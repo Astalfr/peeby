@@ -2,6 +2,9 @@
 //! lire" and "Aléatoire", and its videos, loading the next ones as the end comes into view.
 //! Playing starts a [`Queue`] on a watch page. In playlists the user can edit, an "x" on each
 //! video removes it.
+//!
+//! A playlist can be shown and played in reverse order (saved per playlist in the settings).
+//! Reversing needs its end, so a reversed playlist loads all its pages first.
 
 use gpui::prelude::*;
 use gpui::{
@@ -11,7 +14,7 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
-use gpui_component::{Disableable, IconName, h_flex, v_flex};
+use gpui_component::{Disableable, IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Playlist, PlaylistSummary};
 
 use crate::app::{AppView, Route};
@@ -19,8 +22,9 @@ use crate::assets::Icon;
 use crate::images::Images;
 use crate::queue::Queue;
 use crate::save::{self, EntryRemoved};
+use crate::settings::Settings;
 use crate::ui::{
-  error_text, image_fill, loading_more, near_scroll_end, notice, page_title, playlist_row,
+  error_text, image_fill, loader, loading_more, near_scroll_end, notice, page_title, playlist_row,
   skeleton_card,
 };
 use crate::{motion, runtime, theme};
@@ -414,12 +418,32 @@ impl PlaylistView {
     .detach();
   }
 
-  /// Next videos once the end of the list is within about a screen.
+  /// Whether this playlist is shown last video first.
+  fn reversed(&self, cx: &App) -> bool {
+    Settings::get(cx).reversed_playlists.contains(&self.id)
+  }
+
+  fn toggle_reversed(&mut self, cx: &mut Context<Self>) {
+    let id = self.id.clone();
+    Settings::update(cx, |s| {
+      if let Some(i) = s.reversed_playlists.iter().position(|p| *p == id) {
+        s.reversed_playlists.remove(i);
+      } else {
+        s.reversed_playlists.push(id);
+      }
+    });
+    self.scroll.set_offset(gpui::point(px(0.), px(0.)));
+    cx.notify();
+  }
+
+  /// Next videos once the end of the list is within about a screen, or all of them, one page
+  /// after the other, when the playlist is reversed.
   fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
     let State::Loaded(playlist) = &self.state else {
       return;
     };
-    if self.loading_more || self.more_failed || !near_scroll_end(&self.scroll) {
+    let wanted = self.reversed(cx) || near_scroll_end(&self.scroll);
+    if self.loading_more || self.more_failed || !wanted {
       return;
     }
     let Some(token) = playlist.continuation.clone() else {
@@ -454,8 +478,9 @@ impl PlaylistView {
     .detach();
   }
 
-  /// Plays the playlist on a watch page from `start` (a random video when shuffled without
-  /// one). The queue takes the videos loaded so far and loads the next ones itself.
+  /// Plays the playlist on a watch page from `start`, a place in the order shown (a random
+  /// video when shuffled without one). The queue takes the videos loaded so far and loads the
+  /// next ones itself; a reversed playlist is complete already.
   fn play(&self, start: Option<usize>, shuffle: bool, window: &mut Window, cx: &mut App) {
     let State::Loaded(playlist) = &self.state else {
       return;
@@ -463,13 +488,18 @@ impl PlaylistView {
     if playlist.videos.is_empty() {
       return;
     }
+    let (videos, continuation) = if self.reversed(cx) {
+      (playlist.videos.iter().rev().cloned().collect(), None)
+    } else {
+      (playlist.videos.clone(), playlist.continuation.clone())
+    };
     let queue = cx.new(|cx| {
       Queue::new(
         self.client.clone(),
         playlist.id.clone(),
         playlist.title.clone(),
-        playlist.videos.clone(),
-        playlist.continuation.clone(),
+        videos,
+        continuation,
         start,
         shuffle,
         cx,
@@ -494,7 +524,9 @@ impl PlaylistView {
       .flatten()
       .collect::<Vec<_>>()
       .join(" · ");
-    let empty = playlist.videos.is_empty();
+    let reversed = self.reversed(cx);
+    // Reversed and still loading: nothing to play in that order yet.
+    let empty = playlist.videos.is_empty() || (reversed && playlist.continuation.is_some());
     v_flex()
       .w(px(CARD_WIDTH))
       .flex_none()
@@ -527,6 +559,18 @@ impl PlaylistView {
               .label("Aléatoire")
               .disabled(empty)
               .on_click(cx.listener(|this, _, window, cx| this.play(None, true, window, cx))),
+          )
+          .child(
+            Button::new("reverse")
+              .ghost()
+              .icon(Icon::Reverse)
+              .selected(reversed)
+              .tooltip(if reversed {
+                "Remettre dans l'ordre"
+              } else {
+                "Inverser l'ordre"
+              })
+              .on_click(cx.listener(|this, _, _, cx| this.toggle_reversed(cx))),
           ),
       )
       .into_any_element()
@@ -600,17 +644,30 @@ impl Render for PlaylistView {
       State::Loaded(playlist) => {
         let header = self.header(playlist, window, cx);
         let view = cx.weak_entity();
-        // Ids carry the place: a playlist may hold the same video twice.
-        let rows: Vec<_> = playlist
-          .videos
-          .iter()
+        let reversed = self.reversed(cx);
+        // Reversed, the list waits for the last page: its end comes first.
+        let gathering = reversed && playlist.continuation.is_some();
+        let count = playlist.videos.len();
+        // Places in the playlist, in the order shown.
+        let order: Vec<usize> = if gathering {
+          Vec::new()
+        } else if reversed {
+          (0..count).rev().collect()
+        } else {
+          (0..count).collect()
+        };
+        // Ids carry the place: a playlist may hold the same video twice. Numbers stay the
+        // playlist's own, so a reversed list counts down.
+        let rows: Vec<_> = order
+          .into_iter()
           .enumerate()
-          .map(|(i, video)| {
+          .map(|(shown, i)| {
+            let video = &playlist.videos[i];
             let view = view.clone();
             let remove = video
               .set_video_id
               .as_deref()
-              .map(|entry| save::removal(&playlist.id, &playlist.title, entry, cx));
+              .map(|entry| save::removal(&playlist.id, &playlist.title, entry, &video.id, cx));
             playlist_row(
               &format!("pl-{i}-{}", video.id),
               i + 1,
@@ -619,7 +676,7 @@ impl Render for PlaylistView {
               false,
               move |window, cx| {
                 view
-                  .update(cx, |this, cx| this.play(Some(i), false, window, cx))
+                  .update(cx, |this, cx| this.play(Some(shown), false, window, cx))
                   .ok();
               },
               remove,
@@ -640,10 +697,23 @@ impl Render for PlaylistView {
               }))
               .into_any_element(),
           )
+        } else if gathering {
+          Some(
+            h_flex()
+              .gap_3()
+              .items_center()
+              .text_sm()
+              .text_color(theme::muted())
+              .child(loader(16., theme::accent()))
+              .child(format!(
+                "Chargement de toute la playlist pour l'inverser… {count} vidéos"
+              ))
+              .into_any_element(),
+          )
         } else {
           self.loading_more.then(|| loading_more().into_any_element())
         };
-        let empty = rows.is_empty();
+        let empty = rows.is_empty() && !gathering;
         h_flex()
           .gap_8()
           .items_start()

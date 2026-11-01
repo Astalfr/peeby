@@ -58,6 +58,8 @@ pub struct Settings {
   pub muted: bool,
   /// Layout of the subscriptions page.
   pub subscriptions_layout: FeedLayout,
+  /// Playlists shown and played last video first.
+  pub reversed_playlists: Vec<String>,
 }
 
 impl Default for Settings {
@@ -69,6 +71,7 @@ impl Default for Settings {
       volume: 100.0,
       muted: false,
       subscriptions_layout: FeedLayout::Grid,
+      reversed_playlists: Vec::new(),
     }
   }
 }

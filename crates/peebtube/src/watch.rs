@@ -211,7 +211,7 @@ impl WatchView {
           .set_video_id
           .clone()
           .filter(|_| place != current)
-          .map(|entry| save::removal(&playlist_id, &title, &entry, cx));
+          .map(|entry| save::removal(&playlist_id, &title, &entry, &video.id, cx));
         playlist_row(
           &format!("q-{place}-{}", video.id),
           place + 1,

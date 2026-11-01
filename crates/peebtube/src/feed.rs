@@ -187,8 +187,7 @@ impl FeedView {
       (State::SignedOut, _, _) | (_, Source::Home, false) => (
         "Connectez-vous pour voir cette page".to_owned(),
         "YouTube n'affiche plus de recommandations sans compte. Importez les cookies d'une \
-         session YouTube depuis la page Compte. En attendant, collez une URL de vidéo dans la \
-         barre du haut."
+         session YouTube depuis la page Compte."
           .to_owned(),
       ),
       (_, Source::Home, true) => (

@@ -23,7 +23,7 @@ One accent: red marks what can be acted on or what is selected. Everything else 
 
 ## Window and layout
 
-- **Title bar** (44 px, a window drag area whose controls are occluded): back button, PeebTube's mark (a red rounded play badge and the name), then the "open a URL or id" field centered, with a search icon.
+- **Title bar** (44 px, a window drag area whose controls are occluded): back button, then PeebTube's mark (a red rounded play badge and the name). A video opens from the command line (`peebtube <url-or-id>`); there is no URL field.
 - **Sidebar** (232 px): Accueil, Abonnements, À regarder plus tard (that playlist's page, as a sidebar page) and Playlists; Compte and Réglages are pinned at the bottom above a separator. The subscribed channels are not listed there (hundreds of them), but on their own page. Entries are 40 px, muted until hovered; the entry of the page at the bottom of the stack has a light background and a 3×16 px red pill on its left edge, so Abonnements stays lit on the channels and channel pages opened from it.
 - **Content**: a panel with a 12 px top-left corner and a 1 px top and left border, over the chrome as in Windows 11 Settings. Pages have 32 px side margins.
 - **Shapes**: 8 px radius for controls, 12 px for cards and large surfaces. Font: Segoe UI Variable Text, else Segoe UI, at 15 px.
@@ -36,12 +36,13 @@ One accent: red marks what can be acted on or what is selected. Everything else 
 - **Playlist**: a 320 px column on the left with the cover, the title (2xl, bold), owner and count, and two buttons, **Tout lire** (red) and **Aléatoire**. On the right, the videos as numbered rows (160 px thumbnail, two-line title, channel · views · date), loading the next 100 as the end comes near. A click on a row plays the playlist from there.
 - **Queue panel** (watch page of a playlist, above the related videos): a bordered card with the playlist's title, the place (`3 / 17`, `+` while more are to load), shuffle and repeat toggles, then up to 420 px of rows in play order (100 px thumbnails). The current video's row is on `accent_soft` with a red play icon instead of its number, and the panel opens scrolled to it. The player gets previous and next buttons around play/pause (keys P and N), disabled at the ends.
 - **Saving to a playlist**:
-  - grid cards and list rows show, on hover only, a round **Watch later** button (clock) at the thumbnail's top right and a **⋮** button by the title. Their clicks are their own, not the card's;
+  - grid cards and list rows show, on hover only, a round **Watch later** button at the thumbnail's top right: a clock, or a check when the video is in "Watch later" already (a click then removes it; the "⋮" menu entry toggles the same way) and a **⋮** button by the title. Their clicks are their own, not the card's;
   - **⋮** opens a popover with "À regarder plus tard" and "Ajouter à une playlist", which turns into the list of playlists;
   - the watch page has an **Enregistrer** button left of the votes, opening that list directly;
   - the list ("Enregistrer dans…") checks the playlists holding the video (a red box with a check), a lock marks private ones; a click adds or removes at once and undoes the check if YouTube refuses;
   - in a playlist the user can edit (their own, "Watch later"), each video of the playlist page and of the queue panel gets an **x** on hover (not the playing one), removing it from the playlist;
   - while a request runs, its "x" or "Watch later" button shows a small spinner and stays visible after the mouse leaves; a second click sends nothing;
+  - a playlist's page has a reverse button (arrow-down-up, highlighted when on) next to "Tout lire" and "Aléatoire": the list and its playback go last video first, numbers counting down; saved per playlist (`reversed_playlists` in `settings.toml`). A reversed playlist loads all its pages first, with a loader and the count so far;
   - every change shows a toast, at the bottom right of the window: "Ajoutée à « … »", "Retirée de « … »", or the error.
 - **Channels** (from "Toutes les chaînes"): the subscribed channels as a grid of 168 px tiles (96 px round avatar, name, subscribers), a red ring and a soft surface on hover, a filter field in the header.
 - **Watch page**: the 16:9 player, the title, the channel (red on hover), the votes pill (likes | dislikes, red ratio bar, RYD attribution; it links to returnyoutubedislike.com), the description card, then the comments. The related videos are a 400 px column of compact cards that get a soft surface on hover.

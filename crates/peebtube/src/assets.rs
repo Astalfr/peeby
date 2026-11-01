@@ -61,6 +61,7 @@ icons! {
   Save => "list-plus",
   Check => "check",
   Lock => "lock",
+  Reverse => "arrow-down-up",
 }
 
 macro_rules! files {

@@ -6,8 +6,11 @@
 //! shows where the video already is; a click adds the video, or removes it from a playlist
 //! that holds it, as YouTube's "Save" dialog does.
 //!
-//! The "x" of a playlist's videos removes one entry ([`remove_entry`]); the pages showing that
+//! The "x" of a playlist's videos removes one entry ([`removal`]); the pages showing that
 //! playlist hear about it through [`Edits`] and drop the entry.
+//!
+//! The ids of the videos in "Watch later" are kept ([`load_watch_later`], then every change),
+//! so the thumbnails' shortcut shows a check on those already in it.
 
 use std::collections::HashSet;
 
@@ -44,8 +47,78 @@ enum Change {
   Add(String),
   /// Remove this video, wherever it is.
   Remove(String),
-  /// Remove this entry ([`innertube::VideoItem::set_video_id`]).
-  RemoveEntry(String),
+  /// Remove this entry ([`innertube::VideoItem::set_video_id`]) of this video.
+  RemoveEntry { entry: String, video: String },
+}
+
+impl Change {
+  fn video(&self) -> &str {
+    match self {
+      Self::Add(video) | Self::Remove(video) | Self::RemoveEntry { video, .. } => video,
+    }
+  }
+}
+
+/// The videos in "Watch later", once loaded. `generation` tells apart the loads of successive
+/// sessions, so a late answer for an old session is dropped.
+#[derive(Default)]
+struct WatchLater {
+  ids: HashSet<String>,
+  generation: u64,
+}
+
+impl Global for WatchLater {}
+
+/// Most pages of "Watch later" read at startup (100 videos each).
+const WATCH_LATER_PAGES: usize = 50;
+
+/// Reads the ids of the videos in "Watch later", in the background. Called at startup and on
+/// every session change.
+pub fn load_watch_later(cx: &mut App) {
+  let state = cx.default_global::<WatchLater>();
+  state.ids.clear();
+  state.generation += 1;
+  let generation = state.generation;
+  let Some(client) = cx.try_global::<Session>().map(|s| s.0.clone()) else {
+    return;
+  };
+  if !client.signed_in() {
+    return;
+  }
+  let task = runtime::spawn(cx, async move {
+    let playlist = client.playlist(WATCH_LATER).await?;
+    let mut ids: HashSet<String> = playlist.videos.into_iter().map(|v| v.id).collect();
+    let mut token = playlist.continuation;
+    for _ in 1..WATCH_LATER_PAGES {
+      let Some(next) = token else { break };
+      let page = client.playlist_more(&next).await?;
+      ids.extend(page.items.into_iter().map(|v| v.id));
+      token = page.continuation;
+    }
+    Ok::<_, Error>(ids)
+  });
+  cx.spawn(async move |cx| {
+    let ids = match task.await {
+      Some(Ok(ids)) => ids,
+      Some(Err(e)) => return tracing::warn!("watch later: {e}"),
+      None => return,
+    };
+    cx.update(|cx| {
+      let state = cx.default_global::<WatchLater>();
+      if state.generation == generation {
+        tracing::info!("watch later: {} videos", ids.len());
+        state.ids = ids;
+        cx.refresh_windows();
+      }
+    });
+  })
+  .detach();
+}
+
+/// Whether `video_id` is in "Watch later", as far as the app knows.
+fn in_watch_later(video_id: &str, cx: &App) -> bool {
+  cx.try_global::<WatchLater>()
+    .is_some_and(|w| w.ids.contains(video_id))
 }
 
 /// One entry left a playlist: pages showing it drop the entry.
@@ -85,7 +158,7 @@ fn change_key(playlist_id: &str, change: &Change) -> String {
   match change {
     Change::Add(video) => format!("{playlist_id}:add:{video}"),
     Change::Remove(video) => format!("{playlist_id}:remove:{video}"),
-    Change::RemoveEntry(entry) => format!("{playlist_id}:entry:{entry}"),
+    Change::RemoveEntry { entry, .. } => format!("{playlist_id}:entry:{entry}"),
   }
 }
 
@@ -114,15 +187,16 @@ fn edit(
   cx.refresh_windows();
   let adding = matches!(change, Change::Add(_));
   let removed_entry = match &change {
-    Change::RemoveEntry(id) => Some(id.clone()),
+    Change::RemoveEntry { entry, .. } => Some(entry.clone()),
     _ => None,
   };
+  let video_id = change.video().to_owned();
   let playlist = playlist_id.clone();
   let task = runtime::spawn(cx, async move {
     match change {
       Change::Add(video) => client.add_to_playlist(&playlist, &video).await,
       Change::Remove(video) => client.remove_from_playlist(&playlist, &video).await,
-      Change::RemoveEntry(entry) => client.remove_playlist_entry(&playlist, &entry).await,
+      Change::RemoveEntry { entry, .. } => client.remove_playlist_entry(&playlist, &entry).await,
     }
   });
   cx.spawn(async move |cx| {
@@ -137,6 +211,14 @@ fn edit(
     };
     cx.update(|cx| {
       cx.default_global::<Pending>().0.remove(&key);
+      if result.is_ok() && playlist_id == WATCH_LATER {
+        let ids = &mut cx.default_global::<WatchLater>().ids;
+        if adding {
+          ids.insert(video_id);
+        } else {
+          ids.remove(&video_id);
+        }
+      }
       cx.refresh_windows();
       if result.is_ok()
         && let Some(set_video_id) = removed_entry
@@ -170,13 +252,23 @@ fn save_error(error: &Error, adding: bool) -> String {
 
 /// The "x" of a playlist's entry: removes it from the playlist; on success the pages showing
 /// the playlist drop it ([`EntryRemoved`]). Busy while the request runs.
-pub fn removal(playlist_id: &str, playlist_title: &str, set_video_id: &str, cx: &App) -> RowAction {
-  let change = Change::RemoveEntry(set_video_id.into());
-  let busy = is_pending(&change_key(playlist_id, &change), cx);
-  let (playlist_id, playlist_title, entry) = (
+pub fn removal(
+  playlist_id: &str,
+  playlist_title: &str,
+  set_video_id: &str,
+  video_id: &str,
+  cx: &App,
+) -> RowAction {
+  let change = || Change::RemoveEntry {
+    entry: set_video_id.to_owned(),
+    video: video_id.to_owned(),
+  };
+  let busy = is_pending(&change_key(playlist_id, &change()), cx);
+  let (playlist_id, playlist_title, entry, video) = (
     playlist_id.to_owned(),
     playlist_title.to_owned(),
     set_video_id.to_owned(),
+    video_id.to_owned(),
   );
   RowAction {
     busy,
@@ -184,7 +276,10 @@ pub fn removal(playlist_id: &str, playlist_title: &str, set_video_id: &str, cx: 
       edit(
         playlist_id.clone(),
         playlist_title.clone(),
-        Change::RemoveEntry(entry.clone()),
+        Change::RemoveEntry {
+          entry: entry.clone(),
+          video: video.clone(),
+        },
         window.window_handle(),
         cx,
         |_, _| {},
@@ -193,26 +288,38 @@ pub fn removal(playlist_id: &str, playlist_title: &str, set_video_id: &str, cx: 
   }
 }
 
-/// Adds `video_id` to "Watch later".
-pub fn watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
+/// Adds `video_id` to "Watch later", or removes it when it is in already.
+pub fn toggle_watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
+  let change = if in_watch_later(video_id, cx) {
+    Change::Remove(video_id.into())
+  } else {
+    Change::Add(video_id.into())
+  };
   edit(
     WATCH_LATER.into(),
     WATCH_LATER_TITLE.into(),
-    Change::Add(video_id.into()),
+    change,
     window.window_handle(),
     cx,
     |_, _| {},
   );
 }
 
+/// Whether a "Watch later" change of `video_id` is waiting for YouTube.
+fn watch_later_busy(video_id: &str, cx: &App) -> bool {
+  let video = video_id.to_owned();
+  [Change::Add(video.clone()), Change::Remove(video)]
+    .iter()
+    .any(|change| is_pending(&change_key(WATCH_LATER, change), cx))
+}
+
 /// The round "Watch later" button over a thumbnail's top right corner, faded in by `t` (the
-/// card's hover), with a spinner while the video is being added. Its clicks are its own, not
-/// the card's.
+/// card's hover): a clock, or a check when the video is in "Watch later" already (a click
+/// then removes it), and a spinner while YouTube answers. Its clicks are its own, not the
+/// card's.
 pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl IntoElement {
-  let busy = is_pending(
-    &change_key(WATCH_LATER, &Change::Add(video_id.to_owned())),
-    cx,
-  );
+  let busy = watch_later_busy(video_id, cx);
+  let saved = in_watch_later(video_id, cx);
   let video_id = video_id.to_owned();
   div()
     .id(ElementId::Name(format!("{id}-watch-later").into()))
@@ -236,15 +343,22 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl In
     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     .on_click(move |_, window, cx| {
       cx.stop_propagation();
-      watch_later(&video_id, window, cx);
+      if !watch_later_busy(&video_id, cx) {
+        toggle_watch_later(&video_id, window, cx);
+      }
     })
-    .tooltip(|window, cx| {
-      gpui_component::tooltip::Tooltip::new(WATCH_LATER_TITLE).build(window, cx)
+    .tooltip(move |window, cx| {
+      let label = if saved {
+        "Retirer de « À regarder plus tard »"
+      } else {
+        WATCH_LATER_TITLE
+      };
+      gpui_component::tooltip::Tooltip::new(label).build(window, cx)
     })
     .child(if busy {
       loader(18., gpui::white()).into_any_element()
     } else {
-      gpui_component::Icon::new(Icon::WatchLater)
+      gpui_component::Icon::new(if saved { Icon::Check } else { Icon::WatchLater })
         .size(px(16.))
         .into_any_element()
     })
@@ -336,12 +450,19 @@ fn picker_content(
     .w(px(220.))
     .gap_0p5()
     .child(
-      item("menu-watch-later", Icon::WatchLater, WATCH_LATER_TITLE).on_click(cx.listener(
-        move |state, _, window, cx| {
-          watch_later(&video_id, window, cx);
-          state.dismiss(window, cx);
-        },
-      )),
+      if in_watch_later(&video_id, cx) {
+        item(
+          "menu-watch-later",
+          Icon::Check,
+          "Retirer de « À regarder plus tard »",
+        )
+      } else {
+        item("menu-watch-later", Icon::WatchLater, WATCH_LATER_TITLE)
+      }
+      .on_click(cx.listener(move |state, _, window, cx| {
+        toggle_watch_later(&video_id, window, cx);
+        state.dismiss(window, cx);
+      })),
     )
     .child(
       item("menu-save", Icon::Save, "Ajouter à une playlist").on_click(move |_, _, cx| {

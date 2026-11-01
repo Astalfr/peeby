@@ -1,15 +1,14 @@
-//! Root view: title bar (back, open a video by URL or id), sidebar (home, subscriptions,
+//! Root view: title bar (back), sidebar (home, subscriptions,
 //! playlists, account, settings) and a stack of pages. In fullscreen only the page is shown.
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyView, App, Context, Entity, FontWeight, SharedString, Subscription,
-  Window, div, ease_out_quint, px,
+  Animation, AnimationExt, AnyView, App, Context, Entity, FontWeight, SharedString, Window, div,
+  ease_out_quint, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Sizable, TitleBar, h_flex, v_flex};
+use gpui_component::{TitleBar, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
 use crate::account::AccountView;
@@ -79,8 +78,6 @@ pub struct AppView {
   stack: Vec<Page>,
   /// Page to open at the next render (it needs the window), after a session change.
   reset_to: Option<Route>,
-  open_input: Entity<InputState>,
-  _open_subscription: Subscription,
 }
 
 impl AppView {
@@ -94,32 +91,12 @@ impl AppView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let open_input = cx.new(|cx| {
-      InputState::new(window, cx).placeholder("Coller une URL ou un ID de vidéo YouTube…")
-    });
-    let subscription = cx.subscribe_in(
-      &open_input,
-      window,
-      |this, input, event: &InputEvent, window, cx| {
-        if matches!(event, InputEvent::PressEnter { .. }) {
-          let text = input.read(cx).value().trim().to_string();
-          match video_id(&text) {
-            Some(id) => {
-              input.update(cx, |state, cx| state.set_value("", window, cx));
-              this.open(Route::Watch(id.to_owned()), window, cx);
-            }
-            None => tracing::info!("not a YouTube video URL or id"),
-          }
-        }
-      },
-    );
     cx.set_global(save::Session(client.clone()));
+    save::load_watch_later(cx);
     let mut app = Self {
       client,
       stack: Vec::new(),
       reset_to: None,
-      open_input,
-      _open_subscription: subscription,
     };
     app.open(Route::Home, window, cx);
     for id in initial_videos {
@@ -152,6 +129,7 @@ impl AppView {
       }
     }));
     cx.set_global(save::Session(client.clone()));
+    save::load_watch_later(cx);
     self.client = client;
     // Pages hold the old client: they are rebuilt on the next navigation; Home now.
     self.reset_to = Some(Route::Home);
@@ -300,18 +278,7 @@ impl AppView {
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .children(back.map(|b| div().occlude().child(b)))
-        .child(mark())
-        .child(div().flex_1())
-        .child(
-          div().occlude().w(px(480.)).child(
-            Input::new(&self.open_input).small().prefix(
-              gpui_component::Icon::new(Icon::Search)
-                .small()
-                .text_color(theme::muted()),
-            ),
-          ),
-        )
-        .child(div().flex_1()),
+        .child(mark()),
     )
   }
 
