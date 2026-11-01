@@ -109,6 +109,12 @@ impl Client {
     })
   }
 
+  /// `login`'s channel and its live, if on air.
+  pub async fn channel(&self, login: &str) -> Result<gql::Channel> {
+    let answer = self.gql(&gql::channel_request(login)).await?;
+    gql::parse_channel(&answer)
+  }
+
   /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
   /// [`Error::NotLoggedIn`] when it is refused or there is none.
   pub async fn current_user(&self) -> Result<String> {

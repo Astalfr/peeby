@@ -1,0 +1,18 @@
+{
+  "data": {
+    "user": {
+      "id": "12826",
+      "login": "twitch",
+      "displayName": "Twitch",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/7db44749-286f-4db0-9c99-574b16170d44-profile_image-70x70.png",
+      "broadcastSettings": {
+        "title": "Make Twitch Category Art With @eiffelart"
+      },
+      "stream": null
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 28,
+    "operationName": "Channel"
+  }
+}

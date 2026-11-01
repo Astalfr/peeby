@@ -207,3 +207,28 @@ fn master_url_carries_the_token_in_its_query() {
   // Debug never shows the token.
   assert!(!format!("{token:?}").contains("abc"));
 }
+
+#[test]
+fn live_channel() {
+  let channel = gql::parse_channel(&json("gql_channel_live.json")).unwrap();
+  assert_eq!(channel.login, "squeezie");
+  assert_eq!(channel.display_name, "Squeezie");
+  assert!(channel.title.starts_with("GENTLE MATES"));
+  assert!(channel.avatar_url.unwrap().ends_with("70x70.png"));
+  let live = channel.live.unwrap();
+  assert_eq!(live.viewers, 80308);
+  assert_eq!(live.category.as_deref(), Some("VALORANT"));
+  assert_eq!(
+    live.started_at,
+    twitch::time::epoch_millis("2026-11-01T17:39:06Z")
+  );
+  assert!(live.started_at.is_some());
+}
+
+#[test]
+fn offline_channel() {
+  let channel = gql::parse_channel(&json("gql_channel_offline.json")).unwrap();
+  assert_eq!(channel.login, "twitch");
+  assert!(channel.live.is_none());
+  assert!(!channel.title.is_empty());
+}

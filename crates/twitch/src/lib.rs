@@ -15,6 +15,7 @@ mod error;
 pub mod gql;
 mod proxy;
 pub mod splice;
+pub mod time;
 pub mod usher;
 
 pub use client::{Client, Master};

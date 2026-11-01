@@ -1,34 +1,54 @@
 //! The Twitch space (ADR 0010, docs/twitch-plan.md): nothing without signing in (the user's
 //! choice), so its only page while signed out is the sign-in card. Signed in, it keeps the Helix
-//! session (refreshed one at a time, validated at startup and every hour, as Twitch requires) and
-//! the optional web `auth-token` used for playback. Its pages come with the next steps.
+//! session (refreshed one at a time, validated at startup and every hour, as Twitch requires), the
+//! optional web `auth-token` its playback client sends to GQL, and a stack of pages: "Suivies",
+//! then a channel's live on top.
 
+pub mod following;
 pub mod login;
+pub mod play;
 pub mod session;
 pub mod settings_page;
+pub mod watch;
 
 use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, Entity, EventEmitter, SharedString, Subscription, Task, Window, div,
-  rgb,
+  AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString, Subscription, Task,
+  Window, div, rgb,
 };
-use gpui_component::v_flex;
 use twitch::Error;
 use twitch::auth::{Auth, Session, Validation};
 use ui::assets::Icon;
+use ui::player::PlayerView;
 use ui::theme::Accent;
 use ui::{runtime, theme};
 
 use crate::settings::Settings;
 use crate::shell::space::{Avatar, MenuEntry, Space, SpaceEvent, SpaceInfo};
+use following::FollowingView;
 use login::{LoginView, SignedIn};
 use session::Secrets;
 use settings_page::SettingsView;
+use watch::WatchView;
 
 /// Twitch requires validating the token every hour.
 const VALIDATE_EVERY: Duration = Duration::from_secs(3600);
+
+/// A page of the space.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Route {
+  /// "Suivies" (a field to open a channel until step 7).
+  Following,
+  /// A channel's live, by login.
+  Watch(String),
+}
+
+struct Page {
+  route: Route,
+  view: AnyView,
+}
 
 /// The signed-in part.
 struct Signed {
@@ -47,8 +67,13 @@ enum State {
 pub struct TwitchSpace {
   auth: Auth,
   state: State,
-  /// The web `auth-token`, for GQL playback tokens (step 6).
+  /// The web `auth-token`, sent to GQL by `client`.
   auth_token: Option<String>,
+  /// GQL and usher, for playback and the channels' headers.
+  client: Option<twitch::Client>,
+  stack: Vec<Page>,
+  /// A channel asked for on the command line, opened once signed in.
+  pending_channel: Option<String>,
   /// The sign-in card while signed out, made at the next render.
   login: Option<Entity<LoginView>>,
   /// Why the card shows (the session expired, Twitch unreachable).
@@ -69,19 +94,43 @@ impl TwitchSpace {
   }
 
   /// The space with the secrets read before the UI started: a saved refresh token is exchanged
-  /// in the background.
-  pub fn new(auth: Auth, secrets: Secrets, cx: &mut Context<Self>) -> Self {
+  /// in the background. `channel` (from the command line) opens once signed in, and shows the tab.
+  pub fn new(
+    auth: Auth,
+    secrets: Secrets,
+    channel: Option<String>,
+    cx: &mut Context<Self>,
+  ) -> Self {
     let mut space = Self {
       auth,
       state: State::SignedOut,
-      auth_token: secrets.auth_token,
+      auth_token: None,
+      client: None,
+      stack: Vec::new(),
+      pending_channel: channel,
       login: None,
       login_message: None,
       settings: None,
       _login_subscription: None,
     };
+    space.set_auth_token(secrets.auth_token, cx);
+    // Twitch may have changed its web Client-ID: read the current one from its page.
+    if let Some(client) = space.client.clone() {
+      drop(runtime::spawn(cx, async move {
+        if let Err(e) = client.refresh_client_id().await {
+          tracing::warn!("Twitch web Client-ID: {e}");
+        }
+      }));
+    }
     if let Some(refresh) = secrets.refresh {
       space.restore(refresh, cx);
+    }
+    if space.pending_channel.is_some() {
+      // After the shell has subscribed to the space's events.
+      cx.spawn(async move |this, cx| {
+        this.update(cx, |_, cx| cx.emit(SpaceEvent::Activate)).ok();
+      })
+      .detach();
     }
     space
   }
@@ -161,13 +210,19 @@ impl TwitchSpace {
     self.login = None;
     self.login_message = None;
     self._login_subscription = None;
+    self.stack.clear();
+    self.open(Route::Following, cx);
+    if let Some(channel) = self.pending_channel.take() {
+      self.open(Route::Watch(channel), cx);
+    }
     cx.notify();
   }
 
-  /// Leaves the session here: the refresh token is deleted, the sign-in card shows with
-  /// `message`.
+  /// Leaves the session here: the pages go, the refresh token is deleted, the sign-in card shows
+  /// with `message`.
   fn sign_out(&mut self, message: Option<SharedString>, cx: &mut Context<Self>) {
     self.state = State::SignedOut;
+    self.stack.clear();
     self.login = None;
     self.login_message = message;
     cx.background_executor()
@@ -190,6 +245,62 @@ impl TwitchSpace {
     self.sign_out(None, cx);
   }
 
+  /// Shows `route`: "Suivies" resets the stack, a live is pushed (on top of another one too).
+  pub fn open(&mut self, route: Route, cx: &mut Context<Self>) {
+    let State::SignedIn(signed) = &self.state else {
+      return;
+    };
+    if self.stack.last().is_some_and(|p| p.route == route) {
+      return;
+    }
+    let nav = cx.weak_entity();
+    let view: AnyView = match &route {
+      Route::Following => {
+        let login = signed.login.clone();
+        cx.new(|_| FollowingView::new(nav, login)).into()
+      }
+      Route::Watch(login) => {
+        let Some(client) = self.client.clone() else {
+          return;
+        };
+        let login = login.clone();
+        cx.new(|cx| WatchView::new(login, client, nav, cx)).into()
+      }
+    };
+    if route == Route::Following {
+      self.stack.clear();
+    }
+    self.cover_top(true, cx);
+    self.stack.push(Page { route, view });
+    cx.notify();
+  }
+
+  pub fn back(&mut self, cx: &mut Context<Self>) {
+    if self.stack.len() > 1 {
+      self.stack.pop();
+      self.cover_top(false, cx);
+      cx.notify();
+    }
+  }
+
+  /// Pauses the player of the page on top when another page covers it.
+  fn cover_top(&self, covered: bool, cx: &mut Context<Self>) {
+    if let Some(player) = self.top_player(cx) {
+      player.update(cx, |player, _| player.set_covered(covered));
+    }
+  }
+
+  fn top_player(&self, cx: &App) -> Option<Entity<PlayerView>> {
+    let watch = self
+      .stack
+      .last()?
+      .view
+      .clone()
+      .downcast::<WatchView>()
+      .ok()?;
+    Some(watch.read(cx).player())
+  }
+
   /// The signed-in user's login.
   pub fn login(&self) -> Option<String> {
     match &self.state {
@@ -203,8 +314,17 @@ impl TwitchSpace {
     self.auth_token.is_some()
   }
 
-  /// A new (checked and saved) or removed web `auth-token`.
+  /// A new (checked and saved) or removed web `auth-token`: the playback client is rebuilt with
+  /// it, for the next live opened.
   pub fn set_auth_token(&mut self, token: Option<String>, cx: &mut Context<Self>) {
+    let web_client_id = Settings::get(cx).twitch.web_client_id.clone();
+    self.client = match twitch::Client::new(web_client_id, token.clone()) {
+      Ok(client) => Some(client),
+      Err(e) => {
+        tracing::error!("cannot create the Twitch HTTP client: {e}");
+        None
+      }
+    };
     self.auth_token = token;
     cx.notify();
   }
@@ -250,9 +370,13 @@ impl Space for TwitchSpace {
       .to_uppercase()
       .to_string()
       .into();
+    let following = self
+      .stack
+      .first()
+      .is_some_and(|p| p.route == Route::Following);
     vec![
       MenuEntry {
-        active: true,
+        active: following,
         ..MenuEntry::new("following", "Suivies", Icon::Subscriptions)
       },
       MenuEntry {
@@ -273,6 +397,7 @@ impl Space for TwitchSpace {
 
   fn open_entry(&mut self, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
     match id {
+      "following" => self.open(Route::Following, cx),
       "account" => cx.emit(SpaceEvent::OpenSettings),
       "sign-out" => self.log_out(cx),
       _ => {}
@@ -280,10 +405,16 @@ impl Space for TwitchSpace {
   }
 
   fn can_go_back(&self) -> bool {
-    false
+    self.stack.len() > 1
   }
 
-  fn back(&mut self, _cx: &mut Context<Self>) {}
+  fn back(&mut self, cx: &mut Context<Self>) {
+    TwitchSpace::back(self, cx);
+  }
+
+  fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
+    self.top_player(cx)
+  }
 
   fn settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
     let nav = cx.weak_entity();
@@ -297,38 +428,29 @@ impl Space for TwitchSpace {
 
 impl Render for TwitchSpace {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let centered = |text: String| {
-      div()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(div().text_color(theme::muted()).child(text))
-    };
     match &self.state {
-      State::Restoring => centered("Connexion à Twitch…".into()).into_any_element(),
-      State::SignedOut => div()
-        .size_full()
-        .child(self.render_login(cx))
-        .into_any_element(),
-      State::SignedIn(signed) => div()
+      State::Restoring => div()
         .size_full()
         .flex()
         .items_center()
         .justify_center()
         .child(
-          v_flex()
-            .items_center()
-            .gap_2()
-            .child(format!("Connecté à Twitch en tant que {}.", signed.login))
-            .child(
-              div()
-                .text_sm()
-                .text_color(theme::muted())
-                .child("Vos chaînes suivies apparaîtront ici."),
-            ),
+          div()
+            .text_color(theme::muted())
+            .child("Connexion à Twitch…"),
         )
         .into_any_element(),
+      State::SignedOut => div()
+        .size_full()
+        .child(self.render_login(cx))
+        .into_any_element(),
+      State::SignedIn(_) => match self.stack.last() {
+        Some(page) => div()
+          .size_full()
+          .child(page.view.clone())
+          .into_any_element(),
+        None => div().size_full().into_any_element(),
+      },
     }
   }
 }

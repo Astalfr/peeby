@@ -6,10 +6,10 @@ use gpui::{AnyElement, Context, Entity, SharedString, WeakEntity, Window, div, p
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
-use ui::form::section;
+use ui::form::{chips, row, section};
 use ui::{runtime, theme};
 
-use super::{TwitchSpace, session};
+use super::{TwitchSpace, play, session};
 use crate::settings::Settings;
 
 /// The tutorial's steps (docs/twitch.md, "The auth-token tutorial").
@@ -262,9 +262,38 @@ impl SettingsView {
   }
 }
 
+fn playback_section(max_height: u32) -> AnyElement {
+  let qualities = play::QUALITIES
+    .iter()
+    .map(|&h| (h, format!("{h}p")))
+    .collect();
+  section(
+    "Lecture",
+    vec![
+      row(
+        "Qualité par défaut",
+        "La plus haute choisie au lancement d'un live. Sans le jeton du site, Twitch s'arrête à 1080p.",
+        chips("twitch-quality", qualities, &max_height, |h, cx| {
+          Settings::update(cx, |s| s.twitch.max_height = Some(h))
+        }),
+      )
+      .into_any_element(),
+    ],
+  )
+  .into_any_element()
+}
+
 impl Render for SettingsView {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let sections = vec![self.account_section(cx), self.auth_token_section(cx)];
+    let max_height = Settings::get(cx)
+      .twitch
+      .max_height
+      .unwrap_or(play::DEFAULT_HEIGHT);
+    let sections = vec![
+      self.account_section(cx),
+      playback_section(max_height),
+      self.auth_token_section(cx),
+    ];
     v_flex().gap_8().children(sections)
   }
 }

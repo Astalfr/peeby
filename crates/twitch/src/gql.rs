@@ -155,6 +155,75 @@ fn gql_error(answer: &Value) -> Option<Error> {
   })
 }
 
+/// A channel and its live, for the watch page's header.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Channel {
+  /// Numeric id (third-party emotes and badges are keyed by it).
+  pub id: String,
+  /// Login, lowercase.
+  pub login: String,
+  /// Shown name, e.g. `Squeezie`.
+  pub display_name: String,
+  /// Avatar, 70 px.
+  pub avatar_url: Option<String>,
+  /// The broadcast's title (kept when offline).
+  pub title: String,
+  /// The live, when the channel is on air.
+  pub live: Option<Live>,
+}
+
+/// A channel's live.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Live {
+  /// Current viewers.
+  pub viewers: u64,
+  /// Start, milliseconds since the epoch.
+  pub started_at: Option<i64>,
+  /// Category (game) name.
+  pub category: Option<String>,
+}
+
+const CHANNEL_QUERY: &str = "query Channel($login: String!) { user(login: $login) { id login \
+  displayName profileImageURL(width: 70) broadcastSettings { title } stream { id type viewersCount \
+  createdAt game { id displayName } } } }";
+
+/// The request for `login`'s channel and live.
+pub fn channel_request(login: &str) -> Value {
+  json!({
+    "operationName": "Channel",
+    "query": CHANNEL_QUERY,
+    "variables": { "login": login },
+  })
+}
+
+/// Reads a channel; `user: null` is [`Error::NotFound`].
+pub fn parse_channel(answer: &Value) -> Result<Channel> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let user = &answer["data"]["user"];
+  if user.is_null() {
+    return Err(Error::NotFound);
+  }
+  let text = |v: &Value| v.as_str().unwrap_or_default().to_owned();
+  let stream = &user["stream"];
+  let live = (!stream.is_null()).then(|| Live {
+    viewers: stream["viewersCount"].as_u64().unwrap_or(0),
+    started_at: stream["createdAt"]
+      .as_str()
+      .and_then(crate::time::epoch_millis),
+    category: stream["game"]["displayName"].as_str().map(str::to_owned),
+  });
+  Ok(Channel {
+    id: text(&user["id"]),
+    login: text(&user["login"]),
+    display_name: text(&user["displayName"]),
+    avatar_url: user["profileImageURL"].as_str().map(str::to_owned),
+    title: text(&user["broadcastSettings"]["title"]),
+    live,
+  })
+}
+
 /// The request asking who the auth-token belongs to.
 pub fn current_user_request() -> Value {
   json!({ "query": "query { currentUser { id login } }" })

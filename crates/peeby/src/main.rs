@@ -34,8 +34,14 @@ fn main() {
   // others).
   let initial_videos: Vec<String> = std::env::args()
     .skip(1)
+    .filter(|arg| !arg.contains("twitch.tv/"))
     .filter_map(|arg| spaces::youtube::video_id(&arg).map(str::to_owned))
     .collect();
+  // `peeby twitch.tv/<login>` opens that channel's live in the Twitch tab.
+  let twitch_channel = std::env::args()
+    .skip(1)
+    .filter(|arg| arg.contains("twitch.tv/") && !arg.contains("/videos/"))
+    .find_map(|arg| spaces::twitch::following::channel_login(&arg));
 
   // Small local file, read before the UI starts.
   let cookies = settings::load_cookies();
@@ -129,7 +135,7 @@ fn main() {
         let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, window, cx));
         let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube), Rc::new(jellyfin)];
         if let Some(auth) = twitch_auth {
-          let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, cx));
+          let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_channel, cx));
           spaces.push(Rc::new(twitch));
         }
         let shell = cx.new(|cx| Shell::new(spaces, window, cx));

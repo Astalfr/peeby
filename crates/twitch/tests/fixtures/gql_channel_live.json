@@ -1,0 +1,27 @@
+{
+  "data": {
+    "user": {
+      "id": "52130765",
+      "login": "squeezie",
+      "displayName": "Squeezie",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/1939615e-a34d-4fab-a035-8c3d8ffae278-profile_image-70x70.png",
+      "broadcastSettings": {
+        "title": "GENTLE MATES 1-2 KRU (Grande Finale Worlds de Valorant) avec @itachi @gotaga & @nikof #GCCWatchParty"
+      },
+      "stream": {
+        "id": "318204974307",
+        "type": "live",
+        "viewersCount": 80308,
+        "createdAt": "2026-11-01T17:39:06Z",
+        "game": {
+          "id": "516575",
+          "displayName": "VALORANT"
+        }
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 44,
+    "operationName": "Channel"
+  }
+}

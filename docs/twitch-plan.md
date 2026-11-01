@@ -347,22 +347,54 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
     token refused by `validate`;
   - in the app, from screenshots with posted clicks: the Twitch tab with its violet and the sign-in
     card, and the settings part (account and the tutorial, wrapped after a fix).
-- **Not verified, needs the user**: approving a code, the session surviving a restart, the hourly
-  validation, sign-out's revoke, a real auth-token being accepted
-- Exit: pending the user's sign-in test
+- Verified with the user (2026-11-01):
+  - they signed in with a code and saved their auth-token, which the GQL check accepted;
+  - a restart restored the session (the saved refresh token exchanged, then validated): "Connecté à
+    Twitch en tant que astalfr", the sidebar's entries, "Un jeton est enregistré" in the settings.
+- Not verified: the hourly validation (an hour of running), sign-out's revoke (it would end the user's
+  session), an expired session's card
+- Exit: met. Signed in, restarted, still signed in; auth-token saved and checked
 ### 6. Live playback in the space
-- [ ] `play.rs`: resolve a live into a `Source` (proxy master as `options.url`, `Referer` and
-      `Origin: https://player.twitch.tv` in `http_headers`, one `Quality` per variant, `live: true`), the
-      default quality from `[twitch]` settings
-- [ ] Watch page (embedded layout as YouTube's): player, title, channel and avatar, category, viewers,
-      uptime; a right column reserved for the chat (empty until step 9); theater mode as on YouTube
-- [ ] `peeby twitch.tv/<login>` and `twitch.tv/videos/<id>` on the command line open the space on that
-      channel or VOD (after the sign-in card when signed out)
-- [ ] French messages for each error of step 2 (integrity: "Twitch demande une vérification que Peeby ne
-      peut pas faire sans navigateur. Réessayez plus tard." — wording to review)
-- [ ] The settings part gains the default quality
-- Exit: `peeby twitch.tv/<login>` plays a live in the Twitch tab without ads, in the mini-player too
+- [x] `play.rs`: a live's `Source` from the proxy's variants:
+  - the landscape ones with a picture, best first, then "Audio seul";
+  - each quality's `url` is the proxy's (`/<key>/<n>.m3u8`), with `Referer` and `Origin` for the CDN's
+    segments, the `[player]` hardware setting, and `live: true`;
+  - the first quality not taller than `[twitch] max_height` (default 1080) plays.
+- [x] `watch.rs`:
+  - `Client::play` (both tokens, both masters, the proxy) and the channel's header are asked for
+    together;
+  - the header is a GQL `Channel` query (`gql::parse_channel`, tested on a live and an offline
+    channel): avatar, title, name in the accent, category, viewers, uptime. GQL, not Helix: it is one
+    call for a channel, signed in or not, and Helix comes at step 7;
+  - the player gets the name as title and `LiveInfo`, refreshed every minute;
+  - every second, the proxy's ad state becomes the player's notice ("Publicité retirée · reprise dans
+    N s"), only when the backup does not cover the break;
+  - `Ended` shows "Le live est terminé.";
+  - the chat column (340 px, "Le chat arrive bientôt.") until step 9, and theater mode shared with
+    YouTube (`Settings::theater`).
 
+  Dropping the page drops the proxy
+- [x] The space keeps a stack: "Suivies" (until step 7, a field taking a name or a twitch.tv link, and
+      `following::channel_login`, tested), then lives pushed on top. Back pops, and a covered player
+      pauses. `Space::player` gives the shell the live's player for the mini-player
+- [x] `peeby twitch.tv/<login>` opens the Twitch tab (`SpaceEvent::Activate`) and that live once signed
+      in, after the card if signed out. VOD URLs wait for step 8
+- [x] French messages (`play::describe`): offline, unknown channel, subscribers only, integrity, refused
+      auth-token, unreachable
+- [x] The playback client carries the saved auth-token (`set_auth_token` rebuilds it). The web
+      Client-ID is refreshed from twitch.tv's page at startup
+- [x] Settings part: "Qualité par défaut" (1440p to 360p)
+- Verified in the app (`peeby https://www.twitch.tv/squeezie`, signed in with the user's auth-token,
+  screenshots):
+  - the live plays in 1.33 s from the click, 6 qualities (1080p60 to "Audio seul");
+  - live controls: the badge, uptime 3:27:06 and 83 081 viewers, no seek bar, quality, theater,
+    fullscreen;
+  - the header, and the chat column.
+- Not verified: the ad notice in the app (no ad ran, `embed` gets no pre-roll), the mini-player with a
+  live, the offline and unknown channel messages in the app, the theater layout, back from a live
+- Seen: signed in with the auth-token, the best variant was still 1080p60 with `supported_codecs=h264`,
+  although the channel's source is 1440p60. The 1440p source is probably HEVC/AV1-only (step 10)
+- Exit: met. `peeby twitch.tv/<login>` plays a live in the Twitch tab, without ads
 ### 7. Helix catalog and pages
 - Fixtures first, from signed-in responses, trimmed and redacted: `streams_followed.json`,
   `channels_followed.json`, `streams.json` (by category), `games_top.json`, `games.json`,
