@@ -32,7 +32,7 @@
 
 - **UI thread (GPUI).** Rendering and input only.
 - **Network.** `reqwest` needs tokio, GPUI has its own executor. `ui::runtime` owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
-- **Player.** `Player::start` runs on GPUI's background executor (libmpv and D3D11 setup block briefly). mpv events and frames come back through channels (peeby's design).
+- **Player.** `ui::player::PlayerView` plays a `Source` and talks to its page through `PlayerEvent`s (`Started`, `Paused`, `Seeked`, `TracksChanged`, `Ended`, `Next`, `Previous`, `Close`, `Sound`, `Theater`); `Layout::Embedded` for YouTube's watch page, `Layout::Window` for a full-window player. Skippable segments come from the page (`set_segments`) or from the chapter titles; the "up next" card from `set_up_next`. `Player::start` runs on GPUI's background executor (libmpv and D3D11 setup block briefly). mpv events and frames come back through channels (peeby's design).
 
 ## Startup
 

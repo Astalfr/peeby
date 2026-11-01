@@ -20,6 +20,11 @@ pub struct Source {
   pub subtitles: Vec<Subtitle>,
   /// Thumbnails shown over the seek bar.
   pub previews: Option<Rc<dyn Previews>>,
+  /// Names of the file's audio tracks in mpv's order (id − 1), when the server knows better
+  /// ones than the file's tags. Missing or empty names fall back to the tags.
+  pub audio_names: Vec<String>,
+  /// Same for the subtitle tracks: embedded ones, then the external ones in `options`.
+  pub subtitle_names: Vec<String>,
 }
 
 /// One quality of a source: switching to it restarts mpv with its options at the current

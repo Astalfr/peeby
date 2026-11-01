@@ -6591,6 +6591,7 @@ dependencies = [
  "dirs 6.0.0",
  "gpui-component",
  "gpui-pre",
+ "gpui-pre-platform",
  "gpui-video",
  "image",
  "player",

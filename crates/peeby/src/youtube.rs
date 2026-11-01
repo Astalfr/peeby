@@ -101,6 +101,7 @@ pub fn source(stream: Stream) -> Source {
     previews: stream
       .storyboard
       .map(|board| Rc::new(StoryboardPreviews(board)) as Rc<dyn Previews>),
+    ..Default::default()
   }
 }
 

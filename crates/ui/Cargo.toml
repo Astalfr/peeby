@@ -18,5 +18,8 @@ player = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 tracing = "0.1"
 
+[dev-dependencies]
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10" }
+
 [lints]
 workspace = true

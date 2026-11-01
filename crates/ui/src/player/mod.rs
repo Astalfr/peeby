@@ -1,10 +1,16 @@
 //! The video player shared by every space: picture, auto-hiding controls (seek bar with
-//! previews, volume, buttons, quality and subtitle menus), OSD and keyboard shortcuts. It plays a
-//! [`Source`] and tells its page what happens through [`PlayerEvent`]s; it reads no setting
-//! itself. Embedded in a page; fills the window in fullscreen.
+//! previews and chapters, volume, buttons, quality, audio, subtitle and chapter menus), skip
+//! button, "up next" card, OSD, shortcut help and keyboard shortcuts. It plays a [`Source`] and
+//! tells its page what happens through [`PlayerEvent`]s; it reads no setting itself. Embedded in
+//! a page ([`Layout::Embedded`], YouTube) or filling the window ([`Layout::Window`], Jellyfin);
+//! fills the window in fullscreen. Controls and behavior come from peeby's player page.
 
+mod overlays;
+pub mod segments;
 mod source;
+mod tracks;
 
+pub use overlays::format_step;
 pub use source::{Previews, Quality, Source, Subtitle, Tile};
 
 use std::cell::Cell;
@@ -22,7 +28,9 @@ use gpui::{
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
-use player::{Choice, Event, Player, StartOptions};
+use player::{Chapter, Choice, Event, Player, StartOptions, Track};
+use segments::Segment;
+use tracks::{SUBTITLE_DELAY_STEP, UpNext};
 
 use crate::assets::Icon;
 use crate::images::Images;
@@ -35,9 +43,6 @@ const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
 const PREVIEW_WIDTH: f32 = 176.;
-/// Arrow keys seek 5 s, J and L 10 s, as on YouTube.
-const SEEK_SMALL: f64 = 5.0;
-const SEEK_LARGE: f64 = 10.0;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
 
@@ -59,24 +64,75 @@ pub enum PlayerEvent {
     /// Muted.
     muted: bool,
   },
+  /// The file is loaded and plays (once per source): the moment to report playback.
+  Started,
+  /// Paused or resumed.
+  Paused(bool),
+  /// The user moved the playhead.
+  Seeked,
+  /// mpv's selected tracks, by mpv id (1, 2… per type), after any change.
+  TracksChanged {
+    /// Audio track.
+    audio: Option<i64>,
+    /// Subtitle track, `None` when off.
+    subtitle: Option<i64>,
+  },
+  /// The user asked to leave the player (full-window layout: back button, Escape, Backspace),
+  /// or mpv quit.
+  Close,
+}
+
+/// Where the player sits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layout {
+  /// In a page with other content (YouTube's watch page): theater mode, the wheel scrolls the
+  /// page unless in fullscreen.
+  Embedded,
+  /// The whole window (Jellyfin): a top bar with back, title and the window buttons; Escape and
+  /// Backspace close it; the wheel sets the volume.
+  Window,
 }
 
 /// The user's preferences the player starts with.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Prefs {
   /// 0 to 100.
   pub volume: f64,
   /// Muted.
   pub muted: bool,
-  /// Language picked first by the subtitles key (C), e.g. `fr`.
+  /// Language picked first by the subtitles key (C) among subtitles added on demand, e.g. `fr`.
   pub subtitle_language: Option<String>,
+  /// Arrows and J/L seek this many seconds…
+  pub seek_step: u32,
+  /// …and this many with Shift.
+  pub seek_step_large: u32,
+  /// Plays the next item when the "up next" countdown ends.
+  pub autoplay_next: bool,
+  /// Length of that countdown, seconds.
+  pub autoplay_countdown: u32,
+}
+
+impl Default for Prefs {
+  fn default() -> Self {
+    Self {
+      volume: 100.0,
+      muted: false,
+      subtitle_language: None,
+      seek_step: 10,
+      seek_step_large: 60,
+      autoplay_next: true,
+      autoplay_countdown: 10,
+    }
+  }
 }
 
 /// The open menu of the control bar.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Menu {
   Quality,
+  Audio,
   Subtitles,
+  Chapters,
 }
 
 /// The player: see the module documentation.
@@ -85,6 +141,22 @@ pub struct PlayerView {
   prefs: Prefs,
   /// The page is in theater mode: the player spans it and squares its corners but one.
   theater: bool,
+  layout: Layout,
+  /// Second line of the title (episode, year), shown in the full-window layout.
+  subtitle: SharedString,
+  /// mpv's tracks of the playing file.
+  tracks: Vec<Track>,
+  subtitle_delay: f64,
+  chapters: Vec<Chapter>,
+  /// Segments from the source's server; without them, `segments` comes from the chapters.
+  given_segments: Vec<Segment>,
+  segments: Vec<Segment>,
+  /// The next item, offered in the "up next" card near the end.
+  up_next_title: Option<SharedString>,
+  up_next: UpNext,
+  countdown_task: Option<Task<()>>,
+  /// The shortcut help is open.
+  help: bool,
   title: SharedString,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
@@ -160,6 +232,17 @@ impl PlayerView {
     Self {
       focus: cx.focus_handle(),
       theater,
+      layout: Layout::Embedded,
+      subtitle: SharedString::default(),
+      tracks: Vec::new(),
+      subtitle_delay: 0.0,
+      chapters: Vec::new(),
+      given_segments: Vec::new(),
+      segments: Vec::new(),
+      up_next_title: None,
+      up_next: UpNext::Hidden,
+      countdown_task: None,
+      help: false,
       title: SharedString::default(),
       player: None,
       video: None,
@@ -205,13 +288,46 @@ impl PlayerView {
     &self.focus
   }
 
-  /// Title shown over the picture in fullscreen.
+  /// Title shown over the picture in fullscreen and in the full-window layout.
   pub fn set_title(&mut self, title: SharedString, cx: &mut Context<Self>) {
     self.title = title;
     cx.notify();
   }
 
-  /// Shows the previous and next buttons of a queue, enabled when it has such videos.
+  /// Second line of the title in the full-window layout (episode, year).
+  pub fn set_subtitle(&mut self, subtitle: SharedString, cx: &mut Context<Self>) {
+    self.subtitle = subtitle;
+    cx.notify();
+  }
+
+  /// Where the player sits; [`Layout::Embedded`] until set.
+  pub fn set_layout(&mut self, layout: Layout, cx: &mut Context<Self>) {
+    self.layout = layout;
+    cx.notify();
+  }
+
+  /// Playback position, seconds.
+  pub fn position(&self) -> f64 {
+    self.position
+  }
+
+  /// Length of the video, seconds (0 until known).
+  pub fn duration(&self) -> f64 {
+    self.duration
+  }
+
+  /// Whether playback is paused.
+  pub fn is_paused(&self) -> bool {
+    self.paused
+  }
+
+  /// Asks the page to close the player (full-window layout).
+  fn close(&mut self, cx: &mut Context<Self>) {
+    cx.emit(PlayerEvent::Close);
+  }
+
+  /// Shows the previous and next buttons (a queue's videos, a series' episodes), enabled when
+  /// there is such an item.
   pub fn set_queue(&mut self, queue: Option<(bool, bool)>, cx: &mut Context<Self>) {
     self.queue = queue;
     cx.notify();
@@ -426,13 +542,22 @@ impl PlayerView {
     match event {
       Event::Loaded => {
         self.buffering = false;
-        self.started = true;
+        if !self.started {
+          self.started = true;
+          cx.emit(PlayerEvent::Started);
+        }
       }
       // While dragging, mpv still reports the positions of the seeks it has not caught up
       // with: the playhead would jump back behind the mouse.
-      Event::Position(seconds) if !self.seek_dragging => self.position = seconds,
+      Event::Position(seconds) if !self.seek_dragging => {
+        self.position = seconds;
+        self.update_up_next(cx);
+      }
       Event::Position(_) => {}
-      Event::Duration(seconds) => self.duration = seconds,
+      Event::Duration(seconds) => {
+        self.duration = seconds;
+        self.refresh_segments();
+      }
       Event::Paused(paused) => {
         // Not for the state the file opens in.
         if self.started && paused != self.paused {
@@ -441,17 +566,33 @@ impl PlayerView {
             .map_or(0, |(count, _)| count.wrapping_add(1));
           self.pause_pulse = Some((count, paused));
         }
+        if paused != self.paused {
+          cx.emit(PlayerEvent::Paused(paused));
+        }
         self.paused = paused;
         self.show_controls(cx);
       }
       Event::Buffering(buffering) => self.buffering = buffering,
       Event::Muted(muted) => self.muted = muted,
+      Event::Tracks(tracks) => self.on_tracks(tracks, cx),
+      Event::Chapters(chapters) => self.on_chapters(chapters),
       Event::EndReached => {
         self.position = self.position.max(self.duration);
-        cx.emit(PlayerEvent::Ended);
+        let autoplay = self.up_next_title.is_some()
+          && self.prefs.autoplay_next
+          && self.up_next != UpNext::Dismissed;
+        if autoplay {
+          self.play_next(cx);
+        } else {
+          cx.emit(PlayerEvent::Ended);
+        }
       }
       Event::Ended(Some(error)) => self.fail(format!("Lecture interrompue : {error}").into(), cx),
-      Event::Ended(None) | Event::Tracks(_) | Event::Chapters(_) => {}
+      Event::Ended(None) => {
+        if self.layout == Layout::Window {
+          self.close(cx);
+        }
+      }
     }
     cx.notify();
   }
@@ -466,6 +607,7 @@ impl PlayerView {
     let target = seconds.clamp(0.0, self.duration.max(0.0));
     self.position = target;
     self.with_player(|p| p.seek_to(target));
+    cx.emit(PlayerEvent::Seeked);
     cx.notify();
   }
 
@@ -565,6 +707,7 @@ impl PlayerView {
           let busy = this.paused
             || this.failed
             || this.menu.is_some()
+            || this.help
             || this.over_controls
             || this.volume_hover.1
             || this.volume_dragging
@@ -581,31 +724,53 @@ impl PlayerView {
     }));
   }
 
+  fn seek_step(&self, large: bool) -> f64 {
+    f64::from(if large {
+      self.prefs.seek_step_large
+    } else {
+      self.prefs.seek_step
+    })
+  }
+
   fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
     let keystroke = &event.keystroke;
+    let shift = keystroke.modifiers.shift;
+    if keystroke.key_char.as_deref() == Some("?") {
+      self.help = !self.help;
+      cx.stop_propagation();
+      return self.show_controls(cx);
+    }
+    let window_layout = self.layout == Layout::Window;
     match keystroke.key.as_str() {
       "space" | "k" => self.with_player(Player::toggle_pause),
-      "left" => self.seek_by(-SEEK_SMALL, cx),
-      "right" => self.seek_by(SEEK_SMALL, cx),
-      "j" => self.seek_by(-SEEK_LARGE, cx),
-      "l" => self.seek_by(SEEK_LARGE, cx),
+      "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
+      "right" | "l" => self.seek_by(self.seek_step(shift), cx),
+      "pageup" => self.add_chapter(-1, cx),
+      "pagedown" => self.add_chapter(1, cx),
       "home" => self.seek_to(0.0, cx),
-      key @ ("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
-        if !keystroke.modifiers.shift =>
-      {
+      key @ ("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9") if !shift => {
         let tenth = key.parse::<f64>().unwrap_or(0.0);
         self.seek_to(self.duration * tenth / 10.0, cx);
       }
       "up" => self.set_volume(self.volume + VOLUME_STEP, cx),
       "down" => self.set_volume(self.volume - VOLUME_STEP, cx),
       "m" => self.toggle_mute(cx),
-      "c" => self.toggle_captions(cx),
-      "n" if self.queue.is_some_and(|(_, next)| next) => cx.emit(PlayerEvent::Next),
+      "a" => self.cycle_audio(cx),
+      "c" if self.on_demand_subtitles() => self.toggle_captions(cx),
+      "c" => self.cycle_subtitles(cx),
+      "z" => self.add_subtitle_delay(-SUBTITLE_DELAY_STEP, cx),
+      "x" => self.add_subtitle_delay(SUBTITLE_DELAY_STEP, cx),
+      "s" => self.skip(cx),
+      "n" if self.queue.is_some_and(|(_, next)| next) => self.play_next(cx),
       "p" if self.queue.is_some_and(|(previous, _)| previous) => cx.emit(PlayerEvent::Previous),
-      "escape" if self.menu.is_some() => self.menu = None,
-      "t" if !window.is_fullscreen() => self.toggle_theater(cx),
+      "escape" if self.help || self.menu.is_some() => {
+        self.help = false;
+        self.menu = None;
+      }
+      "t" if !window.is_fullscreen() && !window_layout => self.toggle_theater(cx),
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
+      "escape" | "backspace" if window_layout => self.close(cx),
       _ => return,
     }
     cx.stop_propagation();
@@ -620,7 +785,7 @@ impl PlayerView {
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
   fn on_video_click(&mut self, event: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
     window.focus(&self.focus, cx);
-    if self.menu.take().is_some() {
+    if self.menu.take().is_some() || std::mem::take(&mut self.help) {
       return cx.notify();
     }
     self.with_player(Player::toggle_pause);
@@ -629,9 +794,10 @@ impl PlayerView {
     }
   }
 
-  /// Mouse wheel: volume, in fullscreen only (in the page the wheel scrolls the page).
+  /// Mouse wheel: volume, in fullscreen or the full-window layout (embedded, the wheel scrolls
+  /// the page).
   fn on_wheel(&mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
-    if !window.is_fullscreen() {
+    if !window.is_fullscreen() && self.layout == Layout::Embedded {
       return;
     }
     let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
@@ -725,6 +891,9 @@ impl PlayerView {
         72.
       };
       let left = (bar_width * fraction as f32 - width / 2.).clamp(0., (bar_width - width).max(0.));
+      let chapter = self
+        .chapter_at(seconds)
+        .and_then(|i| self.chapters[i].title.clone());
       v_flex()
         .absolute()
         .bottom(px(22.))
@@ -734,16 +903,31 @@ impl PlayerView {
         .gap_1()
         .children(thumbnail)
         .child(
-          div()
+          v_flex()
+            .items_center()
             .px_2()
             .py_1()
             .rounded_md()
             .bg(gpui::black().opacity(0.8))
-            .text_sm()
             .text_color(gpui::white())
-            .child(format_time(seconds)),
+            .child(div().text_sm().child(format_time(seconds)))
+            .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c))),
         )
     });
+    let marks = self
+      .chapters
+      .iter()
+      .filter(|c| c.start > 1.0 && self.duration > 0.0 && c.start < self.duration)
+      .map(|c| {
+        div()
+          .absolute()
+          .top_0()
+          .bottom_0()
+          .left(relative((c.start / self.duration) as f32))
+          .w(px(3.))
+          .bg(gpui::black().opacity(0.7))
+      })
+      .collect::<Vec<_>>();
 
     div()
       .id("seek")
@@ -786,6 +970,7 @@ impl PlayerView {
               .map(|f| fill(f, gpui::white().opacity(0.25))),
           )
           .when(progress > 0.0, |el| el.child(fill(progress, primary)))
+          .children(marks)
           // A knob at the playhead while the bar is hovered.
           .when(self.seek_hover.is_some(), |el| {
             el.child(
@@ -964,14 +1149,17 @@ impl PlayerView {
     let fullscreen = window.is_fullscreen();
     let theater = self.theater;
     let white = |opacity: f32| gpui::white().opacity(opacity);
-    let has_captions = self
-      .source
-      .as_ref()
-      .is_some_and(|s| !s.subtitles.is_empty());
+    let has_captions =
+      self.on_demand_subtitles() || !self.tracks_of(player::TrackKind::Subtitle).is_empty();
+    let has_audio_choice = self.tracks_of(player::TrackKind::Audio).len() > 1;
     let has_qualities = self.source.as_ref().is_some_and(|s| s.qualities.len() > 1);
+    let embedded = self.layout == Layout::Embedded;
+    let step = self.prefs.seek_step;
     let mut layers = Vec::new();
 
-    if fullscreen && !self.title.is_empty() {
+    if !embedded {
+      layers.push(self.render_top_bar(window, cx));
+    } else if fullscreen && !self.title.is_empty() {
       layers.push(
         div()
           .absolute()
@@ -1002,7 +1190,7 @@ impl PlayerView {
           self
             .control_button("previous", cx)
             .icon(Icon::Previous)
-            .tooltip("Vidéo précédente (P)")
+            .tooltip("Précédent (P)")
             .disabled(!previous)
             .on_click(cx.listener(|_, _, _, cx| cx.emit(PlayerEvent::Previous))),
         )
@@ -1026,24 +1214,24 @@ impl PlayerView {
           self
             .control_button("next", cx)
             .icon(Icon::Next)
-            .tooltip("Vidéo suivante (N)")
+            .tooltip("Suivant (N)")
             .disabled(!next)
-            .on_click(cx.listener(|_, _, _, cx| cx.emit(PlayerEvent::Next))),
+            .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
         )
       })
       .child(
         self
           .control_button("back-10", cx)
           .icon(Icon::Back10)
-          .tooltip("Reculer de 10 s (J)")
-          .on_click(cx.listener(|this, _, _, cx| this.seek_by(-SEEK_LARGE, cx))),
+          .tooltip(format!("Reculer de {} (←)", format_step(step)))
+          .on_click(cx.listener(|this, _, _, cx| this.seek_by(-this.seek_step(false), cx))),
       )
       .child(
         self
           .control_button("fwd-10", cx)
           .icon(Icon::Forward10)
-          .tooltip("Avancer de 10 s (L)")
-          .on_click(cx.listener(|this, _, _, cx| this.seek_by(SEEK_LARGE, cx))),
+          .tooltip(format!("Avancer de {} (→)", format_step(step)))
+          .on_click(cx.listener(|this, _, _, cx| this.seek_by(this.seek_step(false), cx))),
       )
       .child(self.render_volume(cx))
       .child(div().pl_2().text_sm().text_color(white(0.9)).child(format!(
@@ -1052,6 +1240,33 @@ impl PlayerView {
         format_time(self.duration)
       )))
       .child(div().flex_1())
+      .when(!embedded && self.duration > 0.0, |row| {
+        row.child(
+          div()
+            .pr_2()
+            .text_sm()
+            .text_color(white(0.85))
+            .child(format!("-{}", format_time(self.duration - self.position))),
+        )
+      })
+      .when(!self.chapters.is_empty(), |row| {
+        row.child(
+          self
+            .control_button("chapters-menu", cx)
+            .icon(Icon::Chapters)
+            .tooltip("Chapitres (Page préc. / Page suiv.)")
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Chapters, cx))),
+        )
+      })
+      .when(has_audio_choice, |row| {
+        row.child(
+          self
+            .control_button("audio-menu", cx)
+            .icon(Icon::Audio)
+            .tooltip("Audio (A)")
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Audio, cx))),
+        )
+      })
       .when(has_captions, |row| {
         row.child(
           self
@@ -1070,8 +1285,18 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Quality, cx))),
         )
       })
+      .child(
+        self
+          .control_button("help", cx)
+          .icon(Icon::Keyboard)
+          .tooltip("Raccourcis clavier (?)")
+          .on_click(cx.listener(|this, _, _, cx| {
+            this.help = !this.help;
+            this.show_controls(cx);
+          })),
+      )
       // In fullscreen the picture fills the window anyway.
-      .when(!fullscreen, |row| {
+      .when(!fullscreen && embedded, |row| {
         row.child(
           self
             .control_button("theater", cx)
@@ -1202,74 +1427,6 @@ fn listen_to_drag(
   });
 }
 
-impl PlayerView {
-  /// Quality or subtitle list above the control bar (peeby's track menu).
-  fn render_menu(&self, menu: Menu, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    let theme = cx.theme();
-    let (popover, border) = (theme.popover, theme.border);
-    let mut list = v_flex().gap_1();
-    let entry = |id: SharedString, label: String, selected: bool| {
-      Button::new(id)
-        .label(label)
-        .when(selected, |b| b.primary())
-        .when(!selected, |b| b.ghost())
-    };
-    let (qualities, subtitles) = match &self.source {
-      Some(source) => (source.qualities.as_slice(), source.subtitles.as_slice()),
-      None => (&[][..], &[][..]),
-    };
-    match menu {
-      Menu::Quality => {
-        for (i, quality) in qualities.iter().enumerate() {
-          list = list.child(
-            entry(
-              format!("quality-{i}").into(),
-              quality.label.to_string(),
-              self.quality == Some(i),
-            )
-            .on_click(cx.listener(move |this, _, _, cx| this.select_quality(i, cx))),
-          );
-        }
-      }
-      Menu::Subtitles => {
-        list = list.child(
-          entry(
-            "sub-off".into(),
-            "Désactivés".into(),
-            self.caption.is_none(),
-          )
-          .on_click(cx.listener(|this, _, _, cx| this.select_caption(None, cx))),
-        );
-        for (i, caption) in subtitles.iter().enumerate() {
-          list = list.child(
-            entry(
-              format!("sub-{i}").into(),
-              caption.label.clone(),
-              self.caption == Some(i),
-            )
-            .on_click(cx.listener(move |this, _, _, cx| this.select_caption(Some(i), cx))),
-          );
-        }
-      }
-    }
-    div()
-      .id("menu")
-      .occlude()
-      .absolute()
-      .right_4()
-      .bottom(px(84.))
-      .max_h(px(320.))
-      .min_w(px(220.))
-      .overflow_y_scroll()
-      .p_2()
-      .rounded_lg()
-      .bg(popover)
-      .border_1()
-      .border_color(border)
-      .child(list)
-  }
-}
-
 /// A player button in a wrapper that reports its hover: the button's own `on_hover` is taken
 /// by its tooltip, and GPUI allows only one per element.
 #[derive(IntoElement)]
@@ -1377,10 +1534,14 @@ impl Render for PlayerView {
           .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx))),
       );
 
-    let status = self
-      .status
-      .clone()
-      .or_else(|| self.buffering.then(|| "Chargement…".into()));
+    let status = if self.failed {
+      None
+    } else {
+      self
+        .status
+        .clone()
+        .or_else(|| self.buffering.then(|| "Chargement…".into()))
+    };
     if let Some(status) = status {
       root = root.child(
         div()
@@ -1451,11 +1612,29 @@ impl Render for PlayerView {
           ),
       );
     }
-    if show_ui && !self.failed {
+    if self.failed {
+      let error = self.status.clone().unwrap_or_default();
+      if self.layout == Layout::Window {
+        root = root.child(self.render_top_bar(window, cx));
+      }
+      return root.child(self.render_error(error, cx));
+    }
+    // Skip and "up next" stay visible when the other controls hide.
+    let up_next = self.render_up_next(cx);
+    let skip = if up_next.is_none() {
+      self.render_skip(show_ui, cx)
+    } else {
+      None
+    };
+    root = root.children(skip).children(up_next);
+    if show_ui {
       root = root.children(self.render_controls(window, cx));
       if let Some(menu) = self.menu {
         root = root.child(self.render_menu(menu, cx));
       }
+    }
+    if self.help {
+      root = root.child(self.render_help(cx));
     }
     root
   }

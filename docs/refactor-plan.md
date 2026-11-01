@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–2 done, step 3 under way. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–3 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -92,10 +92,29 @@ Principles:
       options, subtitles added on demand, `Previews` tiles) and reads no setting: `Prefs` in, `PlayerEvent::Sound`
       and `Theater` out. YouTube builds its source in `youtube::source` (verified: 8 qualities, 6 subtitle
       tracks, playback 1.44 s)
-- [ ] The player owned by a `NowPlaying` session rather than by the watch page (needed by the mini-player)
-- [ ] Port peeby's player features one at a time (see the checklist below)
-- [ ] One shortcut table (below), with the `?` help overlay
-- [ ] Two layouts: embedded and full window (own window buttons, Esc/Backspace closes)
+- [x] Peeby's player features in `ui::player`: audio and subtitle tracks from mpv (named by the source when it
+      knows better, `Source::audio_names`/`subtitle_names`) with menus and A/C, subtitle delay (Z/X), chapters
+      (marks and titles on the seek bar, menu, Page Up/Down, mojibake repair), segments (`set_segments`, else
+      guessed from chapter titles, `segments.rs` with its tests) and the skip button (S), "up next" with its
+      countdown (`set_up_next`, `Prefs::autoplay_next`/`autoplay_countdown`), configurable seek steps
+      (`Prefs::seek_step`/`seek_step_large`), remaining time, error panel
+- [x] Events for Jellyfin's reports: `Started`, `Paused`, `Seeked`, `TracksChanged` (only on a change),
+      `Close`; `position()`, `duration()`, `is_paused()`, `selected_tracks()`, `finished()`
+- [x] One shortcut table (below), with the `?` help overlay (French)
+- [x] Two layouts: `Layout::Embedded` (YouTube) and `Layout::Window` (top bar with back, title and subtitle,
+      window buttons; Esc/Backspace close; wheel volume)
+- [x] `cargo run -p ui --example player`: the full-window layout on a video mpv generates (two audio tracks,
+      intro segment, "up next"). Verified on screenshots: top bar, skip button, audio button, "up next" card
+      and its countdown ending in `Next`
+- Left to the Jellyfin space (step 6), which owns the data: reports to the server, track mapping to
+  Jellyfin indexes and per-series memory, server segments, trickplay as `Previews`, external subtitle fonts,
+  start fullscreen, "remember volume"
+- Moved to step 4: the `NowPlaying` session. `PlayerView` is an entity, so the mini-player can hold it
+  alongside (or after) its page without changing the player
+- **Changed for YouTube:** arrows and J/L now both seek 10 s (Shift: 60 s), as in peeby, instead of 5 s and
+  10 s; a help button and `?`; subtitle delay and chapters keys apply too
+- **Not verified by hand:** the menus (audio, subtitles, chapters, quality), the help overlay, Z/X and Page
+  Up/Down were not clicked or pressed (the tests do not take the mouse or the keyboard)
 
 ### 4. Shell
 - [ ] Top bar: logo, tabs, search, bell, gear, window buttons

@@ -61,8 +61,9 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
 - VISIONOS needs a session `visitorData` (else `LOGIN_REQUIRED`); refresh it once and retry before failing.
 
 ## Player
-- `player_view.rs` adapts peeby's `player_page.rs`: take controls and behavior from there first (peeby is at
-  `D:\DEV\peeby\crates\peeby\src\player_page.rs`), leaving out its Jellyfin parts.
+- `ui::player` (crates/ui/src/player/) is the shared player, built from peeby's `player_page.rs`: take controls and
+  behavior from there first, keeping service data out of it (spaces give it a `Source`; peeby is at
+  `D:\DEV\peeby\crates\peeby\src\player_page.rs`); Jellyfin specifics (reports, track mapping) go to its space.
 
 ## Ask before
 - Adding, removing or upgrading a dependency, changing the GPUI revision, the libmpv build or the yt-dlp/Deno pins.

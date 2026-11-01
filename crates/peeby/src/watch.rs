@@ -122,6 +122,8 @@ impl WatchView {
       volume: settings.volume,
       muted: settings.muted,
       subtitle_language: Some(settings.language.clone()),
+      // Seek steps and autoplay become settings with the unified settings page.
+      ..Prefs::default()
     };
     let theater = settings.theater;
     let player = cx.new(|cx| PlayerView::new(prefs, theater, cx));
@@ -154,6 +156,12 @@ impl WatchView {
               queue.update(cx, |q, cx| q.previous(cx));
             }
           }
+          // YouTube reports nothing back, and the embedded player has no close button.
+          PlayerEvent::Started
+          | PlayerEvent::Paused(_)
+          | PlayerEvent::Seeked
+          | PlayerEvent::TracksChanged { .. }
+          | PlayerEvent::Close => {}
         }
       }),
     ];
