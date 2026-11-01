@@ -20,8 +20,8 @@ use ui::theme::Accent;
 pub struct SpaceInfo {
   /// Tab label, e.g. `YouTube`.
   pub name: SharedString,
-  /// Two letters on the tab's colored badge, e.g. `YT`.
-  pub badge: SharedString,
+  /// The service's logo on the tab: a colored SVG with a square view box.
+  pub icon: &'static [u8],
   /// The app's accent while the space is open.
   pub accent: Accent,
 }
@@ -83,7 +83,7 @@ pub enum SpaceEvent {
 
 /// A service's part of the app: its pages, its sidebar entries and what it plays.
 pub trait Space: Render + EventEmitter<SpaceEvent> {
-  /// Name, badge and accent.
+  /// Name, logo and accent.
   fn info(&self) -> SpaceInfo;
 
   /// Sidebar entries, top to bottom.

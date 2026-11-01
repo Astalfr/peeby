@@ -546,7 +546,7 @@ impl Space for TwitchSpace {
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
       name: "Twitch".into(),
-      badge: "TW".into(),
+      icon: include_bytes!("icon.svg"),
       accent: Self::accent(),
     }
   }

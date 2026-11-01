@@ -376,7 +376,7 @@ impl Space for JellyfinSpace {
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
       name: "Jellyfin".into(),
-      badge: "JF".into(),
+      icon: include_bytes!("icon.svg"),
       accent: Self::accent(),
     }
   }

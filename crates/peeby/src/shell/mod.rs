@@ -291,7 +291,7 @@ impl Shell {
         .child(div().occlude().child(menu))
         .child(div().occlude().child(back))
         .child(mark(window, cx))
-        .child(div().occlude().ml_4().child(self.tabs(cx)))
+        .child(div().occlude().ml_4().child(self.tabs(window, cx)))
         .child(div().flex_1())
         .child(
           h_flex()
@@ -323,9 +323,9 @@ impl Shell {
     )
   }
 
-  /// The spaces as tabs: a colored badge and the name; the open one has a light background and
-  /// a line in its accent underneath.
-  fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  /// The spaces as tabs: the service's logo and the name; the open one has a light background
+  /// and a line in its accent underneath.
+  fn tabs(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     h_flex()
       .h(px(34.))
       .gap_1()
@@ -365,20 +365,7 @@ impl Shell {
             s.bg(gpui::white().opacity(0.04))
               .text_color(theme::foreground())
           })
-          .child(
-            div()
-              .size(px(20.))
-              .flex_none()
-              .rounded(px(5.))
-              .flex()
-              .items_center()
-              .justify_center()
-              .bg(info.accent.base.opacity(0.18))
-              .text_color(info.accent.base)
-              .text_size(px(9.))
-              .font_weight(FontWeight::BOLD)
-              .child(info.badge.clone()),
-          )
+          .child(assets::color_svg(info.icon, 18., window, cx))
           .child(info.name.clone())
           .on_click(cx.listener(move |this, _, window, cx| this.activate(index, window, cx)))
       }))

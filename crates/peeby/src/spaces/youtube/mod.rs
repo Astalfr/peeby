@@ -311,7 +311,7 @@ impl Space for YouTubeSpace {
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
       name: "YouTube".into(),
-      badge: "YT".into(),
+      icon: include_bytes!("icon.svg"),
       accent: Accent::red(),
     }
   }

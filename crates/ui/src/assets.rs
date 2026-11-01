@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-  AnyElement, App, AssetSource, Global, ImageSource, IntoElement, RenderImage, SharedString,
-  Styled, Window, img, px,
+  AnyElement, App, AssetSource, DevicePixels, Global, ImageSource, IntoElement, RenderImage,
+  SharedString, Styled, SvgSize, Window, img, px,
 };
 use gpui_component::IconNamed;
 
@@ -135,6 +135,46 @@ pub fn logo(size: f32, window: &Window, cx: &mut App) -> AnyElement {
     .entry(side)
     .or_insert_with(|| images::decode(LOGO_PNG, Some((side, side))))
     .clone();
+  match image {
+    Some(image) => img(ImageSource::Render(image))
+      .size(px(size))
+      .flex_none()
+      .into_any_element(),
+    None => gpui::div().size(px(size)).flex_none().into_any_element(),
+  }
+}
+
+/// Colored SVGs, rasterized once per source and device-pixel size (keyed by the bytes' address:
+/// they are `'static`).
+#[derive(Default)]
+struct ColorSvgCache(HashMap<(usize, u32), Option<Arc<RenderImage>>>);
+
+impl Global for ColorSvgCache {}
+
+/// A colored SVG (a service's logo), `size` logical pixels square. Unlike [`gpui::svg`], which
+/// draws a one-color mask, it keeps the file's colors; as [`logo`], it is rasterized to the exact
+/// device-pixel size. The SVG's view box should be square.
+pub fn color_svg(bytes: &'static [u8], size: f32, window: &Window, cx: &mut App) -> AnyElement {
+  let side = (size * window.scale_factor()).round().max(1.) as u32;
+  let key = (bytes.as_ptr() as usize, side);
+  let image = match cx.default_global::<ColorSvgCache>().0.get(&key) {
+    Some(image) => image.clone(),
+    None => {
+      let renderer = cx.svg_renderer();
+      let pixels = DevicePixels(side as i32);
+      let image = renderer
+        .parse_svg(bytes)
+        .and_then(|svg| {
+          renderer.render_parsed(&svg, SvgSize::ExactSize(gpui::size(pixels, pixels)))
+        })
+        .inspect_err(|e| tracing::warn!("SVG not rendered: {e}"))
+        .ok();
+      cx.default_global::<ColorSvgCache>()
+        .0
+        .insert(key, image.clone());
+      image
+    }
+  };
   match image {
     Some(image) => img(ImageSource::Render(image))
       .size(px(size))
