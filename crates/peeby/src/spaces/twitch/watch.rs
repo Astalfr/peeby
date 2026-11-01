@@ -6,13 +6,13 @@
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar;
 //! - a clip: its direct MP4s.
 //!
-//! The layout is `ui::chat::watch_layout`: theater mode puts the player across the page, beside the
-//! chat (`Settings::theater`, shared). The channel's name opens its page.
+//! The layout is `ui::chat::watch_layout`: theater mode gives the whole page to the player and the
+//! chat, flush (`Settings::theater`, shared). The channel's name opens its page.
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, FontWeight, SharedString, Task, WeakEntity, Window, div, px, size};
+use gpui::{Context, Entity, FontWeight, SharedString, Task, WeakEntity, Window, div, px};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use twitch::gql::Channel;
 use twitch::helix::Helix;
@@ -556,14 +556,7 @@ impl Render for WatchView {
         .child(self.player.clone())
         .into_any_element();
     }
-    let settings = Settings::get(cx);
-    let theater = settings.theater.then(|| {
-      let viewport = window.viewport_size();
-      size(
-        viewport.width - theme::sidebar_width(settings.sidebar_collapsed),
-        viewport.height - theme::TITLE_BAR_HEIGHT,
-      )
-    });
+    let theater = Settings::get(cx).theater;
     let header = self.header(window, cx).into_any_element();
     watch_layout(
       self.player.clone().into_any_element(),

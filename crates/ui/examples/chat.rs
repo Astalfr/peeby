@@ -348,8 +348,7 @@ impl Render for Host {
     let host = cx.entity().downgrade();
     div()
       .size_full()
-      .bg(theme::background())
-      .p_2()
+      .bg(theme::surface())
       .child(self.panel.clone())
       .child(
         canvas(

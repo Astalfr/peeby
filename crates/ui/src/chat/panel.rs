@@ -36,7 +36,8 @@ fn emote_width(emote: &Emote) -> f32 {
 /// Height kept above and below the visible messages, laid out ahead of a scroll.
 const OVERDRAW: f32 = 400.;
 
-/// The chat panel: see the module documentation. Its page feeds it with [`ChatPanel::push`].
+/// The chat panel: see the module documentation. Its page feeds it with [`ChatPanel::push`]. It
+/// draws no background nor frame: its container does (`watch_layout`).
 pub struct ChatPanel {
   messages: VecDeque<ChatMessage>,
   /// Arrived while scrolled up, shown on resuming.
@@ -402,10 +403,6 @@ impl Render for ChatPanel {
     let empty = self.messages.is_empty() && held == 0;
     v_flex()
       .size_full()
-      .rounded(theme::RADIUS_LG)
-      .bg(theme::surface())
-      .border_1()
-      .border_color(theme::border())
       .overflow_hidden()
       .child(header)
       .children(self.status.clone().map(|status| {

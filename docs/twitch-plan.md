@@ -513,7 +513,8 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
     author's color.
 
   `ui::chat::watch_layout` is the watch page with a chat column (the chat on the page's height on the
-  right; in theater mode, beside the player at its height). `spaces/twitch/chat.rs` turns `twitch::chat`
+  right; in theater mode, as on Twitch, the player fills the rest of the page and the chat runs on its
+  whole height, flush against it, the header hidden). `spaces/twitch/chat.rs` turns `twitch::chat`
   updates into `ChatEvent`s, 200 at most per batch, the room's modes as French labels ("Followers depuis
   1 j", "Mode lent : 30 s"…); Twitch emotes as `Picture::sized` at scale 1, 2 or 3 for the drawn size
 - Verified (2026-11-01): in the app, signed in, on the secondary screen: jynxzi's, zackrawrr's and
