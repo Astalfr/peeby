@@ -23,7 +23,7 @@ fn open_video(
 }
 
 /// The card of `video` under `id` (which tells apart the same video in two lists): title,
-/// thumbnail, duration, channel then views · date, and the stream prefetch on hover.
+/// thumbnail, duration or live badge, channel then views · date, and the stream prefetch on hover.
 fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
   let video_id = video.id.clone();
   MediaCard::new(
@@ -37,6 +37,7 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
     video.metadata.join(" · "),
   ])
   .badge(video.duration.clone())
+  .live(video.live)
   .on_hover(move |hovered, cx| crate::spaces::youtube::prefetch::hover(&video_id, hovered, cx))
 }
 

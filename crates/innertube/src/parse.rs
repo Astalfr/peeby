@@ -294,6 +294,11 @@ fn parse_video_renderer(video: &Value) -> Option<VideoItem> {
       .chain(non_empty(text(&video["publishedTimeText"])))
       .collect(),
     duration: non_empty(text(&video["lengthText"])),
+    live: video["badges"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .any(|b| b["metadataBadgeRenderer"]["style"] == "BADGE_STYLE_TYPE_LIVE_NOW"),
     thumbnails: thumbnails(&video["thumbnail"]["thumbnails"]),
     avatar: thumbnails(
       &video["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]["thumbnail"]
@@ -552,6 +557,7 @@ fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
       .map(str::to_owned)
       .collect(),
     duration: non_empty(text(&r["lengthText"])),
+    live: false,
     thumbnails: thumbnails(&r["thumbnail"]["thumbnails"]),
     avatar: Vec::new(),
     set_video_id: removable_entry(r),
@@ -712,7 +718,7 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
 
   let avatar = &meta["image"]["decoratedAvatarViewModel"];
   let image = &lockup["contentImage"]["thumbnailViewModel"];
-  let duration = image["overlays"]
+  let badges: Vec<&Value> = image["overlays"]
     .as_array()
     .into_iter()
     .flatten()
@@ -722,9 +728,16 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
         .into_iter()
         .flatten()
     })
-    .find_map(|b| b["thumbnailBadgeViewModel"]["text"].as_str())
+    .map(|b| &b["thumbnailBadgeViewModel"])
+    .collect();
+  let duration = badges
+    .iter()
+    .find_map(|b| b["text"].as_str())
     .filter(|t| t.contains(':'))
     .map(str::to_owned);
+  let live = badges
+    .iter()
+    .any(|b| b["badgeStyle"] == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE");
 
   Some(VideoItem {
     id,
@@ -736,6 +749,7 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
       .map(str::to_owned),
     metadata,
     duration,
+    live,
     thumbnails: thumbnails(&image["image"]["sources"]),
     avatar: thumbnails(&avatar["avatar"]["avatarViewModel"]["image"]["sources"]),
     set_video_id: None,

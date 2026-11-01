@@ -45,6 +45,16 @@ fn channel_videos_grid() {
   assert!(first.metadata[1].starts_with("il y a"));
   assert!(first.thumbnails.iter().any(|t| t.width >= 720));
   assert!(feed.items.iter().all(|v| v.id.len() == 11));
+  assert!(feed.items.iter().all(|v| !v.live));
+}
+
+#[test]
+fn channel_streams_are_live() {
+  // Lofi Girl's "En direct" tab, captured 2026-11-02, trimmed to its first three lives.
+  let feed = parse_feed(&fixture("channel_streams.json"));
+  assert_eq!(feed.items.len(), 3);
+  assert_eq!(feed.items[0].id, "0sfDth4lMLc");
+  assert!(feed.items.iter().all(|v| v.live && v.duration.is_none()));
 }
 
 #[test]
@@ -474,6 +484,7 @@ fn search_results() {
     Some("UC7EVSn5inapL20oPSwAwEUg")
   );
   assert_eq!(first.duration.as_deref(), Some("3:05:04"));
+  assert!(!first.live);
   assert_eq!(first.metadata, ["663\u{a0}k\u{a0}vues", "il y a 2 ans"]);
   assert!(first.thumbnails.iter().any(|t| t.width >= 720));
   assert!(!first.avatar.is_empty());
@@ -489,6 +500,17 @@ fn search_results() {
   );
   // Protocol-relative avatars get their scheme.
   assert!(channel.avatar.iter().all(|a| a.url.starts_with("https://")));
+}
+
+#[test]
+fn search_lives() {
+  // A search filtered on lives, captured 2026-11-02, trimmed to its first three results.
+  let page = parse_search(&fixture("search_live.json"));
+  assert_eq!(page.results.len(), 3);
+  assert!(page.results.iter().all(|r| match r {
+    SearchResult::Video(v) => v.live && v.duration.is_none(),
+    _ => false,
+  }));
 }
 
 #[test]

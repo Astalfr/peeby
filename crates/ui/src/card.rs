@@ -96,6 +96,7 @@ pub struct MediaCard {
   picture: Picture,
   avatar: Option<Picture>,
   badge: Option<SharedString>,
+  live: bool,
   progress: Option<f32>,
   corner: Option<Corner>,
   play: bool,
@@ -122,6 +123,7 @@ impl MediaCard {
       picture,
       avatar: None,
       badge: None,
+      live: false,
       progress: None,
       corner: None,
       play: true,
@@ -152,6 +154,12 @@ impl MediaCard {
   /// Text in a dark badge at the picture's bottom right (duration).
   pub fn badge(mut self, badge: Option<impl Into<SharedString>>) -> Self {
     self.badge = badge.map(Into::into);
+    self
+  }
+
+  /// Whether the item is live now: an "EN DIRECT" badge on the accent takes the badge's place.
+  pub fn live(mut self, live: bool) -> Self {
+    self.live = live;
     self
   }
 
@@ -269,7 +277,8 @@ impl MediaCard {
       .children(play.map(|size| play_overlay(t, size, radius)))
       .children(self.progress.map(progress_bar))
       .children(self.corner.map(corner))
-      .children(self.badge.take().map(badge))
+      .when(self.live, |el| el.child(live_badge()))
+      .children(self.badge.take().filter(|_| !self.live).map(badge))
       .children(self.overlays.drain(..))
   }
 
@@ -615,6 +624,25 @@ fn badge(text: SharedString) -> impl IntoElement {
     .font_weight(FontWeight::SEMIBOLD)
     .text_color(gpui::white())
     .child(text)
+}
+
+/// "EN DIRECT" with a white dot on the accent at a picture's bottom right, like the player's.
+fn live_badge() -> impl IntoElement {
+  h_flex()
+    .absolute()
+    .bottom(px(8.))
+    .right(px(8.))
+    .gap_1()
+    .items_center()
+    .px(px(6.))
+    .py(px(1.))
+    .rounded(px(4.))
+    .bg(theme::accent())
+    .text_xs()
+    .font_weight(FontWeight::BOLD)
+    .text_color(gpui::white())
+    .child(div().size(px(6.)).rounded_full().bg(gpui::white()))
+    .child("EN DIRECT")
 }
 
 /// Height of a [`MediaCard::poster`] `width` wide with its picture at the `aspect` ratio.

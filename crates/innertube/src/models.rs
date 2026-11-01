@@ -35,6 +35,8 @@ pub struct VideoItem {
   pub metadata: Vec<String>,
   /// Duration badge, e.g. `3:51`; `None` for lives and premieres.
   pub duration: Option<String>,
+  /// Whether the video is a live broadcast happening now.
+  pub live: bool,
   /// Thumbnail sizes.
   pub thumbnails: Vec<Thumbnail>,
   /// Channel avatar sizes.
