@@ -211,9 +211,10 @@ pub fn video_card(
               v_flex()
                 .flex_1()
                 .min_w_0()
-                .gap_1()
+                .gap_0p5()
                 .child(
                   div()
+                    .line_height(px(20.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .line_clamp(2)
                     .text_color(if hovered {
@@ -223,7 +224,7 @@ pub fn video_card(
                     })
                     .child(video.title.clone()),
                 )
-                .child(meta_text(video).text_sm()),
+                .child(meta_text(video).text_sm().line_height(px(18.))),
             ),
         ),
     )
@@ -264,10 +265,11 @@ pub fn compact_card(
             .flex_1()
             .min_w_0()
             .pt_0p5()
-            .gap_1()
+            .gap_0p5()
             .child(
               div()
                 .text_sm()
+                .line_height(px(18.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .line_clamp(2)
                 .text_color(if hovered {
@@ -277,7 +279,7 @@ pub fn compact_card(
                 })
                 .child(video.title.clone()),
             )
-            .child(meta_text(video).text_xs()),
+            .child(meta_text(video).text_xs().line_height(px(16.))),
         ),
     )
     .into_any_element()
