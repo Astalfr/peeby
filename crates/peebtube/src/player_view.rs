@@ -11,7 +11,7 @@ use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, App, Bounds, ClickEvent, Context, Corners, DispatchPhase, Entity,
   EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-  MouseUpEvent, Pixels, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div,
+  MouseUpEvent, Pixels, Point, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div,
   ease_out_quint, linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
@@ -96,6 +96,9 @@ pub struct PlayerView {
   seek_bounds: Rc<Cell<Bounds<Pixels>>>,
   /// Mouse position over the seek bar, as a fraction of the duration.
   seek_hover: Option<f64>,
+  /// The left button went down on the seek bar and is still held: the playhead follows the
+  /// mouse horizontally wherever it is, and mpv's positions are ignored until the release.
+  seek_dragging: bool,
   /// The stream being played (VISIONOS): its qualities and subtitle tracks.
   stream: Option<Stream>,
   /// Index of the playing quality in `stream.qualities`.
@@ -146,6 +149,7 @@ impl PlayerView {
       hide_task: None,
       seek_bounds: Rc::default(),
       seek_hover: None,
+      seek_dragging: false,
       stream: None,
       quality: None,
       caption: None,
@@ -382,7 +386,10 @@ impl PlayerView {
         self.buffering = false;
         self.started = true;
       }
-      Event::Position(seconds) => self.position = seconds,
+      // While dragging, mpv still reports the positions of the seeks it has not caught up
+      // with: the playhead would jump back behind the mouse.
+      Event::Position(seconds) if !self.seek_dragging => self.position = seconds,
+      Event::Position(_) => {}
       Event::Duration(seconds) => self.duration = seconds,
       Event::Paused(paused) => {
         // Not for the state the file opens in.
@@ -444,6 +451,23 @@ impl PlayerView {
     }
   }
 
+  /// Seeks to the mouse's horizontal position on the seek bar, clamped to its ends.
+  fn seek_at(&mut self, x: Pixels, cx: &mut Context<Self>) {
+    if let Some(fraction) = self.seek_fraction(x) {
+      self.seek_hover = Some(fraction);
+      self.seek_to(fraction * self.duration, cx);
+    }
+  }
+
+  fn end_seek_drag(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+    self.seek_dragging = false;
+    // Released away from the bar: no hover-out comes, the bar was left during the drag.
+    if !self.seek_bounds.get().dilate(px(8.)).contains(&position) {
+      self.seek_hover = None;
+    }
+    self.show_controls(cx);
+  }
+
   fn end_volume_drag(&mut self, cx: &mut Context<Self>) {
     self.volume_dragging = false;
     // Restarts the hide timer, which skipped hiding the controls during the drag.
@@ -500,7 +524,8 @@ impl PlayerView {
             || this.menu.is_some()
             || this.over_controls
             || this.volume_hover.1
-            || this.volume_dragging;
+            || this.volume_dragging
+            || this.seek_dragging;
           if !busy {
             this.controls_visible = false;
             // The buttons go away without a hover-out.
@@ -607,6 +632,7 @@ impl PlayerView {
         .bg(color)
     };
     let bounds_cell = self.seek_bounds.clone();
+    let (dragging, view) = (self.seek_dragging, cx.weak_entity());
     let preview = self.seek_hover.map(|fraction| {
       let seconds = fraction * self.duration;
       let bar_width = f32::from(self.seek_bounds.get().size.width);
@@ -638,11 +664,14 @@ impl PlayerView {
       .py_2()
       .cursor_pointer()
       .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-        this.seek_hover = this.seek_fraction(event.position.x);
-        cx.notify();
+        // During a drag the window listener moves the playhead (and the preview with it).
+        if !this.seek_dragging {
+          this.seek_hover = this.seek_fraction(event.position.x);
+          cx.notify();
+        }
       }))
       .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-        if !hovered {
+        if !hovered && !this.seek_dragging {
           this.seek_hover = None;
           cx.notify();
         }
@@ -650,9 +679,8 @@ impl PlayerView {
       .on_mouse_down(
         MouseButton::Left,
         cx.listener(|this, event: &MouseDownEvent, _, cx| {
-          if let Some(fraction) = this.seek_fraction(event.position.x) {
-            this.seek_to(fraction * this.duration, cx);
-          }
+          this.seek_dragging = this.seek_fraction(event.position.x).is_some();
+          this.seek_at(event.position.x, cx);
         }),
       )
       .child(
@@ -684,9 +712,21 @@ impl PlayerView {
             )
           })
           .child(
-            canvas(move |bounds, _, _| bounds_cell.set(bounds), |_, _, _, _| {})
-              .absolute()
-              .inset_0(),
+            canvas(
+              move |bounds, _, _| bounds_cell.set(bounds),
+              move |_, _, window, _| {
+                if dragging {
+                  listen_to_drag(
+                    &view,
+                    window,
+                    |this, position, cx| this.seek_at(position.x, cx),
+                    PlayerView::end_seek_drag,
+                  );
+                }
+              },
+            )
+            .absolute()
+            .inset_0(),
           ),
       )
       .children(preview)
@@ -787,7 +827,12 @@ impl PlayerView {
               move |bounds, _, _| bounds_cell.set(bounds),
               move |_, _, window, _| {
                 if dragging {
-                  listen_to_volume_drag(&view, window);
+                  listen_to_drag(
+                    &view,
+                    window,
+                    |this, position, cx| this.set_volume_at(position.y, cx),
+                    |this, _, cx| this.end_volume_drag(cx),
+                  );
                 }
               },
             )
@@ -1031,17 +1076,26 @@ impl PlayerView {
   }
 }
 
-fn listen_to_volume_drag(view: &WeakEntity<PlayerView>, window: &mut Window) {
+type DragHandler = fn(&mut PlayerView, Point<Pixels>, &mut Context<PlayerView>);
+
+/// Follows a left-button drag (volume slider, seek bar) over the whole window until the release.
+/// Registered at each paint while the drag lasts, as GPUI drops window listeners every frame.
+fn listen_to_drag(
+  view: &WeakEntity<PlayerView>,
+  window: &mut Window,
+  on_move: DragHandler,
+  on_end: DragHandler,
+) {
   let move_view = view.clone();
   window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
     if phase == DispatchPhase::Capture {
       move_view
         .update(cx, |this, cx| {
           if event.pressed_button == Some(MouseButton::Left) {
-            this.set_volume_at(event.position.y, cx);
+            on_move(this, event.position, cx);
           } else {
             // The button was released where no mouse up reached the window.
-            this.end_volume_drag(cx);
+            on_end(this, event.position, cx);
           }
         })
         .ok();
@@ -1050,7 +1104,9 @@ fn listen_to_volume_drag(view: &WeakEntity<PlayerView>, window: &mut Window) {
   let up_view = view.clone();
   window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
     if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
-      up_view.update(cx, |this, cx| this.end_volume_drag(cx)).ok();
+      up_view
+        .update(cx, |this, cx| on_end(this, event.position, cx))
+        .ok();
     }
   });
 }
