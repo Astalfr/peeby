@@ -22,7 +22,7 @@ use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
-use crate::{prefetch, runtime, settings, theme};
+use crate::{prefetch, runtime, save, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -104,6 +104,7 @@ impl AppView {
         }
       },
     );
+    cx.set_global(save::Session(client.clone()));
     let mut app = Self {
       client,
       stack: Vec::new(),
@@ -141,6 +142,7 @@ impl AppView {
         tracing::warn!("ytcfg: {e}");
       }
     }));
+    cx.set_global(save::Session(client.clone()));
     self.client = client;
     // Pages hold the old client: they are rebuilt on the next navigation; Home now.
     self.reset_to = Some(Route::Home);

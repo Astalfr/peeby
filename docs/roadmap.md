@@ -11,6 +11,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Save to playlist
+
+- Done (2026-11-01): "⋮" menu and "Watch later" shortcut on grid cards and list rows (hover only), "Enregistrer" on the watch page, the list of playlists with checks, toasts. `playlist/get_add_to_playlist` is parsed and tested on a redacted fixture.
+- Verified: the card buttons appear on hover. **Not verified:** the popover and its list in the app (the test run was stopped), and any actual add or remove: the `browse/edit_playlist` request was never sent (writing to the account needs the user's go-ahead), so its response has no fixture yet.
+
 ## Playlists
 
 - Done (2026-11-01): "Playlists" in the sidebar: the user's playlists, a playlist's page (header, numbered videos, next pages on scroll), "Tout lire" and "Aléatoire". Playing a playlist shows its queue next to the player: a video that ends plays the next one, previous/next buttons and P/N keys, shuffle, repeat, next pages loaded as the end comes near, next stream resolved ahead. Parsers tested on 4 new redacted fixtures (library, "Watch later", a public playlist and its continuation); `smoke` checks the library, "Liked videos" and its next page live.

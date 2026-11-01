@@ -15,6 +15,7 @@ mod playlists;
 mod prefetch;
 mod queue;
 mod runtime;
+mod save;
 mod settings;
 mod settings_page;
 mod theme;

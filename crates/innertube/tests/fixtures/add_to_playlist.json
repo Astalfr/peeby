@@ -1,0 +1,808 @@
+{
+ "contents": [
+  {
+   "addToPlaylistRenderer": {
+    "actions": [
+     {
+      "menuTitleRenderer": {
+       "title": {
+        "runs": [
+         {
+          "text": "Enregistrer dans…"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "buttonRenderer": {
+       "command": {
+        "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+        "commandExecutorCommand": {
+         "commands": [
+          {
+           "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+           "signalAction": {
+            "signal": "CLOSE_POPUP"
+           }
+          },
+          {
+           "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+           "showDialogCommand": {
+            "panelLoadingStrategy": {
+             "inlineContent": {
+              "dialogViewModel": {
+               "customContent": {
+                "createPlaylistDialogFormViewModel": {
+                 "createPlaylistDialogFormSchema": {
+                  "fieldSchemas": {
+                   "title": {
+                    "validationSchema": {
+                     "syncStep": {
+                      "rules": [
+                       {
+                        "lengthValidationRule": {
+                         "maxLength": 150,
+                         "minLength": 1,
+                         "translations": {
+                          "maxLengthErrorMessage": "Choisissez un titre plus court",
+                          "minLengthErrorMessage": "Veuillez indiquer un titre"
+                         }
+                        }
+                       }
+                      ]
+                     }
+                    }
+                   },
+                   "visibility": {
+                    "validationSchema": {
+                     "dependencies": [
+                      "is_collaborative"
+                     ],
+                     "syncStep": {
+                      "rules": [
+                       {
+                        "collaborativePlaylistVisibilityValidationRule": {
+                         "dependencies": {
+                          "collaborationFieldId": "is_collaborative"
+                         },
+                         "translations": {
+                          "visibilityNotValidErrorMessage": {
+                           "commandRuns": [
+                            {
+                             "length": 14,
+                             "onTap": {
+                              "innertubeCommand": {
+                               "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+                               "commandMetadata": {
+                                "webCommandMetadata": {
+                                 "rootVe": 83769,
+                                 "url": "https://support.google.com/youtube/answer/6109639?nohelpkit=1",
+                                 "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                                }
+                               },
+                               "urlEndpoint": {
+                                "target": "TARGET_NEW_WINDOW",
+                                "url": "https://support.google.com/youtube/answer/6109639?nohelpkit=1"
+                               }
+                              }
+                             },
+                             "startIndex": 61
+                            }
+                           ],
+                           "content": "Modifiez la confidentialité pour autoriser la collaboration. En savoir plus",
+                           "styleRuns": [
+                            {
+                             "length": 14,
+                             "startIndex": 61
+                            }
+                           ]
+                          }
+                         }
+                        }
+                       }
+                      ]
+                     }
+                    }
+                   }
+                  },
+                  "id": "create_playlist_dialog",
+                  "initialValues": {
+                   "isCollaborative": false,
+                   "visibility": "PRIVATE"
+                  }
+                 },
+                 "createPlaylistParamsCollaborationDisabled": "CAAoAA%3D%3D",
+                 "createPlaylistParamsCollaborationEnabled": "CAAoAQ%3D%3D",
+                 "disablePlaylistCollaborate": false,
+                 "playlistCollaborate": {
+                  "switchListItemViewModel": {
+                   "a11yLabelSwitchedOff": "Désactivé",
+                   "a11yLabelSwitchedOn": "Activé",
+                   "formFieldMetadata": {
+                    "fieldId": "is_collaborative",
+                    "formId": "create_playlist_dialog"
+                   },
+                   "isDisabled": false,
+                   "title": {
+                    "content": "Collaborer"
+                   }
+                  }
+                 },
+                 "playlistTitle": {
+                  "textFieldViewModel": {
+                   "contentProperties": {
+                    "labelText": "Titre",
+                    "maxCharacterCount": 150,
+                    "placeholderText": "Choisissez un titre"
+                   },
+                   "displayProperties": {
+                    "disableNewLines": true,
+                    "isMultiline": true
+                   },
+                   "enableEditableTextV2": false,
+                   "formFieldMetadata": {
+                    "fieldId": "title",
+                    "formId": "create_playlist_dialog"
+                   },
+                   "initialState": {
+                    "isFocused": true
+                   }
+                  }
+                 },
+                 "playlistVisibility": {
+                  "dropdownViewModel": {
+                   "disabled": false,
+                   "id": "visibility",
+                   "label": {
+                    "content": "Visibilité"
+                   },
+                   "options": [
+                    {
+                     "leadingImage": {
+                      "sources": [
+                       {
+                        "clientResource": {
+                         "imageName": "PRIVACY_PUBLIC"
+                        }
+                       }
+                      ]
+                     },
+                     "onTap": {
+                      "innertubeCommand": {
+                       "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+                       "notifyDropdownOptionSelectedCommand": {
+                        "dropdownId": "visibility",
+                        "selectedOptionIndex": 0
+                       }
+                      }
+                     },
+                     "subtitle": {
+                      "content": "Tout le monde peut la rechercher et la voir"
+                     },
+                     "title": {
+                      "content": "Publique"
+                     },
+                     "value": {
+                      "privacyStatusValue": "PUBLIC"
+                     }
+                    },
+                    {
+                     "leadingImage": {
+                      "sources": [
+                       {
+                        "clientResource": {
+                         "imageName": "PRIVACY_UNLISTED"
+                        }
+                       }
+                      ]
+                     },
+                     "onTap": {
+                      "innertubeCommand": {
+                       "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+                       "notifyDropdownOptionSelectedCommand": {
+                        "dropdownId": "visibility",
+                        "selectedOptionIndex": 1
+                       }
+                      }
+                     },
+                     "subtitle": {
+                      "content": "Toute personne ayant le lien peut la voir"
+                     },
+                     "title": {
+                      "content": "Non répertoriée"
+                     },
+                     "value": {
+                      "privacyStatusValue": "UNLISTED"
+                     }
+                    },
+                    {
+                     "isSelected": true,
+                     "leadingImage": {
+                      "sources": [
+                       {
+                        "clientResource": {
+                         "imageName": "PRIVACY_PRIVATE"
+                        }
+                       }
+                      ]
+                     },
+                     "onTap": {
+                      "innertubeCommand": {
+                       "clickTrackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+                       "notifyDropdownOptionSelectedCommand": {
+                        "dropdownId": "visibility",
+                        "selectedOptionIndex": 2
+                       }
+                      }
+                     },
+                     "subtitle": {
+                      "content": "Vous seul(e) pouvez la voir"
+                     },
+                     "title": {
+                      "content": "Privée"
+                     },
+                     "value": {
+                      "privacyStatusValue": "PRIVATE"
+                     }
+                    }
+                   ],
+                   "placeholderText": {
+                    "content": "Définir la visibilité"
+                   },
+                   "type": "SELECTION_TYPE_PRIVACY_STATUS"
+                  }
+                 },
+                 "videoIds": [
+                  "tcqah8v8qmo"
+                 ]
+                }
+               },
+               "footer": {
+                "formFooterViewModel": {
+                 "containerType": "FORM_FOOTER_CONTAINER_TYPE_DIALOG",
+                 "enableLongLivedCommandDispatcher": true,
+                 "formId": "create_playlist_dialog",
+                 "panelFooter": {
+                  "panelFooterViewModel": {
+                   "primaryButton": {
+                    "buttonViewModel": {
+                     "accessibilityText": "Créer",
+                     "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEMa playlist 2ULT",
+                     "isFullWidth": false,
+                     "state": "BUTTON_VIEW_MODEL_STATE_DISABLED",
+                     "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                     "title": "Créer",
+                     "trackingParams": "CAMQ8FsiEwiAidbjhueXAxVA20kHHT7bEu4=",
+                     "type": "BUTTON_VIEW_MODEL_TYPE_FILLED"
+                    }
+                   },
+                   "secondaryButton": {
+                    "buttonViewModel": {
+                     "accessibilityText": "Annuler",
+                     "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEMa playlist 2ULT",
+                     "isFullWidth": false,
+                     "onTap": {
+                      "innertubeCommand": {
+                       "clickTrackingParams": "CAIQ8FsiEwiAidbjhueXAxVA20kHHT7bEu7KAQSPWpwx",
+                       "dismissDialogEndpoint": {}
+                      }
+                     },
+                     "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                     "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                     "title": "Annuler",
+                     "trackingParams": "CAIQ8FsiEwiAidbjhueXAxVA20kHHT7bEu4=",
+                     "type": "BUTTON_VIEW_MODEL_TYPE_OUTLINE"
+                    }
+                   },
+                   "shouldHideDivider": true
+                  }
+                 }
+                }
+               },
+               "header": {
+                "dialogHeaderViewModel": {
+                 "headline": {
+                  "content": "Nouvelle playlist"
+                 }
+                }
+               }
+              }
+             }
+            },
+            "removeDefaultPadding": true
+           }
+          }
+         ]
+        }
+       },
+       "icon": {
+        "iconType": "ADD"
+       },
+       "size": "SIZE_DEMa playlist 2ULT",
+       "style": "STYLE_DEMa playlist 2ULT",
+       "text": {
+        "runs": [
+         {
+          "text": "Nouvelle playlist"
+         }
+        ]
+       },
+       "trackingParams": "CAEQ1NwDGAkiEwiAidbjhueXAxVA20kHHT7bEu4="
+      }
+     }
+    ],
+    "playlists": [
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "WL"
+        }
+       },
+       "containsSelectedVideos": "ALL",
+       "playlistId": "WL",
+       "privacy": "PRIVATE",
+       "privacyIcon": {
+        "iconType": "PRIVACY_PRIVATE"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "WL"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "À regarder plus tard Privée"
+         }
+        },
+        "simpleText": "À regarder plus tard"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "FLREDACTEDxxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "FLREDACTEDxxxxxxxxxxxxxx",
+       "privacy": "PRIVATE",
+       "privacyIcon": {
+        "iconType": "PRIVACY_PRIVATE"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "FLREDACTEDxxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Favoris Privée"
+         }
+        },
+        "simpleText": "Favoris"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist01xxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "PLREDACTEDplaylist01xxxxxxxxxxxxxx",
+       "privacy": "UNLISTED",
+       "privacyIcon": {
+        "iconType": "PRIVACY_UNLISTED"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist01xxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Ma playlist 1 Non répertoriée"
+         }
+        },
+        "simpleText": "Ma playlist 1"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist02xxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "PLREDACTEDplaylist02xxxxxxxxxxxxxx",
+       "privacy": "UNLISTED",
+       "privacyIcon": {
+        "iconType": "PRIVACY_UNLISTED"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist02xxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Ma playlist 2 Non répertoriée"
+         }
+        },
+        "simpleText": "Ma playlist 2"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist03xxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "PLREDACTEDplaylist03xxxxxxxxxxxxxx",
+       "privacy": "PRIVATE",
+       "privacyIcon": {
+        "iconType": "PRIVACY_PRIVATE"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist03xxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Ma playlist 3 Privée"
+         }
+        },
+        "simpleText": "Ma playlist 3"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist04xxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "PLREDACTEDplaylist04xxxxxxxxxxxxxx",
+       "privacy": "UNLISTED",
+       "privacyIcon": {
+        "iconType": "PRIVACY_UNLISTED"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist04xxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Ma playlist 4 Non répertoriée"
+         }
+        },
+        "simpleText": "Ma playlist 4"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     },
+     {
+      "playlistAddToOptionRenderer": {
+       "addToPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_ADD_VIDEO",
+           "addedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist05xxxxxxxxxxxxxx"
+        }
+       },
+       "containsSelectedVideos": "NONE",
+       "playlistId": "PLREDACTEDplaylist05xxxxxxxxxxxxxx",
+       "privacy": "PRIVATE",
+       "privacyIcon": {
+        "iconType": "PRIVACY_PRIVATE"
+       },
+       "removeFromPlaylistServiceEndpoint": {
+        "clickTrackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ==",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "apiUrl": "/youtubei/v1/browse/edit_playlist",
+          "sendPost": true
+         }
+        },
+        "playlistEditEndpoint": {
+         "actions": [
+          {
+           "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+           "removedVideoId": "tcqah8v8qmo"
+          }
+         ],
+         "playlistId": "PLREDACTEDplaylist05xxxxxxxxxxxxxx"
+        }
+       },
+       "title": {
+        "accessibility": {
+         "accessibilityData": {
+          "label": "Ma playlist 5 Privée"
+         }
+        },
+        "simpleText": "Ma playlist 5"
+       },
+       "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "responseContext": {
+  "mainAppWebResponseContext": {
+   "loggedOut": false,
+   "trackingParam": "kVAfmPxhojaRHthvTqcQkc3ufzPOj_9JAOGjfA8SA46e4GLa8vqiYDJPQ0VEAdBact1CguIBwOcC069TnuslLKPQSTS"
+  },
+  "responseId": "IhMIgInW44bnlwMVQNtJBx0-2xLu",
+  "serviceTrackingParams": [
+   {
+    "params": [
+     {
+      "key": "c",
+      "value": "WEB"
+     },
+     {
+      "key": "cver",
+      "value": "2.20261029.11.00"
+     },
+     {
+      "key": "yt_li",
+      "value": "1"
+     },
+     {
+      "key": "GetAddToPlaylist_rid",
+      "value": "0x563b7ba3025b894d"
+     }
+    ],
+    "service": "Ma playlist 3I"
+   },
+   {
+    "params": [
+     {
+      "key": "logged_in",
+      "value": "1"
+     }
+    ],
+    "service": "GFEEDBACK"
+   },
+   {
+    "params": [
+     {
+      "key": "logged_in",
+      "value": "1"
+     }
+    ],
+    "service": "GUIDED_HELP"
+   },
+   {
+    "params": [
+     {
+      "key": "client.version",
+      "value": "2.20261029"
+     },
+     {
+      "key": "client.name",
+      "value": "WEB"
+     }
+    ],
+    "service": "ECATCHER"
+   }
+  ],
+  "visitorData": "REDACTED",
+  "webResponseContextExtensionData": {
+   "hasDecorated": true,
+   "webResponseContextPreloadData": {
+    "preloadMessageNames": [
+     "addToPlaylistRenderer",
+     "playlistAddToOptionRenderer",
+     "menuTitleRenderer",
+     "buttonRenderer",
+     "dialogViewModel",
+     "dialogHeaderViewModel",
+     "formFooterViewModel",
+     "panelFooterViewModel",
+     "buttonViewModel",
+     "createPlaylistDialogFormViewModel",
+     "textFieldViewModel",
+     "dropdownViewModel",
+     "switchListItemViewModel"
+    ]
+   }
+  }
+ },
+ "trackingParams": "CAAQisQGIhMIgInW44bnlwMVQNtJBx0-2xLuygEEj1qcMQ=="
+}

@@ -13,7 +13,7 @@ use innertube::{Thumbnail, VideoItem};
 use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
-use crate::{motion, theme};
+use crate::{motion, save, theme};
 
 /// Side of a channel avatar next to a card's title.
 const AVATAR: f32 = 36.;
@@ -169,13 +169,8 @@ pub fn video_card(
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
-  let (card, hovered, t) = hover_card(
-    &format!("card-{}", video.id),
-    video,
-    open_video(video, nav),
-    window,
-    cx,
-  );
+  let id = format!("card-{}", video.id);
+  let (card, hovered, t) = hover_card(&id, video, open_video(video, nav), window, cx);
   let thumb = image_fill(&video.thumbnails, width, theme::RADIUS_LG, window, cx);
   let avatar = (!video.avatar.is_empty()).then(|| {
     div().size(px(AVATAR)).flex_none().child(image_fill(
@@ -213,7 +208,8 @@ pub fn video_card(
                 .rounded(theme::RADIUS_LG)
                 .border_2()
                 .border_color(theme::accent().opacity(t)),
-            ),
+            )
+            .child(save::watch_later_button(&id, &video.id, t)),
         )
         .child(
           h_flex()
@@ -239,7 +235,8 @@ pub fn video_card(
                     .child(video.title.clone()),
                 )
                 .child(meta_text(video).text_sm().line_height(px(18.))),
-            ),
+            )
+            .child(save::menu_button(&id, &video.id, t)),
         ),
     )
     .into_any_element()
@@ -317,13 +314,8 @@ pub fn video_row(
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
-  let (card, hovered, t) = hover_card(
-    &format!("row-{}", video.id),
-    video,
-    open_video(video, nav),
-    window,
-    cx,
-  );
+  let id = format!("row-{}", video.id);
+  let (card, hovered, t) = hover_card(&id, video, open_video(video, nav), window, cx);
   let thumb = image_fill(&video.thumbnails, ROW_WIDTH, theme::RADIUS, window, cx);
   let channel = video.channel.clone().map(|name| {
     h_flex()
@@ -357,7 +349,8 @@ pub fn video_row(
             .flex_none()
             .child(thumb)
             .child(play_overlay(t, 44., theme::RADIUS))
-            .children(duration_badge(&video.duration)),
+            .children(duration_badge(&video.duration))
+            .child(save::watch_later_button(&id, &video.id, t)),
         )
         .child(
           v_flex()
@@ -382,7 +375,8 @@ pub fn video_row(
             )
             .children(channel)
             .child(div().truncate().child(video.metadata.join(" · "))),
-        ),
+        )
+        .child(save::menu_button(&id, &video.id, t)),
     )
     .into_any_element()
 }

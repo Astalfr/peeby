@@ -225,3 +225,16 @@ pub struct Playlist {
   /// Token of the next videos, for [`crate::Client::playlist_more`].
   pub continuation: Option<String>,
 }
+
+/// A playlist the user can save a video to, from the "Save to playlist" dialog.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaylistChoice {
+  /// Playlist id (`WL`, `PL…`).
+  pub id: String,
+  /// Title.
+  pub title: String,
+  /// Whether the video is already in it.
+  pub contains: bool,
+  /// Only the user can see it (`PRIVATE`; `UNLISTED` and `PUBLIC` are not).
+  pub private: bool,
+}

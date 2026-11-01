@@ -13,8 +13,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::models::{
-  Caption, Channel, Comment, CommentPage, Feed, Playlist, PlaylistSummary, Thumbnail, VideoItem,
-  WatchPage,
+  Caption, Channel, Comment, CommentPage, Feed, Playlist, PlaylistChoice, PlaylistSummary,
+  Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -165,6 +165,25 @@ fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
       .collect(),
     thumbnails: thumbnails(&image["image"]["sources"]),
   })
+}
+
+/// Parses the "Save to playlist" dialog (`playlist/get_add_to_playlist`): every playlist the
+/// user can add to, "Watch later" first, and whether it holds the video already.
+pub fn parse_playlist_choices(response: &Value) -> Vec<PlaylistChoice> {
+  let mut options = Vec::new();
+  find_all(response, "playlistAddToOptionRenderer", &mut options);
+  options
+    .into_iter()
+    .filter_map(|o| {
+      Some(PlaylistChoice {
+        id: o["playlistId"].as_str()?.to_owned(),
+        title: non_empty(text(&o["title"]))?,
+        // "ALL", "NONE" (and "SOME" when several videos are asked about).
+        contains: o["containsSelectedVideos"] == "ALL",
+        private: o["privacy"] == "PRIVATE",
+      })
+    })
+    .collect()
 }
 
 /// Parses a playlist's page (`VL<id>`): header, first videos and the next videos' token.

@@ -7,11 +7,11 @@ use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
-  Channel, CommentPage, Feed, Playlist, PlaylistSummary, Stream, Votes, WatchPage,
+  Channel, CommentPage, Feed, Playlist, PlaylistChoice, PlaylistSummary, Stream, Votes, WatchPage,
 };
 use crate::parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist, parse_playlist_page,
-  parse_playlists, parse_watch, tracking_param,
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -149,6 +149,45 @@ impl Client {
       .await?;
     self.check_session(&response)?;
     Ok(parse_playlist_page(&response))
+  }
+
+  /// The playlists `video_id` can be saved to, and whether each one holds it already. Needs
+  /// cookies.
+  pub async fn playlist_choices(&self, video_id: &str) -> Result<Vec<PlaylistChoice>> {
+    self.require_session()?;
+    let body = json!({ "videoIds": [video_id], "excludeWatchLater": false });
+    let response = self.web("playlist/get_add_to_playlist", body, true).await?;
+    self.check_session(&response)?;
+    Ok(parse_playlist_choices(&response))
+  }
+
+  /// Adds `video_id` at the end of a playlist (`WL` for "Watch later"). Needs cookies.
+  pub async fn add_to_playlist(&self, playlist_id: &str, video_id: &str) -> Result<()> {
+    let action = json!({ "action": "ACTION_ADD_VIDEO", "addedVideoId": video_id });
+    self.edit_playlist(playlist_id, action).await
+  }
+
+  /// Removes `video_id` from a playlist. Needs cookies.
+  pub async fn remove_from_playlist(&self, playlist_id: &str, video_id: &str) -> Result<()> {
+    let action = json!({ "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", "removedVideoId": video_id });
+    self.edit_playlist(playlist_id, action).await
+  }
+
+  /// `browse/edit_playlist` with one action, the body the "Save to playlist" dialog's
+  /// endpoints carry (see `tests/fixtures/add_to_playlist.json`). No response of it is saved
+  /// yet: an HTTP success counts as done unless the response has a `status` other than
+  /// `STATUS_SUCCEEDED`.
+  async fn edit_playlist(&self, playlist_id: &str, action: Value) -> Result<()> {
+    self.require_session()?;
+    let body = json!({ "playlistId": playlist_id, "actions": [action] });
+    let response = self.web("browse/edit_playlist", body, true).await?;
+    match response["status"].as_str() {
+      None | Some("STATUS_SUCCEEDED") => Ok(()),
+      Some(status) => Err(Error::Parse {
+        endpoint: "browse/edit_playlist",
+        detail: format!("status {status}"),
+      }),
+    }
   }
 
   /// "Videos" tab of a channel, newest first.

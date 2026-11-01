@@ -5,8 +5,8 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  Error, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_page, parse_playlists,
-  parse_watch,
+  Error, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_watch,
 };
 use serde_json::Value;
 
@@ -293,4 +293,17 @@ fn unplayable_playlist_entries_are_skipped() {
   let page = parse_playlist_page(&response);
   let ids: Vec<&str> = page.items.iter().map(|v| v.id.as_str()).collect();
   assert_eq!(ids, ["bbbbbbbbbbb"]);
+}
+
+#[test]
+fn playlist_choices() {
+  // Asked for a video that is in "Watch later" only.
+  let choices = parse_playlist_choices(&fixture("add_to_playlist.json"));
+  assert_eq!(choices.len(), 7);
+  assert_eq!(choices[0].id, "WL");
+  assert_eq!(choices[0].title, "À regarder plus tard");
+  assert!(choices[0].contains && choices[0].private);
+  assert_eq!(choices[2].title, "Ma playlist 1");
+  assert!(!choices[2].contains && !choices[2].private);
+  assert!(choices[1..].iter().all(|c| !c.contains));
 }

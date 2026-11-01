@@ -56,6 +56,11 @@ icons! {
   Repeat => "repeat",
   Previous => "skip-back",
   Next => "skip-forward",
+  More => "ellipsis-vertical",
+  WatchLater => "clock",
+  Save => "list-plus",
+  Check => "check",
+  Lock => "lock",
 }
 
 macro_rules! files {

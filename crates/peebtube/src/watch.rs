@@ -33,7 +33,7 @@ use crate::ui::{
   compact_card, error_text, image_fill, loading_more, near_scroll_end, playlist_row,
   skeleton_compact,
 };
-use crate::{prefetch, runtime, theme, tools};
+use crate::{prefetch, runtime, save, theme, tools};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
@@ -575,6 +575,7 @@ impl WatchView {
               ),
           )
           .child(div().flex_1())
+          .child(save::save_button(&self.video_id))
           .children(self.votes.map(votes_bar)),
       )
       .child(
