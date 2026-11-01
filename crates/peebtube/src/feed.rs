@@ -30,6 +30,8 @@ const CARD_WIDTH: f32 = 416.;
 const CARD_GAP: f32 = 16.;
 /// Side margins of the page (`px_8`).
 const PAGE_MARGIN: f32 = 32.;
+/// Space above the first row, for a hovered card's rise (4 px), ring and shadow.
+const TOP_ROOM: f32 = 8.;
 /// Height built beyond the visible part of the list, above and below.
 const OVERDRAW: Pixels = px(800.);
 
@@ -265,8 +267,10 @@ impl FeedView {
           .map(|v| video_card(v, CARD_WIDTH, &self.nav, window, cx)),
       )
     };
+    // Room above the first row: a hovered card rises over its box, and the list clips it.
     div()
       .px_8()
+      .when(ix == 0, |el| el.pt(px(TOP_ROOM)))
       .opacity(self.fade)
       .child(row)
       .into_any_element()
@@ -446,6 +450,7 @@ impl Render for FeedView {
               .left_0()
               .right_0()
               .px_8()
+              .pt(px(TOP_ROOM))
               .opacity(1. - self.fade)
               .child(skeleton),
           )
@@ -486,7 +491,7 @@ impl Render for FeedView {
             .size_full()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
-            .child(div().px_8().pb_6().child(content)),
+            .child(div().px_8().pt(px(TOP_ROOM)).pb_6().child(content)),
         )
         .into_any_element()
     };

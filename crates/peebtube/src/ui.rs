@@ -306,8 +306,8 @@ pub fn compact_card(
 const ROW_WIDTH: f32 = 246.;
 
 /// List row (subscriptions in list mode, as YouTube showed them until about 2023): thumbnail
-/// on the left, then the title, the channel with its avatar and views · date; a soft surface,
-/// a play button and a red title on hover.
+/// on the left, then the title, the channel with its avatar and views · date; on hover a soft
+/// surface (at once), a play button and a red title.
 pub fn video_row(
   video: &VideoItem,
   nav: &WeakEntity<AppView>,
@@ -336,7 +336,8 @@ pub fn video_row(
     .w_full()
     .p_2()
     .rounded(theme::RADIUS_LG)
-    .bg(theme::surface().opacity(t))
+    // The surface switches at once; the rest of the hover keeps its transition.
+    .when(hovered, |el| el.bg(theme::surface()))
     .child(
       h_flex()
         .gap_4()
