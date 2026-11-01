@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod card;
+pub mod chat;
 pub mod form;
 pub mod images;
 pub mod motion;

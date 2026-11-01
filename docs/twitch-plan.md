@@ -1,7 +1,7 @@
 # Twitch space: technical plan
 
-Status: agreed 2026-11-01 (the user's answers in [Decisions of the user](#decisions-of-the-user)), not
-started. It turns [twitch.md](twitch.md) (the research) and [ADR 0010](decisions/0010-twitch-space.md) (the
+Status: agreed 2026-11-01 (the user's answers in [Decisions of the user](#decisions-of-the-user)); steps 1–9
+done, step 10 to do. It turns [twitch.md](twitch.md) (the research) and [ADR 0010](decisions/0010-twitch-space.md) (the
 decisions) into steps. Each step ends with `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace` and a run of the app, and YouTube and Jellyfin keep working after every step. Tick
 the boxes as steps land, and list under each step what was verified and what was not.
@@ -125,8 +125,9 @@ crates/peeby/src/spaces/twitch/
 spikes/twitch-play/             timings: GQL token, usher, proxy, first frame
 ```
 
-The shell and `ui` learn nothing about Twitch. The only shared changes are those of step 4, plus
-animated images at step 9 if agreed.
+The shell and `ui` learn nothing about Twitch. The shared additions are generic: the live mode of step 4,
+`ui::chat` (the chat model, `ChatPanel`, `watch_layout`) of step 9, and animated images in the image store
+when they come.
 
 ## Secrets and redaction
 
@@ -480,30 +481,55 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   - the Twitch space converts IRC into them;
   - the panel's own tests and an example (`cargo run -p ui --example chat`, generated messages) do not
     involve Twitch, so that a YouTube live chat can plug in later without changing `ui`.
-- Fixtures first: a file of raw IRC lines from a busy channel, with emotes, an emoji before an emote (to
-  settle whether `emotes` ranges count code points), a `CLEARMSG`, a `CLEARCHAT`, a sub `USERNOTICE`
-- [ ] UI spike, small, before the panel: a message with inline emote images that wraps in GPUI
-      (`h_flex().flex_wrap()` of word runs and images, or `StyledText` with inline boxes **[?]**), and a
-      variable-height virtual list (`gpui::list` with `ListState`) appending 20 messages a second without
-      re-laying out the whole list. Measure at 500 messages kept
-- [ ] `chat::irc`: pure parser, tested on the fixture; emote ranges mapped on `char` indexes, never byte
-      slices
-- [ ] `chat::connection`: `wss://irc-ws.chat.twitch.tv:443`, `CAP REQ`, `PASS`/`NICK justinfan<n>`,
-      `JOIN #login`, PONG, reconnect with backoff (1, 2, 4… 30 s), stops when the page drops
-- [ ] `ui::chat::ChatPanel` in the watch page's chat column (the shared layout helper):
-  - the name in its color, lightened on the dark theme when too dark;
-  - the message's fragments with emote pictures (static first);
-  - at most 500 messages;
-  - auto-scroll paused when the user scrolls up ("Reprendre le défilement");
-  - deleted messages greyed.
+- [x] Fixtures first: `tests/fixtures/chat_lines.txt`, 21 lines from busy public channels (anonymous
+      connection, 10 minutes, 12,700 lines captured): a full `ROOMSTATE`, plain, highlighted and first
+      messages, emotes (`emotesv2_` ids too), emoji before emotes, two `/me`, two replies, a cheer, a
+      `CLEARMSG`, a timeout and a ban, `sub`, `resub`, `subgift`, `submysterygift`, `viewermilestone`,
+      `announcement`. Chatters are renamed `viewerN` (ids `100000N`) with aliases as long as the names they
+      replace, mentions and quoted replies included, so that emote ranges still fit; client nonces dropped.
+      **Settled**: the ranges count code points (twitch.md, "Chat")
+- [x] UI spike (`cargo run -p ui --example chat --release`): words as flex-wrapped runs with emotes in fixed
+      boxes (`StyledText` has no inline boxes in this GPUI), `gpui::list` with `FollowMode::Tail`. At 20 and
+      50 generated messages a second with 500 kept: 120 frames a second, the slowest frame 16 ms at 20/s and
+      24 ms at 50/s. An `img` keeps its own ratio over a set height: emotes set `aspect_ratio`
+- [x] `chat::irc`: pure parser (tags unescaped, prefix, parameters), events (`Message`, `Notice`, `Delete`,
+      `ClearUser`, `Clear`, `RoomState` merged by the page, `Ping`, `Reconnect`, `Joined`, `ServerNotice`),
+      `ChatLine::pieces` cutting the text at its emotes on `char` indexes (ranges that do not fit dropped).
+      5 unit tests, 9 fixture tests
+- [x] `chat::connect`: `wss://irc-ws.chat.twitch.tv:443`, `CAP REQ`, `PASS`/`NICK justinfan<n>`,
+      `JOIN #login`, PONG, `RECONNECT` at once, other losses with 1, 2, 4… 30 s (back to 1 s after a
+      connection that joined), 6 minutes without a line taken as dead, stops when its receiver is dropped.
+      Updates on a bounded tokio channel (1,024), awaited from the UI thread
+- [x] `ui::chat` (no Twitch type): the model (`ChatMessage`, `Author`, `Badge`, `Fragment`, `Emote`,
+      `MessageKind`, `ChatEvent`), `split_text` (mentions, links), `name_color` (the user's color lightened
+      to a luminance of 0.35 on the dark theme, else one of 12 by name), `ChatPanel`:
+  - the name in its color, then the fragments, emotes 28 px high;
+  - at most 500 messages, dropped from the top only while following;
+  - scrolled up, new messages are held (500 at most) and "Reprendre le défilement · N nouveaux" resumes;
+    reaching the bottom again resumes by itself at the next batch;
+  - deleted messages greyed (`Delete`, `ClearUser`), `Clear` empties it;
+  - the room's modes as labels in its header, the connection's state under it;
+  - notices (subs, raids…) in a box with an accent edge, highlighted messages tinted, `/me` in the
+    author's color.
 
-  `spaces/twitch/chat.rs` turns `twitch::chat` lines into `ChatEvent`s
+  `ui::chat::watch_layout` is the watch page with a chat column (the chat on the page's height on the
+  right; in theater mode, beside the player at its height). `spaces/twitch/chat.rs` turns `twitch::chat`
+  updates into `ChatEvent`s, 200 at most per batch, the room's modes as French labels ("Followers depuis
+  1 j", "Mode lent : 30 s"…); Twitch emotes as `Picture::sized` at scale 1, 2 or 3 for the drawn size
+- Verified (2026-11-01): in the app, signed in, on the secondary screen: jynxzi's, zackrawrr's and
+  hasanabi's chats next to the live (about 25,000–43,000 viewers), names in their colors, mentions,
+  links, Twitch emotes inline, the "Followers depuis…" label; in the example, the timings above and the
+  pause on scrolling up (the list stays, "Reprendre le défilement · 125 nouveaux" after 6 s, now worded "… nouveaux messages").
+  **Not verified**: a reconnection after a real loss or a `RECONNECT`, the resume button's click, a
+  deletion or a ban seen in the app, theater mode with the chat, and a VOD's or clip's theater mode now that it goes
+  through `watch_layout`, the mini-player while the chat runs
 - [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), 7TV/BTTV/FFZ
       emotes by word (cached per channel), animated emotes (needs `image` animation features and frames in
       the image store, agreed)
 - [ ] VODs: no chat replay at first (GQL comments, later)
-- Exit: a busy channel's chat scrolls smoothly next to the player, with emotes
-- Dependency: `tokio-tungstenite` with `native-tls` (agreed)
+- Exit: met for Twitch's own emotes (third-party ones, badges and animated emotes are the next changes)
+- Dependencies: `tokio-tungstenite` with `native-tls`, `futures-util` (its stream and sink), tokio's
+  `time` (the reconnection delay), agreed
 
 ### 10. Polish and docs
 - [ ] Bell: "en direct" notifications for followed channels that went live since the last check (a

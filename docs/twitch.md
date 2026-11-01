@@ -115,13 +115,16 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - `CAP REQ :twitch.tv/tags twitch.tv/commands`, then `PASS`, `NICK`, `JOIN #login`.
   - Answer every `PING` with `PONG :tmi.twitch.tv`.
   - Handle `PRIVMSG`, `CLEARCHAT`, `CLEARMSG`, `USERNOTICE` and `ROOMSTATE`.
-- **Anonymous reading** **[mem]**: `NICK justinfan<digits>` with any `PASS`. It is a long-standing
-  convention (Chatterino), not in Twitch's docs.
+- **Anonymous reading**: `NICK justinfan<digits>` with any `PASS`. It is a long-standing convention
+  (Chatterino), not in Twitch's docs; it worked on 2026-11-01 (16 channels joined at once).
 - **Twitch's recommendation** **[src]**: EventSub `channel.chat.message`, which needs a user token with
   `user:read:chat`. Its message fragments: text, emote, mention, cheermote, `gif` (2026-07).
 - **Emotes**:
-  - The IRC `emotes` tag gives `id:start-end` ranges, believed to count Unicode code points **[?]**: do not
-    slice a `&str` with them.
+  - The IRC `emotes` tag gives `id:start-end` ranges (end included) that **count Unicode code points**
+    (Rust `char`s), checked on 2026-11-01: on 8 captured lines with an emoji before an emote, code points
+    give the emote's code and UTF-16 units do not. Never slice a `&str` with them. In a `/me` message the
+    ranges count from the text inside `\x01ACTION …\x01`; in a reply, from the whole text, which starts with
+    the `@name ` Twitch adds.
   - Twitch emote images: `https://static-cdn.jtvnw.net/emoticons/v2/{id}/{static|animated}/{dark|light}/{1.0|2.0|3.0}`
     **[src]**.
   - Badges come from Helix Global and Channel Chat Badges, with direct image URLs **[src]**.
@@ -173,12 +176,12 @@ Checked against the code on 2026-11-01:
 | VOD storyboard on the seek bar | `ui::player::Previews` | Covered |
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |
-| A watch page with the player and a chat beside it | `PlayerView` in `Layout::Embedded`, laid out by the space's own page (as YouTube's watch page) | Covered |
+| A watch page with the player and a chat beside it | `ui::chat::watch_layout` (step 9) with `ui::chat::ChatPanel` | Covered |
 | Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `PlayerView` shows a seek bar whenever mpv gives a duration (a live window has one) | **Missing**: a `Source::live` flag |
 | Ads removed | Nothing between Twitch and mpv | **Missing**: a playlist-rewriting layer (decided: build it) |
 | Low latency | Same layer (prefetch segments) | **Missing**, optional |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the first frame | **Missing**: frames in the image store, or static emotes |
-| Chat WebSocket | No WebSocket client in the workspace | **Missing**: a dependency (e.g. `tokio-tungstenite`), to agree on |
+| Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |
 | GQL hashes and Client-ID refreshed without a release | Nothing yet | **Missing**: settings refreshed at startup, as `WEB_CLIENT_VERSION` |
 
@@ -267,7 +270,6 @@ A probe run by the user, anonymously, on a live channel:
   not, see above).
 - Ad-free tokens from a Helix token (very likely not).
 - Muxed audio.
-- The IRC emote indexes.
 - WebView2 for Client-Integrity.
 - GQL's recommendation queries.
 

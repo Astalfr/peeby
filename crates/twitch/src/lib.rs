@@ -10,6 +10,7 @@
 
 pub mod ads;
 pub mod auth;
+pub mod chat;
 mod client;
 mod error;
 pub mod gql;

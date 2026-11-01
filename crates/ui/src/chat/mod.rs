@@ -1,0 +1,267 @@
+//! A live's chat, whatever the service (docs/twitch-plan.md, "Live and chat are generic"): the
+//! model a space converts its protocol into ([`ChatEvent`]s of [`ChatMessage`]s), the
+//! [`ChatPanel`] that shows them, and the watch layout with a chat column. Nothing here knows
+//! IRC or InnerTube: a space owns the connection and feeds the panel.
+
+mod layout;
+mod panel;
+
+use std::time::SystemTime;
+
+use gpui::{Hsla, SharedString, hsla};
+
+use crate::picture::Picture;
+
+pub use layout::{CHAT_WIDTH, watch_layout};
+pub use panel::{ChatPanel, MAX_MESSAGES};
+
+/// One line of the chat.
+#[derive(Clone)]
+pub struct ChatMessage {
+  /// The service's message id, for [`ChatEvent::Delete`].
+  pub id: SharedString,
+  /// Who wrote it; `None` for a line of the service itself.
+  pub author: Option<Author>,
+  /// What it says.
+  pub fragments: Vec<Fragment>,
+  /// When it arrived.
+  pub time: SystemTime,
+  /// A plain message, a `/me`, a highlighted one or a notice.
+  pub kind: MessageKind,
+  /// Removed by a moderator: shown greyed.
+  pub deleted: bool,
+}
+
+/// The author of a message.
+#[derive(Clone)]
+pub struct Author {
+  /// The service's user id, for [`ChatEvent::ClearUser`].
+  pub id: SharedString,
+  /// The name shown.
+  pub name: SharedString,
+  /// The color the user chose; one from [`name_color`] when `None`.
+  pub color: Option<Hsla>,
+  /// Shown before the name.
+  pub badges: Vec<Badge>,
+}
+
+/// A badge before an author's name (moderator, subscriber…).
+#[derive(Clone)]
+pub struct Badge {
+  /// What it means ("Modérateur"…).
+  pub title: SharedString,
+  /// Its image, square.
+  pub picture: Picture,
+}
+
+/// A piece of a message.
+#[derive(Clone)]
+pub enum Fragment {
+  /// Words.
+  Text(SharedString),
+  /// An image in the line.
+  Emote(Emote),
+  /// `@name`.
+  Mention(SharedString),
+  /// A URL, shown as such (not opened by a click yet).
+  Link(SharedString),
+}
+
+/// An emote drawn inline, [`EMOTE_HEIGHT`] high.
+#[derive(Clone)]
+pub struct Emote {
+  /// Its code, shown while it loads.
+  pub name: SharedString,
+  /// Its image.
+  pub picture: Picture,
+  /// Width / height, known before it loads so that the line does not move when it arrives.
+  pub aspect: f32,
+}
+
+/// Height of an emote, logical pixels (Twitch's 1.0 size).
+pub const EMOTE_HEIGHT: f32 = 28.;
+
+/// What kind of line a message is.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MessageKind {
+  /// A plain message.
+  Normal,
+  /// `/me`: the text in the author's color.
+  Action,
+  /// Picked out by the service (a highlighted or paid message).
+  Highlighted,
+  /// An event of the channel (a subscription, a raid…) with its text, and the author's message
+  /// when there is one.
+  Notice(SharedString),
+}
+
+/// What a chat source sends the panel.
+#[derive(Clone)]
+pub enum ChatEvent {
+  /// A new message, at the end.
+  Message(ChatMessage),
+  /// A message removed by a moderator, by id.
+  Delete(SharedString),
+  /// Every message of a user removed (a ban or a timeout), by user id.
+  ClearUser(SharedString),
+  /// The whole chat cleared.
+  Clear,
+  /// The room's modes, as the labels to show ("Mode lent : 30 s"…), replacing the previous ones.
+  State(Vec<SharedString>),
+  /// The connection's state when it is not simply connected ("Connexion…", "Reconnexion…").
+  Status(Option<SharedString>),
+}
+
+impl ChatMessage {
+  /// A message of `author` made of `fragments`, now.
+  pub fn new(
+    id: impl Into<SharedString>,
+    author: Option<Author>,
+    fragments: Vec<Fragment>,
+  ) -> Self {
+    Self {
+      id: id.into(),
+      author,
+      fragments,
+      time: SystemTime::now(),
+      kind: MessageKind::Normal,
+      deleted: false,
+    }
+  }
+}
+
+/// `text` as fragments: `@name` words become mentions and `http(s)://` words links.
+pub fn split_text(text: &str) -> Vec<Fragment> {
+  let mut fragments = Vec::new();
+  let mut plain = String::new();
+  for word in text.split_inclusive(' ') {
+    let bare = word.trim_end_matches(' ');
+    let special = if bare.len() > 1 && bare.starts_with('@') {
+      Some(Fragment::Mention(bare.to_owned().into()))
+    } else if bare.starts_with("https://") || bare.starts_with("http://") {
+      Some(Fragment::Link(bare.to_owned().into()))
+    } else {
+      None
+    };
+    match special {
+      Some(fragment) => {
+        if !plain.is_empty() {
+          fragments.push(Fragment::Text(std::mem::take(&mut plain).into()));
+        }
+        fragments.push(fragment);
+        if word.len() > bare.len() {
+          plain.push(' ');
+        }
+      }
+      None => plain.push_str(word),
+    }
+  }
+  if !plain.is_empty() {
+    fragments.push(Fragment::Text(plain.into()));
+  }
+  fragments
+}
+
+/// Colors given to authors without one of their own, picked by name.
+const NAME_COLORS: [u32; 12] = [
+  0xff6b63, 0xff9f43, 0xfeca57, 0x1dd1a1, 0x48dbfb, 0x54a0ff, 0x5f9ea0, 0xa29bfe, 0xff9ff3,
+  0xf368e0, 0x00d2d3, 0x10ac84,
+];
+
+/// The color of an author's name: theirs made readable on the dark theme, else one picked from
+/// their name (always the same one for a name).
+pub fn name_color(author: &Author) -> Hsla {
+  match author.color {
+    Some(color) => readable(color),
+    None => {
+      let hash = author
+        .name
+        .bytes()
+        .fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+      gpui::rgb(NAME_COLORS[hash as usize % NAME_COLORS.len()]).into()
+    }
+  }
+}
+
+/// `color` lightened until it reads on the dark background (pure blue, black…).
+pub fn readable(color: Hsla) -> Hsla {
+  const LEAST: f32 = 0.35;
+  if luminance(color) >= LEAST {
+    return color;
+  }
+  let mut light = color;
+  // Lightness up in steps: luminance grows with it, and 1.0 is white.
+  while light.l < 1. && luminance(light) < LEAST {
+    light.l = (light.l + 0.05).min(1.);
+  }
+  hsla(light.h, light.s, light.l, color.a)
+}
+
+/// Relative luminance (WCAG) of a color.
+fn luminance(color: Hsla) -> f32 {
+  let rgba = color.to_rgb();
+  let channel = |c: f32| {
+    if c <= 0.039_28 {
+      c / 12.92
+    } else {
+      ((c + 0.055) / 1.055).powf(2.4)
+    }
+  };
+  0.2126 * channel(rgba.r) + 0.7152 * channel(rgba.g) + 0.0722 * channel(rgba.b)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn texts(fragments: &[Fragment]) -> Vec<String> {
+    fragments
+      .iter()
+      .map(|f| match f {
+        Fragment::Text(t) => format!("t:{t}"),
+        Fragment::Mention(m) => format!("m:{m}"),
+        Fragment::Link(l) => format!("l:{l}"),
+        Fragment::Emote(e) => format!("e:{}", e.name),
+      })
+      .collect()
+  }
+
+  #[test]
+  fn split_text_finds_mentions_and_links() {
+    assert_eq!(
+      texts(&split_text("@peeby regarde https://example.com/a ici")),
+      [
+        "m:@peeby",
+        "t: regarde ",
+        "l:https://example.com/a",
+        "t: ici"
+      ]
+    );
+    assert_eq!(texts(&split_text("salut @ tout")), ["t:salut @ tout"]);
+    assert!(split_text("").is_empty());
+  }
+
+  #[test]
+  fn dark_names_are_lightened() {
+    let blue: Hsla = gpui::rgb(0x0000ff).into();
+    let readable_blue = readable(blue);
+    assert!(luminance(readable_blue) >= 0.35);
+    assert!((readable_blue.h - blue.h).abs() < 0.01);
+    let light: Hsla = gpui::rgb(0x9acd32).into();
+    assert_eq!(readable(light), light);
+  }
+
+  #[test]
+  fn names_without_a_color_get_a_stable_one() {
+    let author = |name: &str| Author {
+      id: name.to_owned().into(),
+      name: name.to_owned().into(),
+      color: None,
+      badges: Vec::new(),
+    };
+    assert_eq!(
+      name_color(&author("viewer1")),
+      name_color(&author("viewer1"))
+    );
+  }
+}

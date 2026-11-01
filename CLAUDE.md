@@ -27,6 +27,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Twitch live check (counts only): `cargo run -p twitch --example smoke -- [login]`
 - Twitch Helix fixtures: `cargo run -p peeby --example twitch_capture` (the user's session from the Credential
   Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data)
+- Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_USHER=v1`, `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
@@ -91,6 +92,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `embed`, never `site` (pre-roll).
 - Playback tokens (`value` holds the user's IP), signatures, and usher's error bodies (they repeat the
   signed URL) never reach a log or an error message: keep only `error_code`.
+- Chat: emote ranges count code points (`char`s), never byte or UTF-16 offsets. Chat fixtures are public
+  channels' lines with every chatter renamed (`viewerN`, as long as the name it replaces, so that ranges
+  still fit), mentions and quoted replies included.
 - Fixtures: redact Twitch's session keys by name (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
   `C`/`E`…, and the ads' `*-SESSION-ID`, `RADS-TOKEN`, `*-URL`), never with a blanket IP regex (it breaks
   HEVC codec strings).

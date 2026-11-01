@@ -1,38 +1,32 @@
 //! What plays in the Twitch space, with its header under the player:
 //! - a channel's live: the shared player in live mode through the local proxy, the channel's
-//!   header (GQL), a column for the chat beside it (step 9). While an ad break runs that the backup
+//!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute;
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar;
 //! - a clip: its direct MP4s.
 //!
-//! Theater mode puts the player across the page, as on YouTube (`Settings::theater`, shared). The
-//! channel's name opens its page.
+//! The layout is `ui::chat::watch_layout`: theater mode puts the player across the page, beside the
+//! chat (`Settings::theater`, shared). The channel's name opens its page.
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{
-  Context, Entity, FontWeight, SharedString, Task, WeakEntity, Window, div, px, relative,
-};
+use gpui::{Context, Entity, FontWeight, SharedString, Task, WeakEntity, Window, div, px, size};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use twitch::gql::Channel;
 use twitch::helix::Helix;
 use twitch::usher::Codec;
 use twitch::{Proxy, Target};
+use ui::chat::{ChatPanel, watch_layout};
 use ui::images::Images;
 use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, theme};
 
-use super::{Route, TwitchSpace, cards, play};
+use super::{Route, TwitchSpace, cards, chat, play};
 use crate::settings::{Player, Settings};
 
-/// Width of the chat column.
-const CHAT_WIDTH: f32 = 340.;
-/// Theater mode: room left under the player, and its least height (as YouTube's watch page).
-const THEATER_BELOW: f32 = 120.;
-const THEATER_MIN: f32 = 240.;
 /// How often a live's viewers and category are read again.
 const INFO_EVERY: Duration = Duration::from_secs(60);
 
@@ -67,6 +61,8 @@ pub struct WatchView {
   player: Entity<PlayerView>,
   /// Serves mpv's playlists (a live, a VOD); dropping it (with the page) stops it.
   proxy: Option<Proxy>,
+  /// A live's chat.
+  chat: Option<Entity<ChatPanel>>,
   header: Option<Header>,
   /// A live's start, for the header's uptime.
   started_at: Option<i64>,
@@ -113,13 +109,19 @@ impl WatchView {
       nav,
       player,
       proxy: None,
+      chat: None,
       header: None,
       started_at: None,
       focused: false,
       _tasks: Vec::new(),
     };
     match view.kind.clone() {
-      Kind::Live(login) => view.start_live(login, cx),
+      Kind::Live(login) => {
+        let panel = cx.new(ChatPanel::new);
+        view._tasks.push(chat::start(&login, &panel, cx));
+        view.chat = Some(panel);
+        view.start_live(login, cx)
+      }
       Kind::Vod(id) => view.start_vod(id, cx),
       Kind::Clip(slug) => view.start_clip(slug, cx),
     }
@@ -475,74 +477,20 @@ impl Render for WatchView {
         .child(self.player.clone())
         .into_any_element();
     }
-    let theater = Settings::get(cx).theater;
-    let player = if theater {
+    let settings = Settings::get(cx);
+    let theater = settings.theater.then(|| {
       let viewport = window.viewport_size();
-      let width = viewport.width - theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
-      let room = viewport.height - theme::TITLE_BAR_HEIGHT - px(THEATER_BELOW);
-      div()
-        .w_full()
-        .flex_none()
-        .h((width * (9. / 16.)).min(room.max(px(THEATER_MIN))))
-        .rounded_tl(theme::PANEL_INNER_RADIUS)
-        .bg(gpui::black())
-        .child(self.player.clone())
-    } else {
-      // 16:9 through padding-top, as GPUI has no aspect-ratio style.
-      div()
-        .relative()
-        .w_full()
-        .pt(relative(9. / 16.))
-        .rounded(theme::RADIUS_LG)
-        .overflow_hidden()
-        .child(div().absolute().inset_0().child(self.player.clone()))
-    };
-    let (above, inline) = if theater {
-      (Some(player), None)
-    } else {
-      (None, Some(player))
-    };
-    // The chat column is a live's only (step 9).
-    let chat = matches!(self.kind, Kind::Live(_)).then(|| {
-      v_flex()
-        .w(px(CHAT_WIDTH))
-        .flex_none()
-        .h(px(480.))
-        .items_center()
-        .justify_center()
-        .rounded(theme::RADIUS_LG)
-        .bg(theme::surface())
-        .border_1()
-        .border_color(theme::border())
-        .child(
-          div()
-            .text_sm()
-            .text_color(theme::muted())
-            .child("Le chat arrive bientôt."),
-        )
-    });
-    let header = self.header(window, cx);
-    v_flex()
-      .id("twitch-watch")
-      .size_full()
-      .overflow_y_scroll()
-      .children(above)
-      .child(
-        h_flex()
-          .w_full()
-          .p_6()
-          .gap_6()
-          .items_start()
-          .child(
-            v_flex()
-              .flex_1()
-              .min_w_0()
-              .gap_5()
-              .children(inline)
-              .child(header),
-          )
-          .children(chat),
+      size(
+        viewport.width - theme::sidebar_width(settings.sidebar_collapsed),
+        viewport.height - theme::TITLE_BAR_HEIGHT,
       )
-      .into_any_element()
+    });
+    let header = self.header(window, cx).into_any_element();
+    watch_layout(
+      self.player.clone().into_any_element(),
+      header,
+      self.chat.clone().map(|chat| chat.into_any_element()),
+      theater,
+    )
   }
 }
