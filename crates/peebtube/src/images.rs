@@ -126,7 +126,7 @@ impl ImageStore {
       };
       // 3. Decode off the UI thread.
       let image = match bytes {
-        Some(bytes) => executor.spawn(async move { decode(&bytes) }).await,
+        Some(bytes) => executor.spawn(async move { decode(&bytes, None) }).await,
         None => None,
       };
       this
@@ -182,8 +182,13 @@ fn cache_name(key: &str) -> String {
   format!("{:016x}.img", hasher.finish())
 }
 
-fn decode(bytes: &[u8]) -> Option<Arc<RenderImage>> {
-  let rgba = image::load_from_memory(bytes).ok()?.into_rgba8();
+/// Decodes an image, scaled to fill `size` (device pixels) when given.
+pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>> {
+  let mut image = image::load_from_memory(bytes).ok()?;
+  if let Some((w, h)) = size {
+    image = image.resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3);
+  }
+  let rgba = image.into_rgba8();
   let (w, h) = rgba.dimensions();
   let mut pixels = rgba.into_raw();
   // GPUI sprites are BGRA: swap the red and blue channels.

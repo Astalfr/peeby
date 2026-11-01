@@ -21,7 +21,7 @@ use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
-use crate::{bell, inbox, prefetch, runtime, save, settings, theme};
+use crate::{assets, bell, inbox, prefetch, runtime, save, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -268,7 +268,7 @@ impl AppView {
     }
   }
 
-  fn title_bar(&self, cx: &mut Context<Self>) -> TitleBar {
+  fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> TitleBar {
     let collapsed = Settings::get(cx).sidebar_collapsed;
     let menu = Button::new("menu")
       .ghost()
@@ -298,7 +298,7 @@ impl AppView {
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .child(div().occlude().child(menu))
         .children(back.map(|b| div().occlude().child(b)))
-        .child(mark())
+        .child(mark(window, cx))
         .child(div().flex_1())
         .children(
           inbox::bell_button(cx.weak_entity(), cx).map(|bell| div().occlude().mr_2().child(bell)),
@@ -414,23 +414,12 @@ impl AppView {
   }
 }
 
-/// PeebTube's mark: a red rounded play badge and the name.
-fn mark() -> impl IntoElement {
+/// PeebTube's mark: the round logo and the name.
+fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
   h_flex()
     .gap_2()
     .items_center()
-    .child(
-      div()
-        .w(px(24.))
-        .h(px(17.))
-        .rounded(px(5.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .bg(theme::accent())
-        .text_color(theme::on_accent())
-        .child(gpui_component::Icon::new(Icon::Play).size(px(10.))),
-    )
+    .child(assets::logo(22., window, cx))
     .child(
       div()
         .text_sm()
@@ -473,7 +462,7 @@ impl Render for AppView {
         )
         .into_any_element()
     });
-    root.child(self.title_bar(cx)).child(
+    root.child(self.title_bar(window, cx)).child(
       h_flex()
         .flex_1()
         .min_h_0()

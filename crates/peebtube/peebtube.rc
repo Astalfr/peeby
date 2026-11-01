@@ -1,0 +1,2 @@
+// Windows resources for peebtube.exe. GPUI loads the window and taskbar icon from resource ID 1.
+1 ICON "assets/peebtube.ico"

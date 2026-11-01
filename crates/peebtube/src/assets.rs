@@ -1,10 +1,18 @@
-//! Embedded SVG icons (Lucide, ISC license: assets/icons/LICENSE), served to GPUI. Adapted
-//! from peeby; gpui-component also draws some of them inside its widgets (window buttons).
+//! Embedded SVG icons (Lucide, ISC license: assets/icons/LICENSE), served to GPUI, and the
+//! PeebTube logo. Adapted from peeby; gpui-component also draws some of the icons inside its
+//! widgets (window buttons).
 
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use gpui::{AssetSource, SharedString};
+use gpui::{
+  AnyElement, App, AssetSource, Global, ImageSource, IntoElement, RenderImage, SharedString,
+  Styled, Window, img, px,
+};
 use gpui_component::IconNamed;
+
+use crate::images;
 
 macro_rules! icons {
   ($($name:ident => $file:literal,)*) => {
@@ -93,6 +101,35 @@ const COMPONENT: &[(&str, &[u8])] = files!(
   "window-minimize",
   "window-restore",
 );
+
+const LOGO_PNG: &[u8] = include_bytes!("../assets/logo.png");
+
+/// The logo, decoded once per device-pixel size.
+#[derive(Default)]
+struct LogoCache(HashMap<u32, Option<Arc<RenderImage>>>);
+
+impl Global for LogoCache {}
+
+/// The round PeebTube logo (peeby's, with the red play badge), `size` logical pixels wide. It is
+/// scaled on the CPU to the exact device-pixel size: GPUI samples without mipmaps, so the 256 px
+/// file drawn small would look pixelated. Decoding the small embedded PNG is quick and happens
+/// once per size.
+pub fn logo(size: f32, window: &Window, cx: &mut App) -> AnyElement {
+  let side = (size * window.scale_factor()).round() as u32;
+  let image = cx
+    .default_global::<LogoCache>()
+    .0
+    .entry(side)
+    .or_insert_with(|| images::decode(LOGO_PNG, Some((side, side))))
+    .clone();
+  match image {
+    Some(image) => img(ImageSource::Render(image))
+      .size(px(size))
+      .flex_none()
+      .into_any_element(),
+    None => gpui::div().size(px(size)).flex_none().into_any_element(),
+  }
+}
 
 fn files() -> impl Iterator<Item = &'static (&'static str, &'static [u8])> {
   OWN.iter().chain(COMPONENT)
