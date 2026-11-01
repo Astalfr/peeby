@@ -11,6 +11,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Playlists
+
+- Done (2026-11-01): "Playlists" in the sidebar: the user's playlists, a playlist's page (header, numbered videos, next pages on scroll), "Tout lire" and "Aléatoire". Playing a playlist shows its queue next to the player: a video that ends plays the next one, previous/next buttons and P/N keys, shuffle, repeat, next pages loaded as the end comes near, next stream resolved ahead. Parsers tested on 4 new redacted fixtures (library, "Watch later", a public playlist and its continuation); `smoke` checks the library, "Liked videos" and its next page live.
+- Verified by driving the app: the playlists page (15 playlists), "Watch later" (17 videos), "Tout lire" (playback after 1.7 s), N, then the end of a video playing the next one (1.3 s, prefetched), the same in fullscreen (it stays fullscreen, Escape still works), playing from row 4, shuffle, back to the playlist page.
+- **Not verified:** reaching the end of a loaded page during playback (the queue loads the next one first; only its request was checked live), repeat at the end of a playlist.
+
 ## Visual refresh
 
 - Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.

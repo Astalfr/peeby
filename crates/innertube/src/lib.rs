@@ -6,6 +6,8 @@
 //! - [`Client::subscriptions`], [`Client::subscribed_channels`], [`Client::channel_videos`];
 //! - [`Client::watch`]: watch page metadata, related videos and the comments token (`next`);
 //! - [`Client::comments`]: comment pages and replies (`next` continuations);
+//! - [`Client::playlists`], [`Client::playlist`], [`Client::playlist_more`]: the user's
+//!   playlists and their videos;
 //! - [`Client::votes`]: likes and dislikes from Return YouTube Dislike, another service:
 //!   attribution required, at most 100 requests/min and 10,000/day, so cache the results;
 //! - [`Client::stream`]: playable HLS streams through the VISIONOS client, which needs no JS
@@ -26,6 +28,10 @@ pub use auth::Cookies;
 pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
 pub use error::Error;
 pub use models::{
-  Caption, Channel, Comment, CommentPage, Feed, Stream, Thumbnail, VideoItem, Votes, WatchPage,
+  Caption, Channel, Comment, CommentPage, Feed, Playlist, PlaylistSummary, Stream, Thumbnail,
+  VideoItem, Votes, WatchPage,
 };
-pub use parse::{parse_captions, parse_channels, parse_comments, parse_feed, parse_watch};
+pub use parse::{
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist, parse_playlist_page,
+  parse_playlists, parse_watch,
+};

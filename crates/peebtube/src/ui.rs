@@ -111,13 +111,27 @@ fn play_overlay(t: f32, size: f32, radius: Pixels) -> impl IntoElement {
     )
 }
 
+/// Opens the watch page of `video`.
+fn open_video(
+  video: &VideoItem,
+  nav: &WeakEntity<AppView>,
+) -> impl Fn(&mut Window, &mut App) + use<> {
+  let nav = nav.clone();
+  let route = Route::Watch(video.id.clone());
+  move |window, cx| {
+    nav
+      .update(cx, |app, cx| app.open(route.clone(), window, cx))
+      .ok();
+  }
+}
+
 /// A clickable card for `video`, with its hover flag and the hover animation (0 to 1).
 /// `id` tells apart the same video in two lists. Resting on it resolves its stream, so a click
 /// plays at once.
 fn hover_card(
   id: &str,
   video: &VideoItem,
-  nav: &WeakEntity<AppView>,
+  on_click: impl Fn(&mut Window, &mut App) + 'static,
   window: &mut Window,
   cx: &mut App,
 ) -> (gpui::Stateful<gpui::Div>, bool, f32) {
@@ -132,8 +146,6 @@ fn hover_card(
     window,
     cx,
   );
-  let nav = nav.clone();
-  let route = Route::Watch(video.id.clone());
   let video_id = video.id.clone();
   let card = div()
     .id(ElementId::Name(id.to_owned().into()))
@@ -144,11 +156,7 @@ fn hover_card(
       hovered.update(cx, |h, _| *h = *hover);
       window.refresh();
     })
-    .on_click(move |_, window, cx| {
-      nav
-        .update(cx, |app, cx| app.open(route.clone(), window, cx))
-        .ok();
-    });
+    .on_click(move |_, window, cx| on_click(window, cx));
   (card, is_hovered, t)
 }
 
@@ -161,7 +169,13 @@ pub fn video_card(
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
-  let (card, hovered, t) = hover_card(&format!("card-{}", video.id), video, nav, window, cx);
+  let (card, hovered, t) = hover_card(
+    &format!("card-{}", video.id),
+    video,
+    open_video(video, nav),
+    window,
+    cx,
+  );
   let thumb = image_fill(&video.thumbnails, width, theme::RADIUS_LG, window, cx);
   let avatar = (!video.avatar.is_empty()).then(|| {
     div().size(px(AVATAR)).flex_none().child(image_fill(
@@ -239,7 +253,13 @@ pub fn compact_card(
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
-  let (card, hovered, t) = hover_card(&format!("related-{}", video.id), video, nav, window, cx);
+  let (card, hovered, t) = hover_card(
+    &format!("related-{}", video.id),
+    video,
+    open_video(video, nav),
+    window,
+    cx,
+  );
   let thumb = image_fill(&video.thumbnails, COMPACT_WIDTH, theme::RADIUS, window, cx);
   card
     .w_full()
@@ -297,7 +317,13 @@ pub fn video_row(
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
-  let (card, hovered, t) = hover_card(&format!("row-{}", video.id), video, nav, window, cx);
+  let (card, hovered, t) = hover_card(
+    &format!("row-{}", video.id),
+    video,
+    open_video(video, nav),
+    window,
+    cx,
+  );
   let thumb = image_fill(&video.thumbnails, ROW_WIDTH, theme::RADIUS, window, cx);
   let channel = video.channel.clone().map(|name| {
     h_flex()
@@ -383,6 +409,106 @@ pub fn skeleton_row() -> impl IntoElement {
         .child(Skeleton::new().w(px(160.)).h(px(14.)))
         .child(Skeleton::new().w(px(200.)).h(px(14.))),
     )
+}
+
+/// A video of a playlist (its page, or the queue next to the player): the place in the
+/// playlist, a thumbnail of `thumb_width`, the title, channel and details. `id` must tell apart
+/// two entries of the same video, which playlists allow. `current` marks the video playing.
+#[allow(clippy::too_many_arguments)] // A row of a list: each argument is one aspect of it.
+pub fn playlist_row(
+  id: &str,
+  number: usize,
+  video: &VideoItem,
+  thumb_width: f32,
+  current: bool,
+  on_click: impl Fn(&mut Window, &mut App) + 'static,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let (card, hovered, t) = hover_card(id, video, on_click, window, cx);
+  let thumb = image_fill(&video.thumbnails, thumb_width, theme::RADIUS, window, cx);
+  let small = thumb_width < 140.;
+  let details = video
+    .channel
+    .iter()
+    .cloned()
+    .chain((!small).then(|| video.metadata.join(" · ")))
+    .filter(|t| !t.is_empty())
+    .collect::<Vec<_>>()
+    .join(" · ");
+  card
+    .w_full()
+    .px_2()
+    .py_1p5()
+    .rounded(theme::RADIUS_LG)
+    .when(current, |el| el.bg(theme::accent_soft()))
+    .when(!current, |el| el.bg(theme::surface().opacity(t)))
+    .child(
+      h_flex()
+        .gap_3()
+        .items_center()
+        .child(
+          div()
+            .w(px(if small { 20. } else { 28. }))
+            .flex_none()
+            .text_center()
+            .text_xs()
+            .text_color(if current {
+              theme::accent()
+            } else {
+              theme::muted()
+            })
+            .map(|el| {
+              if current {
+                el.child(
+                  gpui_component::Icon::new(Icon::Play)
+                    .size(px(12.))
+                    .text_color(theme::accent()),
+                )
+              } else {
+                el.child(number.to_string())
+              }
+            }),
+        )
+        .child(
+          div()
+            .relative()
+            .w(px(thumb_width))
+            .h(px(thumb_width * 9. / 16.))
+            .flex_none()
+            .child(thumb)
+            .when(!small, |el| el.child(play_overlay(t, 32., theme::RADIUS)))
+            .children(duration_badge(&video.duration)),
+        )
+        .child(
+          v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_0p5()
+            .child(
+              div()
+                .when(small, |el| el.text_sm().line_height(px(18.)))
+                .when(!small, |el| el.line_height(px(20.)))
+                .font_weight(FontWeight::SEMIBOLD)
+                .line_clamp(2)
+                .text_color(if hovered || current {
+                  theme::accent_hover()
+                } else {
+                  theme::foreground()
+                })
+                .child(video.title.clone()),
+            )
+            .child(
+              div()
+                .truncate()
+                .text_color(theme::muted())
+                .when(small, |el| el.text_xs())
+                .when(!small, |el| el.text_sm())
+                .child(details),
+            ),
+        ),
+    )
+    .into_any_element()
 }
 
 /// Channel, then views · date, in muted text.

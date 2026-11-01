@@ -1,5 +1,5 @@
 //! Root view: title bar (back, open a video by URL or id), sidebar (home, subscriptions,
-//! account, settings) and a stack of pages. In fullscreen only the page is shown.
+//! playlists, account, settings) and a stack of pages. In fullscreen only the page is shown.
 
 use gpui::prelude::*;
 use gpui::{
@@ -17,6 +17,8 @@ use crate::assets::Icon;
 use crate::channels::ChannelsView;
 use crate::feed::{FeedView, Source};
 use crate::images::Images;
+use crate::playlists::{PlaylistView, PlaylistsView};
+use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
@@ -37,6 +39,13 @@ pub enum Route {
     id: String,
     name: String,
   },
+  /// The user's playlists.
+  Playlists,
+  /// A playlist's videos.
+  Playlist {
+    id: String,
+    title: String,
+  },
   /// Watch page of a video id.
   Watch(String),
 }
@@ -46,7 +55,7 @@ impl Route {
   fn is_top_level(&self) -> bool {
     matches!(
       self,
-      Self::Home | Self::Subscriptions | Self::Account | Self::Settings
+      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Settings
     )
   }
 }
@@ -200,10 +209,48 @@ impl AppView {
         };
         cx.new(|cx| FeedView::new(client, source, nav, cx)).into()
       }
+      Route::Playlists => cx.new(|cx| PlaylistsView::new(client, nav, cx)).into(),
+      Route::Playlist { id, title } => cx
+        .new(|cx| PlaylistView::new(client, id.clone(), title.clone(), nav, cx))
+        .into(),
       Route::Watch(id) => cx
-        .new(|cx| WatchView::new(client, id.clone(), nav, window, cx))
+        .new(|cx| WatchView::new(client, id.clone(), None, nav, window, cx))
         .into(),
     };
+    self.stack.push(Page { route, view });
+    cx.notify();
+  }
+
+  /// Plays the current video of `queue` on a watch page: pushed on the stack, or replacing the
+  /// watch page on top (`replace`, from one video of the queue to the next). Replacing drops
+  /// the previous page and its player, so a long queue keeps a single player, and "back"
+  /// still leads to the page the queue was started from.
+  pub fn play_queue(
+    &mut self,
+    queue: Entity<Queue>,
+    replace: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let Some(id) = queue.read(cx).current_video().map(|v| v.id.clone()) else {
+      return;
+    };
+    if replace
+      && self
+        .stack
+        .last()
+        .is_some_and(|page| matches!(page.route, Route::Watch(_)))
+    {
+      self.stack.pop();
+    } else {
+      self.set_top_covered(true, cx);
+    }
+    let nav = cx.weak_entity();
+    let client = self.client.clone();
+    let route = Route::Watch(id.clone());
+    let view = cx
+      .new(|cx| WatchView::new(client, id, Some(queue), nav, window, cx))
+      .into();
     self.stack.push(Page { route, view });
     cx.notify();
   }
@@ -326,7 +373,8 @@ impl AppView {
             Icon::Subscriptions,
             Route::Subscriptions,
             cx,
-          )),
+          ))
+          .child(nav("Playlists", Icon::Playlists, Route::Playlists, cx)),
       )
       .child(
         v_flex()

@@ -2,14 +2,19 @@
 //! - grids (home, subscriptions, channel tabs): `richGridRenderer > richItemRenderer >
 //!   content > lockupViewModel`, continuation in `continuationItemRenderer`;
 //! - related videos: `lockupViewModel` under `secondaryResults`;
-//! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`.
+//! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`;
+//! - the playlists library: playlist `lockupViewModel`s with a `collectionThumbnailViewModel`;
+//! - a playlist's videos: video `lockupViewModel`s, or `playlistVideoRenderer`s for "Watch
+//!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
+//!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists).
 
 use serde_json::Value;
 
 use std::collections::HashMap;
 
 use crate::models::{
-  Caption, Channel, Comment, CommentPage, Feed, Thumbnail, VideoItem, WatchPage,
+  Caption, Channel, Comment, CommentPage, Feed, Playlist, PlaylistSummary, Thumbnail, VideoItem,
+  WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -113,6 +118,202 @@ pub fn parse_channels(response: &Value) -> Vec<Channel> {
     .collect()
 }
 
+/// Parses the user's playlists (`FEplaylist_aggregation`, all of them in one response). Mixes
+/// (`RD…`) are left out: they have no playlist page.
+pub fn parse_playlists(response: &Value) -> Vec<PlaylistSummary> {
+  let mut lockups = Vec::new();
+  find_all(response, "lockupViewModel", &mut lockups);
+  lockups
+    .into_iter()
+    .filter_map(parse_playlist_lockup)
+    .collect()
+}
+
+fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
+  if lockup["contentType"] != "LOCKUP_CONTENT_TYPE_PLAYLIST" {
+    return None;
+  }
+  let id = lockup["contentId"]
+    .as_str()
+    .filter(|id| !id.starts_with("RD"))?;
+  let meta = &lockup["metadata"]["lockupMetadataViewModel"];
+  let image = &lockup["contentImage"]["collectionThumbnailViewModel"]["primaryThumbnail"]["thumbnailViewModel"];
+  let count = image["overlays"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .flat_map(|o| {
+      o["thumbnailOverlayBadgeViewModel"]["thumbnailBadges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    })
+    .find_map(|b| b["thumbnailBadgeViewModel"]["text"].as_str())
+    .map(str::to_owned);
+  Some(PlaylistSummary {
+    id: id.to_owned(),
+    title: meta["title"]["content"].as_str()?.to_owned(),
+    count,
+    // The last row is a link ("Afficher la playlist complète"), not a detail.
+    metadata: meta["metadata"]["contentMetadataViewModel"]["metadataRows"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .flat_map(|row| row["metadataParts"].as_array().into_iter().flatten())
+      .filter(|part| part["text"].get("commandRuns").is_none())
+      .filter_map(|part| part["text"]["content"].as_str().map(str::to_owned))
+      .collect(),
+    thumbnails: thumbnails(&image["image"]["sources"]),
+  })
+}
+
+/// Parses a playlist's page (`VL<id>`): header, first videos and the next videos' token.
+pub fn parse_playlist(id: &str, response: &Value) -> Playlist {
+  let page = parse_playlist_page(response);
+  let mut playlist = Playlist {
+    id: id.to_owned(),
+    videos: page.items,
+    continuation: page.continuation,
+    ..Playlist::default()
+  };
+  let header = &response["header"];
+  if let Some(h) = header.get("playlistHeaderRenderer") {
+    playlist.title = text(&h["title"]);
+    playlist.owner = non_empty(text(&h["ownerText"]));
+    playlist.count = non_empty(text(&h["numVideosText"]));
+    playlist.thumbnails = thumbnails(
+      &h["cinematicContainer"]["cinematicContainerRenderer"]["backgroundImageConfig"]["thumbnail"]
+        ["thumbnails"],
+    );
+  } else {
+    let h = &header["pageHeaderRenderer"]["content"]["pageHeaderViewModel"];
+    playlist.title = h["title"]["dynamicTextViewModel"]["text"]["content"]
+      .as_str()
+      .unwrap_or_default()
+      .to_owned();
+    // The owner is an avatar stack's text ("de TeamFourStar"); the count is the part with a
+    // number among "Playlist · 69 vidéos · 494 852 918 vues".
+    playlist.owner = h["metadata"]["contentMetadataViewModel"]["metadataRows"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .flat_map(|r| r["metadataParts"].as_array().into_iter().flatten())
+      .find_map(|p| p["avatarStack"]["avatarStackViewModel"]["text"]["content"].as_str())
+      .map(str::to_owned);
+    playlist.count = metadata_rows(&h["metadata"])
+      .concat()
+      .into_iter()
+      .find(|part| part.chars().any(|c| c.is_ascii_digit()));
+    playlist.thumbnails =
+      thumbnails(&h["heroImage"]["contentPreviewImageViewModel"]["image"]["sources"]);
+  }
+  if playlist.title.is_empty() {
+    playlist.title = id.to_owned();
+  }
+  playlist
+}
+
+/// Videos of a playlist page or of its continuation, with the token of the next ones. The
+/// token is taken from the list holding the videos: a playlist page has another continuation
+/// item next to that list, which is not the next videos.
+pub fn parse_playlist_page(response: &Value) -> Feed {
+  let mut page = Feed {
+    logged_in: tracking_param(response, "logged_in").as_deref() == Some("1"),
+    ..Feed::default()
+  };
+  for item in find_video_list(response).into_iter().flatten() {
+    if let Some(lockup) = item.get("lockupViewModel") {
+      page.items.extend(parse_lockup(lockup));
+    } else if let Some(renderer) = item.get("playlistVideoRenderer") {
+      page.items.extend(parse_playlist_video(renderer));
+    } else if item.get("continuationItemViewModel").is_some()
+      || item.get("continuationItemRenderer").is_some()
+    {
+      page.continuation = page.continuation.or_else(|| continuation_token(item));
+    }
+  }
+  page
+}
+
+/// The first array with a video in it (a video lockup or a `playlistVideoRenderer`).
+fn find_video_list(value: &Value) -> Option<&Vec<Value>> {
+  match value {
+    Value::Array(items) => {
+      let has_video = items.iter().any(|i| {
+        i.get("playlistVideoRenderer").is_some()
+          || i["lockupViewModel"]["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO"
+      });
+      if has_video {
+        return Some(items);
+      }
+      items.iter().find_map(find_video_list)
+    }
+    Value::Object(map) => map.values().find_map(find_video_list),
+    _ => None,
+  }
+}
+
+/// A "Watch later" entry. `None` for deleted or private videos (`isPlayable: false`).
+fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
+  if r["isPlayable"] == false {
+    return None;
+  }
+  let byline = &r["shortBylineText"];
+  Some(VideoItem {
+    id: r["videoId"].as_str()?.to_owned(),
+    title: non_empty(text(&r["title"]))?,
+    channel: non_empty(text(byline)),
+    channel_id: byline["runs"][0]["navigationEndpoint"]["browseEndpoint"]["browseId"]
+      .as_str()
+      .map(str::to_owned),
+    // Runs alternate values and " • " separators.
+    metadata: r["videoInfo"]["runs"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .filter_map(|run| run["text"].as_str())
+      .map(str::trim)
+      .filter(|t| !t.is_empty() && *t != "•")
+      .map(str::to_owned)
+      .collect(),
+    duration: non_empty(text(&r["lengthText"])),
+    thumbnails: thumbnails(&r["thumbnail"]["thumbnails"]),
+    avatar: Vec::new(),
+  })
+}
+
+/// The token of a continuation item: `continuationItemRenderer` keeps it in
+/// `continuationEndpoint.continuationCommand`, `continuationItemViewModel` in
+/// `continuationCommand.innertubeCommand.continuationCommand` (the outer command has none).
+fn continuation_token(value: &Value) -> Option<String> {
+  match value {
+    Value::Object(map) => map
+      .get("continuationCommand")
+      .and_then(|c| c["token"].as_str())
+      .map(str::to_owned)
+      .or_else(|| map.values().find_map(continuation_token)),
+    Value::Array(values) => values.iter().find_map(continuation_token),
+    _ => None,
+  }
+}
+
+/// Text parts of each row of a `contentMetadataViewModel`.
+fn metadata_rows(metadata: &Value) -> Vec<Vec<String>> {
+  metadata["contentMetadataViewModel"]["metadataRows"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .map(|row| {
+      row["metadataParts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|part| part["text"]["content"].as_str().map(str::to_owned))
+        .collect()
+    })
+    .collect()
+}
+
 /// Parses a comments page (`next` continuation). Threads are `commentThreadRenderer`s pointing
 /// by key to `commentEntityPayload` mutations; replies pages list `commentViewModel`s.
 pub fn parse_comments(response: &Value) -> CommentPage {
@@ -208,19 +409,7 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
 
   // Rows: with two or more, the first is the channel and the next ones views · date; a
   // channel's own tab has a single views · date row.
-  let rows: Vec<Vec<String>> = meta["metadata"]["contentMetadataViewModel"]["metadataRows"]
-    .as_array()
-    .into_iter()
-    .flatten()
-    .map(|row| {
-      row["metadataParts"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|part| part["text"]["content"].as_str().map(str::to_owned))
-        .collect()
-    })
-    .collect();
+  let rows = metadata_rows(&meta["metadata"]);
   let (channel, metadata) = match rows.as_slice() {
     [] => (None, Vec::new()),
     [only] => (None, only.clone()),

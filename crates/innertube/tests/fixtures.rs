@@ -4,7 +4,10 @@
 // Test helpers outside #[test] functions: a missing fixture should panic.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use innertube::{Error, hls, hls_manifest_url, parse_feed, parse_watch};
+use innertube::{
+  Error, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_page, parse_playlists,
+  parse_watch,
+};
 use serde_json::Value;
 
 fn fixture(name: &str) -> Value {
@@ -200,4 +203,94 @@ fn captions() {
   assert_eq!(captions[1].name, "Anglais");
   assert!(captions[2].auto_generated);
   assert!(captions.iter().all(|c| c.url.ends_with("&fmt=vtt")));
+}
+
+#[test]
+fn playlists_library() {
+  let playlists = parse_playlists(&fixture("playlists_library.json"));
+  let ids: Vec<&str> = playlists.iter().map(|p| p.id.as_str()).collect();
+  assert_eq!(
+    ids,
+    [
+      "WL",
+      "LL",
+      "PLREDACTEDplaylist01xxxxxxxxxxxxxx",
+      "PLREDACTEDplaylist02xxxxxxxxxxxxxx"
+    ]
+  );
+  let watch_later = &playlists[0];
+  assert_eq!(watch_later.title, "À regarder plus tard");
+  assert_eq!(watch_later.count.as_deref(), Some("17\u{a0}vidéos"));
+  // The "Afficher la playlist complète" link row is left out.
+  assert_eq!(
+    watch_later.metadata,
+    ["Privée", "Playlist", "Mise à jour aujourd'hui"]
+  );
+  assert!(!watch_later.thumbnails.is_empty());
+  assert_eq!(
+    playlists[1].count.as_deref(),
+    Some("5\u{202f}000\u{a0}vidéos")
+  );
+}
+
+#[test]
+fn watch_later_uses_playlist_video_renderers() {
+  let playlist = parse_playlist("WL", &fixture("playlist_watch_later.json"));
+  assert!(playlist.title.starts_with("À regarder plus tard"));
+  assert_eq!(playlist.count.as_deref(), Some("17\u{a0}vidéos"));
+  assert_eq!(playlist.videos.len(), 3);
+  let first = &playlist.videos[0];
+  assert_eq!(first.id, "tcqah8v8qmo");
+  assert_eq!(first.title, "Activision is genuinely desperate now..");
+  assert_eq!(first.channel.as_deref(), Some("SmugAlana"));
+  assert_eq!(first.duration.as_deref(), Some("23:37"));
+  // The " • " separator run is dropped.
+  assert_eq!(first.metadata, ["163\u{a0}k\u{a0}vues", "il y a 7 jours"]);
+  assert_eq!(playlist.continuation, None);
+}
+
+#[test]
+fn public_playlist_header_and_next_videos_token() {
+  let playlist = parse_playlist(
+    "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+    &fixture("playlist_public.json"),
+  );
+  assert!(!playlist.title.is_empty());
+  assert!(playlist.owner.is_some());
+  assert!(
+    playlist
+      .count
+      .as_deref()
+      .is_some_and(|c| c.chars().any(|ch| ch.is_ascii_digit()))
+  );
+  let ids: Vec<&str> = playlist.videos.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["fOT0BUpITw8", "NFvDHYMzj9U", "8c7KOGxeY3w"]);
+  // Two continuation items on the page: the one after the videos is the next videos.
+  let token = playlist.continuation.unwrap();
+  assert!(token.starts_with("4qmFsgKBARIkVkxQTEZncXVM"), "{token}");
+}
+
+#[test]
+fn playlist_continuation_is_the_last_page() {
+  let page = parse_playlist_page(&fixture("playlist_public_continuation.json"));
+  assert!(page.logged_in);
+  let ids: Vec<&str> = page.items.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["1STyaZA7-BY", "Ke9A6XV2H38", "_db-mfu8y1k"]);
+  assert_eq!(page.continuation, None);
+}
+
+#[test]
+fn unplayable_playlist_entries_are_skipped() {
+  let response: Value = serde_json::from_str(
+    r#"{"contents": [
+      {"playlistVideoRenderer": {"videoId": "aaaaaaaaaaa", "isPlayable": false,
+        "title": {"runs": [{"text": "[Vidéo supprimée]"}]}}},
+      {"playlistVideoRenderer": {"videoId": "bbbbbbbbbbb", "isPlayable": true,
+        "title": {"runs": [{"text": "Une vidéo"}]}}}
+    ]}"#,
+  )
+  .unwrap();
+  let page = parse_playlist_page(&response);
+  let ids: Vec<&str> = page.items.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["bbbbbbbbbbb"]);
 }

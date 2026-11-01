@@ -189,3 +189,39 @@ pub struct Votes {
   /// Estimated dislikes.
   pub dislikes: u64,
 }
+
+/// A playlist of the user's library (`FEplaylist_aggregation`): their own playlists, saved
+/// ones, "Watch later" (`WL`) and "Liked videos" (`LL`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaylistSummary {
+  /// Playlist id (`PL…`, `WL`, `LL`…).
+  pub id: String,
+  /// Title.
+  pub title: String,
+  /// Localized video count as the badge shows it, e.g. `17 vidéos`.
+  pub count: Option<String>,
+  /// Localized details, e.g. `["Privée", "Playlist", "Mise à jour aujourd'hui"]`.
+  pub metadata: Vec<String>,
+  /// Thumbnail of its first video.
+  pub thumbnails: Vec<Thumbnail>,
+}
+
+/// A playlist's page (`VL<id>`): its header and the first videos (100 at most).
+#[derive(Clone, Debug, Default)]
+pub struct Playlist {
+  /// Playlist id.
+  pub id: String,
+  /// Title.
+  pub title: String,
+  /// Owner, e.g. `TeamFourStar`.
+  pub owner: Option<String>,
+  /// Localized video count, e.g. `69 vidéos`.
+  pub count: Option<String>,
+  /// Thumbnail of its first video.
+  pub thumbnails: Vec<Thumbnail>,
+  /// Playable videos in playlist order (deleted and private ones are left out). A video may
+  /// appear twice.
+  pub videos: Vec<VideoItem>,
+  /// Token of the next videos, for [`crate::Client::playlist_more`].
+  pub continuation: Option<String>,
+}

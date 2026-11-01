@@ -9,13 +9,13 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, App, Bounds, ClickEvent, Context, DispatchPhase, Entity, FocusHandle,
-  FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-  ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint,
+  Animation, AnimationExt, App, Bounds, ClickEvent, Context, DispatchPhase, Entity, EventEmitter,
+  FocusHandle, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+  Pixels, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint,
   linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
-use gpui_component::{ActiveTheme, Sizable, h_flex, v_flex};
+use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
 use innertube::Stream;
 use innertube::hls::Variant;
@@ -34,6 +34,15 @@ const SEEK_SMALL: f64 = 5.0;
 const SEEK_LARGE: f64 = 10.0;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
+
+/// What the player tells the watch page.
+pub enum PlayerEvent {
+  /// The video played to its end.
+  Ended,
+  /// The user asked for the next or the previous video of the queue.
+  Next,
+  Previous,
+}
 
 /// The open menu of the control bar.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -94,8 +103,12 @@ pub struct PlayerView {
   /// 1, 2… since the HLS streams carry none).
   captions_added: Vec<String>,
   menu: Option<Menu>,
+  /// Playing a queue: whether it has a previous and a next video (buttons, P and N keys).
+  queue: Option<(bool, bool)>,
   _events: Option<Task<()>>,
 }
+
+impl EventEmitter<PlayerEvent> for PlayerView {}
 
 impl PlayerView {
   pub fn new(cx: &mut Context<Self>) -> Self {
@@ -135,6 +148,7 @@ impl PlayerView {
       caption: None,
       captions_added: Vec::new(),
       menu: None,
+      queue: None,
       _events: None,
     }
   }
@@ -146,6 +160,12 @@ impl PlayerView {
   /// Title shown over the picture in fullscreen.
   pub fn set_title(&mut self, title: SharedString, cx: &mut Context<Self>) {
     self.title = title;
+    cx.notify();
+  }
+
+  /// Shows the previous and next buttons of a queue, enabled when it has such videos.
+  pub fn set_queue(&mut self, queue: Option<(bool, bool)>, cx: &mut Context<Self>) {
+    self.queue = queue;
     cx.notify();
   }
 
@@ -374,7 +394,10 @@ impl PlayerView {
       }
       Event::Buffering(buffering) => self.buffering = buffering,
       Event::Muted(muted) => self.muted = muted,
-      Event::EndReached => self.position = self.position.max(self.duration),
+      Event::EndReached => {
+        self.position = self.position.max(self.duration);
+        cx.emit(PlayerEvent::Ended);
+      }
       Event::Ended(Some(error)) => self.fail(format!("Lecture interrompue : {error}").into(), cx),
       Event::Ended(None) | Event::Tracks(_) | Event::Chapters(_) => {}
     }
@@ -506,6 +529,8 @@ impl PlayerView {
       "down" => self.set_volume(self.volume - VOLUME_STEP, cx),
       "m" => self.toggle_mute(cx),
       "c" => self.toggle_captions(cx),
+      "n" if self.queue.is_some_and(|(_, next)| next) => cx.emit(PlayerEvent::Next),
+      "p" if self.queue.is_some_and(|(previous, _)| previous) => cx.emit(PlayerEvent::Previous),
       "escape" if self.menu.is_some() => self.menu = None,
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
@@ -824,6 +849,16 @@ impl PlayerView {
     let buttons = h_flex()
       .gap_1()
       .items_center()
+      .when_some(self.queue, |row, (previous, _)| {
+        row.child(
+          self
+            .control_button("previous", cx)
+            .icon(Icon::Previous)
+            .tooltip("Vidéo précédente (P)")
+            .disabled(!previous)
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(PlayerEvent::Previous))),
+        )
+      })
       .child(
         self
           .control_button("play-pause", cx)
@@ -838,6 +873,16 @@ impl PlayerView {
             this.show_controls(cx);
           })),
       )
+      .when_some(self.queue, |row, (_, next)| {
+        row.child(
+          self
+            .control_button("next", cx)
+            .icon(Icon::Next)
+            .tooltip("Vidéo suivante (N)")
+            .disabled(!next)
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(PlayerEvent::Next))),
+        )
+      })
       .child(
         self
           .control_button("back-10", cx)
@@ -1103,6 +1148,11 @@ impl ControlButton {
 
   fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
     self.button = self.button.on_click(handler);
+    self
+  }
+
+  fn disabled(mut self, disabled: bool) -> Self {
+    self.button = self.button.disabled(disabled);
     self
   }
 }

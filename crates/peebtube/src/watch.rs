@@ -4,33 +4,45 @@
 //! The stream (VISIONOS HLS, ~0.2 s), the page metadata (`next`) and the votes load in
 //! parallel; mpv starts as soon as the stream is known, so playback begins about 1 s after the
 //! click.
+//!
+//! Playing a playlist, the page shows its [`Queue`] above the related videos. When the video
+//! ends (or on Next/Previous), the queue picks a video and the app replaces this page with that
+//! video's page, which shares the same queue.
 
 use std::collections::HashMap;
 use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, WeakEntity, Window, div,
-  px, relative,
+  AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
+  WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{Selectable, h_flex, v_flex};
 use innertube::{Client, Comment, Votes, WatchPage};
 
 use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
-use crate::player_view::PlayerView;
+use crate::player_view::{PlayerEvent, PlayerView};
+use crate::queue::{Queue, QueueEvent};
 use crate::settings::Settings;
 use crate::ui::{
-  compact_card, error_text, image_fill, loading_more, near_scroll_end, skeleton_compact,
+  compact_card, error_text, image_fill, loading_more, near_scroll_end, playlist_row,
+  skeleton_compact,
 };
 use crate::{prefetch, runtime, theme, tools};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
+/// Width of a thumbnail in the queue panel.
+const QUEUE_THUMB: f32 = 100.;
+/// Queue entries shown before and after the current one: a long playlist would otherwise
+/// build thousands of rows on every frame.
+const QUEUE_BEFORE: usize = 50;
+const QUEUE_AFTER: usize = 150;
 
 /// Return YouTube Dislike results for the session: its API allows 100 requests a minute and
 /// 10,000 a day per client.
@@ -71,12 +83,20 @@ pub struct WatchView {
   /// By comment id.
   replies: HashMap<String, Replies>,
   scroll: ScrollHandle,
+  /// The playlist being played, if any.
+  queue: Option<Entity<Queue>>,
+  queue_scroll: ScrollHandle,
+  /// Row of the queue panel to scroll to the top, once the panel has been laid out.
+  queue_scroll_to: Option<usize>,
+  _subscriptions: Vec<Subscription>,
 }
 
 impl WatchView {
+  /// The watch page of `video_id`; `queue` when it plays a playlist (its current video).
   pub fn new(
     client: Client,
     video_id: String,
+    queue: Option<Entity<Queue>>,
     nav: WeakEntity<AppView>,
     window: &mut Window,
     cx: &mut Context<Self>,
@@ -90,6 +110,38 @@ impl WatchView {
     let votes = cx
       .try_global::<VotesCache>()
       .and_then(|cache| cache.0.get(&video_id).copied());
+    let mut subscriptions = vec![cx.subscribe(&player, |this, _, event: &PlayerEvent, cx| {
+      let Some(queue) = &this.queue else { return };
+      match event {
+        PlayerEvent::Ended | PlayerEvent::Next => queue.update(cx, |q, cx| q.next(cx)),
+        PlayerEvent::Previous => queue.update(cx, |q, cx| q.previous(cx)),
+      }
+    })];
+    let queue_scroll = ScrollHandle::new();
+    if let Some(queue) = &queue {
+      // The queue chose another video: this page makes way for that video's page.
+      let nav = nav.clone();
+      subscriptions.push(cx.subscribe_in(
+        queue,
+        window,
+        move |_, queue, QueueEvent::Play, window, cx| {
+          let queue = queue.clone();
+          nav
+            .update(cx, |app, cx| app.play_queue(queue, true, window, cx))
+            .ok();
+        },
+      ));
+      subscriptions.push(cx.observe(queue, |this, _, cx| {
+        this.sync_queue_controls(cx);
+        cx.notify();
+      }));
+      queue.update(cx, |q, cx| q.started(cx));
+    }
+    // The current video near the top of the panel, under the one before it.
+    let queue_scroll_to = queue.as_ref().map(|queue| {
+      let current = queue.read(cx).position() - 1;
+      current.min(QUEUE_BEFORE).saturating_sub(1)
+    });
     let view = Self {
       client,
       video_id,
@@ -100,13 +152,141 @@ impl WatchView {
       comments: Comments::default(),
       replies: HashMap::new(),
       scroll: ScrollHandle::new(),
+      queue,
+      queue_scroll,
+      queue_scroll_to,
+      _subscriptions: subscriptions,
     };
+    view.sync_queue_controls(cx);
     view.load_stream(cx);
     view.load_page(cx);
     if view.votes.is_none() {
       view.load_votes(cx);
     }
     view
+  }
+
+  /// The player's previous and next buttons follow the queue.
+  fn sync_queue_controls(&self, cx: &mut Context<Self>) {
+    let controls = self.queue.as_ref().map(|queue| {
+      let queue = queue.read(cx);
+      (queue.has_previous(), queue.has_next())
+    });
+    self
+      .player
+      .update(cx, |player, cx| player.set_queue(controls, cx));
+  }
+
+  /// The playlist next to the player: title, place, shuffle and repeat, and its videos in
+  /// play order, the current one highlighted. A click plays that video.
+  fn queue_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let entity = self.queue.clone()?;
+    // GPUI scrolls to a row from the list's bounds of the last frame: wait until it has some.
+    if let Some(row) = self.queue_scroll_to {
+      if self.queue_scroll.bounds().size.height > px(0.) {
+        self.queue_scroll.scroll_to_top_of_item(row);
+        self.queue_scroll_to = None;
+      } else {
+        window.request_animation_frame();
+      }
+    }
+    let queue = entity.read(cx);
+    let (title, position, total) = (queue.title.clone(), queue.position(), queue.order().len());
+    let (shuffle, repeat, more) = (queue.shuffle(), queue.repeat(), queue.has_more());
+    let current = position - 1;
+    let start = current.saturating_sub(QUEUE_BEFORE);
+    let end = (current + QUEUE_AFTER + 1).min(total);
+    let entries: Vec<_> = queue.order()[start..end]
+      .iter()
+      .enumerate()
+      .map(|(offset, &index)| (start + offset, index, queue.items()[index].clone()))
+      .collect();
+    let rows: Vec<_> = entries
+      .into_iter()
+      .map(|(place, index, video)| {
+        let queue = entity.clone();
+        playlist_row(
+          &format!("q-{place}-{}", video.id),
+          place + 1,
+          &video,
+          QUEUE_THUMB,
+          place == current,
+          move |_, cx| queue.update(cx, |q, cx| q.jump(index, cx)),
+          window,
+          cx,
+        )
+      })
+      .collect();
+    let toggle = |id: &'static str, icon: Icon, tooltip: &'static str, on: bool| {
+      Button::new(id)
+        .ghost()
+        .icon(icon)
+        .tooltip(tooltip)
+        .selected(on)
+    };
+    Some(
+      v_flex()
+        .w_full()
+        .rounded(theme::RADIUS_LG)
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::surface().opacity(0.5))
+        .overflow_hidden()
+        .child(
+          h_flex()
+            .px_4()
+            .py_3()
+            .gap_2()
+            .items_center()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(
+                  div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .truncate()
+                    .child(title),
+                )
+                .child(div().text_xs().text_color(theme::muted()).child(format!(
+                  "{position} / {total}{}",
+                  if more { "+" } else { "" }
+                ))),
+            )
+            .child(
+              toggle("queue-shuffle", Icon::Shuffle, "Lecture aléatoire", shuffle).on_click(
+                cx.listener(|this, _, _, cx| {
+                  let Some(queue) = this.queue.clone() else {
+                    return;
+                  };
+                  queue.update(cx, |q, cx| q.toggle_shuffle(cx));
+                  // The order changed: bring the current video back into view.
+                  let current = queue.read(cx).position() - 1;
+                  this.queue_scroll_to = Some(current.min(QUEUE_BEFORE).saturating_sub(1));
+                  cx.notify();
+                }),
+              ),
+            )
+            .child(
+              toggle("queue-repeat", Icon::Repeat, "Répéter la playlist", repeat).on_click({
+                let queue = entity.clone();
+                move |_, _, cx| queue.update(cx, |q, cx| q.toggle_repeat(cx))
+              }),
+            ),
+        )
+        .child(
+          v_flex()
+            .id("queue-list")
+            .max_h(px(420.))
+            .p_1()
+            .overflow_y_scroll()
+            .track_scroll(&self.queue_scroll)
+            .children(rows),
+        )
+        .into_any_element(),
+    )
   }
 
   /// Pauses the player while another page covers this one.
@@ -683,6 +863,7 @@ impl Render for WatchView {
     self.load_more_if_near_end(cx);
     let details = self.details(window, cx);
     let comments = self.comments(window, cx);
+    let queue = self.queue_panel(window, cx);
     let page = v_flex()
       .id("watch")
       .size_full()
@@ -722,6 +903,7 @@ impl Render for WatchView {
               .w(px(RELATED_WIDTH))
               .flex_none()
               .gap_2()
+              .children(queue.map(|panel| div().pb_2().child(panel)))
               .children(related),
           ),
       );

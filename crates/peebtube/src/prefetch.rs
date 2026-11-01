@@ -67,6 +67,15 @@ pub fn hover(video_id: &str, hovered: bool, cx: &mut App) {
   });
 }
 
+/// Resolves the stream of `video_id` now, e.g. the next video of a playlist, so it starts at
+/// once when its turn comes.
+pub fn warm(video_id: &str, cx: &mut App) {
+  if let Some(Handle(streams)) = cx.try_global::<Handle>().cloned() {
+    let id = video_id.to_owned();
+    streams.update(cx, |streams, cx| streams.fetch(id, cx));
+  }
+}
+
 /// A stream resolved recently for `video_id`, taken out of the cache.
 pub fn take(video_id: &str, cx: &mut App) -> Option<Stream> {
   let Handle(streams) = cx.try_global::<Handle>().cloned()?;

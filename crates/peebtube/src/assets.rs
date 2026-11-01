@@ -51,6 +51,11 @@ icons! {
   Search => "search",
   Grid => "layout-grid",
   List => "list",
+  Playlists => "list-video",
+  Shuffle => "shuffle",
+  Repeat => "repeat",
+  Previous => "skip-back",
+  Next => "skip-forward",
 }
 
 macro_rules! files {

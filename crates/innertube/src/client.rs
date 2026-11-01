@@ -6,8 +6,13 @@ use serde_json::{Value, json};
 use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
-use crate::models::{Channel, CommentPage, Feed, Stream, Votes, WatchPage};
-use crate::parse::{parse_captions, parse_channels, parse_comments, parse_feed, parse_watch};
+use crate::models::{
+  Channel, CommentPage, Feed, Playlist, PlaylistSummary, Stream, Votes, WatchPage,
+};
+use crate::parse::{
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist, parse_playlist_page,
+  parse_playlists, parse_watch, tracking_param,
+};
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
 /// the page's ytcfg. YouTube ships a new one every week; old ones keep working for months.
@@ -108,6 +113,42 @@ impl Client {
     } else {
       Err(Error::NotLoggedIn)
     }
+  }
+
+  /// The user's playlists, "Watch later" and "Liked videos" first. Needs cookies.
+  pub async fn playlists(&self) -> Result<Vec<PlaylistSummary>> {
+    self.require_session()?;
+    let response = self
+      .web(
+        "browse",
+        json!({ "browseId": "FEplaylist_aggregation" }),
+        true,
+      )
+      .await?;
+    if tracking_param(&response, "logged_in").as_deref() == Some("1") {
+      Ok(parse_playlists(&response))
+    } else {
+      Err(Error::NotLoggedIn)
+    }
+  }
+
+  /// A playlist's header and first videos (100 at most). Private playlists, "Watch later" and
+  /// "Liked videos" need cookies.
+  pub async fn playlist(&self, id: &str) -> Result<Playlist> {
+    let response = self
+      .web("browse", json!({ "browseId": format!("VL{id}") }), true)
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_playlist(id, &response))
+  }
+
+  /// The next videos of a playlist, from [`Playlist::continuation`] or a previous page.
+  pub async fn playlist_more(&self, token: &str) -> Result<Feed> {
+    let response = self
+      .web("browse", json!({ "continuation": token }), true)
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_playlist_page(&response))
   }
 
   /// "Videos" tab of a channel, newest first.
@@ -271,6 +312,14 @@ impl Client {
       return Err(Error::NotLoggedIn);
     }
     Ok(feed)
+  }
+
+  /// With cookies, a response served as signed out means the session is gone.
+  fn check_session(&self, response: &Value) -> Result<()> {
+    if self.session.is_some() && tracking_param(response, "logged_in").as_deref() != Some("1") {
+      return Err(Error::NotLoggedIn);
+    }
+    Ok(())
   }
 
   /// A WEB client request, with the session cookies when `signed` and cookies are set.

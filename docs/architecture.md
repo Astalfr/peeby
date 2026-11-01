@@ -21,10 +21,10 @@
 
 | Crate | Role | Notes |
 |---|---|---|
-| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos and continuations (`browse`), watch page and comments (`next`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
+| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`, `account`, `settings_page`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -45,15 +45,23 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 `PlayerView` owns the player, the `VideoView` and the controls, plus the stream's quality ladder and subtitle tracks. A quality change starts a new mpv on the other variant at the current position (the old one is paused, then dropped when the new picture arrives). Subtitle tracks are given to mpv with `sub-add` the first time they are picked; mpv numbers them 1, 2… in that order.
 
-`prefetch` resolves the stream of a card the mouse rests on (300 ms), and the watch page takes it from there. In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
+`prefetch` resolves the stream of a card the mouse rests on (300 ms), and the watch page takes it from there. `prefetch::warm` resolves a stream at once (the next video of a queue). In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
 
 ## Navigation
 
-`AppView` owns the title bar (back button, "paste a URL or id" field), the sidebar (Home, Subscriptions, subscribed channels) and a stack of pages. Home and Subscriptions reset the stack; channel and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
+`AppView` owns the title bar (back button, "paste a URL or id" field), the sidebar (Home, Subscriptions, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack; the channels, channel, playlist and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
+
+## Playlists
+
+`Client::playlists` reads the library (`FEplaylist_aggregation`, all playlists in one response, "Watch later" and "Liked videos" included), `Client::playlist` a playlist's page (`VL<id>`, header and the first 100 videos) and `Client::playlist_more` the next 100. "Watch later" lists `playlistVideoRenderer`s, the others video lockups; the next page's token is the `continuationItemViewModel` of the list holding the videos (the page has another one beside it).
+
+Playing a playlist creates a `queue::Queue` entity: the loaded videos, the play order (shuffled or not), repeat, and the token of the next videos, which it loads when fewer than 5 are left to play. `AppView::play_queue` pushes a watch page for its current video. That page shows the queue, subscribes to its player (`PlayerEvent::Ended`, `Next`, `Previous`) and to the queue (`QueueEvent::Play`). When the video ends, the queue picks the next one and `play_queue(…, replace: true)` swaps the watch page on top for a new one sharing the queue. Replacing rather than pushing keeps a single player alive for a whole playlist, drops the previous page's pending requests with it, and keeps "back" leading to the playlist. The new page takes the focus, so fullscreen and its keys carry on. Each page warms the next video's stream (`prefetch::warm`), so the next video starts in about 1.3 s.
+
+Shuffling uses a small xorshift generator (no dependency) and mixes the videos loaded so far: a long playlist's next pages are inserted at random places after the current video as they arrive.
 
 ## Session
 
-`AppView::set_session` replaces the app's `Client` after a cookie import or a sign-out, reloads the subscribed channels and rebuilds Home. The image store and the stream prefetch use an anonymous client of their own, so they never need replacing. Pages that need a session (Home signed out, subscriptions, an expired session) offer an "Importer des cookies" button that opens the account page.
+`AppView::set_session` replaces the app's `Client` after a cookie import or a sign-out and rebuilds Home. The image store and the stream prefetch use an anonymous client of their own, so they never need replacing. Pages that need a session (Home signed out, subscriptions, an expired session) offer an "Importer des cookies" button that opens the account page.
 
 ## Images
 

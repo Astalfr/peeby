@@ -56,6 +56,43 @@ async fn main() {
         .await
         .map(|c| format!("{} channels", c.len())),
     );
+    let playlists = client.playlists().await;
+    let first = playlists
+      .as_ref()
+      .ok()
+      // "Liked videos" is usually long enough to have a next page.
+      .and_then(|p| p.iter().find(|p| p.id == "LL").or(p.first()))
+      .map(|p| p.id.clone());
+    check(
+      "playlists",
+      playlists.map(|p| format!("{} playlists", p.len())),
+    );
+    if let Some(id) = first {
+      let playlist = client.playlist(&id).await;
+      let more = playlist.as_ref().ok().and_then(|p| p.continuation.clone());
+      check(
+        "playlist",
+        playlist.map(|p| {
+          format!(
+            "{} videos · more: {}",
+            p.videos.len(),
+            p.continuation.is_some()
+          )
+        }),
+      );
+      if let Some(token) = more {
+        check(
+          "playlist_more",
+          client.playlist_more(&token).await.map(|f| {
+            format!(
+              "{} videos · more: {}",
+              f.items.len(),
+              f.continuation.is_some()
+            )
+          }),
+        );
+      }
+    }
   }
   let channel = client.channel_videos(CHANNEL).await;
   let next = channel.as_ref().ok().and_then(|f| f.continuation.clone());
