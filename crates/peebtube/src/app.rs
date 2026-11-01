@@ -9,20 +9,23 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Sizable, TitleBar, h_flex, v_flex};
-use innertube::{Channel, Client};
+use innertube::{Channel, Client, Cookies};
 
+use crate::account::AccountView;
 use crate::assets::Icon;
 use crate::feed::{FeedView, Source};
 use crate::images::Images;
 use crate::ui::image_fill;
 use crate::watch::WatchView;
-use crate::{runtime, theme};
+use crate::{runtime, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Route {
   Home,
   Subscriptions,
+  /// Session state and cookie import.
+  Account,
   /// A channel's videos.
   Channel {
     id: String,
@@ -35,7 +38,7 @@ pub enum Route {
 impl Route {
   /// Top-level pages reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
-    matches!(self, Self::Home | Self::Subscriptions)
+    matches!(self, Self::Home | Self::Subscriptions | Self::Account)
   }
 }
 
@@ -49,6 +52,8 @@ pub struct AppView {
   stack: Vec<Page>,
   /// Subscribed channels for the sidebar, once loaded (signed in only).
   channels: Vec<Channel>,
+  /// Page to open at the next render (it needs the window), after a session change.
+  reset_to: Option<Route>,
   open_input: Entity<InputState>,
   _open_subscription: Subscription,
 }
@@ -87,6 +92,7 @@ impl AppView {
       client,
       stack: Vec::new(),
       channels: Vec::new(),
+      reset_to: None,
       open_input,
       _open_subscription: subscription,
     };
@@ -96,6 +102,35 @@ impl AppView {
     }
     app.load_channels(cx);
     app
+  }
+
+  /// Switches to a new session (imported cookies) or signs out (`None`), then shows Home.
+  pub fn set_session(&mut self, cookies: Option<Cookies>, cx: &mut Context<Self>) {
+    let (hl, gl) = settings::LANGUAGE;
+    let client = match Client::new(cookies, settings::cookies_path(), hl, gl) {
+      Ok(client) => client,
+      Err(e) => return tracing::error!("cannot create the HTTP client: {e}"),
+    };
+    tracing::info!(
+      "session {}",
+      if client.signed_in() {
+        "imported"
+      } else {
+        "closed"
+      }
+    );
+    let warmup = client.clone();
+    drop(runtime::spawn(cx, async move {
+      if let Err(e) = warmup.refresh_client_version().await {
+        tracing::warn!("ytcfg: {e}");
+      }
+    }));
+    self.client = client;
+    self.channels.clear();
+    self.load_channels(cx);
+    // Pages hold the old client: they are rebuilt on the next navigation; Home now.
+    self.reset_to = Some(Route::Home);
+    cx.notify();
   }
 
   fn load_channels(&self, cx: &mut Context<Self>) {
@@ -141,6 +176,10 @@ impl AppView {
       Route::Subscriptions => cx
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
+      Route::Account => {
+        let signed_in = client.signed_in();
+        cx.new(|_| AccountView::new(nav, signed_in)).into()
+      }
       Route::Channel { id, name } => {
         let source = Source::Channel {
           id: id.clone(),
@@ -276,6 +315,7 @@ impl AppView {
         Route::Subscriptions,
         cx,
       ))
+      .child(nav("Compte", Icon::Account, Route::Account, cx))
       .when(!channels.is_empty(), |el| {
         el.child(
           div()
@@ -294,6 +334,15 @@ impl AppView {
 
 impl Render for AppView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    if let Some(route) = self.reset_to.take() {
+      // The account page stays on screen with its message; Home is rebuilt underneath.
+      let on_account = matches!(self.stack.last().map(|p| &p.route), Some(Route::Account));
+      if !on_account {
+        self.open(route, window, cx);
+      } else {
+        self.stack.retain(|page| page.route == Route::Account);
+      }
+    }
     let page = self.stack.last().map(|page| page.view.clone());
     let root = v_flex()
       .size_full()

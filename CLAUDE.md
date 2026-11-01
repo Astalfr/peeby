@@ -13,7 +13,8 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (PowerShell: `"$env:APPDATA\peebtube\cookies.txt"`; `%APPDATA%` only works in cmd)
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
-- yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike)
+- yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
+  Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBTUBE_RESOLVER=ytdl` for yt-dlp)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 

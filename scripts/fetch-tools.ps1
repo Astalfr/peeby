@@ -5,7 +5,8 @@
 
 .DESCRIPTION
   Every archive is checked against its pinned SHA-256 before being extracted. Layout:
-    third_party/yt-dlp/yt-dlp/yt-dlp.exe   yt-dlp "onedir" build (no unpacking to %TEMP% per run)
+    third_party/yt-dlp/yt-dlp.exe          yt-dlp single-file build: it updates itself (`yt-dlp -U`),
+                                           which the "onedir" build cannot do
     third_party/yt-dlp/deno.exe            Deno, the JS runtime yt-dlp needs for YouTube (~110 MB)
     third_party/yt-dlp/VERSION             pins of this script, to skip a re-download
   QuickJS-NG (2 MB) was measured and rejected: 5.6 s per JS challenge against 0.8 s for Deno.
@@ -26,9 +27,9 @@ $ErrorActionPreference = 'Stop'
 $Pins = @(
   @{
     Name    = 'yt-dlp 2026.10.26'
-    Url     = 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_win.zip'
-    Sha256  = 'fd51b212cf8380c7a52ee08c0d6be7f3c59b2f2c832eaf7b45acfae6eab57419'
-    Extract = 'yt-dlp'
+    Url     = 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe'
+    Sha256  = 'f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d'
+    Rename  = 'yt-dlp.exe'
   },
   @{
     Name    = 'deno 2.9.8'
@@ -71,7 +72,7 @@ try {
     }
   }
 
-  $YtDlp = Join-Path $Dest 'yt-dlp\yt-dlp.exe'
+  $YtDlp = Join-Path $Dest 'yt-dlp.exe'
   if (-not (Test-Path $YtDlp)) { throw "yt-dlp.exe not found in the archive (expected $YtDlp)" }
 
   Set-Content -Path $Stamp -Value $Version -NoNewline

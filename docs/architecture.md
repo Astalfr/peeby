@@ -24,7 +24,7 @@
 | `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos and continuations (`browse`), watch page and comments (`next`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`, `account`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -50,6 +50,10 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 ## Navigation
 
 `AppView` owns the title bar (back button, "paste a URL or id" field), the sidebar (Home, Subscriptions, subscribed channels) and a stack of pages. Home and Subscriptions reset the stack; channel and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
+
+## Session
+
+`AppView::set_session` replaces the app's `Client` after a cookie import or a sign-out, reloads the subscribed channels and rebuilds Home. The image store and the stream prefetch use an anonymous client of their own, so they never need replacing. Pages that need a session (Home signed out, subscriptions, an expired session) offer an "Importer des cookies" button that opens the account page.
 
 ## Images
 

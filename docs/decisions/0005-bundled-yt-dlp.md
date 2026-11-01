@@ -10,7 +10,7 @@ VISIONOS ([0003](0003-visionos-hls-streams.md)) can fail: client blocked, age or
 ## Decision
 
 - `scripts/fetch-tools.ps1` downloads pinned, SHA-256-checked builds into `third_party/yt-dlp/`:
-  - yt-dlp 2026.10.26, `yt-dlp_win.zip` ("onedir": nothing unpacked to `%TEMP%` per run, `--version` in 0.4 s);
+  - yt-dlp 2026.10.26, the single-file `yt-dlp.exe`. The "onedir" `yt-dlp_win.zip` starts faster (`--version` in 0.4 s against 1.05 s) but cannot update itself (`win_dir` is in yt-dlp's `_NON_UPDATEABLE_REASONS`). Since yt-dlp is only the fallback, updates matter more than 0.65 s;
   - Deno 2.9.8, the JS runtime yt-dlp needs for YouTube.
 - The release bundle ships the same layout in `tools/` next to the executable.
 - yt-dlp runs isolated from the host: `--ignore-config`, `--cache-dir` in the app's folder, `--js-runtimes deno:<path>`.
@@ -21,4 +21,5 @@ In the app (`tools.rs`, `watch.rs`): when `Client::stream` fails with anything b
 ## Consequences
 
 - About 110 MB more in the bundle (Deno). QuickJS-NG (2 MB) was measured and rejected: 5.6 s per JS challenge.
-- yt-dlp needs updates more often than the app: plan an in-app updater that checks `SHA2-256SUMS`.
+- yt-dlp needs updates more often than the app: at startup, at most once a day, the app runs `yt-dlp -U` in the background with no console window (`tools::update_ytdlp`, stamp in `%LOCALAPPDATA%\peebtube\yt-dlp\last-update`). yt-dlp checks the release's `SHA2-256SUMS` itself. The `tools/` folder must stay writable: per-user install only.
+- Measured with the single-file build: age-restricted video playing after 5.4 s (8.1 s earlier with "onedir", the difference comes from YouTube's wait, not from yt-dlp).

@@ -1,5 +1,5 @@
-//! A grid of videos, loading the next page as the end comes into view: Home (recommendations), subscriptions, or a channel's
-//! "Videos" tab. Signed out, Home and subscriptions explain how to import the session cookies.
+//! A grid of videos, loading the next page as the end comes into view: Home (recommendations),
+//! subscriptions, or a channel's "Videos" tab. Pages that need a session link to the account page.
 
 use gpui::prelude::*;
 use gpui::{Context, FontWeight, ScrollHandle, SharedString, WeakEntity, Window, div, px};
@@ -8,10 +8,10 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{h_flex, v_flex};
 use innertube::{Client, Error, Feed, VideoItem};
 
-use crate::app::AppView;
+use crate::app::{AppView, Route};
 use crate::images::Images;
 use crate::ui::{error_text, near_scroll_end, video_card};
-use crate::{runtime, settings, theme};
+use crate::{runtime, theme};
 
 /// Card width, logical pixels.
 const CARD_WIDTH: f32 = 320.;
@@ -33,6 +33,8 @@ enum State {
   Loaded,
   /// Signed out on a page that needs a session.
   SignedOut,
+  /// YouTube no longer accepts the session's cookies.
+  Expired,
   Failed(SharedString),
 }
 
@@ -101,6 +103,7 @@ impl FeedView {
           match result {
             Some(Ok(feed)) => this.apply(feed, more),
             Some(Err(Error::SignInRequired)) => this.state = State::SignedOut,
+            Some(Err(Error::NotLoggedIn)) if !more => this.state = State::Expired,
             Some(Err(e)) => {
               tracing::warn!("{:?}: {e}", this.source);
               this.more_failed = more;
@@ -153,22 +156,20 @@ impl FeedView {
     }
   }
 
-  fn sign_in_help() -> String {
-    let path = settings::cookies_path()
-      .map(|p| p.display().to_string())
-      .unwrap_or_else(|| "cookies.txt".into());
-    format!(
-      "Exportez les cookies de youtube.com au format Netscape (cookies.txt) depuis une fenêtre \
-       de navigation privée connectée, fermez cette fenêtre, puis enregistrez le fichier ici :\n\
-       {path}\n\nEn attendant, collez une URL de vidéo dans la barre du haut."
-    )
-  }
-
   fn empty_state(&self) -> impl IntoElement + use<> {
     let (title, body) = match (&self.state, &self.source, self.logged_in) {
+      (State::Expired, _, _) => (
+        "Session expirée".to_owned(),
+        "YouTube ne reconnaît plus les cookies de la session. Importez-en de nouveaux depuis \
+         la page Compte."
+          .to_owned(),
+      ),
       (State::SignedOut, _, _) | (_, Source::Home, false) => (
         "Connectez-vous pour voir cette page".to_owned(),
-        Self::sign_in_help(),
+        "YouTube n'affiche plus de recommandations sans compte. Importez les cookies d'une \
+         session YouTube depuis la page Compte. En attendant, collez une URL de vidéo dans la \
+         barre du haut."
+          .to_owned(),
       ),
       (_, Source::Home, true) => (
         self
@@ -181,6 +182,9 @@ impl FeedView {
       ),
       _ => ("Aucune vidéo".to_owned(), String::new()),
     };
+    let needs_session = matches!(self.state, State::SignedOut | State::Expired)
+      || (matches!(self.source, Source::Home) && !self.logged_in);
+    let nav = self.nav.clone();
     v_flex()
       .max_w(px(640.))
       .gap_3()
@@ -191,6 +195,20 @@ impl FeedView {
           .child(title),
       )
       .child(div().text_color(theme::muted()).child(body))
+      .when(needs_session, |el| {
+        el.child(
+          h_flex().child(
+            Button::new("to-account")
+              .primary()
+              .label("Importer des cookies")
+              .on_click(move |_, window, cx| {
+                nav
+                  .update(cx, |app, cx| app.open(Route::Account, window, cx))
+                  .ok();
+              }),
+          ),
+        )
+      })
   }
 }
 
@@ -213,7 +231,7 @@ impl Render for FeedView {
         )
         .child(div().text_color(theme::muted()).child(e.clone()))
         .into_any_element(),
-      State::SignedOut => self.empty_state().into_any_element(),
+      State::SignedOut | State::Expired => self.empty_state().into_any_element(),
       State::Loaded if self.videos.is_empty() => self.empty_state().into_any_element(),
       State::Loaded => {
         let cards: Vec<_> = self

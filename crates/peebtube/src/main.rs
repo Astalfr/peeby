@@ -3,6 +3,7 @@
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod account;
 mod app;
 mod assets;
 mod feed;
@@ -64,10 +65,22 @@ fn main() {
       }
       gpui_component::init(cx);
       theme::apply(cx);
-      images::init(client.clone(), cx);
-      prefetch::init(client.clone(), cx);
+      // Images and stream resolution need no session: an anonymous client of their own, so
+      // a cookie import only replaces the app's client.
+      match innertube::Client::new(None, None, hl, gl) {
+        Ok(anonymous) => {
+          images::init(anonymous.clone(), cx);
+          prefetch::init(anonymous, cx);
+        }
+        Err(e) => tracing::error!("cannot create the HTTP client: {e}"),
+      }
 
       // Current WEB client version and a visitorData, in the background.
+      // yt-dlp (the fallback) keeps up with YouTube's changes.
+      cx.background_executor()
+        .spawn(async { tools::update_ytdlp() })
+        .detach();
+
       let warmup = client.clone();
       drop(runtime::spawn(cx, async move {
         if let Err(e) = warmup.refresh_client_version().await {

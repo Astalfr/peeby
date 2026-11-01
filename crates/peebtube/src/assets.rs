@@ -47,6 +47,7 @@ icons! {
   Comments => "message-square",
   Subtitles => "captions",
   Settings => "settings",
+  Account => "circle-user",
 }
 
 macro_rules! files {

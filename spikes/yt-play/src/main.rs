@@ -241,12 +241,12 @@ impl Tools {
     let dir = [beside_exe, Some(Path::new(ROOT).join("third_party/yt-dlp"))]
       .into_iter()
       .flatten()
-      .find(|dir| dir.join("yt-dlp/yt-dlp.exe").exists());
+      .find(|dir| dir.join("yt-dlp.exe").exists());
     Self { dir }
   }
 
   fn yt_dlp(&self) -> Option<PathBuf> {
-    Some(self.dir.as_ref()?.join("yt-dlp/yt-dlp.exe"))
+    Some(self.dir.as_ref()?.join("yt-dlp.exe"))
   }
 
   /// `--js-runtimes` value for `name`, pointing at the bundled binary.

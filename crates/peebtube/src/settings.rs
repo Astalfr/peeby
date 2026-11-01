@@ -31,3 +31,14 @@ pub fn load_cookies() -> Option<Cookies> {
     }
   }
 }
+
+/// Saves imported cookies as the session file (temporary file + rename). Blocking.
+pub fn save_cookies(cookies: &Cookies) -> std::io::Result<()> {
+  let path = cookies_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
+  if let Some(dir) = path.parent() {
+    std::fs::create_dir_all(dir)?;
+  }
+  let temporary = path.with_extension("txt.tmp");
+  std::fs::write(&temporary, cookies.to_netscape())?;
+  std::fs::rename(&temporary, &path)
+}
