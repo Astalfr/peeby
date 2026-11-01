@@ -20,7 +20,7 @@ pub struct Emote {
   pub width: u32,
   /// Height of its smallest file, pixels.
   pub height: u32,
-  /// Several frames (drawn still for now).
+  /// Several frames.
   pub animated: bool,
   /// Drawn over the emote before it (an overlay such as rain).
   pub zero_width: bool,

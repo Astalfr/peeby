@@ -139,3 +139,23 @@ fn durations() {
   assert_eq!(helix::parse_duration("59s"), 59);
   assert_eq!(helix::parse_duration("bad"), 0);
 }
+
+#[test]
+fn global_badges() {
+  let badges = helix::parse_badges(&json("helix_badges_global.json"));
+  assert_eq!(badges.len(), 6);
+  let moderator = badges.iter().find(|b| b.set == "moderator").unwrap();
+  assert_eq!(moderator.version, "1");
+  assert_eq!(moderator.title, "Moderator");
+  assert!(moderator.url_1x.ends_with("/1"));
+  assert!(moderator.url_4x.ends_with("/3"));
+}
+
+#[test]
+fn channel_badges() {
+  let badges = helix::parse_badges(&json("helix_badges_channel.json"));
+  let versions: Vec<&str> = badges.iter().map(|b| b.version.as_str()).collect();
+  assert_eq!(versions, ["0", "102", "108"]);
+  assert!(badges.iter().all(|b| b.set == "subscriber"));
+  assert_eq!(badges[1].title, "8.5-Year Subscriber");
+}

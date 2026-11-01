@@ -533,11 +533,26 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       animated-emotes change. Verified in the app on zackrawrr's chat: 7TV emotes inline, wide ones at
       their ratio, in theater mode (the chat beside the player). **Not verified**: a channel without 7TV
       in the app
-- [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), BTTV and FFZ
-      emotes by word, animated emotes and zero-width overlays (needs `image` animation features and frames
-      in the image store, agreed)
+- [x] Badges: `helix::parse_badges` (`/chat/badges/global`, `/chat/badges`: every version of every set,
+      18/36/72 px images), tested on 2 fixtures saved by `twitch_capture -- badges` (6 global sets, a public
+      channel's subscriber versions, trimmed). The chat source loads them with the 7TV sets once the room's
+      id arrives, keeps them for the session (`ChatSets`), the channel's versions over the global ones, and
+      gives each author the badges of their `badges` tag that exist. Verified in the app on hasanabi's chat:
+      subscriber and global badges before the names. **Not verified**: a channel without its own badges
+      in the app
+- BTTV and FFZ: dropped, the user's choice (2026-11-01): 7TV is enough
+- [x] Animated emotes and zero-width overlays: `ui::images::decode` keeps the frames and delays of animated
+      GIFs and WebPs (at most 300; `image`'s `gif` feature added, agreed), the store counts every frame in
+      its budget, and the panel gives each emote image an id so that GPUI plays it (only while the window
+      is active, not with reduced motion). `Emote::overlay` draws an emote over the one before it (blank
+      text between allowed), else as an ordinary one: 7TV's zero-width emotes. 7TV emotes now ask for the
+      animated WebP; Twitch's `default` URLs were already animated GIFs. 2 tests (a GIF built in memory);
+      a real 7TV animated WebP decoded to its 55 frames (checked once, not kept as a fixture: third-party
+      art). The example blinks some emotes and draws rings over others: 120 frames a second at 20 messages
+      a second. **Not verified**: the motion in the app (screenshots are still), a zero-width 7TV emote in
+      the app
 - [ ] VODs: no chat replay at first (GQL comments, later)
-- Exit: met for Twitch's own emotes (third-party ones, badges and animated emotes are the next changes)
+- Exit: met: the chat with Twitch and 7TV emotes (animated, overlays), badges, next to the player
 - Dependencies: `tokio-tungstenite` with `native-tls`, `futures-util` (its stream and sink), tokio's
   `time` (the reconnection delay), agreed
 

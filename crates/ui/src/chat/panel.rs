@@ -6,8 +6,8 @@ use std::collections::VecDeque;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, FollowMode, FontWeight, ImageSource, ListAlignment, ListState, ObjectFit,
-  SharedString, Window, div, img, list, px,
+  AnyElement, Context, ElementId, FollowMode, FontWeight, ImageSource, ListAlignment, ListState,
+  ObjectFit, SharedString, Window, div, img, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Sizable, h_flex, v_flex};
@@ -23,6 +23,11 @@ use crate::theme;
 pub const MAX_MESSAGES: usize = 500;
 /// Size of a badge, logical pixels.
 const BADGE_SIZE: f32 = 18.;
+/// Width an emote is drawn at, [`EMOTE_HEIGHT`] high.
+fn emote_width(emote: &Emote) -> f32 {
+  EMOTE_HEIGHT * emote.aspect.max(0.1)
+}
+
 /// Height kept above and below the visible messages, laid out ahead of a scroll.
 const OVERDRAW: f32 = 400.;
 
@@ -187,8 +192,10 @@ impl ChatPanel {
     if message.deleted {
       text_color = theme::subtle();
     }
-    for fragment in &message.fragments {
-      match fragment {
+    let fragments = &message.fragments;
+    let mut index = 0;
+    while index < fragments.len() {
+      match &fragments[index] {
         Fragment::Text(text) => {
           for word in text.split_inclusive(' ') {
             line = line.child(
@@ -225,30 +232,65 @@ impl ChatPanel {
               .child(url.clone()),
           );
         }
-        Fragment::Emote(Emote {
-          picture, aspect, ..
-        }) => {
-          let width = EMOTE_HEIGHT * aspect.max(0.1);
-          line = line.child(
-            div()
-              .w(px(width))
-              .h(px(EMOTE_HEIGHT))
-              .flex_none()
-              .when(message.deleted, |el| el.opacity(0.35))
-              .children(image(picture, width, EMOTE_HEIGHT).map(|render| {
+        Fragment::Emote(emote) => {
+          // The overlays that follow it (blank text between) are drawn on it.
+          let mut overlays = Vec::new();
+          let mut next = index + 1;
+          if !emote.overlay {
+            let mut look = next;
+            loop {
+              while matches!(fragments.get(look), Some(Fragment::Text(t)) if t.trim().is_empty()) {
+                look += 1;
+              }
+              match fragments.get(look) {
+                Some(Fragment::Emote(over)) if over.overlay => {
+                  overlays.push((look, over));
+                  look += 1;
+                  next = look;
+                }
+                _ => break,
+              }
+            }
+          }
+          let width = emote_width(emote);
+          let mut drawn = div()
+            .relative()
+            .w(px(width))
+            .h(px(EMOTE_HEIGHT))
+            .flex_none()
+            .when(message.deleted, |el| el.opacity(0.35));
+          for (at, layer) in std::iter::once((index, emote)).chain(overlays) {
+            let layer_width = emote_width(layer);
+            if let Some(render) = image(&layer.picture, layer_width, EMOTE_HEIGHT) {
+              drawn = drawn.child(
                 img(ImageSource::Render(render))
-                  .w(px(width))
+                  // An id lets GPUI play an animated image's frames.
+                  .id(("emote", at))
+                  .absolute()
+                  .bottom_0()
+                  .left(px((width - layer_width) / 2.))
+                  .w(px(layer_width))
                   .h(px(EMOTE_HEIGHT))
                   // Else the image's own ratio wins over the height.
-                  .aspect_ratio(width / EMOTE_HEIGHT)
-                  .object_fit(ObjectFit::Contain)
-              })),
-          );
+                  .aspect_ratio(layer_width / EMOTE_HEIGHT)
+                  .object_fit(ObjectFit::Contain),
+              );
+            }
+          }
+          line = line.child(drawn);
+          index = next;
+          continue;
         }
       }
+      index += 1;
     }
 
-    let item = div().w_full().px_3().py(px(3.));
+    // Its id keeps the emotes' animation state apart from other messages'.
+    let item = div()
+      .id(ElementId::Name(message.id.clone()))
+      .w_full()
+      .px_3()
+      .py(px(3.));
     match &message.kind {
       MessageKind::Notice(text) => item
         .child(

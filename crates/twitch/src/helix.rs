@@ -240,6 +240,53 @@ pub fn parse_users(answer: &Value) -> Vec<User> {
   .items
 }
 
+/// A chat badge's version: shown before a chatter's name when their IRC `badges` tag has
+/// `set/version`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Badge {
+  /// `subscriber`, `moderator`…
+  pub set: String,
+  /// `0`, `3012`…
+  pub version: String,
+  /// What it means ("Moderator", "2-Year Subscriber"…).
+  pub title: String,
+  /// The 18 px image.
+  pub url_1x: String,
+  /// The 36 px image.
+  pub url_2x: String,
+  /// The 72 px image.
+  pub url_4x: String,
+}
+
+/// `/chat/badges/global`, `/chat/badges`: every version of every set.
+pub fn parse_badges(answer: &Value) -> Vec<Badge> {
+  let Some(sets) = answer["data"].as_array() else {
+    return Vec::new();
+  };
+  sets
+    .iter()
+    .flat_map(|set| {
+      let name = text(&set["set_id"]);
+      set["versions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(move |v| {
+          let url_1x = v["image_url_1x"].as_str().filter(|u| !u.is_empty())?;
+          Some(Badge {
+            set: name.clone(),
+            version: text(&v["id"]),
+            title: text(&v["title"]),
+            url_1x: url_1x.to_owned(),
+            url_2x: text(&v["image_url_2x"]),
+            url_4x: text(&v["image_url_4x"]),
+          })
+        })
+    })
+    .filter(|b| !b.set.is_empty())
+    .collect()
+}
+
 /// `/channels/followed`.
 pub fn parse_followed(answer: &Value) -> Page<Followed> {
   page(answer, |f| {
@@ -442,6 +489,20 @@ impl Helix {
       .into_iter()
       .next()
       .ok_or(Error::NotFound)
+  }
+
+  /// The chat badges every channel shares (moderator, VIP, partner…).
+  pub async fn global_badges(&self) -> Result<Vec<Badge>> {
+    Ok(parse_badges(&self.get("chat/badges/global", &[]).await?))
+  }
+
+  /// A channel's own chat badges (subscriber months, bits).
+  pub async fn channel_badges(&self, broadcaster_id: &str) -> Result<Vec<Badge>> {
+    Ok(parse_badges(
+      &self
+        .get("chat/badges", &[("broadcaster_id", broadcaster_id)])
+        .await?,
+    ))
   }
 
   /// The followed channels on air, most viewers first.

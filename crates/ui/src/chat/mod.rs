@@ -67,7 +67,7 @@ pub enum Fragment {
   Link(SharedString),
 }
 
-/// An emote drawn inline, [`EMOTE_HEIGHT`] high.
+/// An emote drawn inline, [`EMOTE_HEIGHT`] high; an animated image plays.
 #[derive(Clone)]
 pub struct Emote {
   /// Its code, shown while it loads.
@@ -76,6 +76,8 @@ pub struct Emote {
   pub picture: Picture,
   /// Width / height, known before it loads so that the line does not move when it arrives.
   pub aspect: f32,
+  /// Drawn over the emote before it (7TV's zero-width emotes), else as an ordinary one.
+  pub overlay: bool,
 }
 
 /// Height of an emote, logical pixels (Twitch's 1.0 size).

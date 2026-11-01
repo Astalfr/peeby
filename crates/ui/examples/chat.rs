@@ -1,5 +1,5 @@
 //! The chat panel alone, fed with generated messages: words, mentions, links, emotes (squares
-//! drawn in memory, no network), badges, `/me`, notices, deletions and bans, at a busy channel's
+//! drawn in memory, no network; some blink, some are rings drawn over the emote before them), badges, `/me`, notices, deletions and bans, at a busy channel's
 //! rate. Every 5 s it prints the frames drawn and the slowest frame, to check that the list keeps
 //! up at [`ui::chat::MAX_MESSAGES`] messages (docs/twitch-plan.md, step 9).
 //!
@@ -69,7 +69,8 @@ const NAMES: &[&str] = &[
   "huit",
 ];
 
-/// Draws emotes and badges: `chat://emote/<n>?w=..&h=..` is a colored square, as PNG.
+/// Draws emotes and badges: `chat://emote/<n>?w=..&h=..` is a colored square, as PNG;
+/// `chat://anim/…` a square that blinks (a GIF); `chat://over/…` a ring drawn over an emote.
 struct Squares;
 
 impl Fetch for Squares {
@@ -77,7 +78,38 @@ impl Fetch for Squares {
     let seed = url
       .bytes()
       .fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+    let (animated, over) = (
+      url.starts_with("chat://anim/"),
+      url.starts_with("chat://over/"),
+    );
     Box::pin(async move {
+      if animated || over {
+        let mut bytes = Vec::new();
+        {
+          let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+          encoder
+            .set_repeat(image::codecs::gif::Repeat::Infinite)
+            .map_err(|e| e.to_string())?;
+          for step in 0..4u32 {
+            let frame = image::RgbaImage::from_fn(56, 56, |x, y| {
+              let ring = (x as i32 - 28).pow(2) + (y as i32 - 28).pow(2);
+              if over {
+                let radius = 8 + step as i32 * 5;
+                let on = (ring - radius * radius).abs() < 60;
+                image::Rgba(if on { [255, 255, 0, 255] } else { [0, 0, 0, 0] })
+              } else {
+                let shade = 60 + step as u8 * 60;
+                image::Rgba([shade, (seed >> 8) as u8, 255 - shade, 255])
+              }
+            });
+            let delay = image::Delay::from_numer_denom_ms(150, 1);
+            encoder
+              .encode_frame(image::Frame::from_parts(frame, 0, 0, delay))
+              .map_err(|e| e.to_string())?;
+          }
+        }
+        return Ok(bytes);
+      }
       let mut image = image::RgbaImage::new(56, 56);
       let color = [
         (seed >> 16) as u8,
@@ -131,11 +163,23 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
   let mut fragments = Vec::new();
   for _ in 0..1 + rng.next(24) {
     match rng.next(12) {
-      0 | 1 => fragments.push(Fragment::Emote(Emote {
-        name: "Kappa".into(),
-        picture: picture(format!("emote/{}", rng.next(20))),
-        aspect: if rng.next(4) == 0 { 2. } else { 1. },
-      })),
+      0 | 1 => {
+        let kind = match rng.next(8) {
+          0 => "anim",
+          1 if !fragments.is_empty() => "over",
+          _ => "emote",
+        };
+        fragments.push(Fragment::Emote(Emote {
+          name: "Kappa".into(),
+          picture: picture(format!("{kind}/{}", rng.next(20))),
+          aspect: if kind == "emote" && rng.next(4) == 0 {
+            2.
+          } else {
+            1.
+          },
+          overlay: kind == "over",
+        }));
+      }
       2 if rng.next(4) == 0 => {
         fragments.extend(split_text(&format!("@{} ", NAMES[rng.next(NAMES.len())])))
       }

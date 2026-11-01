@@ -1,4 +1,4 @@
-//! Remote images (thumbnails, posters, avatars): download on the network runtime, disk cache,
+//! Remote images (thumbnails, posters, avatars, emotes, animated ones with their frames): download on the network runtime, disk cache,
 //! decode off the UI thread, in-memory LRU of GPU-ready images, and BlurHash placeholders.
 //! Shared by every space: the app gives the store a [`Fetch`], and a space whose server needs
 //! its own requests (Jellyfin's `Authorization` header) adds one for its server's URLs
@@ -248,8 +248,12 @@ impl ImageStore {
 }
 
 fn image_bytes(image: &RenderImage) -> usize {
-  let size = image.size(0);
-  size.width.0 as usize * size.height.0 as usize * 4
+  (0..image.frame_count())
+    .map(|frame| {
+      let size = image.size(frame);
+      size.width.0 as usize * size.height.0 as usize * 4
+    })
+    .sum()
 }
 
 fn cache_name(key: &str) -> String {
@@ -258,8 +262,31 @@ fn cache_name(key: &str) -> String {
   format!("{:016x}.img", hasher.finish())
 }
 
-/// Decodes an image, scaled to fill `size` (device pixels) when given.
+/// Frames kept of an animated image; the rest are dropped (a long GIF would fill the memory).
+const MAX_FRAMES: usize = 300;
+
+/// Decodes an image, scaled to fill `size` (device pixels) when given. Animated GIFs and WebPs keep
+/// their frames and delays: an `img` with an id plays them (GPUI's own animation).
 pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>> {
+  if let Some(frames) = animation(bytes) {
+    let frames: Vec<image::Frame> = frames
+      .into_iter()
+      .map(|frame| {
+        let delay = frame.delay();
+        let mut buffer = frame.into_buffer();
+        if let Some((w, h)) = size {
+          buffer = image::DynamicImage::ImageRgba8(buffer)
+            .resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3)
+            .into_rgba8();
+        }
+        for px in buffer.as_chunks_mut::<4>().0 {
+          px.swap(0, 2);
+        }
+        image::Frame::from_parts(buffer, 0, 0, delay)
+      })
+      .collect();
+    return Some(Arc::new(RenderImage::new(frames)));
+  }
   let mut image = image::load_from_memory(bytes).ok()?;
   if let Some((w, h)) = size {
     image = image.resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3);
@@ -267,6 +294,29 @@ pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>
   let rgba = image.into_rgba8();
   let (w, h) = rgba.dimensions();
   bgra_image(w, h, rgba.into_raw())
+}
+
+/// The frames of an animated GIF or WebP (full canvases, RGBA), at most [`MAX_FRAMES`]; `None` for
+/// a still image or another format.
+fn animation(bytes: &[u8]) -> Option<Vec<image::Frame>> {
+  use image::AnimationDecoder;
+  let cursor = std::io::Cursor::new(bytes);
+  let frames = match image::guess_format(bytes).ok()? {
+    image::ImageFormat::Gif => image::codecs::gif::GifDecoder::new(cursor)
+      .ok()?
+      .into_frames(),
+    image::ImageFormat::WebP => {
+      let decoder = image::codecs::webp::WebPDecoder::new(cursor).ok()?;
+      if !decoder.has_animation() {
+        return None;
+      }
+      decoder.into_frames()
+    }
+    _ => return None,
+  };
+  let frames: Vec<image::Frame> = frames.take(MAX_FRAMES).filter_map(Result::ok).collect();
+  // A single frame is drawn as a still image.
+  (frames.len() > 1).then_some(frames)
 }
 
 /// GPUI sprites are BGRA: swap the red and blue channels of RGBA pixels.
@@ -329,4 +379,42 @@ pub fn route(prefix: &str, fetcher: Option<Arc<dyn Fetch>>, cx: &mut gpui::App) 
     }
     store.failed.retain(|url| !url.starts_with(prefix));
   });
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// A GIF of `colors.len()` 4×4 frames, 50 ms each.
+  fn gif(colors: &[[u8; 4]]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+      let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+      for color in colors {
+        let buffer = image::RgbaImage::from_pixel(4, 4, image::Rgba(*color));
+        let delay = image::Delay::from_numer_denom_ms(50, 1);
+        encoder
+          .encode_frame(image::Frame::from_parts(buffer, 0, 0, delay))
+          .expect("a frame");
+      }
+    }
+    bytes
+  }
+
+  #[test]
+  fn animated_gifs_keep_their_frames_as_bgra() {
+    let image = decode(&gif(&[[255, 0, 0, 255], [0, 0, 255, 255]]), None).expect("an image");
+    assert_eq!(image.frame_count(), 2);
+    // BGRA: red is stored last.
+    assert_eq!(&image.as_bytes(0).expect("frame 0")[..4], &[0, 0, 255, 255]);
+    assert_eq!(&image.as_bytes(1).expect("frame 1")[..4], &[255, 0, 0, 255]);
+    assert_eq!(image_bytes(&image), 2 * 4 * 4 * 4);
+  }
+
+  #[test]
+  fn a_single_frame_gif_is_a_still_image() {
+    let image = decode(&gif(&[[0, 255, 0, 255]]), Some((2, 2))).expect("an image");
+    assert_eq!(image.frame_count(), 1);
+    assert_eq!(image_bytes(&image), 2 * 2 * 4);
+  }
 }

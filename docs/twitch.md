@@ -136,11 +136,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
       256); a Twitch user without 7TV answers 404 `{"error_code":12000}`;
     - BTTV `https://api.betterttv.net/3/cached/users/twitch/{id}` and `/3/cached/emotes/global` **[mem]**;
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
-- **Order of work**:
-  1. anonymous IRC with Twitch emotes from the tag;
-  2. badges;
-  3. 7TV, BTTV and FFZ;
-  4. deleted messages.
+- **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
+  tag, deleted messages, 7TV, badges; BTTV and FFZ dropped (the user's choice: 7TV is enough).
 
 ## Helix
 
@@ -184,7 +181,7 @@ Checked against the code on 2026-11-01:
 | Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `PlayerView` shows a seek bar whenever mpv gives a duration (a live window has one) | **Missing**: a `Source::live` flag |
 | Ads removed | Nothing between Twitch and mpv | **Missing**: a playlist-rewriting layer (decided: build it) |
 | Low latency | Same layer (prefetch segments) | **Missing**, optional |
-| Animated emotes (WebP, GIF) | `ui::images::decode` keeps the first frame | **Missing**: frames in the image store, or static emotes |
+| Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |
 | Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |
 | GQL hashes and Client-ID refreshed without a release | Nothing yet | **Missing**: settings refreshed at startup, as `WEB_CLIENT_VERSION` |

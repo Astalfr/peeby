@@ -15,7 +15,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
-- 7TV emotes in the chat (2026-11-01, step 9): `twitch::seventv` (global and channel sets, the channel's aliases, still frames of animated emotes), loaded once per channel and session from the room's id, words replaced by emotes. 5 new tests on 3 saved responses. Verified in the app on a busy channel. Animated and zero-width rendering, badges, BTTV and FFZ come later.
+- Animated emotes (2026-11-01, step 9, which ends with it): the image store keeps the frames of animated GIFs and WebPs, the chat panel plays them, and 7TV's zero-width emotes are drawn over the emote before them. 2 new tests. Checked with a real animated 7TV emote (55 frames) and in the example (120 frames a second). **Not verified:** the motion in the app.
+
+- Chat badges (2026-11-01, step 9): Helix global and channel badges, loaded with the 7TV sets and kept for the session, shown before the names. 2 new tests on 2 fixtures (`twitch_capture -- badges`). Verified in the app. BTTV and FFZ dropped: 7TV is enough (the user's choice).
+
+- 7TV emotes in the chat (2026-11-01, step 9): `twitch::seventv` (global and channel sets, the channel's aliases, still frames of animated emotes), loaded once per channel and session from the room's id, words replaced by emotes. 5 new tests on 3 saved responses. Verified in the app on a busy channel.
 
 - Step 9 done (2026-11-01): the read-only chat beside a live. Generic in `ui::chat` (model, `ChatPanel`: a virtual list of 500 messages following the newest, held while scrolled up, emotes inline, deletions greyed, the room's modes; `watch_layout`: the watch page with a chat column), so that YouTube lives can plug in later; `twitch::chat` (IRC parser, anonymous WebSocket with reconnection) and `spaces::twitch::chat` in between. Emote ranges proved to count code points. 19 new tests, 9 of them on a fixture of 21 anonymized IRC lines. Verified in the app on three busy channels; the panel example holds 120 frames a second at 50 messages a second. **Not verified:** a reconnection, the resume button's click, a deletion seen in the app. Badges, third-party and animated emotes come next.
 

@@ -4,7 +4,8 @@
 //! ids, titles, previews), when they followed them, how many. Public lists (top categories, a
 //! category's streams, searches) are only trimmed.
 //!
-//! `cargo run -p peeby --example twitch_capture`
+//! `cargo run -p peeby --example twitch_capture` · `-- badges` saves only the chat badges (global, and a
+//! public channel's), trimmed to a few sets and versions.
 //!
 //! The saved refresh token is spent and its successor saved back, as the app does: do not run it
 //! while Peeby runs, or the app's session ends at its next refresh. Prints counts only.
@@ -32,7 +33,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   twitch::block_on(async move {
     let session = Session::restore(Auth::new(None)?, &refresh, store).await?;
     let helix = Helix::new(session)?;
-    capture(&helix).await
+    if std::env::args().any(|a| a == "badges") {
+      capture_badges(&helix).await
+    } else {
+      capture(&helix).await
+    }
   })??;
   Ok(())
 }
@@ -112,6 +117,44 @@ async fn capture(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
     .await?;
   save("helix_clips.json", &clips)?;
   Ok(())
+}
+
+/// The chat badges: the global sets most chats show, and a busy public channel's (its
+/// subscriber and bits versions, a few of each).
+async fn capture_badges(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
+  const GLOBAL: &[&str] = &[
+    "broadcaster",
+    "moderator",
+    "vip",
+    "partner",
+    "premium",
+    "turbo",
+  ];
+  let mut global = helix.get("chat/badges/global", &[]).await?;
+  trim_badges(&mut global, |set| GLOBAL.contains(&set));
+  save("helix_badges_global.json", &global)?;
+  // A busy public channel with its own subscriber and bits badges.
+  let user = helix.get("users", &[("login", "hasanabi")]).await?;
+  let id = user["data"][0]["id"]
+    .as_str()
+    .unwrap_or_default()
+    .to_owned();
+  let mut channel = helix.get("chat/badges", &[("broadcaster_id", &id)]).await?;
+  trim_badges(&mut channel, |_| true);
+  save("helix_badges_channel.json", &channel)?;
+  Ok(())
+}
+
+/// Keeps the sets `keep` accepts, with at most 3 versions each.
+fn trim_badges(answer: &mut Value, keep: impl Fn(&str) -> bool) {
+  if let Some(sets) = answer["data"].as_array_mut() {
+    sets.retain(|set| keep(set["set_id"].as_str().unwrap_or_default()));
+    for set in sets {
+      if let Some(versions) = set["versions"].as_array_mut() {
+        versions.truncate(3);
+      }
+    }
+  }
 }
 
 /// The signed-in user, replaced by a made-up one (same shape).
