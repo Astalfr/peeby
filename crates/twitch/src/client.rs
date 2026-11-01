@@ -212,11 +212,17 @@ impl Client {
 impl Client {
   /// Everything to play `target` through the local proxy. For a live, the main token
   /// ([`gql::PLAYER_TYPE`]) and a backup one ([`gql::BACKUP_PLAYER_TYPE`], to fill ad breaks) are
-  /// asked for together, then both masters; a failing backup only costs the ad cover. Call it on a
-  /// tokio runtime.
-  pub async fn play(&self, target: &Target, codecs: &[Codec]) -> Result<Proxy> {
+  /// asked for together, then both masters; a failing backup only costs the ad cover. A live gets
+  /// Twitch's prefetch segments when `low_latency`. Call it on a tokio runtime.
+  pub async fn play(&self, target: &Target, codecs: &[Codec], low_latency: bool) -> Result<Proxy> {
     self
-      .play_with(target, codecs, gql::PLAYER_TYPE, gql::BACKUP_PLAYER_TYPE)
+      .play_with(
+        target,
+        codecs,
+        gql::PLAYER_TYPE,
+        gql::BACKUP_PLAYER_TYPE,
+        low_latency,
+      )
       .await
   }
 
@@ -228,6 +234,7 @@ impl Client {
     codecs: &[Codec],
     main_type: &str,
     backup_type: &str,
+    low_latency: bool,
   ) -> Result<Proxy> {
     let live = matches!(target, Target::Live(_));
     let backup = async {
@@ -253,7 +260,7 @@ impl Client {
       self.master(target, &token, codecs).await
     };
     let (main, backup) = tokio::join!(main, backup);
-    Proxy::start(self.clone(), target, main?, backup).await
+    Proxy::start(self.clone(), target, main?, backup, low_latency).await
   }
 
   /// A media playlist (live or VOD), with the player's `Referer` and `Origin`.

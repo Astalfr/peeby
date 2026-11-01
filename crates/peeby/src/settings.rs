@@ -85,6 +85,10 @@ pub struct Twitch {
   pub web_client_id: Option<String>,
   /// Highest quality picked when a stream starts, as a height in pixels.
   pub max_height: Option<u32>,
+  /// Lives start closer to the broadcast (Twitch's prefetch segments); on when unset.
+  pub low_latency: Option<bool>,
+  /// Codecs this PC was found to decode on the CPU only (`h265`, `av1`): no longer asked for.
+  pub software_codecs: Vec<String>,
 }
 
 /// `[player]`: how the player behaves, in every space.

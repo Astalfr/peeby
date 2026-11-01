@@ -1,6 +1,6 @@
 # Peeby documentation
 
-Peeby is a native media client for Windows, written in Rust with [GPUI](https://www.gpui.rs/), with one tab ("space") per service: YouTube and Jellyfin, Twitch prepared ([refactor-plan.md](refactor-plan.md), [twitch.md](twitch.md)). It was PeebTube, a YouTube client reusing the playback stack of peeby, the author's Jellyfin client, which it now replaces ([ADR 0007](decisions/0007-multi-space-app.md)).
+Peeby is a native media client for Windows, written in Rust with [GPUI](https://www.gpui.rs/), with one tab ("space") per service: YouTube, Jellyfin and Twitch ([refactor-plan.md](refactor-plan.md), [twitch.md](twitch.md)). It was PeebTube, a YouTube client reusing the playback stack of peeby, the author's Jellyfin client, which it now replaces ([ADR 0007](decisions/0007-multi-space-app.md)).
 
 ## Goals
 
@@ -20,10 +20,10 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
 | Look and motion | Peeby's visual system, one accent per space (YouTube red, Jellyfin amber) | [0006](decisions/0006-peeby-visual-system.md) |
-| Multi-service app (YouTube, Jellyfin, later Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
+| Multi-service app (YouTube, Jellyfin, Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
 | Mini-player | A window of its own above the others (PopUp), the same video surface, one sound at a time | [0008](decisions/0008-mini-player-window.md) |
 | Jellyfin | 12.0 or newer, one server, one account, token in the Credential Manager | [0009](decisions/0009-jellyfin-12-single-account.md) |
-| Twitch (prepared, not built) | Helix for the catalog, GQL and usher for playback, ads removed by a playlist-rewriting layer, the web `auth-token` asked for (optional, with a tutorial), no browser on the host, chat read anonymously | [0010](decisions/0010-twitch-space.md) |
+| Twitch | Helix for the catalog (sign-in required), GQL and usher for playback, ads removed by a local playlist proxy, low latency, HEVC above 1080p, the web `auth-token` asked for (optional, with a tutorial), no browser on the host, chat read anonymously with Twitch and 7TV emotes | [0010](decisions/0010-twitch-space.md) |
 | UI language | French UI strings; code, comments and docs in English | — |
 
 ## Index
@@ -35,7 +35,8 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 - [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
 - [decisions/](decisions/): architecture decision records; the former peeby's are archived in [decisions/peeby/](decisions/peeby/)
 - [player/](player/): mpv options, video surface, playback UX, ASS subtitles (from peeby)
-- [twitch.md](twitch.md): how a Twitch space would work (playback, credentials, chat, Helix) and what the
-  architecture already covers; [twitch-plan.md](twitch-plan.md): the technical plan to build it, step by step
+- [twitch.md](twitch.md): how the Twitch space works (playback, credentials, chat, Helix), with what was
+  checked live; [twitch-plan.md](twitch-plan.md): the technical plan it was built from, step by step, with what
+  each step verified
 - [jellyfin/](jellyfin/): the Jellyfin API as used, Direct Play (from peeby); [reference/](reference/): Jellyfin's OpenAPI spec
 - [../vendor/README.md](../vendor/README.md): the GPUI patch

@@ -5,7 +5,10 @@
 //! category's streams, searches) are only trimmed.
 //!
 //! `cargo run -p peeby --example twitch_capture` · `-- badges` saves only the chat badges (global, and a
-//! public channel's), trimmed to a few sets and versions.
+//! public channel's), trimmed to a few sets and versions. `-- master <login>` prints the variants (name,
+//! codec, height) of a live's master asked for with every codec (AV1, HEVC, H.264) and the saved
+//! `auth-token`, and saves it redacted as `usher_master_codecs.m3u8` when it has HEVC or AV1.
+//! `-- master-scan` lists which of the top 100 lives offer HEVC or AV1 (logins and codecs only).
 //!
 //! The saved refresh token is spent and its successor saved back, as the app does: do not run it
 //! while Peeby runs, or the app's session ends at its next refresh. Prints counts only.
@@ -23,6 +26,11 @@ use twitch::helix::Helix;
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../twitch/tests/fixtures");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let args: Vec<String> = std::env::args().collect();
+  if let Some(i) = args.iter().position(|a| a == "master") {
+    let login = args.get(i + 1).ok_or("master <login>")?.clone();
+    return twitch::block_on(capture_master(login))?;
+  }
   let entry = keyring::Entry::new("peeby", "twitch|refresh")?;
   let refresh = entry.get_password()?;
   let store: Store = Arc::new(move |token: &str| {
@@ -33,7 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   twitch::block_on(async move {
     let session = Session::restore(Auth::new(None)?, &refresh, store).await?;
     let helix = Helix::new(session)?;
-    if std::env::args().any(|a| a == "badges") {
+    if std::env::args().any(|a| a == "master-scan") {
+      scan_masters(&helix).await
+    } else if std::env::args().any(|a| a == "badges") {
       capture_badges(&helix).await
     } else {
       capture(&helix).await
@@ -117,6 +127,132 @@ async fn capture(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
     .await?;
   save("helix_clips.json", &clips)?;
   Ok(())
+}
+
+/// A live's master with every codec, as the user's account (auth-token): variants printed, the
+/// master saved redacted when it offers HEVC or AV1. Its URLs and session keys never print.
+async fn capture_master(login: String) -> Result<(), Box<dyn std::error::Error>> {
+  use twitch::Target;
+  use twitch::usher::Codec;
+  let auth_token = keyring::Entry::new("peeby", "twitch|auth-token")
+    .and_then(|e| e.get_password())
+    .ok();
+  println!(
+    "auth-token: {}",
+    if auth_token.is_some() { "yes" } else { "no" }
+  );
+  let client = twitch::Client::new(None, auth_token)?;
+  let target = Target::Live(login);
+  let token = client
+    .playback_token(&target, twitch::gql::PLAYER_TYPE)
+    .await?;
+  let master = client
+    .master(&target, &token, &[Codec::Av1, Codec::H265, Codec::H264])
+    .await?;
+  let mut other = false;
+  for v in &master.variants {
+    println!(
+      "{:<20} {:<8} {:?} {:?} portrait={}",
+      v.id, v.name, v.codec, v.height, v.portrait
+    );
+    other |= !v.portrait && matches!(v.codec, Some(Codec::Av1 | Codec::H265));
+  }
+  if other {
+    let path = Path::new(FIXTURES).join("usher_master_codecs.m3u8");
+    std::fs::write(&path, redact_master(&master.text))?;
+    println!("saved {}", path.display());
+  }
+  Ok(())
+}
+
+/// The top 100 lives whose master offers HEVC or AV1 in landscape, with the user's auth-token.
+async fn scan_masters(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
+  use twitch::Target;
+  use twitch::usher::Codec;
+  let auth_token = keyring::Entry::new("peeby", "twitch|auth-token")
+    .and_then(|e| e.get_password())
+    .ok();
+  let client = twitch::Client::new(None, auth_token)?;
+  let streams = helix.get("streams", &[("first", "100")]).await?;
+  let logins: Vec<String> = streams["data"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|s| s["user_login"].as_str().map(str::to_owned))
+    .collect();
+  println!("{} lives", logins.len());
+  for login in logins {
+    let target = Target::Live(login.clone());
+    let Ok(token) = client
+      .playback_token(&target, twitch::gql::PLAYER_TYPE)
+      .await
+    else {
+      continue;
+    };
+    let Ok(master) = client
+      .master(&target, &token, &[Codec::Av1, Codec::H265, Codec::H264])
+      .await
+    else {
+      continue;
+    };
+    let found: Vec<String> = master
+      .variants
+      .iter()
+      .filter(|v| !v.portrait && matches!(v.codec, Some(Codec::Av1 | Codec::H265)))
+      .map(|v| format!("{} {:?}", v.id, v.codec))
+      .collect();
+    if !found.is_empty() {
+      println!("{login}: {}", found.join(", "));
+    }
+  }
+  Ok(())
+}
+
+/// Session keys kept as they are; every other `SESSION-DATA` value is redacted.
+const MASTER_KEPT: &[&str] = &[
+  "SUPPRESS",
+  "SERVER-TIME",
+  "TRANSCODESTACK",
+  "TRANSCODEMODE",
+  "ABS",
+  "STREAM-TIME",
+  "FUTURE",
+  "B",
+  "D",
+  "CHANNEL-METADATA",
+];
+
+/// A master with its session values redacted (but [`MASTER_KEPT`]) and its variant URLs
+/// replaced by placeholders.
+fn redact_master(text: &str) -> String {
+  let mut out = String::new();
+  let mut variant = 0;
+  for line in text.lines() {
+    if let Some(rest) = line.strip_prefix("#EXT-X-SESSION-DATA:") {
+      let id = rest
+        .split_once("DATA-ID=\"")
+        .and_then(|(_, r)| r.split_once('"'))
+        .map_or("", |(id, _)| id);
+      if MASTER_KEPT.contains(&id) {
+        out.push_str(line);
+      } else {
+        out.push_str(&format!(
+          "#EXT-X-SESSION-DATA:DATA-ID=\"{id}\",VALUE=\"REDACTED\""
+        ));
+      }
+    } else if line.starts_with("#EXT-X-TWITCH-INFO:") {
+      out.push_str("#EXT-X-TWITCH-INFO:REDACTED");
+    } else if !line.starts_with('#') && !line.trim().is_empty() {
+      variant += 1;
+      out.push_str(&format!(
+        "https://video-edge.example.invalid/variant/{variant}.m3u8"
+      ));
+    } else {
+      out.push_str(line);
+    }
+    out.push('\n');
+  }
+  out
 }
 
 /// The chat badges: the global sets most chats show, and a busy public channel's (its

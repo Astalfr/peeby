@@ -10,7 +10,7 @@ use std::rc::Rc;
 use player::StartOptions;
 use twitch::Proxy;
 use twitch::gql::{ClipPlayback, StoryboardLevel};
-use twitch::usher::Variant;
+use twitch::usher::{Codec, Variant};
 use ui::player::{Previews, Quality, Source, Tile};
 
 use crate::settings;
@@ -66,27 +66,93 @@ fn source(
   }
 }
 
+/// The codec and height of each quality of a [`proxied`] source, in its order.
+pub type QualityCodecs = Vec<(Option<Codec>, Option<u32>)>;
+
 /// A live's or a VOD's source from `proxy`'s variants: the landscape ones with a picture, then
-/// "Audio seul".
-pub fn proxied(proxy: &Proxy, live: bool, max_height: u32, player: &settings::Player) -> Source {
+/// "Audio seul"; with the codec and height of each quality.
+pub fn proxied(
+  proxy: &Proxy,
+  live: bool,
+  max_height: u32,
+  player: &settings::Player,
+) -> (Source, QualityCodecs) {
   let mut playable: Vec<&Variant> = proxy
     .variants()
     .iter()
     .filter(|v| !v.portrait && !v.audio_only())
     .collect();
   playable.extend(proxy.variants().iter().filter(|v| v.audio_only()).take(1));
+  let labels = labels(&playable);
   let qualities = playable
     .iter()
-    .map(|v| {
-      let label = if v.audio_only() {
-        "Audio seul".to_owned()
-      } else {
-        v.name.clone()
-      };
-      (label, v.url.clone(), v.height)
-    })
+    .zip(labels)
+    .map(|(v, label)| (label, v.url.clone(), v.height))
     .collect();
-  source(qualities, max_height, live, player)
+  let codecs = playable.iter().map(|v| (v.codec, v.height)).collect();
+  (source(qualities, max_height, live, player), codecs)
+}
+
+/// The quality menu's labels: the variant's name, with its codec when another variant has the
+/// same name; "Audio seul".
+fn labels(variants: &[&Variant]) -> Vec<String> {
+  variants
+    .iter()
+    .map(|v| {
+      if v.audio_only() {
+        return "Audio seul".to_owned();
+      }
+      let shared = variants
+        .iter()
+        .filter(|o| o.name == v.name && !o.audio_only())
+        .count()
+        > 1;
+      match v.codec {
+        Some(codec) if shared => format!("{} {}", v.name, codec_name(codec)),
+        _ => v.name.clone(),
+      }
+    })
+    .collect()
+}
+
+fn codec_name(codec: Codec) -> &'static str {
+  match codec {
+    Codec::Av1 => "AV1",
+    Codec::H265 => "HEVC",
+    Codec::H264 => "H.264",
+  }
+}
+
+/// The settings' name of a codec (`software_codecs`).
+pub fn codec_key(codec: Codec) -> &'static str {
+  match codec {
+    Codec::Av1 => "av1",
+    Codec::H265 => "h265",
+    Codec::H264 => "h264",
+  }
+}
+
+/// The codecs to ask usher for, best first: AV1 and HEVC (Twitch's source above 1080p) unless
+/// this PC decodes them on the CPU only, and H.264 always.
+pub fn codecs(software: &[String]) -> Vec<Codec> {
+  [Codec::Av1, Codec::H265, Codec::H264]
+    .into_iter()
+    .filter(|&c| c == Codec::H264 || !software.iter().any(|s| s == codec_key(c)))
+    .collect()
+}
+
+/// The H.264 quality to fall back to from quality `current`: the best one not taller, else the
+/// best one.
+pub fn fallback(qualities: &QualityCodecs, current: usize) -> Option<usize> {
+  let height = qualities.get(current)?.1;
+  let h264 = |(_, (codec, _)): &(usize, &(Option<Codec>, Option<u32>))| *codec == Some(Codec::H264);
+  qualities
+    .iter()
+    .enumerate()
+    .filter(h264)
+    .find(|(_, (_, h))| h.zip(height).is_none_or(|(h, height)| h <= height))
+    .or_else(|| qualities.iter().enumerate().find(h264))
+    .map(|(i, _)| i)
 }
 
 /// A clip's source: one quality per MP4.
@@ -147,5 +213,62 @@ pub fn describe(error: &twitch::Error, channel: &str) -> String {
     }
     Error::Http(_) => "Twitch est injoignable. Vérifiez votre connexion.".into(),
     other => format!("Lecture impossible : {other}"),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn variant(name: &str, codec: Option<Codec>, height: Option<u32>) -> Variant {
+    Variant {
+      id: name.into(),
+      name: name.into(),
+      height,
+      frame_rate: None,
+      bandwidth: 0,
+      codecs: String::new(),
+      codec,
+      portrait: false,
+      url: String::new(),
+    }
+  }
+
+  #[test]
+  fn labels_show_the_codec_only_when_names_repeat() {
+    let a = variant("1440p60", Some(Codec::H265), Some(1440));
+    let b = variant("1080p60", Some(Codec::H265), Some(1080));
+    let c = variant("1080p60", Some(Codec::H264), Some(1080));
+    let d = variant("audio_only", None, None);
+    assert_eq!(
+      labels(&[&a, &b, &c, &d]),
+      ["1440p60", "1080p60 HEVC", "1080p60 H.264", "Audio seul"]
+    );
+  }
+
+  #[test]
+  fn codecs_drop_those_decoded_on_the_cpu() {
+    assert_eq!(codecs(&[]), [Codec::Av1, Codec::H265, Codec::H264]);
+    assert_eq!(
+      codecs(&["av1".to_owned(), "h264".to_owned()]),
+      [Codec::H265, Codec::H264]
+    );
+  }
+
+  #[test]
+  fn fallback_takes_the_best_h264_not_taller() {
+    let qualities: QualityCodecs = vec![
+      (Some(Codec::H265), Some(1440)),
+      (Some(Codec::H264), Some(1080)),
+      (Some(Codec::H264), Some(720)),
+      (None, None),
+    ];
+    assert_eq!(fallback(&qualities, 0), Some(1));
+    assert_eq!(fallback(&qualities, 2), Some(2));
+    let small: QualityCodecs = vec![
+      (Some(Codec::Av1), Some(360)),
+      (Some(Codec::H264), Some(720)),
+    ];
+    assert_eq!(fallback(&small, 0), Some(1));
   }
 }

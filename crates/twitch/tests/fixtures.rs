@@ -267,3 +267,35 @@ fn vod_storyboard() {
   assert!(sheet.ends_with("-high-3.jpg"));
   assert_eq!((col, row), (4, 9));
 }
+
+#[test]
+fn a_master_asked_with_every_codec_has_its_source_in_hevc_only() {
+  // squeezie, with the user's auth-token and `supported_codecs=av1,h265,h264` (2026-11-01).
+  let variants = usher::variants(&text("usher_master_codecs.m3u8"));
+  let landscape: Vec<(&str, Option<Codec>, Option<u32>)> = variants
+    .iter()
+    .filter(|v| !v.portrait)
+    .map(|v| (v.id.as_str(), v.codec, v.height))
+    .collect();
+  assert_eq!(
+    landscape,
+    [
+      ("1440p60", Some(Codec::H265), Some(1440)),
+      ("1080p60", Some(Codec::H264), Some(1080)),
+      ("720p60", Some(Codec::H264), Some(720)),
+      ("480p30", Some(Codec::H264), Some(480)),
+      ("360p30", Some(Codec::H264), Some(360)),
+      ("160p30", Some(Codec::H264), Some(160)),
+      ("audio_only", None, None),
+    ]
+  );
+  // No quality in two codecs.
+  let mut names: Vec<&str> = variants
+    .iter()
+    .filter(|v| !v.portrait)
+    .map(|v| v.name.as_str())
+    .collect();
+  let count = names.len();
+  names.dedup();
+  assert_eq!(names.len(), count);
+}

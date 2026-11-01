@@ -5,8 +5,11 @@
 //! - no argument: the top live channel; `vod:<login>`: that channel's latest VOD.
 //! - `PEEBY_PLAYER_TYPE`: `playerType` of the token, default `embed` (`site` gets a pre-roll).
 //! - `PEEBY_CODECS`: `supported_codecs`, default `h264` (e.g. `av1,h265,h264`).
+//! - `PEEBY_VARIANT`: the variant to play by id (e.g. `1080p60-portrait`), else the best landscape one.
 //! - `PEEBY_FIXTURES=1`: saves the GQL answer, redacted, in `crates/twitch/tests/fixtures/`.
 //! - `PEEBY_QUIT_AFTER`: quits after that many seconds (unattended runs).
+//! - `PEEBY_LOW_LATENCY=0`: without Twitch's prefetch segments (default with them). A live prints,
+//!   every 10 s, how long ago the segment FFmpeg starts at (third from the end) was captured.
 //! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
 //! - The mpv log goes to `target/twitch-play-mpv.log` (it holds stream URLs: never share it).
 //!
@@ -150,6 +153,7 @@ fn through_proxy(target: &Target) -> Result<String, String> {
   // `PEEBY_PLAYER_TYPE=site` gets the pre-roll, which the backup then covers.
   let main_type =
     std::env::var("PEEBY_PLAYER_TYPE").unwrap_or_else(|_| ::twitch::gql::PLAYER_TYPE.into());
+  let low_latency = std::env::var("PEEBY_LOW_LATENCY").as_deref() != Ok("0");
   let (tx, rx) = std::sync::mpsc::channel();
   let started = Instant::now();
   std::thread::spawn(move || {
@@ -177,6 +181,7 @@ fn through_proxy(target: &Target) -> Result<String, String> {
           &[::twitch::usher::Codec::H264],
           &main_type,
           ::twitch::gql::BACKUP_PLAYER_TYPE,
+          low_latency,
         )
         .await
       {
@@ -191,10 +196,19 @@ fn through_proxy(target: &Target) -> Result<String, String> {
         .iter()
         .find(|v| !v.portrait && !v.audio_only())
         .map(|v| (v.url.clone(), format!("{v:?}")));
+      let playlist = best.as_ref().map(|(url, _)| url.clone());
       let _ = tx.send(best.ok_or_else(|| "no landscape variant".to_owned()));
       let mut last = proxy.ad_state();
+      let mut ticks = 0u32;
       loop {
         tokio::time::sleep(Duration::from_millis(500)).await;
+        ticks += 1;
+        if ticks.is_multiple_of(20)
+          && let Some(url) = &playlist
+          && let Some(behind) = start_behind(url).await
+        {
+          eprintln!("start point: {behind:.1} s behind (low latency {low_latency})");
+        }
         let state = proxy.ad_state();
         if state.active != last.active || state.covered != last.covered {
           eprintln!(
@@ -214,6 +228,40 @@ fn through_proxy(target: &Target) -> Result<String, String> {
     started.elapsed().as_secs_f64()
   );
   Ok(url)
+}
+
+/// How long ago the segment FFmpeg starts a live at (third from the end of `url`'s playlist) was
+/// captured: its `PROGRAM-DATE-TIME`, or the last one plus the durations after it (prefetch
+/// segments have none).
+async fn start_behind(url: &str) -> Option<f64> {
+  let text = reqwest::get(url).await.ok()?.text().await.ok()?;
+  // (capture time in ms when known, duration in s) of each segment.
+  let mut segments: Vec<(Option<i64>, f64)> = Vec::new();
+  let mut date = None;
+  let mut duration = 0.0;
+  for line in text.lines() {
+    if let Some(d) = line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:") {
+      date = ::twitch::time::epoch_millis(d);
+    } else if let Some(d) = line.strip_prefix("#EXTINF:") {
+      duration = d.split(',').next()?.parse().ok()?;
+    } else if !line.starts_with('#') && !line.is_empty() {
+      segments.push((date.take(), duration));
+    }
+  }
+  let start = segments.len().checked_sub(3)?;
+  // Extrapolate from the last dated segment at or before the start.
+  let (dated, (millis, _)) = segments[..=start]
+    .iter()
+    .enumerate()
+    .rev()
+    .find_map(|(i, (d, len))| d.map(|d| (i, (d, *len))))?;
+  let after: f64 = segments[dated..start].iter().map(|(_, len)| len).sum();
+  let captured = millis as f64 / 1000. + after;
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .ok()?
+    .as_secs_f64();
+  Some(now - captured)
 }
 
 #[derive(Default)]
@@ -282,6 +330,12 @@ impl Spike {
         if s.playing_after.is_none() && s.loaded_after.is_some() && p > 0.0 && p != s.position {
           s.playing_after = Some(elapsed);
           eprintln!("playing after {:.2} s", elapsed.as_secs_f64());
+          // Whether the GPU decodes this codec (HEVC and AV1 checks, step 10).
+          eprintln!(
+            "decoder: {} · hwdec {}",
+            self.player.property("video-codec").unwrap_or_default(),
+            self.player.property("hwdec-current").unwrap_or_default()
+          );
         }
         s.position = p;
       }

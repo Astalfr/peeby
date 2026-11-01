@@ -25,7 +25,7 @@ pub struct Page<T> {
 }
 
 /// A live stream.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Stream {
   /// Stream id.
   pub id: String,

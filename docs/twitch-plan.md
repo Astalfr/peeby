@@ -1,7 +1,6 @@
 # Twitch space: technical plan
 
-Status: agreed 2026-11-01 (the user's answers in [Decisions of the user](#decisions-of-the-user)); steps 1–9
-done, step 10 to do. It turns [twitch.md](twitch.md) (the research) and [ADR 0010](decisions/0010-twitch-space.md) (the
+Status: done 2026-11-01 (the user's answers in [Decisions of the user](#decisions-of-the-user)): steps 1–10. It turns [twitch.md](twitch.md) (the research) and [ADR 0010](decisions/0010-twitch-space.md) (the
 decisions) into steps. Each step ends with `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace` and a run of the app, and YouTube and Jellyfin keep working after every step. Tick
 the boxes as steps land, and list under each step what was verified and what was not.
@@ -557,24 +556,42 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   `time` (the reconnection delay), agreed
 
 ### 10. Polish and docs
-- [ ] Bell: "en direct" notifications for followed channels that went live since the last check (a
-      section of the aggregated panel, `Space::notifications`)
-- [ ] **Low latency** (agreed): the proxy turns `#EXT-X-TWITCH-PREFETCH:<url>` lines into ordinary
-      segments (Streamlink's approach), except after an ad discontinuity; mpv gets a small read-ahead
-      for live sources (`cache-secs`, `demuxer-readahead-secs` around 2–4 s, to tune) through the space's
-      `StartOptions`, so a new option in `player` only if no existing one fits (ADR 0001 note then). A
-      "Faible latence" switch in the settings part, on by default. Measure the delay to the broadcast
-      (the chat is the reference) with and without
-- [ ] **HEVC and AV1** (agreed): check D3D11 hardware decoding of both on this PC first (mpv
-      `hwdec-current` on a sample). Then `supported_codecs=av1,h265,h264`, and `usher::variants` keeps one
-      variant per name and codec. The space picks the best codec the GPU decodes (a per-codec result kept
-      in the settings after the first check). When mpv falls back to software decoding on a variant, the
-      space moves to the h264 variant of the same quality. The quality menu shows the codec only when two
-      codecs share a name
-- [ ] docs: architecture.md (the `twitch` crate, the proxy in the playback path), design.md (Twitch pages,
-      chat), twitch.md (the [?] settled by the steps), ADR 0010 consequences, README, CLAUDE.md (commands,
-      Twitch rules: the proxy, the secrets), roadmap
-- Exit: the roadmap's criterion: live and VOD playback without ads, followed channels, chat
+- [x] Bell: `spaces/twitch/bell.rs`, Twitch's section of the panel (`Space::unseen`, `Space::notifications`).
+      It reads the sidebar's reading of the followed lives (every 2 minutes, now every live of the first
+      page): the first reading learns who is on air and announces nothing (so that opening Peeby does
+      not announce every live), later ones announce the channels not on air at the previous one, newest
+      first (30 kept, a channel back on air replacing its entry). Opening the panel sees them; a click
+      opens the live. Nothing is kept across restarts. 4 tests. Verified in the app: the section under
+      YouTube's, with its empty text. **Not verified**: a real announcement (a followed channel going
+      live while Peeby runs), the unseen count on the bell
+- [x] **Low latency**: `Splicer::new(low_latency)` follows the content with the main playlist's prefetch
+      segments, numbered after its newest segment, never during an ad break nor when the newest kept
+      segment is not the main content's; `Client::play` takes the switch, VODs never. No mpv option was
+      needed: FFmpeg starts a live three segments from the end, so two more segments at the end start it
+      about two segments later. `[twitch] low_latency` with "Faible latence" in the settings part, on by
+      default. Measured with the spike on a live (`PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0|1`, the segment
+      FFmpeg starts at against its `PROGRAM-DATE-TIME`): about **2.6 s** behind with it against about
+      **7.0 s** without, start time unchanged (1.31 s), no stall in 45 s. 2 tests on the saved playlists.
+      **Not verified**: the delay by eye against the chat, a mid-roll with it on
+- [x] **HEVC and AV1**: checked first, on this PC: the spike (`PEEBY_VARIANT`, now printing `video-codec`
+      and `hwdec-current`) played a 1080p60 HEVC variant with `d3d11va`. Then `twitch_capture -- master
+      <login>` and `-- master-scan` (the user's auth-token, every codec): 16 of the top 100 lives offer
+      **1440p60 in HEVC only**, with H.264 at 1080p60 and below; no AV1 anywhere. Saved as
+      `usher_master_codecs.m3u8` (session values redacted by allowlist). So Twitch does not repeat a
+      quality across codecs: lives and VODs ask for `av1,h265,h264` minus the codecs found decoded on the
+      CPU (`[twitch] software_codecs`), and the watch page checks every 4 s that an AV1 or HEVC quality
+      plays with `hwdec-current` other than `no` (two readings in a row, never with hardware acceleration
+      off, so that a quality still loading or a forced software decoder saves nothing; removing the codec
+      from `settings.toml` asks for it again); if not, the codec is saved there and playback moves to
+      the best H.264 quality not taller (`play::fallback`). The quality menu shows the codec only when two
+      variants share a name (none seen). New in `ui::player`: `property`, `quality`, `set_quality`.
+      4 tests. Verified in the app: squeezie offers 7 qualities, 1440p60 first; the default (1080p)
+      plays H.264; a VOD still plays (0.91 s, 7 qualities); the low-latency live plays in the app.
+      **Not verified**: 1440p HEVC played in the app (needs picking it in the menu), the
+      fallback (this GPU decodes HEVC), AV1
+- [x] docs: architecture.md, design.md (Twitch pages, the chat, the bell), twitch.md, ADR 0010
+      consequences, README, CLAUDE.md, roadmap
+- Exit: met. Live and VOD playback without ads, followed channels, chat (the roadmap's criterion)
 
 ## Risks
 
@@ -586,6 +603,7 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 | The proxy hop slows the start | Over the 1–2 s budget | Measured at steps 1 and 3; the master can be fetched while the token resolves on hover (prefetch, as YouTube) |
 | Refresh token burned by a race | Signed out | Single-flight refresh, keyring written first |
 | Chat throughput on busy channels | UI stutter | Virtual list, cap of 500, batch appends per frame |
+| Prefetch segments announced just before a mid-roll turn out to be ads | A few seconds of ad slip through (Streamlink has the same caveat) | Prefetch dropped as soon as a reload shows the break; "Faible latence" can be switched off |
 
 ## Still to ask
 

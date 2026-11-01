@@ -10,10 +10,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **3: player comfort** | ✅ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **Peeby refactor** | ✅ | One space per service (YouTube, Jellyfin), shared `ui` crate and player, tabs, mini-player, YouTube search, unified settings ([refactor-plan.md](refactor-plan.md), ADRs 0007–0010) | All ten steps of the plan; peeby's Jellyfin features in the Jellyfin space |
-| **Twitch space** | 🚧 | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
+| **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
 ## Twitch space
+
+- Step 10 done (2026-11-01), the Twitch space is complete: the bell announces the followed channels that go live while Peeby runs; low latency (Twitch's prefetch segments through the proxy, "Faible latence" on by default) starts a live about 2.6 s behind its capture instead of about 7 s, measured with the spike; HEVC: the 1440p60 source that 16 of the top 100 lives send only in HEVC is now offered, decoded by the GPU here, with a fall back to H.264 when a codec decodes on the CPU (kept in the settings). 10 new tests, a multi-codec master fixture (`twitch_capture -- master`). **Not verified:** a real bell announcement, 1440p HEVC picked in the app, the fallback, AV1 (no channel offered it).
 
 - Animated emotes (2026-11-01, step 9, which ends with it): the image store keeps the frames of animated GIFs and WebPs, the chat panel plays them, and 7TV's zero-width emotes are drawn over the emote before them. 2 new tests. Checked with a real animated 7TV emote (55 frames) and in the example (120 frames a second). **Not verified:** the motion in the app.
 

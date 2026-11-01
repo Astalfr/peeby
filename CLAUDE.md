@@ -1,7 +1,7 @@
 # Peeby
 
-Native media client for Windows, written in Rust with GPUI: one tab ("space") per service, YouTube and Jellyfin, Twitch
-prepared (docs/twitch.md, ADR 0010). Playback through libmpv, YouTube streams from the InnerTube API, Jellyfin's by Direct Play.
+Native media client for Windows, written in Rust with GPUI: one tab ("space") per service: YouTube, Jellyfin and Twitch
+(docs/twitch.md, ADR 0010, docs/twitch-plan.md). Playback through libmpv, YouTube streams from the InnerTube API, Jellyfin's by Direct Play.
 Project docs: docs/README.md (start there). Decisions: docs/decisions/. Progress: docs/roadmap.md.
 The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`), `jellyfin-api` and the Jellyfin pages came from
 the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import nothing else from there.
@@ -26,10 +26,14 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBY_RESOLVER=ytdl` for yt-dlp)
 - Twitch live check (counts only): `cargo run -p twitch --example smoke -- [login]`
 - Twitch Helix fixtures: `cargo run -p peeby --example twitch_capture` (the user's session from the Credential
-  Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data; `-- badges` saves only the chat badges)
+  Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data; `-- badges` saves only the chat badges; `-- master <login>` prints a live's
+  variants with every codec and the auth-token and saves its master redacted, without spending the refresh token;
+  `-- master-scan` lists the top lives offering HEVC/AV1)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
-  (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_USHER=v1`, `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs)
+  (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_VARIANT`, `PEEBY_USHER=v1`, `PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0`,
+  `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
+  start delay)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 
 ## Product constraints (no exceptions)

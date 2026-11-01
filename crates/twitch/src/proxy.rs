@@ -65,12 +65,14 @@ impl std::fmt::Debug for Proxy {
 
 impl Proxy {
   /// Starts a proxy for `main`'s variants, with `backup` (a master of the same channel from an
-  /// ad-free `playerType`) to fill ad breaks. Call it on a tokio runtime.
+  /// ad-free `playerType`) to fill ad breaks; a live's playlists end with Twitch's prefetch
+  /// segments when `low_latency` ([`Splicer`]). Call it on a tokio runtime.
   pub async fn start(
     client: Client,
     target: &Target,
     main: Master,
     backup: Option<Master>,
+    low_latency: bool,
   ) -> Result<Self> {
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
       .await
@@ -91,7 +93,7 @@ impl Proxy {
       upstreams.push(Upstream {
         main: variant.url.clone(),
         backup,
-        splicer: Mutex::default(),
+        splicer: Mutex::new(Splicer::new(low_latency)),
       });
       variants.push(Variant {
         url: format!("http://127.0.0.1:{port}/{key}/{i}.m3u8"),

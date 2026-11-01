@@ -151,3 +151,34 @@ fn plain_live_passes_through() {
   assert!(!text.contains("DISCONTINUITY\n"));
   assert!(!text.contains("#EXT-X-ENDLIST"));
 }
+
+#[test]
+fn low_latency_appends_the_prefetch_segments_numbered_after_the_content() {
+  let live = backup();
+  let mut splicer = Splicer::new(true);
+  splicer.update(&live, None);
+  assert_eq!(splicer.prefetched(), 2);
+  let text = splicer.render();
+  let urls: Vec<&str> = text.lines().filter(|l| !l.starts_with('#')).collect();
+  assert_eq!(urls.len(), 14 + 2);
+  assert_eq!(&urls[14..], live.prefetch.as_slice());
+  // The media sequence still starts at the first kept segment.
+  assert!(text.contains("#EXT-X-MEDIA-SEQUENCE:4536\n"));
+  assert!(!text.contains("#EXT-X-DISCONTINUITY\n"));
+
+  let mut plain = Splicer::new(false);
+  plain.update(&live, None);
+  assert_eq!(plain.prefetched(), 0);
+}
+
+#[test]
+fn no_prefetch_during_an_ad_break() {
+  let mut splicer = Splicer::new(true);
+  splicer.update(&preroll(0), Some(&backup()));
+  assert!(splicer.ad_state().active);
+  assert_eq!(splicer.prefetched(), 0);
+  // After the pre-roll, the live's own prefetch comes back.
+  splicer.update(&preroll(24), None);
+  assert!(!splicer.ad_state().active);
+  assert_eq!(splicer.prefetched(), 2);
+}

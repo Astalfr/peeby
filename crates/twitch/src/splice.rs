@@ -2,6 +2,11 @@
 //! break leaves filled by a backup playlist's segments (another `playerType`, without ads). Both
 //! number their content by Twitch's live sequence ([`crate::ads`]), which becomes the output's
 //! media sequence: it never goes back, and a segment once shown stays the same.
+//!
+//! Low latency (Streamlink's approach): the main playlist's `#EXT-X-TWITCH-PREFETCH` segments, which
+//! Twitch announces before they are complete, follow the content as ordinary segments, so that
+//! FFmpeg (which starts a live three segments from the end) starts about two segments closer to
+//! the broadcast. Never during an ad break, nor when the newest segment is not the main content's.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -48,9 +53,20 @@ pub struct Splicer {
   target_duration: u32,
   ended: bool,
   state: AdState,
+  low_latency: bool,
+  /// The prefetch segments after the newest kept one, by live sequence; rendered, not kept.
+  prefetch: Vec<(u64, Segment)>,
 }
 
 impl Splicer {
+  /// A splicer that adds the prefetch segments when `low_latency`.
+  pub fn new(low_latency: bool) -> Self {
+    Self {
+      low_latency,
+      ..Self::default()
+    }
+  }
+
   /// Takes a reload of the main playlist, and of the backup when one was fetched (the caller
   /// fetches it while [`MediaPlaylist::in_ad`]).
   pub fn update(&mut self, main: &MediaPlaylist, backup: Option<&MediaPlaylist>) {
@@ -79,6 +95,7 @@ impl Splicer {
       covered: in_ad && covered,
     };
     self.trim();
+    self.prefetch = self.prefetch_after(main);
   }
 
   fn add(&mut self, playlist: &MediaPlaylist, origin: Origin) {
@@ -115,6 +132,45 @@ impl Splicer {
     }
   }
 
+  /// `main`'s prefetch segments numbered after its newest segment, when that one is the newest
+  /// kept and comes from the main playlist's content.
+  fn prefetch_after(&self, main: &MediaPlaylist) -> Vec<(u64, Segment)> {
+    if !self.low_latency || main.ended || main.in_ad() {
+      return Vec::new();
+    }
+    let Some(last) = main.segments.last() else {
+      return Vec::new();
+    };
+    let Some(n) = last.live_sequence else {
+      return Vec::new();
+    };
+    let newest = self.kept.iter().next_back();
+    if newest.is_none_or(|(&k, kept)| k != n || kept.origin != Origin::Main) {
+      return Vec::new();
+    }
+    main
+      .prefetch
+      .iter()
+      .zip(n + 1..)
+      .map(|(url, sequence)| {
+        (
+          sequence,
+          Segment {
+            url: url.clone(),
+            // Not known yet: Twitch's segments last the same.
+            duration: last.duration,
+            extinf: format!("#EXTINF:{:.3},live", last.duration),
+            date_line: None,
+            map: last.map.clone(),
+            discontinuity: false,
+            ad: false,
+            live_sequence: Some(sequence),
+          },
+        )
+      })
+      .collect()
+  }
+
   /// Whether the output marks a discontinuity before segment `n`: a change of source, a gap, or
   /// one in the source playlist.
   fn discontinuity_before(&self, n: u64, kept: &Kept) -> bool {
@@ -134,9 +190,14 @@ impl Splicer {
     self.state
   }
 
-  /// Number of segments in the output.
+  /// Number of segments in the output, prefetch ones excluded.
   pub fn len(&self) -> usize {
     self.kept.len()
+  }
+
+  /// Number of prefetch segments after them.
+  pub fn prefetched(&self) -> usize {
+    self.prefetch.len()
   }
 
   /// Whether the output has no segment yet (an ad break with no backup).
@@ -178,6 +239,17 @@ impl Splicer {
       }
       let _ = writeln!(out, "#EXTINF:{:.3},", kept.segment.duration);
       out.push_str(&kept.segment.url);
+      out.push('\n');
+    }
+    for (_, segment) in &self.prefetch {
+      if let Some(uri) = segment.map.as_deref()
+        && map != Some(uri)
+      {
+        let _ = writeln!(out, "#EXT-X-MAP:URI=\"{uri}\"");
+        map = Some(uri);
+      }
+      let _ = writeln!(out, "#EXTINF:{:.3},", segment.duration);
+      out.push_str(&segment.url);
       out.push('\n');
     }
     if self.ended {

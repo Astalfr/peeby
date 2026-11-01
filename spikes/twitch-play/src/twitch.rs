@@ -220,15 +220,21 @@ fn best_variant(master: &str) -> Option<Stream> {
     };
     let url = lines.next()?;
     total += 1;
-    let groups = attribute(attrs, "IVS-GROUPS");
-    if groups.is_some_and(|g| !g.split(',').any(|g| g == "landscape")) {
-      continue;
-    }
-    landscape += 1;
     let name = attribute(attrs, "STABLE-VARIANT-ID")
       .or_else(|| attribute(attrs, "VIDEO"))
       .unwrap_or("?");
-    if found.is_none() && attribute(attrs, "RESOLUTION").is_some() {
+    // `PEEBY_VARIANT=<id>` picks a variant, portrait ones too (e.g. an HEVC one).
+    let wanted = std::env::var("PEEBY_VARIANT").ok();
+    let groups = attribute(attrs, "IVS-GROUPS");
+    let portrait = groups.is_some_and(|g| !g.split(',').any(|g| g == "landscape"));
+    if !portrait {
+      landscape += 1;
+    }
+    let pick = match &wanted {
+      Some(id) => id == name,
+      None => !portrait && attribute(attrs, "RESOLUTION").is_some(),
+    };
+    if found.is_none() && pick {
       found = Some(Stream {
         url: url.to_owned(),
         name: name.to_owned(),

@@ -27,6 +27,8 @@ use ui::{runtime, theme};
 use super::{Route, TwitchSpace, cards, chat, play};
 use crate::settings::{Player, Settings};
 
+/// How often the decoding of an AV1 or HEVC quality is checked.
+const DECODING_EVERY: Duration = Duration::from_secs(4);
 /// How often a live's viewers and category are read again.
 const INFO_EVERY: Duration = Duration::from_secs(60);
 
@@ -63,6 +65,10 @@ pub struct WatchView {
   proxy: Option<Proxy>,
   /// A live's chat.
   chat: Option<Entity<ChatPanel>>,
+  /// The codec and height of each quality of a live or a VOD, for the decoding check.
+  qualities: play::QualityCodecs,
+  /// The quality whose last check read `hwdec-current` as `no`: a second reading in a row acts.
+  cpu_reading: Option<usize>,
   header: Option<Header>,
   /// A live's start, for the header's uptime.
   started_at: Option<i64>,
@@ -110,6 +116,8 @@ impl WatchView {
       player,
       proxy: None,
       chat: None,
+      qualities: Vec::new(),
+      cpu_reading: None,
       header: None,
       started_at: None,
       focused: false,
@@ -181,9 +189,15 @@ impl WatchView {
   fn start_live(&mut self, login: String, cx: &mut Context<Self>) {
     let clicked = Instant::now();
     let client = self.client.clone();
+    let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
+    let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
     let play = runtime::spawn(cx, {
       let (client, login) = (client.clone(), login.clone());
-      async move { client.play(&Target::Live(login), &[Codec::H264]).await }
+      async move {
+        client
+          .play(&Target::Live(login), &codecs, low_latency)
+          .await
+      }
     });
     let channel = runtime::spawn(cx, async move { client.channel(&login).await });
     self._tasks.push(cx.spawn(async move |this, cx| {
@@ -195,15 +209,17 @@ impl WatchView {
           }
           match play {
             Some(Ok(proxy)) => {
-              let source = play::proxied(
+              let (source, qualities) = play::proxied(
                 &proxy,
                 true,
                 Self::max_height(cx),
                 &Settings::get(cx).player,
               );
               this.proxy = Some(proxy);
+              this.qualities = qualities;
               this.start_source(source, clicked, cx);
               this.watch_live(cx);
+              this.watch_decoding(cx);
             }
             Some(Err(e)) => this.fail(&e, cx),
             None => {}
@@ -244,13 +260,68 @@ impl WatchView {
     }));
   }
 
+  /// Checks every few seconds that the GPU decodes the quality playing when it is AV1 or HEVC:
+  /// if mpv decodes it on the CPU (`hwdec-current` is `no` twice in a row, not a reading taken while
+  /// a quality loads), the codec is no longer asked for (`[twitch] software_codecs`) and playback moves
+  /// to the best H.264 quality not taller. Not with hardware acceleration off: mpv decodes everything
+  /// on the CPU then.
+  fn watch_decoding(&mut self, cx: &mut Context<Self>) {
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      loop {
+        cx.background_executor().timer(DECODING_EVERY).await;
+        let alive = this.update(cx, |this, cx| this.check_decoding(cx));
+        if alive.is_err() {
+          return;
+        }
+      }
+    }));
+  }
+
+  fn check_decoding(&mut self, cx: &mut Context<Self>) {
+    if !Settings::get(cx).player.hardware_acceleration
+      || std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1")
+    {
+      return;
+    }
+    let player = self.player.read(cx);
+    let Some(index) = player.quality() else {
+      return;
+    };
+    let Some(codec @ (Codec::Av1 | Codec::H265)) = self.qualities.get(index).and_then(|q| q.0)
+    else {
+      self.cpu_reading = None;
+      return;
+    };
+    if player.property("hwdec-current").as_deref() != Some("no") {
+      self.cpu_reading = None;
+      return;
+    }
+    if self.cpu_reading.replace(index) != Some(index) {
+      return;
+    }
+    self.cpu_reading = None;
+    let key = play::codec_key(codec);
+    tracing::info!("Twitch: {key} decoded on the CPU, falling back to H.264");
+    Settings::update(cx, |s| {
+      if !s.twitch.software_codecs.iter().any(|c| c == key) {
+        s.twitch.software_codecs.push(key.to_owned());
+      }
+    });
+    if let Some(fallback) = play::fallback(&self.qualities, index) {
+      self
+        .player
+        .update(cx, |player, cx| player.set_quality(fallback, cx));
+    }
+  }
+
   /// The VOD through the proxy, its storyboard, and its header from Helix.
   fn start_vod(&mut self, id: String, cx: &mut Context<Self>) {
     let clicked = Instant::now();
     let (client, helix) = (self.client.clone(), self.helix.clone());
+    let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
     let play = runtime::spawn(cx, {
       let (client, id) = (client.clone(), id.clone());
-      async move { client.play(&Target::Vod(id), &[Codec::H264]).await }
+      async move { client.play(&Target::Vod(id), &codecs, false).await }
     });
     let storyboard = runtime::spawn(cx, {
       let id = id.clone();
@@ -282,7 +353,7 @@ impl WatchView {
           }
           match play {
             Some(Ok(proxy)) => {
-              let mut source = play::proxied(
+              let (mut source, qualities) = play::proxied(
                 &proxy,
                 false,
                 Self::max_height(cx),
@@ -290,7 +361,9 @@ impl WatchView {
               );
               source.previews = storyboard.and_then(Result::ok).and_then(play::previews);
               this.proxy = Some(proxy);
+              this.qualities = qualities;
               this.start_source(source, clicked, cx);
+              this.watch_decoding(cx);
             }
             Some(Err(e)) => this.fail(&e, cx),
             None => {}

@@ -407,6 +407,23 @@ impl PlayerView {
     self.video.clone()
   }
 
+  /// An mpv property as text, for diagnostics (`hwdec-current`, `video-codec`…); `None` before
+  /// mpv starts. Never read `path` nor `stream-open-filename`: stream URLs carry the user's IP.
+  pub fn property(&self, name: &str) -> Option<String> {
+    self.player.as_ref()?.property(name)
+  }
+
+  /// The index of the quality playing in the source's list.
+  pub fn quality(&self) -> Option<usize> {
+    self.quality
+  }
+
+  /// Plays the source's quality `index`, as if picked in the menu (a page falling back from a
+  /// codec the GPU does not decode).
+  pub fn set_quality(&mut self, index: usize, cx: &mut Context<Self>) {
+    self.select_quality(index, cx);
+  }
+
   /// Plays or pauses.
   pub fn toggle_pause(&self) {
     self.with_player(Player::toggle_pause);

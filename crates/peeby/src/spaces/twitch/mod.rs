@@ -3,8 +3,10 @@
 //! session (refreshed one at a time, validated at startup and every hour, as Twitch requires), the
 //! optional web `auth-token` its playback client sends to GQL, the Helix client of its pages, and a
 //! stack of pages: "Suivies", "Parcourir" or the search, then categories and lives on top. The
-//! sidebar lists the followed channels on air, refreshed every two minutes.
+//! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
+//! the meantime show in the bell ([`bell`]).
 
+pub mod bell;
 pub mod browse;
 pub mod cards;
 pub mod channel;
@@ -17,13 +19,14 @@ pub mod session;
 pub mod settings_page;
 pub mod watch;
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
   AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString, Subscription, Task,
-  Window, div, rgb,
+  WeakEntity, Window, div, rgb,
 };
+use gpui_component::popover::PopoverState;
 use twitch::Error;
 use twitch::auth::{Auth, Session, Validation};
 use twitch::helix::{Helix, Stream};
@@ -123,6 +126,8 @@ struct Signed {
   /// The followed channels on air, for the sidebar, with their avatars.
   live: Vec<Stream>,
   avatars: Avatars,
+  /// Who went live since Peeby opened.
+  bell: bell::Bell,
   _validate: Task<()>,
   _sidebar: Task<()>,
 }
@@ -290,8 +295,8 @@ impl TwitchSpace {
           let (helix, user_id) = (helix.clone(), user_id.clone());
           let Ok(fetch) = this.update(cx, |_, cx| {
             runtime::spawn(cx, async move {
-              let mut live = helix.followed_streams(&user_id, None).await?.items;
-              live.truncate(SIDEBAR_LIVE);
+              // Every live of the first page, for the bell; the sidebar shows the first ones.
+              let live = helix.followed_streams(&user_id, None).await?.items;
               let ids = live.iter().map(|s| s.user_id.clone()).collect();
               let avatars = cards::avatars(&helix, ids).await;
               Ok::<_, Error>((live, avatars))
@@ -303,7 +308,8 @@ impl TwitchSpace {
           let alive = this.update(cx, |this, cx| match result {
             Some(Ok((live, avatars))) => {
               if let State::SignedIn(signed) = &mut this.state {
-                signed.live = live;
+                signed.bell.update(&live, SystemTime::now());
+                signed.live = live.into_iter().take(SIDEBAR_LIVE).collect();
                 signed.avatars = avatars;
               }
               cx.notify();
@@ -325,6 +331,7 @@ impl TwitchSpace {
       user_id: validation.user_id,
       live: Vec::new(),
       avatars: Avatars::new(),
+      bell: bell::Bell::default(),
       _validate: validate,
       _sidebar: sidebar,
     }));
@@ -459,6 +466,16 @@ impl TwitchSpace {
       .downcast::<WatchView>()
       .ok()?;
     Some(watch.read(cx).player())
+  }
+
+  /// The bell's lives are seen (its panel opened).
+  pub fn see_bell(&mut self, cx: &mut Context<Self>) {
+    if let State::SignedIn(signed) = &mut self.state
+      && signed.bell.unseen() > 0
+    {
+      signed.bell.see();
+      cx.notify();
+    }
   }
 
   /// The signed-in user's login.
@@ -646,6 +663,33 @@ impl Space for TwitchSpace {
 
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
     self.top_player(cx)
+  }
+
+  fn unseen(&self, _cx: &App) -> Option<usize> {
+    match &self.state {
+      State::SignedIn(signed) => Some(signed.bell.unseen()),
+      _ => None,
+    }
+  }
+
+  fn notifications(
+    &self,
+    popover: WeakEntity<PopoverState>,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    let State::SignedIn(signed) = &self.state else {
+      return None;
+    };
+    Some(bell::panel(
+      cx.weak_entity(),
+      popover,
+      signed.bell.entries(),
+      signed.bell.unseen(),
+      signed.avatars.clone(),
+      window,
+      cx,
+    ))
   }
 
   fn settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {

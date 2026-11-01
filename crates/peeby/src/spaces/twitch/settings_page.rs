@@ -6,7 +6,7 @@ use gpui::{AnyElement, Context, Entity, SharedString, WeakEntity, Window, div, p
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
-use ui::form::{chips, row, section};
+use ui::form::{chips, row, section, toggle};
 use ui::{runtime, theme};
 
 use super::{TwitchSpace, play, session};
@@ -262,7 +262,7 @@ impl SettingsView {
   }
 }
 
-fn playback_section(max_height: u32) -> AnyElement {
+fn playback_section(max_height: u32, low_latency: bool) -> AnyElement {
   let qualities = play::QUALITIES
     .iter()
     .map(|&h| (h, format!("{h}p")))
@@ -278,6 +278,14 @@ fn playback_section(max_height: u32) -> AnyElement {
         }),
       )
       .into_any_element(),
+      row(
+        "Faible latence",
+        "Les lives démarrent plus près du direct, quelques secondes de moins. Au prochain live ouvert.",
+        toggle("twitch-low-latency", low_latency, |on, cx| {
+          Settings::update(cx, |s| s.twitch.low_latency = Some(on))
+        }),
+      )
+      .into_any_element(),
     ],
   )
   .into_any_element()
@@ -289,9 +297,10 @@ impl Render for SettingsView {
       .twitch
       .max_height
       .unwrap_or(play::DEFAULT_HEIGHT);
+    let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
     let sections = vec![
       self.account_section(cx),
-      playback_section(max_height),
+      playback_section(max_height, low_latency),
       self.auth_token_section(cx),
     ];
     v_flex().gap_8().children(sections)

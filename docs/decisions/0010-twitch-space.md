@@ -1,4 +1,4 @@
-# 0010: A Twitch space, prepared, not built
+# 0010: A Twitch space
 
 - Status: accepted (the two open questions answered by the user on 2026-11-01)
 - Date: 2026-11-01
@@ -94,3 +94,13 @@ and prepare for it without building it (refactor plan, step 9). The research, wi
 - The `auth-token` is a full-access secret: losing it means a password change on Twitch. The tutorial
   says so before the field.
 - Revisit if Twitch publishes a playback API, or if Client-Integrity becomes required on every token.
+- Built (2026-11-01, [twitch-plan.md](../twitch-plan.md) steps 1–10). What the building settled:
+  - the ad layer is a local playlist proxy; playback starts in 1.2–1.5 s through it, and with Twitch's
+    prefetch segments (low latency, on by default) a live starts about 2.6 s behind its capture instead
+    of about 7 s;
+  - a public client has no app token, so the whole space needs the user's sign-in (their choice);
+  - the chat is read anonymously over IRC, with Twitch and 7TV emotes (BTTV and FFZ dropped by the user)
+    and Helix badges; the chat model and panel are generic, in `ui::chat`, for YouTube lives later;
+  - HEVC is Twitch's codec for the source above 1080p (1440p60 on the channels that send it, with
+    H.264 below), decoded by the GPU here; AV1 was offered by no channel tried. A codec the GPU does
+    not decode is dropped for H.264.

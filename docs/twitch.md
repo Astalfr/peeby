@@ -178,9 +178,9 @@ Checked against the code on 2026-11-01:
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |
 | A watch page with the player and a chat beside it | `ui::chat::watch_layout` (step 9) with `ui::chat::ChatPanel` | Covered |
-| Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `PlayerView` shows a seek bar whenever mpv gives a duration (a live window has one) | **Missing**: a `Source::live` flag |
-| Ads removed | Nothing between Twitch and mpv | **Missing**: a playlist-rewriting layer (decided: build it) |
-| Low latency | Same layer (prefetch segments) | **Missing**, optional |
+| Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `Source::live` (step 4) | Covered |
+| Ads removed | `twitch::Proxy`, the local playlist proxy (step 3) | Covered |
+| Low latency | The proxy adds Twitch's prefetch segments (step 10) | Covered |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |
 | Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |
@@ -257,7 +257,12 @@ A probe run by the user, anonymously, on a live channel:
   - The ad-free `embed` playlist is an ordinary sliding window: `EXT-X-MEDIA-SEQUENCE:4536` equal to
     `EXT-X-TWITCH-LIVE-SEQUENCE:4536`.
   - The live sequence number is what lines up the main and the backup playlists.
-- **Prefetch**: two `#EXT-X-TWITCH-PREFETCH:` lines end each live playlist (low latency, step 10).
+- **Prefetch**: two `#EXT-X-TWITCH-PREFETCH:` lines end each live playlist. Given to FFmpeg as ordinary
+  segments after the content (step 10), they start a live about 2.6 s behind its capture instead of about
+  7 s (measured against the segments' `PROGRAM-DATE-TIME`).
+- **Codecs** (the user's auth-token, `supported_codecs=av1,h265,h264`, 2026-11-01): 16 of the top 100 lives
+  send their 1440p60 source in HEVC only, every lower quality in H.264; the others are all H.264. No AV1.
+  Anonymously, the 1440p source is not offered. A quality is never repeated in two codecs.
 - **Redaction** (fixtures and anything printed): redact the keys by name in both formats, plus the ad
   ranges' `AD-SESSION-ID`, `RADS-TOKEN`, `CLICK-BEACON-ID`, `X-TV-TWITCH-SESSIONID` and `*-URL` values.
   A blanket IPv4 pattern corrupts HEVC codec strings (`hev1.1.6.L123.B0`-like): never use one.
