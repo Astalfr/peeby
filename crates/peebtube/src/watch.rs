@@ -1,24 +1,26 @@
-//! Watch page: the player (autoplay), title and channel, related videos.
+//! Watch page: the player (autoplay), title, channel, like/dislike bar (Return YouTube
+//! Dislike), description, comments and related videos. In fullscreen only the player is shown.
 //!
-//! The stream (VISIONOS HLS, ~0.2 s) and the page metadata (`next`) load in parallel; mpv
-//! starts as soon as the stream is known, so playback begins about 1 s after the click.
+//! The stream (VISIONOS HLS, ~0.2 s), the page metadata (`next`) and the votes load in
+//! parallel; mpv starts as soon as the stream is known, so playback begins about 1 s after the
+//! click.
 
-use std::rc::Rc;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  Context, Entity, FocusHandle, FontWeight, KeyDownEvent, SharedString, WeakEntity, Window, div,
-  px, relative,
+  App, Context, Entity, FontWeight, Global, SharedString, WeakEntity, Window, div, px, relative,
 };
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{h_flex, v_flex};
-use gpui_video::VideoView;
-use innertube::{Client, Stream, WatchPage};
-use player::{Event, Player, StartOptions};
+use gpui_component::{Disableable, h_flex, v_flex};
+use innertube::{Client, Comment, Votes, WatchPage};
 
-use crate::app::AppView;
+use crate::app::{AppView, Route};
+use crate::assets::Icon;
 use crate::images::Images;
+use crate::player_view::PlayerView;
 use crate::ui::{compact_card, error_text, image_fill};
 use crate::{runtime, theme};
 
@@ -27,25 +29,31 @@ const MAX_HEIGHT: u32 = 1080;
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
 
+/// Return YouTube Dislike results for the session: its API allows 100 requests a minute and
+/// 10,000 a day per client.
 #[derive(Default)]
-struct Playback {
-  position: f64,
-  duration: f64,
-  paused: bool,
-  buffering: bool,
+struct VotesCache(HashMap<String, Votes>);
+
+impl Global for VotesCache {}
+
+#[derive(Default)]
+struct Comments {
+  items: Vec<Comment>,
+  count: Option<String>,
+  continuation: Option<String>,
+  loading: bool,
+  /// Whether the first page was asked for.
+  requested: bool,
 }
 
 pub struct WatchView {
+  client: Client,
+  video_id: String,
   nav: WeakEntity<AppView>,
-  focus: FocusHandle,
+  player: Entity<PlayerView>,
   page: Option<WatchPage>,
-  player: Option<Rc<Player>>,
-  video: Option<Entity<VideoView>>,
-  playback: Playback,
-  /// Why the video cannot play, shown over the player area.
-  error: Option<SharedString>,
-  /// Another page is on top: the player stays paused, even if it starts after being covered.
-  covered: bool,
+  votes: Option<Votes>,
+  comments: Comments,
 }
 
 impl WatchView {
@@ -59,31 +67,81 @@ impl WatchView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let focus = cx.focus_handle();
+    let player = cx.new(PlayerView::new);
+    let focus = player.read(cx).focus_handle().clone();
     window.focus(&focus, cx);
+    let votes = cx
+      .try_global::<VotesCache>()
+      .and_then(|cache| cache.0.get(&video_id).copied());
     let view = Self {
+      client,
+      video_id,
       nav,
-      focus,
+      player,
       page: None,
-      player: None,
-      video: None,
-      playback: Playback::default(),
-      error: None,
-      covered: false,
+      votes,
+      comments: Comments::default(),
     };
-    view.load_page(client.clone(), video_id.clone(), cx);
-    view.load_stream(client, video_id, cx);
+    view.load_stream(cx);
+    view.load_page(cx);
+    if view.votes.is_none() {
+      view.load_votes(cx);
+    }
     view
   }
 
-  fn load_page(&self, client: Client, video_id: String, cx: &mut Context<Self>) {
-    let fetch = runtime::spawn(cx, async move { client.watch(&video_id).await });
+  /// Pauses the player while another page covers this one.
+  pub fn set_covered(&mut self, covered: bool, cx: &mut Context<Self>) {
+    self
+      .player
+      .update(cx, |player, _| player.set_covered(covered));
+  }
+
+  fn load_stream(&self, cx: &mut Context<Self>) {
+    let clicked = Instant::now();
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    let fetch = runtime::spawn(cx, async move { client.stream(&id, MAX_HEIGHT).await });
+    let player = self.player.downgrade();
+    cx.spawn(async move |_, cx| {
+      let result = fetch.await;
+      player
+        .update(cx, |player, cx| match result {
+          Some(Ok(stream)) => {
+            tracing::info!(
+              "stream after {:.2} s: {} {}",
+              clicked.elapsed().as_secs_f64(),
+              stream.resolution,
+              stream.codecs
+            );
+            player.start(stream, clicked, cx);
+          }
+          Some(Err(e)) => {
+            tracing::warn!("stream: {e}");
+            player.fail(error_text(&e).into(), cx);
+          }
+          None => {}
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  fn load_page(&self, cx: &mut Context<Self>) {
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    let fetch = runtime::spawn(cx, async move { client.watch(&id).await });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this
         .update(cx, |this, cx| {
           match result {
-            Some(Ok(page)) => this.page = Some(page),
+            Some(Ok(page)) => {
+              let title = SharedString::from(page.title.clone());
+              this
+                .player
+                .update(cx, |player, cx| player.set_title(title, cx));
+              this.page = Some(page);
+              this.load_comments(cx);
+            }
             Some(Err(e)) => tracing::warn!("watch page: {e}"),
             None => {}
           }
@@ -94,200 +152,72 @@ impl WatchView {
     .detach();
   }
 
-  fn load_stream(&self, client: Client, video_id: String, cx: &mut Context<Self>) {
-    let started = Instant::now();
-    let fetch = runtime::spawn(
-      cx,
-      async move { client.stream(&video_id, MAX_HEIGHT).await },
-    );
+  fn load_votes(&self, cx: &mut Context<Self>) {
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    let fetch = runtime::spawn(cx, async move { client.votes(&id).await });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
-      match result {
-        Some(Ok(stream)) => {
-          tracing::info!(
-            "stream after {:.2} s: {} {}",
-            started.elapsed().as_secs_f64(),
-            stream.resolution,
-            stream.codecs
-          );
-          this
-            .update(cx, |this, cx| this.start_player(stream, started, cx))
-            .ok();
-        }
-        Some(Err(e)) => {
-          tracing::warn!("stream: {e}");
-          this
-            .update(cx, |this, cx| {
-              this.error = Some(error_text(&e).into());
-              cx.notify();
-            })
-            .ok();
-        }
-        None => {}
-      }
-    })
-    .detach();
-  }
-
-  fn start_player(&mut self, stream: Stream, started: Instant, cx: &mut Context<Self>) {
-    let options = StartOptions {
-      url: stream.video_url,
-      external_audio: stream.audio_url.into_iter().collect(),
-      http_headers: vec![format!("User-Agent: {}", stream.user_agent)],
-      // Opt-in only: the log contains stream URLs, which carry the user's IP.
-      log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
-      ..Default::default()
-    };
-    let (event_tx, event_rx) = async_channel::unbounded();
-    let (frame_tx, frame_rx) = async_channel::unbounded();
-    // libmpv and D3D11 setup block for a moment: off the UI thread.
-    let start = cx
-      .background_executor()
-      .spawn(async move { Player::start(options, event_tx, frame_tx) });
-    cx.spawn(async move |this, cx| {
-      let player = match start.await {
-        Ok(player) => Rc::new(player),
-        Err(e) => {
-          this
-            .update(cx, |this, cx| {
-              this.error = Some(format!("Lecteur indisponible : {e}").into());
-              cx.notify();
-            })
-            .ok();
-          return;
-        }
-      };
-      let attached = this.update(cx, |this, cx| {
-        let resize = player.clone();
-        this.video = Some(cx.new(|cx| {
-          VideoView::new(
-            frame_rx,
-            Rc::new(move |w, h| resize.set_target_size(w, h)),
-            cx,
-          )
-        }));
-        if this.covered {
-          tracing::info!("player started on a covered page: paused");
-          player.set_paused(true);
-        }
-        this.player = Some(player);
-        cx.notify();
-      });
-      if attached.is_err() {
-        return;
-      }
-      let mut first_frame = true;
-      while let Ok(event) = event_rx.recv().await {
-        let alive = this.update(cx, |this, cx| {
-          if first_frame && matches!(event, Event::Position(p) if p > 0.0) {
-            first_frame = false;
-            tracing::info!("playing after {:.2} s", started.elapsed().as_secs_f64());
+      this
+        .update(cx, |this, cx| match result {
+          Some(Ok(votes)) => {
+            cx.default_global::<VotesCache>()
+              .0
+              .insert(this.video_id.clone(), votes);
+            this.votes = Some(votes);
+            cx.notify();
           }
-          this.apply(event);
-          cx.notify();
-        });
-        if alive.is_err() {
-          break;
-        }
-      }
+          Some(Err(e)) => tracing::warn!("Return YouTube Dislike: {e}"),
+          None => {}
+        })
+        .ok();
     })
     .detach();
   }
 
-  /// Called when another page covers this one (pauses) or when it is shown again. Playback
-  /// does not resume by itself on "back": the user resumes it.
-  pub fn set_covered(&mut self, covered: bool) {
-    self.covered = covered;
-    if covered && let Some(player) = &self.player {
-      tracing::info!("watch page covered: player paused");
-      player.set_paused(true);
-    }
-  }
-
-  fn apply(&mut self, event: Event) {
-    let p = &mut self.playback;
-    match event {
-      Event::Position(position) => p.position = position,
-      Event::Duration(duration) => p.duration = duration,
-      Event::Paused(paused) => p.paused = paused,
-      Event::Buffering(buffering) => p.buffering = buffering,
-      Event::Ended(Some(e)) => self.error = Some(format!("Lecture interrompue : {e}").into()),
-      Event::Loaded
-      | Event::Tracks(_)
-      | Event::Chapters(_)
-      | Event::Muted(_)
-      | Event::EndReached
-      | Event::Ended(None) => {}
-    }
-  }
-
-  fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, _cx: &mut Context<Self>) {
-    let Some(player) = &self.player else { return };
-    match event.keystroke.key.as_str() {
-      "space" | "k" => player.toggle_pause(),
-      "right" | "l" => player.seek_by(if event.keystroke.key == "l" { 10. } else { 5. }),
-      "left" | "j" => player.seek_by(if event.keystroke.key == "j" {
-        -10.
-      } else {
-        -5.
-      }),
-      "f" => window.toggle_fullscreen(),
-      _ => {}
-    }
-  }
-
-  fn player_area(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    let status = match (&self.error, &self.video) {
-      (Some(e), _) => Some(e.clone()),
-      (None, None) => Some("Chargement…".into()),
-      (None, Some(_)) if self.playback.buffering => Some("Mise en mémoire tampon…".into()),
-      _ => None,
-    };
-    let progress = if self.playback.duration > 0. {
-      (self.playback.position / self.playback.duration).clamp(0., 1.) as f32
+  /// First page, then the next ones ("Plus de commentaires").
+  fn load_comments(&mut self, cx: &mut Context<Self>) {
+    let token = if self.comments.requested {
+      self.comments.continuation.clone()
     } else {
-      0.
+      self
+        .page
+        .as_ref()
+        .and_then(|p| p.comments_continuation.clone())
     };
-    let player = self.player.clone();
-    div()
-      .id("player")
-      .relative()
-      .w_full()
-      // 16:9 box: GPUI has no aspect-ratio style, so the height follows the width through
-      // padding-top as a share of the width.
-      .pt(relative(9. / 16.))
-      .rounded(theme::RADIUS_LG)
-      .overflow_hidden()
-      .bg(gpui::black())
-      .on_click(cx.listener(move |_, _, _, _| {
-        if let Some(player) = &player {
-          player.toggle_pause();
-        }
-      }))
-      .child(div().absolute().inset_0().children(self.video.clone()))
-      .children(status.map(|text| {
-        div()
-          .absolute()
-          .inset_0()
-          .flex()
-          .items_center()
-          .justify_center()
-          .text_color(theme::muted())
-          .child(text)
-      }))
-      .child(
-        div()
-          .absolute()
-          .left_0()
-          .right_0()
-          .bottom_0()
-          .h(px(3.))
-          .bg(gpui::rgba(0xffffff33))
-          .child(div().h_full().w(relative(progress)).bg(theme::accent())),
-      )
+    let Some(token) = token else { return };
+    if self.comments.loading {
+      return;
+    }
+    self.comments.requested = true;
+    self.comments.loading = true;
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          let comments = &mut this.comments;
+          comments.loading = false;
+          match result {
+            Some(Ok(page)) => {
+              tracing::info!("comments: {} more", page.comments.len());
+              comments.items.extend(page.comments);
+              comments.continuation = page.continuation;
+              if page.count.is_some() {
+                comments.count = page.count;
+              }
+            }
+            Some(Err(e)) => tracing::warn!("comments: {e}"),
+            None => {}
+          }
+          cx.notify();
+        })
+        .ok();
+    })
+    .detach();
   }
 
-  fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  fn details(&self, window: &mut Window, cx: &mut App) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
       return v_flex();
     };
@@ -299,6 +229,17 @@ impl WatchView {
         window,
         cx,
       ))
+    });
+    let channel = page.channel_id.clone().map(|id| {
+      let nav = self.nav.clone();
+      let name = page.channel.clone().unwrap_or_default();
+      move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut App| {
+        let route = Route::Channel {
+          id: id.clone(),
+          name: name.clone(),
+        };
+        nav.update(cx, |app, cx| app.open(route, window, cx)).ok();
+      }
     });
     let stats = [page.views.clone(), page.date.clone()]
       .into_iter()
@@ -314,20 +255,35 @@ impl WatchView {
           .child(page.title.clone()),
       )
       .child(
-        h_flex().gap_3().items_center().children(avatar).child(
-          v_flex()
-            .child(
-              div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(page.channel.clone().unwrap_or_default()),
-            )
-            .child(
-              div()
-                .text_sm()
-                .text_color(theme::muted())
-                .child(page.subscribers.clone().unwrap_or_default()),
-            ),
-        ),
+        h_flex()
+          .gap_3()
+          .items_center()
+          .child(
+            h_flex()
+              .id("channel")
+              .gap_3()
+              .items_center()
+              .when_some(channel, |el, on_click| {
+                el.cursor_pointer().on_click(on_click)
+              })
+              .children(avatar)
+              .child(
+                v_flex()
+                  .child(
+                    div()
+                      .font_weight(FontWeight::SEMIBOLD)
+                      .child(page.channel.clone().unwrap_or_default()),
+                  )
+                  .child(
+                    div()
+                      .text_sm()
+                      .text_color(theme::muted())
+                      .child(page.subscribers.clone().unwrap_or_default()),
+                  ),
+              ),
+          )
+          .child(div().flex_1())
+          .children(self.votes.map(votes_bar)),
       )
       .child(
         v_flex()
@@ -350,24 +306,193 @@ impl WatchView {
           ),
       )
   }
+
+  fn comments(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let comments = &self.comments;
+    let header = h_flex()
+      .gap_2()
+      .items_center()
+      .child(gpui_component::Icon::new(Icon::Comments).size(px(18.)))
+      .child(
+        div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
+          comments
+            .count
+            .clone()
+            .unwrap_or_else(|| "Commentaires".into()),
+        ),
+      );
+    let items: Vec<_> = comments
+      .items
+      .iter()
+      .map(|c| comment_row(c, window, cx))
+      .collect();
+    let more = comments.continuation.as_ref().map(|_| {
+      Button::new("more-comments")
+        .ghost()
+        .label(if comments.loading {
+          "Chargement…"
+        } else {
+          "Plus de commentaires"
+        })
+        .disabled(comments.loading)
+        .on_click(cx.listener(|this, _, _, cx| this.load_comments(cx)))
+    });
+    let empty = (comments.items.is_empty() && !comments.loading && comments.requested)
+      .then(|| div().text_color(theme::muted()).child("Aucun commentaire"));
+    v_flex()
+      .gap_4()
+      .child(header)
+      .children(items)
+      .children(empty)
+      .when(comments.loading && comments.items.is_empty(), |el| {
+        el.child(div().text_color(theme::muted()).child("Chargement…"))
+      })
+      .children(more.map(|b| h_flex().child(b)))
+  }
+}
+
+/// Likes, estimated dislikes and the ratio bar, with the attribution RYD requires.
+fn votes_bar(votes: Votes) -> impl IntoElement {
+  let total = votes.likes + votes.dislikes;
+  let ratio = if total > 0 {
+    votes.likes as f32 / total as f32
+  } else {
+    1.0
+  };
+  v_flex()
+    .id("votes")
+    .w(px(220.))
+    .gap_1()
+    .cursor_pointer()
+    .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
+    .child(
+      h_flex()
+        .justify_between()
+        .child(
+          h_flex()
+            .gap_1()
+            .items_center()
+            .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(16.)))
+            .child(compact_number(votes.likes)),
+        )
+        .child(
+          h_flex()
+            .gap_1()
+            .items_center()
+            .child(compact_number(votes.dislikes))
+            .child(gpui_component::Icon::new(Icon::ThumbsDown).size(px(16.))),
+        ),
+    )
+    .child(
+      div()
+        .h(px(4.))
+        .w_full()
+        .rounded_full()
+        .bg(theme::border())
+        .child(
+          div()
+            .h_full()
+            .w(relative(ratio))
+            .rounded_full()
+            .bg(theme::foreground()),
+        ),
+    )
+    .child(
+      div()
+        .text_xs()
+        .text_color(theme::muted())
+        .child("Dislikes : Return YouTube Dislike"),
+    )
+}
+
+fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl IntoElement + use<> {
+  let avatar = comment.avatar.as_ref().map(|url| {
+    let sizes = [innertube::Thumbnail {
+      url: url.clone(),
+      width: 88,
+      height: 88,
+    }];
+    image_fill(&sizes, 36., px(18.), window, cx)
+  });
+  let meta = [
+    (!comment.likes.is_empty()).then(|| format!("{} j'aime", comment.likes)),
+    (!comment.replies.is_empty()).then(|| format!("{} réponses", comment.replies)),
+  ]
+  .into_iter()
+  .flatten()
+  .collect::<Vec<_>>()
+  .join(" · ");
+  h_flex()
+    .gap_3()
+    .items_start()
+    .child(div().size(px(36.)).flex_none().children(avatar))
+    .child(
+      v_flex()
+        .min_w_0()
+        .gap_1()
+        .child(
+          h_flex()
+            .gap_2()
+            .text_sm()
+            .child(
+              div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .when(comment.by_creator, |el| {
+                  el.px_1().rounded(px(4.)).bg(theme::surface_hover())
+                })
+                .child(comment.author.clone()),
+            )
+            .child(
+              div()
+                .text_color(theme::muted())
+                .child(comment.published.clone()),
+            ),
+        )
+        .child(div().child(comment.text.clone()))
+        .when(!meta.is_empty(), |el| {
+          el.child(div().text_sm().text_color(theme::muted()).child(meta))
+        }),
+    )
+}
+
+/// `1,2 k`, `3,4 M`: French short counts.
+fn compact_number(n: u64) -> String {
+  let short = |value: f64, unit: &str| {
+    let text = if value < 10.0 {
+      format!("{value:.1}")
+    } else {
+      format!("{value:.0}")
+    };
+    format!("{} {unit}", text.replace('.', ",").trim_end_matches(",0"))
+  };
+  match n {
+    0..1_000 => n.to_string(),
+    1_000..1_000_000 => short(n as f64 / 1e3, "k"),
+    1_000_000..1_000_000_000 => short(n as f64 / 1e6, "M"),
+    _ => short(n as f64 / 1e9, "Md"),
+  }
 }
 
 impl Render for WatchView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    if window.is_fullscreen() {
+      return div()
+        .id("watch")
+        .size_full()
+        .child(self.player.clone())
+        .into_any_element();
+    }
     let related: Vec<_> = self
       .page
       .iter()
       .flat_map(|page| page.related.iter())
       .map(|v| compact_card(v, &self.nav, window, cx))
       .collect();
-    let player = self.player_area(cx);
     let details = self.details(window, cx);
-    h_flex()
+    let comments = self.comments(window, cx);
+    v_flex()
       .id("watch")
       .size_full()
-      .items_start()
-      .track_focus(&self.focus)
-      .on_key_down(cx.listener(Self::on_key))
       .overflow_y_scrollbar()
       .child(
         h_flex()
@@ -380,8 +505,19 @@ impl Render for WatchView {
               .flex_1()
               .min_w_0()
               .gap_4()
-              .child(player)
-              .child(details),
+              // 16:9 box: GPUI has no aspect-ratio style, so the height follows the width
+              // through padding-top as a share of the width.
+              .child(
+                div()
+                  .relative()
+                  .w_full()
+                  .pt(relative(9. / 16.))
+                  .rounded(theme::RADIUS_LG)
+                  .overflow_hidden()
+                  .child(div().absolute().inset_0().child(self.player.clone())),
+              )
+              .child(details)
+              .child(comments),
           )
           .child(
             v_flex()
@@ -391,5 +527,20 @@ impl Render for WatchView {
               .children(related),
           ),
       )
+      .into_any_element()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::compact_number;
+
+  #[test]
+  fn compact_numbers() {
+    assert_eq!(compact_number(999), "999");
+    assert_eq!(compact_number(1_234), "1,2 k");
+    assert_eq!(compact_number(19_491_081), "19 M");
+    assert_eq!(compact_number(521_536), "522 k");
+    assert_eq!(compact_number(2_000_000), "2 M");
   }
 }

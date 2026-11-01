@@ -186,6 +186,7 @@ pub fn error_text(error: &innertube::Error) -> String {
     Error::NotLoggedIn => "YouTube ne reconnaît plus la session : les cookies ont expiré ou ont \
                            changé. Exportez-les à nouveau."
       .into(),
+    Error::SignInRequired => "Cette page demande d'être connecté.".into(),
     Error::Cookies(detail) => format!("Fichier de cookies invalide : {detail}"),
     Error::Unplayable { status, reason } if status == "LOGIN_REQUIRED" => {
       format!("Cette vidéo demande d'être connecté. {reason}")

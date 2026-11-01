@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
-use crate::models::{Feed, Stream, WatchPage};
-use crate::parse::{parse_feed, parse_watch};
+use crate::models::{Channel, CommentPage, Feed, Stream, Votes, WatchPage};
+use crate::parse::{parse_channels, parse_comments, parse_feed, parse_watch};
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
 /// the page's ytcfg. YouTube ships a new one every week; old ones keep working for months.
@@ -67,6 +67,71 @@ impl Client {
       .web("browse", json!({ "browseId": "FEwhat_to_watch" }), true)
       .await?;
     self.feed(&response)
+  }
+
+  /// Latest videos of the subscribed channels. Needs cookies.
+  pub async fn subscriptions(&self) -> Result<Feed> {
+    self.require_session()?;
+    let response = self
+      .web("browse", json!({ "browseId": "FEsubscriptions" }), true)
+      .await?;
+    self.feed(&response)
+  }
+
+  /// All subscribed channels, in YouTube's order. Needs cookies.
+  pub async fn subscribed_channels(&self) -> Result<Vec<Channel>> {
+    self.require_session()?;
+    let response = self
+      .web("browse", json!({ "browseId": "FEchannels" }), true)
+      .await?;
+    if parse_feed(&response).logged_in {
+      Ok(parse_channels(&response))
+    } else {
+      Err(Error::NotLoggedIn)
+    }
+  }
+
+  /// "Videos" tab of a channel, newest first.
+  pub async fn channel_videos(&self, channel_id: &str) -> Result<Feed> {
+    // Protobuf selecting the "Videos" tab, as the web client sends it.
+    let body = json!({ "browseId": channel_id, "params": "EgZ2aWRlb3PyBgQKAjoA" });
+    let response = self.web("browse", body, true).await?;
+    self.feed(&response)
+  }
+
+  /// A page of comments or of replies. `token` comes from
+  /// [`WatchPage::comments_continuation`], [`CommentPage::continuation`] or
+  /// [`crate::Comment::replies_continuation`].
+  pub async fn comments(&self, token: &str) -> Result<CommentPage> {
+    let response = self
+      .web("next", json!({ "continuation": token }), true)
+      .await?;
+    Ok(parse_comments(&response))
+  }
+
+  /// Likes and estimated dislikes from Return YouTube Dislike.
+  pub async fn votes(&self, video_id: &str) -> Result<Votes> {
+    let response = self
+      .http
+      .get(format!(
+        "https://returnyoutubedislikeapi.com/votes?videoId={video_id}"
+      ))
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "returnyoutubedislike",
+      });
+    }
+    let value: Value = response.json().await?;
+    match (value["likes"].as_u64(), value["dislikes"].as_u64()) {
+      (Some(likes), Some(dislikes)) => Ok(Votes { likes, dislikes }),
+      _ => Err(Error::Parse {
+        endpoint: "returnyoutubedislike",
+        detail: "likes or dislikes missing".into(),
+      }),
+    }
   }
 
   /// Next page of a feed.
@@ -144,6 +209,14 @@ impl Client {
       .state
       .lock()
       .unwrap_or_else(std::sync::PoisonError::into_inner)
+  }
+
+  fn require_session(&self) -> Result<()> {
+    if self.cookies.is_some() {
+      Ok(())
+    } else {
+      Err(Error::SignInRequired)
+    }
   }
 
   fn feed(&self, response: &Value) -> Result<Feed> {

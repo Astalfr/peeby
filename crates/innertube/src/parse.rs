@@ -6,7 +6,9 @@
 
 use serde_json::Value;
 
-use crate::models::{Feed, Thumbnail, VideoItem, WatchPage};
+use std::collections::HashMap;
+
+use crate::models::{Channel, Comment, CommentPage, Feed, Thumbnail, VideoItem, WatchPage};
 
 /// Parses a browse response or a browse continuation into a feed.
 pub fn parse_feed(response: &Value) -> Feed {
@@ -69,6 +71,93 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     related_continuation: find_continuation(secondary_results),
     comments_continuation,
   }
+}
+
+/// Parses the subscribed channels list (`FEchannels`: all channels in one response).
+pub fn parse_channels(response: &Value) -> Vec<Channel> {
+  let mut renderers = Vec::new();
+  find_all(response, "channelRenderer", &mut renderers);
+  renderers
+    .into_iter()
+    .filter_map(|c| {
+      Some(Channel {
+        id: c["channelId"].as_str()?.to_owned(),
+        name: text(&c["title"]).trim().to_owned(),
+        // In this list YouTube puts the handle in `subscriberCountText` and the subscriber
+        // count in `videoCountText`.
+        handle: non_empty(text(&c["subscriberCountText"])).filter(|h| h.starts_with('@')),
+        subscribers: non_empty(text(&c["videoCountText"])),
+        avatar: thumbnails(&c["thumbnail"]["thumbnails"]),
+      })
+    })
+    .collect()
+}
+
+/// Parses a comments page (`next` continuation). Threads are `commentThreadRenderer`s pointing
+/// by key to `commentEntityPayload` mutations; replies pages list `commentViewModel`s.
+pub fn parse_comments(response: &Value) -> CommentPage {
+  let entities: HashMap<&str, &Value> =
+    response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .filter_map(|m| {
+        let payload = m["payload"].get("commentEntityPayload")?;
+        Some((m["entityKey"].as_str()?, payload))
+      })
+      .collect();
+  let mut page = CommentPage::default();
+  let items = response["onResponseReceivedEndpoints"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|e| {
+      e.get("reloadContinuationItemsCommand")
+        .or_else(|| e.get("appendContinuationItemsAction"))
+    })
+    .flat_map(|c| c["continuationItems"].as_array().into_iter().flatten());
+  for item in items {
+    if let Some(header) = item.get("commentsHeaderRenderer") {
+      page.count = non_empty(text(&header["countText"]));
+    } else if let Some(cont) = item.get("continuationItemRenderer") {
+      page.continuation =
+        find_key(cont, "continuationCommand").and_then(|c| c["token"].as_str().map(str::to_owned));
+    } else {
+      let (view, replies) = match item.get("commentThreadRenderer") {
+        Some(thread) => (
+          &thread["commentViewModel"]["commentViewModel"],
+          &thread["replies"],
+        ),
+        None => (&item["commentViewModel"], &Value::Null),
+      };
+      let Some(entity) = view["commentKey"].as_str().and_then(|k| entities.get(k)) else {
+        continue;
+      };
+      if let Some(mut comment) = parse_comment(entity) {
+        comment.replies_continuation = find_continuation(replies);
+        page.comments.push(comment);
+      }
+    }
+  }
+  page
+}
+
+fn parse_comment(entity: &Value) -> Option<Comment> {
+  let properties = &entity["properties"];
+  let author = &entity["author"];
+  let toolbar = &entity["toolbar"];
+  let string = |v: &Value| v.as_str().unwrap_or_default().trim().to_owned();
+  Some(Comment {
+    id: properties["commentId"].as_str()?.to_owned(),
+    author: string(&author["displayName"]),
+    avatar: author["avatarThumbnailUrl"].as_str().map(str::to_owned),
+    by_creator: author["isCreator"].as_bool().unwrap_or(false),
+    text: properties["content"]["content"].as_str()?.to_owned(),
+    published: string(&properties["publishedTime"]),
+    likes: string(&toolbar["likeCountNotliked"]),
+    replies: string(&toolbar["replyCount"]),
+    replies_continuation: None,
+  })
 }
 
 /// Collects every video lockup under `value`, skipping malformed ones.
@@ -186,6 +275,18 @@ pub(crate) fn tracking_param(response: &Value, key: &str) -> Option<String> {
     .flat_map(|s| s["params"].as_array().into_iter().flatten())
     .find(|p| p["key"] == key)
     .and_then(|p| p["value"].as_str().map(str::to_owned))
+}
+
+/// Every value under `key`, depth first (not looking inside matches).
+fn find_all<'a>(value: &'a Value, key: &str, out: &mut Vec<&'a Value>) {
+  match value {
+    Value::Object(map) => match map.get(key) {
+      Some(found) => out.push(found),
+      None => map.values().for_each(|v| find_all(v, key, out)),
+    },
+    Value::Array(values) => values.iter().for_each(|v| find_all(v, key, out)),
+    _ => {}
+  }
 }
 
 /// First value under `key`, depth first.

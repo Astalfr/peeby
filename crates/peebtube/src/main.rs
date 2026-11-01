@@ -4,8 +4,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod home;
+mod assets;
+mod feed;
 mod images;
+mod player_view;
 mod runtime;
 mod settings;
 mod theme;
@@ -50,45 +52,47 @@ fn main() {
     }
   };
 
-  application().run(move |cx: &mut App| {
-    if let Err(e) = runtime::init(cx) {
-      tracing::error!("cannot start the network runtime: {e:#}");
-      cx.quit();
-      return;
-    }
-    gpui_component::init(cx);
-    theme::apply(cx);
-    images::init(client.clone(), cx);
-
-    // Current WEB client version and a visitorData, in the background.
-    let warmup = client.clone();
-    drop(runtime::spawn(cx, async move {
-      if let Err(e) = warmup.refresh_client_version().await {
-        tracing::warn!("ytcfg: {e}");
+  application()
+    .with_assets(assets::Assets)
+    .run(move |cx: &mut App| {
+      if let Err(e) = runtime::init(cx) {
+        tracing::error!("cannot start the network runtime: {e:#}");
+        cx.quit();
+        return;
       }
-    }));
+      gpui_component::init(cx);
+      theme::apply(cx);
+      images::init(client.clone(), cx);
 
-    let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
-    let options = WindowOptions {
-      window_bounds: Some(WindowBounds::Windowed(bounds)),
-      window_min_size: Some(size(px(960.), px(600.))),
-      window_background: theme::window_background(cx),
-      titlebar: Some(TitlebarOptions {
-        title: Some("PeebTube".into()),
-        ..TitleBar::title_bar_options()
-      }),
-      ..TitleBar::window_options()
-    };
-    let opened = cx.open_window(options, |window, cx| {
-      let app = cx.new(|cx| app::AppView::new(client, initial_videos, window, cx));
-      cx.new(|cx| Root::new(app, window, cx))
+      // Current WEB client version and a visitorData, in the background.
+      let warmup = client.clone();
+      drop(runtime::spawn(cx, async move {
+        if let Err(e) = warmup.refresh_client_version().await {
+          tracing::warn!("ytcfg: {e}");
+        }
+      }));
+
+      let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
+      let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(960.), px(600.))),
+        window_background: theme::window_background(cx),
+        titlebar: Some(TitlebarOptions {
+          title: Some("PeebTube".into()),
+          ..TitleBar::title_bar_options()
+        }),
+        ..TitleBar::window_options()
+      };
+      let opened = cx.open_window(options, |window, cx| {
+        let app = cx.new(|cx| app::AppView::new(client, initial_videos, window, cx));
+        cx.new(|cx| Root::new(app, window, cx))
+      });
+      if let Err(e) = opened {
+        tracing::error!("cannot open the main window: {e:#}");
+        cx.quit();
+        return;
+      }
+      cx.on_window_closed(|cx, _| cx.quit()).detach();
+      cx.activate(true);
     });
-    if let Err(e) = opened {
-      tracing::error!("cannot open the main window: {e:#}");
-      cx.quit();
-      return;
-    }
-    cx.on_window_closed(|cx, _| cx.quit()).detach();
-    cx.activate(true);
-  });
 }

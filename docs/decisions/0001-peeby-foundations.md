@@ -25,6 +25,8 @@ PeebTube additions to `player`:
 - `StartOptions::ytdl` (mpv's `ytdl_hook`, for the yt-dlp fallback);
 - `StartOptions::log_file`.
 
+The app's `player_view.rs` adapts peeby's `player_page.rs` (seek bar, volume slider, control buttons, auto-hide, OSD, shortcuts) without its Jellyfin parts.
+
 ## Consequences
 
 - Playback works from day one: 1080p VP9/AV1 with hardware decoding, about 0.2 core of CPU.

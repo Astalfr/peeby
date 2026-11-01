@@ -108,3 +108,61 @@ impl std::fmt::Debug for Stream {
       .finish_non_exhaustive()
   }
 }
+
+/// A channel the user is subscribed to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Channel {
+  /// Channel id (`UC…`).
+  pub id: String,
+  /// Display name.
+  pub name: String,
+  /// Handle, e.g. `@AsmonTV`.
+  pub handle: Option<String>,
+  /// Localized subscriber count.
+  pub subscribers: Option<String>,
+  /// Avatar sizes.
+  pub avatar: Vec<Thumbnail>,
+}
+
+/// A comment (top-level or reply).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Comment {
+  /// Comment id.
+  pub id: String,
+  /// Author display name (`@handle`).
+  pub author: String,
+  /// Author avatar URL.
+  pub avatar: Option<String>,
+  /// The author is the video's creator.
+  pub by_creator: bool,
+  /// Text, plain.
+  pub text: String,
+  /// Localized age, e.g. `il y a 7 ans`.
+  pub published: String,
+  /// Localized like count, empty when none.
+  pub likes: String,
+  /// Number of replies as shown (localized), empty when none.
+  pub replies: String,
+  /// Token of the replies, for [`crate::Client::comments`].
+  pub replies_continuation: Option<String>,
+}
+
+/// A page of comments.
+#[derive(Clone, Debug, Default)]
+pub struct CommentPage {
+  /// Comments in display order.
+  pub comments: Vec<Comment>,
+  /// Token of the next page.
+  pub continuation: Option<String>,
+  /// Localized total, e.g. `2,3 M commentaires` (first page only).
+  pub count: Option<String>,
+}
+
+/// Like and dislike counts from Return YouTube Dislike (dislikes are its estimate).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Votes {
+  /// Likes.
+  pub likes: u64,
+  /// Estimated dislikes.
+  pub dislikes: u64,
+}

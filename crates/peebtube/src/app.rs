@@ -1,22 +1,42 @@
-//! Root view: title bar (back, open a video by URL or id), sidebar and a stack of pages.
+//! Root view: title bar (back, open a video by URL or id), sidebar (home, subscriptions, the
+//! subscribed channels) and a stack of pages. In fullscreen only the page is shown.
 
 use gpui::prelude::*;
-use gpui::{AnyView, Context, Entity, FontWeight, SharedString, Subscription, Window, div, px};
+use gpui::{
+  AnyView, App, Context, Entity, FontWeight, SharedString, Subscription, Window, div, px,
+};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Sizable, TitleBar, h_flex, v_flex};
-use innertube::Client;
+use innertube::{Channel, Client};
 
-use crate::home::HomeView;
-use crate::theme;
+use crate::assets::Icon;
+use crate::feed::{FeedView, Source};
+use crate::images::Images;
+use crate::ui::image_fill;
 use crate::watch::WatchView;
+use crate::{runtime, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Route {
   Home,
+  Subscriptions,
+  /// A channel's videos.
+  Channel {
+    id: String,
+    name: String,
+  },
   /// Watch page of a video id.
   Watch(String),
+}
+
+impl Route {
+  /// Top-level pages reset the stack; the others are pushed on it.
+  fn is_top_level(&self) -> bool {
+    matches!(self, Self::Home | Self::Subscriptions)
+  }
 }
 
 struct Page {
@@ -27,6 +47,8 @@ struct Page {
 pub struct AppView {
   client: Client,
   stack: Vec<Page>,
+  /// Subscribed channels for the sidebar, once loaded (signed in only).
+  channels: Vec<Channel>,
   open_input: Entity<InputState>,
   _open_subscription: Subscription,
 }
@@ -39,6 +61,9 @@ impl AppView {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
+    }
     let open_input = cx.new(|cx| {
       InputState::new(window, cx).placeholder("Coller une URL ou un ID de vidéo YouTube…")
     });
@@ -61,6 +86,7 @@ impl AppView {
     let mut app = Self {
       client,
       stack: Vec::new(),
+      channels: Vec::new(),
       open_input,
       _open_subscription: subscription,
     };
@@ -68,31 +94,62 @@ impl AppView {
     for id in initial_videos {
       app.open(Route::Watch(id), window, cx);
     }
+    app.load_channels(cx);
     app
   }
 
-  /// Shows `route`: the home page resets the stack, other pages are pushed.
+  fn load_channels(&self, cx: &mut Context<Self>) {
+    if !self.client.signed_in() {
+      return;
+    }
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.subscribed_channels().await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| match result {
+          Some(Ok(channels)) => {
+            tracing::info!("{} subscribed channels", channels.len());
+            this.channels = channels;
+            cx.notify();
+          }
+          Some(Err(e)) => tracing::warn!("subscribed channels: {e}"),
+          None => {}
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// Shows `route`: top-level pages reset the stack, the others are pushed.
   pub fn open(&mut self, route: Route, window: &mut Window, cx: &mut Context<Self>) {
     if self.stack.last().is_some_and(|page| page.route == route) {
       return;
     }
-    // A covered watch page keeps its player (to resume after "back"), paused.
-    if let Some(watch) = self
-      .stack
-      .last()
-      .and_then(|page| page.view.clone().downcast::<WatchView>().ok())
-    {
-      watch.update(cx, |watch, _| watch.set_covered(true));
+    if route.is_top_level() {
+      self.stack.clear();
+    } else {
+      // A covered watch page keeps its player (to resume after "back"), paused.
+      self.set_top_covered(true, cx);
     }
     let nav = cx.weak_entity();
+    let client = self.client.clone();
     let view: AnyView = match &route {
-      Route::Home => {
-        self.stack.clear();
-        cx.new(|cx| HomeView::new(self.client.clone(), nav, cx))
-          .into()
+      Route::Home => cx
+        .new(|cx| FeedView::new(client, Source::Home, nav, cx))
+        .into(),
+      Route::Subscriptions => cx
+        .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
+        .into(),
+      Route::Channel { id, name } => {
+        let source = Source::Channel {
+          id: id.clone(),
+          name: name.clone(),
+        };
+        cx.new(|cx| FeedView::new(client, source, nav, cx)).into()
       }
       Route::Watch(id) => cx
-        .new(|cx| WatchView::new(self.client.clone(), id.clone(), nav, window, cx))
+        .new(|cx| WatchView::new(client, id.clone(), nav, window, cx))
         .into(),
     };
     self.stack.push(Page { route, view });
@@ -102,14 +159,18 @@ impl AppView {
   pub fn back(&mut self, cx: &mut Context<Self>) {
     if self.stack.len() > 1 {
       self.stack.pop();
-      if let Some(watch) = self
-        .stack
-        .last()
-        .and_then(|page| page.view.clone().downcast::<WatchView>().ok())
-      {
-        watch.update(cx, |watch, _| watch.set_covered(false));
-      }
+      self.set_top_covered(false, cx);
       cx.notify();
+    }
+  }
+
+  fn set_top_covered(&self, covered: bool, cx: &mut App) {
+    if let Some(watch) = self
+      .stack
+      .last()
+      .and_then(|page| page.view.clone().downcast::<WatchView>().ok())
+    {
+      watch.update(cx, |watch, cx| watch.set_covered(covered, cx));
     }
   }
 
@@ -117,7 +178,8 @@ impl AppView {
     let back = (self.stack.len() > 1).then(|| {
       Button::new("back")
         .ghost()
-        .label("←")
+        .icon(Icon::ArrowLeft)
+        .tooltip("Retour")
         .on_click(cx.listener(|this, _, _, cx| this.back(cx)))
     });
     TitleBar::new().h(px(44.)).child(
@@ -143,66 +205,121 @@ impl AppView {
     )
   }
 
-  fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-    let on_home = matches!(
-      self.stack.first(),
-      Some(Page {
-        route: Route::Home,
-        ..
-      })
-    );
-    let item = |id: &'static str, label: &'static str, active: bool| {
-      div()
+  fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let root = self.stack.first().map(|page| page.route.clone());
+    let at_root = self.stack.len() == 1;
+    let item = |id: SharedString, active: bool| {
+      h_flex()
         .id(id)
+        .gap_3()
+        .items_center()
         .px_3()
         .py_2()
         .rounded(theme::RADIUS)
         .cursor_pointer()
         .when(active, |el| el.bg(theme::surface_hover()))
         .hover(|el| el.bg(theme::surface()))
-        .child(SharedString::from(label))
     };
+    let nav = |label: &'static str, icon: Icon, route: Route, cx: &mut Context<Self>| {
+      let active = at_root && root.as_ref() == Some(&route);
+      item(SharedString::from(label), active)
+        .child(gpui_component::Icon::new(icon).size(px(18.)))
+        .child(label)
+        .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
+    };
+    let current_channel = match self.stack.last().map(|page| &page.route) {
+      Some(Route::Channel { id, .. }) => Some(id.clone()),
+      _ => None,
+    };
+    let channels: Vec<_> = self
+      .channels
+      .iter()
+      .map(|channel| {
+        let route = Route::Channel {
+          id: channel.id.clone(),
+          name: channel.name.clone(),
+        };
+        let active = current_channel.as_deref() == Some(channel.id.as_str());
+        item(
+          SharedString::from(format!("channel-{}", channel.id)),
+          active,
+        )
+        .child(div().size(px(24.)).flex_none().child(image_fill(
+          &channel.avatar,
+          24.,
+          px(12.),
+          window,
+          cx,
+        )))
+        .child(
+          div()
+            .min_w_0()
+            .text_sm()
+            .line_clamp(1)
+            .child(channel.name.clone()),
+        )
+        .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
+      })
+      .collect();
     v_flex()
+      .id("sidebar")
       .w(theme::SIDEBAR_WIDTH)
+      .h_full()
       .flex_none()
       .p_2()
       .gap_1()
-      .child(
-        item("nav-home", "Accueil", on_home && self.stack.len() == 1).on_click(cx.listener(
-          |this, _, window, cx| {
-            this.stack.clear();
-            this.open(Route::Home, window, cx);
-          },
-        )),
-      )
+      .overflow_y_scrollbar()
+      .child(nav("Accueil", Icon::Home, Route::Home, cx))
+      .child(nav(
+        "Abonnements",
+        Icon::Subscriptions,
+        Route::Subscriptions,
+        cx,
+      ))
+      .when(!channels.is_empty(), |el| {
+        el.child(
+          div()
+            .px_3()
+            .pt_4()
+            .pb_1()
+            .text_sm()
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(theme::muted())
+            .child("Chaînes"),
+        )
+        .children(channels)
+      })
   }
 }
 
 impl Render for AppView {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let page = self.stack.last().map(|page| page.view.clone());
-    v_flex()
+    let root = v_flex()
       .size_full()
       .bg(theme::chrome(cx))
-      .text_color(theme::foreground())
-      .child(self.title_bar(cx))
-      .child(
-        h_flex()
-          .flex_1()
-          .min_h_0()
-          .items_start()
-          .child(self.sidebar(cx))
-          .child(
-            div()
-              .flex_1()
-              .min_w_0()
-              .h_full()
-              .rounded_tl(theme::RADIUS_LG)
-              .bg(theme::background())
-              .overflow_hidden()
-              .children(page),
-          ),
-      )
+      .text_color(theme::foreground());
+    // Fullscreen belongs to the player: no title bar, no sidebar.
+    if window.is_fullscreen() {
+      return root.children(page);
+    }
+    root.child(self.title_bar(cx)).child(
+      h_flex()
+        .flex_1()
+        .min_h_0()
+        .items_start()
+        .child(self.sidebar(window, cx))
+        .child(
+          div()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .rounded_tl(theme::RADIUS_LG)
+            .bg(theme::background())
+            .overflow_hidden()
+            .children(page),
+        ),
+    )
   }
 }
 

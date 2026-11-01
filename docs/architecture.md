@@ -21,10 +21,10 @@
 
 | Crate | Role | Notes |
 |---|---|---|
-| `innertube` | InnerTube client: Home and continuations (`browse`), watch page (`next`), streams (VISIONOS `player` + HLS master), cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/` |
+| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos and continuations (`browse`), watch page and comments (`next`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -41,11 +41,13 @@
 
 ## Watch page
 
-The stream (`Client::stream`, ~0.2 s) and the page metadata (`Client::watch`) load in parallel. mpv starts as soon as the stream is known: video media playlist as the file, audio rendition as `audio-files`, the VISIONOS User-Agent as an HTTP header. Measured: playback about 1.5 s after the page opens, player setup included.
+The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and the RYD votes load in parallel; the first comments page follows the metadata. RYD votes are cached for the session (100 requests/min, 10,000/day). mpv starts as soon as the stream is known: video media playlist as the file, audio rendition as `audio-files`, the VISIONOS User-Agent as an HTTP header. Measured: playback about 1.5 s after the page opens, player setup included.
+
+`PlayerView` owns the player, the `VideoView` and the controls. In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
 
 ## Navigation
 
-`AppView` owns the title bar (back button, "paste a URL or id" field), the sidebar and a stack of pages. The Home route resets the stack; a watch page is pushed. `peebtube <url-or-id>` opens a video at startup.
+`AppView` owns the title bar (back button, "paste a URL or id" field), the sidebar (Home, Subscriptions, subscribed channels) and a stack of pages. Home and Subscriptions reset the stack; channel and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
 
 ## Images
 

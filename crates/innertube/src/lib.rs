@@ -3,7 +3,11 @@
 //! There is no official API for the home feed, so this crate speaks InnerTube directly:
 //! - [`Client::home`]: the "Home" recommendations (`FEwhat_to_watch`), personalized only when
 //!   signed in with browser [`Cookies`] (anonymous Home is empty since 2024);
+//! - [`Client::subscriptions`], [`Client::subscribed_channels`], [`Client::channel_videos`];
 //! - [`Client::watch`]: watch page metadata, related videos and the comments token (`next`);
+//! - [`Client::comments`]: comment pages and replies (`next` continuations);
+//! - [`Client::votes`]: likes and dislikes from Return YouTube Dislike, another service:
+//!   attribution required, at most 100 requests/min and 10,000/day, so cache the results;
 //! - [`Client::stream`]: playable HLS streams through the VISIONOS client, which needs no JS
 //!   challenge and has no `available_at` delay (see docs/decisions/0003-visionos-hls-streams.md).
 //!
@@ -21,5 +25,7 @@ mod parse;
 pub use auth::Cookies;
 pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
 pub use error::Error;
-pub use models::{Feed, Stream, Thumbnail, VideoItem, WatchPage};
-pub use parse::{parse_feed, parse_watch};
+pub use models::{
+  Channel, Comment, CommentPage, Feed, Stream, Thumbnail, VideoItem, Votes, WatchPage,
+};
+pub use parse::{parse_channels, parse_comments, parse_feed, parse_watch};

@@ -24,6 +24,9 @@ pub enum Error {
   /// cookies. Never treated as an empty feed.
   #[error("YouTube does not accept the session cookies (signed out): import fresh cookies")]
   NotLoggedIn,
+  /// The page needs a signed-in session and no cookies are set.
+  #[error("this page needs a signed-in session")]
+  SignInRequired,
   /// The cookie file is unusable.
   #[error("invalid cookies file: {0}")]
   Cookies(String),

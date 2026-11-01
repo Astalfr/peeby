@@ -10,6 +10,8 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
 - Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt]`
+- Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
+  (PowerShell: `"$env:APPDATA\peebtube\cookies.txt"`; `%APPDATA%` only works in cmd)
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike)
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBTUBE_RESOLVER=ytdl` for yt-dlp)
@@ -44,11 +46,16 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
   version (`yt_dlp/extractor/youtube/_base.py`), not memory.
 - Parse leniently from `serde_json::Value`: a malformed item is skipped, never fails the whole feed.
 - Every parser is tested against a real response in `crates/innertube/tests/fixtures/`. A new endpoint gets a saved,
-  redacted response before its parser is written.
+  redacted response before its parser is written. Signed-in responses are trimmed to a few items and stripped of
+  account data (`mainAppWebResponseContext.datasyncId`, visitorData, top bar) before they are committed.
 - Grids and related videos use `lockupViewModel`: with two or more `metadataRows`, row 0 is the channel and the next
   ones views · date; a channel's own tab has a single row.
 - The WEB `clientVersion` is one constant (`WEB_CLIENT_VERSION`), refreshed at startup from the page's ytcfg.
 - VISIONOS needs a session `visitorData` (else `LOGIN_REQUIRED`); refresh it once and retry before failing.
+
+## Player
+- `player_view.rs` adapts peeby's `player_page.rs`: take controls and behavior from there first (peeby is at
+  `D:\DEV\peeby\crates\peeby\src\player_page.rs`), leaving out its Jellyfin parts.
 
 ## Ask before
 - Adding, removing or upgrading a dependency, changing the GPUI revision, the libmpv build or the yt-dlp/Deno pins.

@@ -112,3 +112,51 @@ fn feed_continuation() {
       .all(|v| v.id.len() == 11 && !v.title.is_empty())
   );
 }
+
+#[test]
+fn subscriptions_feed() {
+  // Signed-in response, trimmed to 4 videos, account data removed.
+  let feed = parse_feed(&fixture("subscriptions_feed.json"));
+  assert!(feed.logged_in);
+  assert_eq!(feed.items.len(), 4);
+  assert!(feed.continuation.is_some());
+  assert!(
+    feed
+      .items
+      .iter()
+      .all(|v| v.channel.is_some() && v.channel_id.is_some())
+  );
+}
+
+#[test]
+fn subscribed_channels() {
+  let channels = innertube::parse_channels(&fixture("subscriptions_channels.json"));
+  assert_eq!(channels.len(), 3);
+  let first = &channels[0];
+  assert!(first.id.starts_with("UC"));
+  assert!(!first.name.is_empty() && first.name == first.name.trim());
+  assert!(first.handle.as_deref().is_some_and(|h| h.starts_with('@')));
+  assert!(
+    first
+      .subscribers
+      .as_deref()
+      .is_some_and(|s| s.contains("abonnés"))
+  );
+  assert!(first.avatar.iter().all(|a| a.url.starts_with("https://")));
+}
+
+#[test]
+fn comments_page() {
+  let page = innertube::parse_comments(&fixture("comments.json"));
+  assert_eq!(page.comments.len(), 20);
+  assert!(page.continuation.is_some());
+  let first = &page.comments[0];
+  assert_eq!(first.author, "@bdr8823");
+  assert_eq!(
+    first.text,
+    "My algebra teacher said that this was a link to the test answers"
+  );
+  assert_eq!(first.published, "il y a 7 ans");
+  assert!(!first.likes.is_empty());
+  assert!(first.replies_continuation.is_some());
+}
