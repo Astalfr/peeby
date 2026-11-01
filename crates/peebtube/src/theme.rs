@@ -1,8 +1,18 @@
 //! PeebTube's look: a neutral dark palette with a red accent, Fluent-style shapes (Windows 11),
-//! applied to gpui-component's theme so its widgets follow. Adapted from peeby's theme.
+//! applied to gpui-component's theme so its widgets follow. Adapted from peeby's theme; see
+//! docs/design.md.
+
+use std::time::Duration;
 
 use gpui::{App, Hsla, Pixels, Rgba, WindowAppearance, WindowBackgroundAppearance, px, rgb};
 use gpui_component::{Theme, ThemeMode};
+
+/// Fast transitions: hover, fades of small elements.
+pub const FAST: Duration = Duration::from_millis(150);
+/// Normal transitions: image fade-in, page change.
+pub const NORMAL: Duration = Duration::from_millis(200);
+/// Slow transitions: skeleton to content cross-fade.
+pub const SLOW: Duration = Duration::from_millis(300);
 
 /// Corner radius of controls and cards.
 pub const RADIUS: Pixels = px(8.);
@@ -10,7 +20,7 @@ pub const RADIUS: Pixels = px(8.);
 pub const RADIUS_LG: Pixels = px(12.);
 
 /// Width of the sidebar.
-pub const SIDEBAR_WIDTH: Pixels = px(200.);
+pub const SIDEBAR_WIDTH: Pixels = px(232.);
 
 fn color(hex: u32) -> Hsla {
   rgb(hex).into()
@@ -46,6 +56,10 @@ pub fn foreground() -> Hsla {
 }
 pub fn muted() -> Hsla {
   color(0xa1a1aa)
+}
+/// Section labels, tertiary text.
+pub fn subtle() -> Hsla {
+  color(0x71717a)
 }
 /// Red: primary actions, progress, selection, focus.
 pub fn accent() -> Hsla {

@@ -3,7 +3,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-  AnyView, App, Context, Entity, FontWeight, SharedString, Subscription, Window, div, px,
+  Animation, AnimationExt, AnyView, App, Context, Entity, FontWeight, SharedString, Subscription,
+  Window, div, ease_out_quint, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -265,41 +266,68 @@ impl AppView {
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .children(back.map(|b| div().occlude().child(b)))
+        .child(mark())
+        .child(div().flex_1())
         .child(
-          div()
-            .text_sm()
-            .font_weight(FontWeight::SEMIBOLD)
-            .child("PeebTube"),
+          div().occlude().w(px(480.)).child(
+            Input::new(&self.open_input).small().prefix(
+              gpui_component::Icon::new(Icon::Search)
+                .small()
+                .text_color(theme::muted()),
+            ),
+          ),
         )
-        .child(
-          div()
-            .occlude()
-            .w(px(420.))
-            .child(Input::new(&self.open_input).small()),
-        ),
+        .child(div().flex_1()),
     )
+  }
+
+  /// A sidebar entry: icon (or avatar) and label, muted until hovered or active; the active
+  /// one has a light background and a red pill on its left edge.
+  fn entry(id: SharedString, active: bool) -> gpui::Stateful<gpui::Div> {
+    h_flex()
+      .id(id)
+      .relative()
+      .flex_none()
+      .h(px(40.))
+      .px_3()
+      .gap_3()
+      .items_center()
+      .rounded(px(6.))
+      .cursor_pointer()
+      .text_sm()
+      .text_color(if active {
+        theme::foreground()
+      } else {
+        theme::muted()
+      })
+      .when(active, |el| {
+        el.bg(gpui::white().opacity(0.06))
+          .font_weight(FontWeight::MEDIUM)
+          .child(
+            div()
+              .absolute()
+              .left_0()
+              .top(px(12.))
+              .w(px(3.))
+              .h(px(16.))
+              .rounded_full()
+              .bg(theme::accent()),
+          )
+      })
+      .hover(|s| {
+        s.bg(gpui::white().opacity(0.04))
+          .text_color(theme::foreground())
+      })
   }
 
   fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let root = self.stack.first().map(|page| page.route.clone());
     let at_root = self.stack.len() == 1;
-    let item = |id: SharedString, active: bool| {
-      h_flex()
-        .id(id)
-        .gap_3()
-        .items_center()
-        .px_3()
-        .py_2()
-        .rounded(theme::RADIUS)
-        .cursor_pointer()
-        .when(active, |el| el.bg(theme::surface_hover()))
-        .hover(|el| el.bg(theme::surface()))
-    };
     let nav = |label: &'static str, icon: Icon, route: Route, cx: &mut Context<Self>| {
       let active = at_root && root.as_ref() == Some(&route);
-      item(SharedString::from(label), active)
-        .child(gpui_component::Icon::new(icon).size(px(18.)))
-        .child(label)
+      Self::entry(SharedString::from(label), active)
+        .child(gpui_component::Icon::new(icon).size(px(18.)).flex_none())
+        .child(div().truncate().child(label))
         .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
     };
     let current_channel = match self.stack.last().map(|page| &page.route) {
@@ -315,58 +343,92 @@ impl AppView {
           name: channel.name.clone(),
         };
         let active = current_channel.as_deref() == Some(channel.id.as_str());
-        item(
+        Self::entry(
           SharedString::from(format!("channel-{}", channel.id)),
           active,
         )
-        .child(div().size(px(24.)).flex_none().child(image_fill(
+        .child(div().size(px(22.)).flex_none().child(image_fill(
           &channel.avatar,
-          24.,
-          px(12.),
+          22.,
+          px(11.),
           window,
           cx,
         )))
-        .child(
-          div()
-            .min_w_0()
-            .text_sm()
-            .line_clamp(1)
-            .child(channel.name.clone()),
-        )
+        .child(div().min_w_0().truncate().child(channel.name.clone()))
         .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
       })
       .collect();
+    let label = |text: &'static str| {
+      div()
+        .px_3()
+        .pt_5()
+        .pb_1()
+        .text_xs()
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(theme::subtle())
+        .child(text)
+    };
     v_flex()
-      .id("sidebar")
       .w(theme::SIDEBAR_WIDTH)
       .h_full()
       .flex_none()
-      .p_2()
-      .gap_1()
-      .overflow_y_scrollbar()
-      .child(nav("Accueil", Icon::Home, Route::Home, cx))
-      .child(nav(
-        "Abonnements",
-        Icon::Subscriptions,
-        Route::Subscriptions,
-        cx,
-      ))
-      .child(nav("Compte", Icon::Account, Route::Account, cx))
-      .child(nav("Réglages", Icon::Settings, Route::Settings, cx))
-      .when(!channels.is_empty(), |el| {
-        el.child(
-          div()
-            .px_3()
-            .pt_4()
-            .pb_1()
-            .text_sm()
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(theme::muted())
-            .child("Chaînes"),
-        )
-        .children(channels)
-      })
+      .child(
+        v_flex()
+          .id("sidebar")
+          .flex_1()
+          .min_h_0()
+          .px_2()
+          .pt_2()
+          .gap_1()
+          .overflow_y_scrollbar()
+          .child(nav("Accueil", Icon::Home, Route::Home, cx))
+          .child(nav(
+            "Abonnements",
+            Icon::Subscriptions,
+            Route::Subscriptions,
+            cx,
+          ))
+          .when(!channels.is_empty(), |el| {
+            el.child(label("CHAÎNES")).children(channels)
+          }),
+      )
+      .child(
+        v_flex()
+          .flex_none()
+          .px_2()
+          .py_2()
+          .gap_1()
+          .border_t_1()
+          .border_color(theme::border())
+          .child(nav("Compte", Icon::Account, Route::Account, cx))
+          .child(nav("Réglages", Icon::Settings, Route::Settings, cx)),
+      )
   }
+}
+
+/// PeebTube's mark: a red rounded play badge and the name.
+fn mark() -> impl IntoElement {
+  h_flex()
+    .gap_2()
+    .items_center()
+    .child(
+      div()
+        .w(px(24.))
+        .h(px(17.))
+        .rounded(px(5.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(theme::accent())
+        .text_color(theme::on_accent())
+        .child(gpui_component::Icon::new(Icon::Play).size(px(10.))),
+    )
+    .child(
+      div()
+        .text_sm()
+        .font_weight(FontWeight::BOLD)
+        .child("PeebTube"),
+    )
 }
 
 impl Render for AppView {
@@ -380,15 +442,29 @@ impl Render for AppView {
         self.stack.retain(|page| page.route == Route::Account);
       }
     }
-    let page = self.stack.last().map(|page| page.view.clone());
     let root = v_flex()
       .size_full()
       .bg(theme::chrome(cx))
       .text_color(theme::foreground());
     // Fullscreen belongs to the player: no title bar, no sidebar.
     if window.is_fullscreen() {
-      return root.children(page);
+      return root.children(self.stack.last().map(|page| page.view.clone()));
     }
+    let page = self.stack.last().map(|page| {
+      let view = div().size_full().relative().child(page.view.clone());
+      // A short fade and rise each time a page appears. Not on the watch page: its video
+      // surface is an external texture, and leaving fullscreen would replay the fade.
+      if matches!(page.route, Route::Watch(_)) {
+        return view.into_any_element();
+      }
+      view
+        .with_animation(
+          SharedString::from(format!("page-{}-{:?}", self.stack.len(), page.route)),
+          Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
+          |el, t| el.opacity(t).top(px(8. * (1. - t))),
+        )
+        .into_any_element()
+    });
     root.child(self.title_bar(cx)).child(
       h_flex()
         .flex_1()
@@ -401,6 +477,9 @@ impl Render for AppView {
             .min_w_0()
             .h_full()
             .rounded_tl(theme::RADIUS_LG)
+            .border_t_1()
+            .border_l_1()
+            .border_color(theme::border())
             .bg(theme::background())
             .overflow_hidden()
             .children(page),

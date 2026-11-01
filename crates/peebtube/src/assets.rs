@@ -48,6 +48,7 @@ icons! {
   Subtitles => "captions",
   Settings => "settings",
   Account => "circle-user",
+  Search => "search",
 }
 
 macro_rules! files {

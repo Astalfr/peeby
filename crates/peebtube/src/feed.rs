@@ -2,16 +2,19 @@
 //! subscriptions, or a channel's "Videos" tab. Pages that need a session link to the account page.
 
 use gpui::prelude::*;
-use gpui::{Context, FontWeight, ScrollHandle, SharedString, WeakEntity, Window, div, px};
+use gpui::{Context, ScrollHandle, SharedString, WeakEntity, Window, div};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{IconName, h_flex, v_flex};
 use innertube::{Client, Error, Feed, VideoItem};
 
 use crate::app::{AppView, Route};
+use crate::assets::Icon;
 use crate::images::Images;
-use crate::ui::{error_text, near_scroll_end, video_card};
-use crate::{runtime, theme};
+use crate::ui::{
+  error_text, loading_more, near_scroll_end, notice, page_title, skeleton_card, video_card,
+};
+use crate::{motion, runtime};
 
 /// Card width, logical pixels.
 const CARD_WIDTH: f32 = 320.;
@@ -185,31 +188,39 @@ impl FeedView {
     let needs_session = matches!(self.state, State::SignedOut | State::Expired)
       || (matches!(self.source, Source::Home) && !self.logged_in);
     let nav = self.nav.clone();
-    v_flex()
-      .max_w(px(640.))
-      .gap_3()
-      .child(
-        div()
-          .text_xl()
-          .font_weight(FontWeight::SEMIBOLD)
-          .child(title),
+    notice(
+      if needs_session {
+        Icon::Account
+      } else {
+        Icon::Home
+      },
+      title,
+      body,
+    )
+    .when(needs_session, |el| {
+      el.child(
+        h_flex().pt_2().child(
+          Button::new("to-account")
+            .primary()
+            .label("Importer des cookies")
+            .on_click(move |_, window, cx| {
+              nav
+                .update(cx, |app, cx| app.open(Route::Account, window, cx))
+                .ok();
+            }),
+        ),
       )
-      .child(div().text_color(theme::muted()).child(body))
-      .when(needs_session, |el| {
-        el.child(
-          h_flex().child(
-            Button::new("to-account")
-              .primary()
-              .label("Importer des cookies")
-              .on_click(move |_, window, cx| {
-                nav
-                  .update(cx, |app, cx| app.open(Route::Account, window, cx))
-                  .ok();
-              }),
-          ),
-        )
-      })
+    })
   }
+}
+
+/// The cards, then the end of the list (spinner or retry button).
+fn grid(cards: Vec<gpui::AnyElement>, more: Option<gpui::AnyElement>) -> gpui::AnyElement {
+  v_flex()
+    .gap_8()
+    .child(h_flex().flex_wrap().gap_x_4().gap_y_8().children(cards))
+    .children(more.map(|b| h_flex().justify_center().child(b)))
+    .into_any_element()
 }
 
 impl Render for FeedView {
@@ -217,20 +228,28 @@ impl Render for FeedView {
     // Offsets from the last layout: enough to start the next page before the end is reached.
     self.load_more_if_near_end(cx);
     let content = match &self.state {
-      State::Loading => div()
-        .text_color(theme::muted())
-        .child("Chargement…")
-        .into_any_element(),
-      State::Failed(e) => v_flex()
-        .gap_2()
-        .child(
-          div()
-            .text_xl()
-            .font_weight(FontWeight::SEMIBOLD)
-            .child("Impossible de charger la page"),
-        )
-        .child(div().text_color(theme::muted()).child(e.clone()))
-        .into_any_element(),
+      // Replaced by the skeleton below.
+      State::Loading => div().into_any_element(),
+      State::Failed(e) => notice(
+        IconName::TriangleAlert,
+        "Impossible de charger la page",
+        e.clone(),
+      )
+      .child(
+        h_flex()
+          .pt_2()
+          .child(
+            Button::new("retry")
+              .primary()
+              .label("Réessayer")
+              .on_click(cx.listener(|this, _, _, cx| {
+                this.state = State::Loading;
+                this.load(None, cx);
+                cx.notify();
+              })),
+          ),
+      )
+      .into_any_element(),
       State::SignedOut | State::Expired => self.empty_state().into_any_element(),
       State::Loaded if self.videos.is_empty() => self.empty_state().into_any_element(),
       State::Loaded => {
@@ -240,31 +259,36 @@ impl Render for FeedView {
           .map(|v| video_card(v, CARD_WIDTH, &self.nav, window, cx))
           .collect();
         // Pages load by themselves; the button only shows to retry after a failure.
-        let more = self.continuation.clone().map(|token| {
+        let more = self.continuation.clone().and_then(|token| {
           if self.more_failed {
-            Button::new("more")
-              .primary()
-              .label("Réessayer")
-              .on_click(cx.listener(move |this, _, _, cx| this.load(Some(token.clone()), cx)))
-              .into_any_element()
+            Some(
+              Button::new("more")
+                .primary()
+                .label("Réessayer")
+                .on_click(cx.listener(move |this, _, _, cx| this.load(Some(token.clone()), cx)))
+                .into_any_element(),
+            )
           } else {
-            div()
-              .text_color(theme::muted())
-              .child(if self.loading_more {
-                "Chargement…"
-              } else {
-                ""
-              })
-              .into_any_element()
+            self.loading_more.then(|| loading_more().into_any_element())
           }
         });
-        v_flex()
-          .gap_6()
-          .child(h_flex().flex_wrap().gap_x_4().gap_y_8().children(cards))
-          .children(more.map(|b| h_flex().justify_center().child(b)))
-          .into_any_element()
+        grid(cards, more)
       }
     };
+    let skeleton = h_flex()
+      .flex_wrap()
+      .gap_x_4()
+      .gap_y_8()
+      .children((0..12).map(|_| skeleton_card(CARD_WIDTH)))
+      .into_any_element();
+    let body = motion::crossfade(
+      SharedString::from(format!("feed-load-{}", cx.entity_id())),
+      matches!(self.state, State::Loading),
+      skeleton,
+      content,
+      window,
+      cx,
+    );
     div()
       .size_full()
       .relative()
@@ -282,17 +306,13 @@ impl Render for FeedView {
           }))
           .child(
             v_flex()
-              .p_6()
+              .px_8()
+              .py_6()
               .gap_6()
               .when(!matches!(self.source, Source::Home), |el| {
-                el.child(
-                  div()
-                    .text_2xl()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(self.title()),
-                )
+                el.child(page_title(self.title()))
               })
-              .child(content),
+              .child(body),
           ),
       )
   }

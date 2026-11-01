@@ -11,6 +11,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Visual refresh
+
+- Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.
+- Verified: Home and a watch page render and play (1.7 s to playback) with the new code; clippy and tests pass. **Not verified:** hover animations and page fades by eye (no mouse in the test run).
+
 ## Milestone 4 status
 
 - Done (2026-11-01):

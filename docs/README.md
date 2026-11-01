@@ -17,12 +17,14 @@ PeebTube is a native YouTube client for Windows, written in Rust with [GPUI](htt
 | Streams | VISIONOS client, HLS (no JS challenge, no `available_at` wait) | [0003](decisions/0003-visionos-hls-streams.md) |
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
+| Look and motion | Peeby's visual system with a red accent | [0006](decisions/0006-peeby-visual-system.md) |
 | UI language | French UI strings; code, comments and docs in English | — |
 
 ## Index
 
 - [roadmap.md](roadmap.md): milestones and status
 - [architecture.md](architecture.md): crates, threads, data flow
+- [design.md](design.md): palette, layout, pages and motion
 - [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
 - [decisions/](decisions/): architecture decision records
 - Peeby docs that apply as they are: `D:\DEV\peeby\docs\player\` (mpv options, video surface) and `D:\DEV\peeby\vendor\README.md` (GPUI patch)

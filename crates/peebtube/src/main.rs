@@ -8,6 +8,7 @@ mod app;
 mod assets;
 mod feed;
 mod images;
+mod motion;
 mod player_view;
 mod prefetch;
 mod runtime;

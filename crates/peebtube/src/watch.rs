@@ -15,6 +15,7 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
+use gpui_component::skeleton::Skeleton;
 use gpui_component::{h_flex, v_flex};
 use innertube::{Client, Comment, Votes, WatchPage};
 
@@ -23,7 +24,9 @@ use crate::assets::Icon;
 use crate::images::Images;
 use crate::player_view::PlayerView;
 use crate::settings::Settings;
-use crate::ui::{compact_card, error_text, image_fill, near_scroll_end};
+use crate::ui::{
+  compact_card, error_text, image_fill, loading_more, near_scroll_end, skeleton_compact,
+};
 use crate::{prefetch, runtime, theme, tools};
 
 /// Width of the related videos column.
@@ -326,7 +329,7 @@ impl WatchView {
 
   fn details(&self, window: &mut Window, cx: &mut App) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
-      return v_flex();
+      return skeleton_details();
     };
     let avatar = (!page.channel_avatar.is_empty()).then(|| {
       div().size(px(40.)).flex_none().child(image_fill(
@@ -354,11 +357,11 @@ impl WatchView {
       .collect::<Vec<_>>()
       .join(" · ");
     v_flex()
-      .gap_3()
+      .gap_4()
       .child(
         div()
           .text_xl()
-          .font_weight(FontWeight::SEMIBOLD)
+          .font_weight(FontWeight::BOLD)
           .child(page.title.clone()),
       )
       .child(
@@ -368,6 +371,7 @@ impl WatchView {
           .child(
             h_flex()
               .id("channel")
+              .group("channel")
               .gap_3()
               .items_center()
               .when_some(channel, |el, on_click| {
@@ -379,6 +383,7 @@ impl WatchView {
                   .child(
                     div()
                       .font_weight(FontWeight::SEMIBOLD)
+                      .group_hover("channel", |s| s.text_color(theme::accent_hover()))
                       .child(page.channel.clone().unwrap_or_default()),
                   )
                   .child(
@@ -394,10 +399,13 @@ impl WatchView {
       )
       .child(
         v_flex()
-          .p_3()
+          .px_4()
+          .py_3()
           .gap_1()
           .rounded(theme::RADIUS_LG)
           .bg(theme::surface())
+          .border_1()
+          .border_color(theme::border())
           .text_sm()
           .child(div().font_weight(FontWeight::SEMIBOLD).child(stats))
           // `line_clamp` limits wrapped lines, not explicit line breaks: cut those first.
@@ -443,13 +451,12 @@ impl WatchView {
     let empty = (comments.items.is_empty() && !comments.loading && comments.requested)
       .then(|| div().text_color(theme::muted()).child("Aucun commentaire"));
     v_flex()
-      .gap_4()
+      .pt_2()
+      .gap_5()
       .child(header)
       .children(items)
       .children(empty)
-      .when(comments.loading, |el| {
-        el.child(div().text_color(theme::muted()).child("Chargement…"))
-      })
+      .when(comments.loading, |el| el.child(loading_more()))
       .children(more.map(|b| h_flex().child(b)))
   }
 
@@ -491,14 +498,7 @@ impl WatchView {
         .pl(px(48.))
         .gap_3()
         .children(rows)
-        .when(r.loading, |el| {
-          el.child(
-            div()
-              .text_sm()
-              .text_color(theme::muted())
-              .child("Chargement…"),
-          )
-        })
+        .when(r.loading, |el| el.child(loading_more()))
         .children(more.filter(|_| !r.loading).map(|b| h_flex().child(b)))
     });
     v_flex()
@@ -509,7 +509,8 @@ impl WatchView {
   }
 }
 
-/// Likes, estimated dislikes and the ratio bar, with the attribution RYD requires.
+/// Likes and estimated dislikes on a pill, the ratio bar under it, with the attribution RYD
+/// requires (the pill links to its site).
 fn votes_bar(votes: Votes) -> impl IntoElement {
   let total = votes.likes + votes.dislikes;
   let ratio = if total > 0 {
@@ -517,34 +518,39 @@ fn votes_bar(votes: Votes) -> impl IntoElement {
   } else {
     1.0
   };
+  let count = |icon: Icon, n: u64| {
+    h_flex()
+      .gap_2()
+      .items_center()
+      .child(gpui_component::Icon::new(icon).size(px(16.)))
+      .child(compact_number(n))
+  };
   v_flex()
     .id("votes")
-    .w(px(220.))
-    .gap_1()
+    .w(px(200.))
+    .gap_1p5()
     .cursor_pointer()
     .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
     .child(
       h_flex()
-        .justify_between()
-        .child(
-          h_flex()
-            .gap_1()
-            .items_center()
-            .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(16.)))
-            .child(compact_number(votes.likes)),
-        )
-        .child(
-          h_flex()
-            .gap_1()
-            .items_center()
-            .child(compact_number(votes.dislikes))
-            .child(gpui_component::Icon::new(Icon::ThumbsDown).size(px(16.))),
-        ),
+        .h(px(36.))
+        .px_4()
+        .rounded_full()
+        .bg(theme::surface())
+        .hover(|s| s.bg(theme::surface_hover()))
+        .text_sm()
+        .font_weight(FontWeight::MEDIUM)
+        .items_center()
+        .child(count(Icon::ThumbsUp, votes.likes))
+        .child(div().flex_1())
+        .child(div().w(px(1.)).h(px(20.)).bg(theme::border()))
+        .child(div().flex_1())
+        .child(count(Icon::ThumbsDown, votes.dislikes)),
     )
     .child(
       div()
-        .h(px(4.))
-        .w_full()
+        .mx_4()
+        .h(px(3.))
         .rounded_full()
         .bg(theme::border())
         .child(
@@ -552,14 +558,40 @@ fn votes_bar(votes: Votes) -> impl IntoElement {
             .h_full()
             .w(relative(ratio))
             .rounded_full()
-            .bg(theme::foreground()),
+            .bg(theme::accent()),
         ),
     )
     .child(
       div()
+        .px_4()
         .text_xs()
-        .text_color(theme::muted())
+        .text_color(theme::subtle())
         .child("Dislikes : Return YouTube Dislike"),
+    )
+}
+
+/// Placeholder for the title, channel and description while the page loads.
+fn skeleton_details() -> gpui::Div {
+  v_flex()
+    .gap_4()
+    .child(Skeleton::new().w(relative(0.7)).h(px(26.)))
+    .child(
+      h_flex()
+        .gap_3()
+        .items_center()
+        .child(Skeleton::new().size(px(40.)).rounded_full())
+        .child(
+          v_flex()
+            .gap_2()
+            .child(Skeleton::new().w(px(160.)).h(px(16.)))
+            .child(Skeleton::new().w(px(100.)).h(px(12.))),
+        ),
+    )
+    .child(
+      Skeleton::new()
+        .w_full()
+        .h(px(96.))
+        .rounded(theme::RADIUS_LG),
     )
 }
 
@@ -593,7 +625,7 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
               div()
                 .font_weight(FontWeight::SEMIBOLD)
                 .when(comment.by_creator, |el| {
-                  el.px_1().rounded(px(4.)).bg(theme::surface_hover())
+                  el.px_2().rounded_full().bg(theme::surface_hover())
                 })
                 .child(comment.author.clone()),
             )
@@ -637,12 +669,16 @@ impl Render for WatchView {
         .child(self.player.clone())
         .into_any_element();
     }
-    let related: Vec<_> = self
-      .page
-      .iter()
-      .flat_map(|page| page.related.iter())
-      .map(|v| compact_card(v, &self.nav, window, cx))
-      .collect();
+    let related: Vec<_> = match &self.page {
+      Some(page) => page
+        .related
+        .iter()
+        .map(|v| compact_card(v, &self.nav, window, cx))
+        .collect(),
+      None => (0..8)
+        .map(|_| skeleton_compact().into_any_element())
+        .collect(),
+    };
     // Offsets from the last layout: enough to start the next comments page early.
     self.load_more_if_near_end(cx);
     let details = self.details(window, cx);
@@ -666,7 +702,7 @@ impl Render for WatchView {
             v_flex()
               .flex_1()
               .min_w_0()
-              .gap_4()
+              .gap_5()
               // 16:9 box: GPUI has no aspect-ratio style, so the height follows the width
               // through padding-top as a share of the width.
               .child(
@@ -685,7 +721,7 @@ impl Render for WatchView {
             v_flex()
               .w(px(RELATED_WIDTH))
               .flex_none()
-              .gap_3()
+              .gap_2()
               .children(related),
           ),
       );
