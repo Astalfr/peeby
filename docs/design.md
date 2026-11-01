@@ -61,6 +61,7 @@ Discreet and short; nothing loops except skeletons and spinners.
 | Image load | The image fades in over the flat surface | 200 ms |
 | Page change | Fades in and rises 8 px (not the watch page: the video surface is an external texture, and leaving fullscreen would replay it) | 200 ms |
 | Loading | gpui-component skeletons shaped like the content (grid cards, title and channel, related cards), a spinner at the end of a list | — |
+| Busy button, list end | `ui::loader`: a faint ring with a round-capped arc turning inside it, stretching to 270° then shrinking to 12° as it turns (Material style), drawn on a canvas from a shared clock | 1.4 s per stretch, 2 s per turn |
 | Skeleton to content | `motion::crossfade` on the feeds | 300 ms |
 
 `motion.rs` is copied from peeby. GPUI only animates elements as they appear (`with_animation`); for state changes such as hover, `motion::tween` keeps a value per element id and eases it toward its target, requesting frames until it arrives. Ids must be unique per list (`card-…`, `related-…`): two elements with one id share GPUI's element state, so their hover flags overwrite each other on every frame and the card jumps up and down. Feeds therefore drop the videos YouTube repeats (the subscriptions feed repeats several per page).

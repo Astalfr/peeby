@@ -20,12 +20,11 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
 use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::skeleton::Skeleton;
-use gpui_component::spinner::Spinner;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Error, PlaylistChoice};
 
 use crate::assets::Icon;
-use crate::ui::{RowAction, error_text};
+use crate::ui::{RowAction, error_text, loader};
 use crate::{runtime, theme};
 
 /// The app's current client, for actions started from any page. `AppView` sets it at startup
@@ -243,10 +242,7 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl In
       gpui_component::tooltip::Tooltip::new(WATCH_LATER_TITLE).build(window, cx)
     })
     .child(if busy {
-      Spinner::new()
-        .small()
-        .color(gpui::white())
-        .into_any_element()
+      loader(18., gpui::white()).into_any_element()
     } else {
       gpui_component::Icon::new(Icon::WatchLater)
         .size(px(16.))
