@@ -21,6 +21,19 @@ pub const RADIUS_LG: Pixels = px(12.);
 
 /// Width of the sidebar.
 pub const SIDEBAR_WIDTH: Pixels = px(232.);
+/// Width of the sidebar reduced to its icons: an 18 px icon in a 40 px entry, 8 px margins.
+pub const SIDEBAR_COLLAPSED_WIDTH: Pixels = px(56.);
+/// Width of the sidebar, open or reduced to its icons.
+pub fn sidebar_width(collapsed: bool) -> Pixels {
+  if collapsed {
+    SIDEBAR_COLLAPSED_WIDTH
+  } else {
+    SIDEBAR_WIDTH
+  }
+}
+
+/// Height of the title bar.
+pub const TITLE_BAR_HEIGHT: Pixels = px(44.);
 
 fn color(hex: u32) -> Hsla {
   rgb(hex).into()

@@ -11,6 +11,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Theater mode and folding sidebar
+
+- Done (2026-11-01): theater mode on the watch page ("Mode cinéma" button and T key; the player across the page above the details and related videos), a burger button at the left of the title bar that folds the sidebar to its icons (labels as tooltips). Both are saved in `settings.toml`.
+- **Not verified:** not driven in the app yet (build, clippy and tests only): the theater layout and its height, the button and the T key, the folded sidebar and its tooltips.
+
 ## Save to playlist
 
 - Done (2026-11-01): "⋮" menu and "Watch later" shortcut on grid cards and list rows (hover only), "Enregistrer" on the watch page, the list of playlists with checks, toasts. `playlist/get_add_to_playlist` is parsed and tested on a redacted fixture.

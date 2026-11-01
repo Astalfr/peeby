@@ -42,6 +42,8 @@ pub enum PlayerEvent {
   /// The user asked for the next or the previous video of the queue.
   Next,
   Previous,
+  /// Theater mode was switched on or off (`Settings::theater`): the page lays itself out again.
+  Theater,
 }
 
 /// The open menu of the control bar.
@@ -532,12 +534,20 @@ impl PlayerView {
       "n" if self.queue.is_some_and(|(_, next)| next) => cx.emit(PlayerEvent::Next),
       "p" if self.queue.is_some_and(|(previous, _)| previous) => cx.emit(PlayerEvent::Previous),
       "escape" if self.menu.is_some() => self.menu = None,
+      "t" if !window.is_fullscreen() => self.toggle_theater(cx),
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
       _ => return,
     }
     cx.stop_propagation();
     self.show_controls(cx);
+  }
+
+  /// Switches theater mode, kept in the settings so the next videos open the same way.
+  fn toggle_theater(&mut self, cx: &mut Context<Self>) {
+    Settings::update(cx, |s| s.theater = !s.theater);
+    cx.emit(PlayerEvent::Theater);
+    cx.notify();
   }
 
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
@@ -818,6 +828,7 @@ impl PlayerView {
     cx: &mut Context<Self>,
   ) -> Vec<gpui::AnyElement> {
     let fullscreen = window.is_fullscreen();
+    let theater = Settings::get(cx).theater;
     let white = |opacity: f32| gpui::white().opacity(opacity);
     let has_captions = self.stream.as_ref().is_some_and(|s| !s.captions.is_empty());
     let has_qualities = self.stream.as_ref().is_some_and(|s| s.qualities.len() > 1);
@@ -920,6 +931,20 @@ impl PlayerView {
             .icon(Icon::Settings)
             .tooltip("Qualité")
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Quality, cx))),
+        )
+      })
+      // In fullscreen the picture fills the window anyway.
+      .when(!fullscreen, |row| {
+        row.child(
+          self
+            .control_button("theater", cx)
+            .icon(Icon::Theater)
+            .tooltip(if theater {
+              "Quitter le mode cinéma (T)"
+            } else {
+              "Mode cinéma (T)"
+            })
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_theater(cx))),
         )
       })
       .child(

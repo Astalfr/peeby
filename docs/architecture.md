@@ -45,11 +45,11 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 `PlayerView` owns the player, the `VideoView` and the controls, plus the stream's quality ladder and subtitle tracks. A quality change starts a new mpv on the other variant at the current position (the old one is paused, then dropped when the new picture arrives). Subtitle tracks are given to mpv with `sub-add` the first time they are picked; mpv numbers them 1, 2… in that order.
 
-`prefetch` resolves the stream of a card the mouse rests on (300 ms), and the watch page takes it from there. `prefetch::warm` resolves a stream at once (the next video of a queue). In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
+`prefetch` resolves the stream of a card the mouse rests on (300 ms), and the watch page takes it from there. `prefetch::warm` resolves a stream at once (the next video of a queue). In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`). Theater mode is a setting (`Settings::theater`), so the next videos of a queue keep it: the player toggles it and emits `PlayerEvent::Theater`, and the watch page lays itself out again, sizing the player from the window and the sidebar width.
 
 ## Navigation
 
-`AppView` owns the title bar (back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
+`AppView` owns the title bar (menu button folding the sidebar, back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
 
 ## Playlists
 

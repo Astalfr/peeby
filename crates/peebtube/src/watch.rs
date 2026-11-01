@@ -1,5 +1,6 @@
 //! Watch page: the player (autoplay), title, channel, like/dislike bar (Return YouTube
-//! Dislike), description, comments and related videos. In fullscreen only the player is shown.
+//! Dislike), description, comments and related videos. In fullscreen only the player is shown;
+//! in theater mode (`Settings::theater`) the player spans the page above the two columns.
 //!
 //! The stream (VISIONOS HLS, ~0.2 s), the page metadata (`next`) and the votes load in
 //! parallel; mpv starts as soon as the stream is known, so playback begins about 1 s after the
@@ -43,6 +44,10 @@ const QUEUE_THUMB: f32 = 100.;
 /// build thousands of rows on every frame.
 const QUEUE_BEFORE: usize = 50;
 const QUEUE_AFTER: usize = 150;
+/// Theater mode: height left under the player for the start of the title, and the player's
+/// least height.
+const THEATER_BELOW: f32 = 120.;
+const THEATER_MIN: f32 = 240.;
 
 /// Return YouTube Dislike results for the session: its API allows 100 requests a minute and
 /// 10,000 a day per client.
@@ -111,10 +116,14 @@ impl WatchView {
       .try_global::<VotesCache>()
       .and_then(|cache| cache.0.get(&video_id).copied());
     let mut subscriptions = vec![cx.subscribe(&player, |this, _, event: &PlayerEvent, cx| {
+      if let PlayerEvent::Theater = event {
+        return cx.notify();
+      }
       let Some(queue) = &this.queue else { return };
       match event {
         PlayerEvent::Ended | PlayerEvent::Next => queue.update(cx, |q, cx| q.next(cx)),
         PlayerEvent::Previous => queue.update(cx, |q, cx| q.previous(cx)),
+        PlayerEvent::Theater => {}
       }
     })];
     let queue_scroll = ScrollHandle::new();
@@ -873,6 +882,35 @@ impl Render for WatchView {
     let details = self.details(window, cx);
     let comments = self.comments(window, cx);
     let queue = self.queue_panel(window, cx);
+    let theater = Settings::get(cx).theater;
+    let player = if theater {
+      // Across the whole page on black, 16:9 but short enough to leave the title in view;
+      // mpv letterboxes the picture inside.
+      let viewport = window.viewport_size();
+      let width = viewport.width - theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
+      let room = viewport.height - theme::TITLE_BAR_HEIGHT - px(THEATER_BELOW);
+      div()
+        .w_full()
+        .flex_none()
+        .h((width * (9. / 16.)).min(room.max(px(THEATER_MIN))))
+        .bg(gpui::black())
+        .child(self.player.clone())
+    } else {
+      // 16:9 box: GPUI has no aspect-ratio style, so the height follows the width
+      // through padding-top as a share of the width.
+      div()
+        .relative()
+        .w_full()
+        .pt(relative(9. / 16.))
+        .rounded(theme::RADIUS_LG)
+        .overflow_hidden()
+        .child(div().absolute().inset_0().child(self.player.clone()))
+    };
+    let (above, inline) = if theater {
+      (Some(player), None)
+    } else {
+      (None, Some(player))
+    };
     let page = v_flex()
       .id("watch")
       .size_full()
@@ -882,6 +920,7 @@ impl Render for WatchView {
         this.load_more_if_near_end(cx);
         cx.notify();
       }))
+      .children(above)
       .child(
         h_flex()
           .w_full()
@@ -893,17 +932,7 @@ impl Render for WatchView {
               .flex_1()
               .min_w_0()
               .gap_5()
-              // 16:9 box: GPUI has no aspect-ratio style, so the height follows the width
-              // through padding-top as a share of the width.
-              .child(
-                div()
-                  .relative()
-                  .w_full()
-                  .pt(relative(9. / 16.))
-                  .rounded(theme::RADIUS_LG)
-                  .overflow_hidden()
-                  .child(div().absolute().inset_0().child(self.player.clone())),
-              )
+              .children(inline)
               .child(details)
               .child(comments),
           )

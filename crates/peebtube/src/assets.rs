@@ -62,6 +62,8 @@ icons! {
   Check => "check",
   Lock => "lock",
   Reverse => "arrow-down-up",
+  Menu => "menu",
+  Theater => "rectangle-horizontal",
 }
 
 macro_rules! files {

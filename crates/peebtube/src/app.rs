@@ -263,6 +263,19 @@ impl AppView {
   }
 
   fn title_bar(&self, cx: &mut Context<Self>) -> TitleBar {
+    let collapsed = Settings::get(cx).sidebar_collapsed;
+    let menu = Button::new("menu")
+      .ghost()
+      .icon(Icon::Menu)
+      .tooltip(if collapsed {
+        "Développer le menu"
+      } else {
+        "Réduire le menu"
+      })
+      .on_click(cx.listener(|_, _, _, cx| {
+        Settings::update(cx, |s| s.sidebar_collapsed = !s.sidebar_collapsed);
+        cx.notify();
+      }));
     let back = (self.stack.len() > 1).then(|| {
       Button::new("back")
         .ghost()
@@ -270,28 +283,35 @@ impl AppView {
         .tooltip("Retour")
         .on_click(cx.listener(|this, _, _, cx| this.back(cx)))
     });
-    TitleBar::new().h(px(44.)).child(
+    TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
       h_flex()
         .h_full()
         .w_full()
         .gap_3()
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
+        .child(div().occlude().child(menu))
         .children(back.map(|b| div().occlude().child(b)))
         .child(mark()),
     )
   }
 
   /// A sidebar entry: icon and label, muted until hovered or active; the active
-  /// one has a light background and a red pill on its left edge.
-  fn entry(id: SharedString, active: bool) -> gpui::Stateful<gpui::Div> {
+  /// one has a light background and a red pill on its left edge. `collapsed`: the icon alone,
+  /// centered.
+  fn entry(id: SharedString, active: bool, collapsed: bool) -> gpui::Stateful<gpui::Div> {
     h_flex()
       .id(id)
       .relative()
       .flex_none()
       .h(px(40.))
-      .px_3()
-      .gap_3()
+      .map(|el| {
+        if collapsed {
+          el.justify_center()
+        } else {
+          el.px_3().gap_3()
+        }
+      })
       .items_center()
       .rounded(px(6.))
       .cursor_pointer()
@@ -322,18 +342,28 @@ impl AppView {
   }
 
   /// The entry of the page at the bottom of the stack is active, so Subscriptions stays lit
-  /// on the channels and channel pages opened from it.
+  /// on the channels and channel pages opened from it. Collapsed, entries show their icon
+  /// alone and their label as a tooltip.
   fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let root = self.stack.first().map(|page| page.route.clone());
+    let collapsed = Settings::get(cx).sidebar_collapsed;
     let nav = |label: &'static str, icon: Icon, route: Route, cx: &mut Context<Self>| {
       let active = root.as_ref() == Some(&route);
-      Self::entry(SharedString::from(label), active)
+      Self::entry(SharedString::from(label), active, collapsed)
         .child(gpui_component::Icon::new(icon).size(px(18.)).flex_none())
-        .child(div().truncate().child(label))
+        .map(|el| {
+          if collapsed {
+            el.tooltip(move |window, cx| {
+              gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+            })
+          } else {
+            el.child(div().truncate().child(label))
+          }
+        })
         .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
     };
     v_flex()
-      .w(theme::SIDEBAR_WIDTH)
+      .w(theme::sidebar_width(collapsed))
       .h_full()
       .flex_none()
       .child(

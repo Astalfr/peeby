@@ -60,6 +60,10 @@ pub struct Settings {
   pub subscriptions_layout: FeedLayout,
   /// Playlists shown and played last video first.
   pub reversed_playlists: Vec<String>,
+  /// Watch page in theater mode: the player across the whole width, above the details.
+  pub theater: bool,
+  /// Sidebar reduced to its icons.
+  pub sidebar_collapsed: bool,
 }
 
 impl Default for Settings {
@@ -72,6 +76,8 @@ impl Default for Settings {
       muted: false,
       subscriptions_layout: FeedLayout::Grid,
       reversed_playlists: Vec::new(),
+      theater: false,
+      sidebar_collapsed: false,
     }
   }
 }
