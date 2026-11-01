@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–8 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–9 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -198,8 +198,12 @@ Principles:
   acceleration off
 
 ### 9. Twitch preparation
-- [ ] ADR and `docs/twitch.md` from the research (below)
-- [ ] Check that the playback source, `MediaCard`, the space trait and the watch layout cover it
+- [x] ADR and `docs/twitch.md` from the research (below): [twitch.md](twitch.md),
+      [ADR 0010](decisions/0010-twitch-space.md), accepted: ads removed by a playlist-rewriting layer; the
+      web `auth-token` asked for, optional, with a tutorial (user's answers, 2026-11-01)
+- [x] Check that the playback source, `MediaCard`, the space trait and the watch layout cover it: they do;
+      to add when the space is built: `Source::live` (no seek bar, live badge), a WebSocket client for the
+      chat, animated images, the ad-removing layer if chosen, refreshable GQL settings (table in twitch.md)
 
 ### 10. Documentation
 - [ ] architecture.md, design.md, roadmap.md, CLAUDE.md, README updated

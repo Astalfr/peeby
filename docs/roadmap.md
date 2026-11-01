@@ -13,6 +13,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Peeby refactor
 
+- Step 9 done (2026-11-01): [twitch.md](twitch.md) (the research with its sources, and what the architecture covers) and [ADR 0010](decisions/0010-twitch-space.md): ads removed by a playlist-rewriting layer, the web `auth-token` asked for with a tutorial (the user's choices). No code.
 - Step 8 done (2026-11-01): one settings page behind the gear, with the app's sections, a shared `[player]` section used by both spaces, and a part per space (`Space::settings`); YouTube's account moved there from its sidebar. Verified on screenshots; see the plan.
 - Step 7 done (2026-11-01): YouTube search (`Client::search`, `search_more`, `parse_search` tested on two new redacted fixtures, a results page behind the top bar's search button with next pages on scroll). Verified signed out; see the plan.
 - Step 6 done (2026-11-01): the Jellyfin space (`spaces/jellyfin/`): login with Quick Connect, token in the Credential Manager, Home with its banner and rows, libraries as a virtual grid, a title's page, search from the top bar, playback in the content panel (`Layout::Page`) with reports, track mapping, segments, trickplay and adjacent episodes, its settings page. Shared pieces added to `ui`: BlurHash placeholders and per-server image routes, logos, posters with progress and badges, scrolling rows, the grid layout, `plain_text`. Verified on the user's server and on screenshots; see the plan for what was not.
