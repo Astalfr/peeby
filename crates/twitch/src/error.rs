@@ -42,6 +42,9 @@ pub enum Error {
   /// already spent). The user signs in again.
   #[error("the Twitch session expired")]
   SessionExpired,
+  /// Helix's rate limit is spent for now (HTTP 429).
+  #[error("too many Twitch requests, try again in a moment")]
+  RateLimited,
   /// The device code expired before the user approved it.
   #[error("the sign-in code expired")]
   DeviceExpired,

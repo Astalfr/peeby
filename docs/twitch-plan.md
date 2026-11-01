@@ -396,26 +396,44 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   although the channel's source is 1440p60. The 1440p source is probably HEVC/AV1-only (step 10)
 - Exit: met. `peeby twitch.tv/<login>` plays a live in the Twitch tab, without ads
 ### 7. Helix catalog and pages
-- Fixtures first, from signed-in responses, trimmed and redacted: `streams_followed.json`,
-  `channels_followed.json`, `streams.json` (by category), `games_top.json`, `games.json`,
-  `search_categories.json`, `search_channels.json`, `videos.json`, `clips.json`, `users.json`
-- [ ] `helix.rs`: one `get<T>(path, query)`, pages (`first=100`, `after`), `Ratelimit-*` headers read;
-      a 429 waits until `Ratelimit-Reset` once, then fails with `RateLimited`
-- [ ] Image templates filled by the space: `{width}x{height}` and `%{width}x%{height}`, a cache-buster on
-      live previews (rounded to 5 minutes, so the image store still caches), `404_processing` as "VOD en
-      cours de traitement"
-- [ ] Pages:
-  - **Suivies** (sidebar's first entry): live followed channels as stream cards (preview, title,
-    channel, category, viewers badge), then the offline followed channels as avatars;
-  - **Parcourir**: top categories as tall box-art posters, next pages on scroll; a category's page:
-    its live streams;
-  - **Chaîne**: header (avatar, name, description), the live if on, VODs and clips tabs;
-  - **Recherche** from the top bar: categories and channels (live first).
-- [ ] Sidebar: Suivies, Parcourir, then the live followed channels (avatar, name, category as `detail`),
-      refreshed every 2 minutes in the background; the user at the bottom (opens the settings)
-- [ ] `examples/smoke.rs` covers every endpoint
-- Exit: the followed channels and a category browse, open and play, signed in
+- [x] Fixtures first: `cargo run -p peeby --example twitch_capture` signs in from the Credential
+      Manager (the refresh token spent and its successor saved, so never while Peeby runs) and saves 8
+      answers trimmed to 1 to 4 items. Everything about the account is replaced: the user, and the
+      followed channels' identities, titles, previews, categories, viewers, start times, follow dates,
+      total and cursor. Public lists are only trimmed. VODs and clips come with step 8
+- [x] `twitch::helix`:
+  - `Helix::get(path, query)`: a 401 refreshes the token once through the single-flight
+    `Session::refresh_after`, then retries; a 429 is `RateLimited` (no waiting);
+  - `me`, `users` (by id, 100 at most), `followed_streams`, `followed_channels`, `top_categories`,
+    `category_streams`, `search_channels`, `search_categories`;
+  - lenient parsers: an item without an id is skipped, never the page;
+  - 9 tests on the fixtures.
+- [x] Image templates: `helix::sized` fills `{width}x{height}` and `%{width}x%{height}`. Live previews get
+      a five-minute stamp, fresh regularly while the image store still caches them. `404_processing`
+      waits for VODs (step 8)
+- [x] Pages (`cards.rs` holds the shared cards):
+  - **Suivies**: the followed channels on air as stream cards (preview, avatar, title, channel,
+    category, viewers), widened to fill their rows, then "Hors ligne", the others as avatars and
+    names. It reads up to 300 live and 500 followed channels;
+  - **Parcourir**: the top 200 categories as 3:4 box-art posters. A category's page shows its 100
+    lives with the most viewers;
+  - **Rechercher** from the top bar: up to 20 channels (on air first, with "En direct") and the
+    categories.
 
+  A click on a channel opens its live; an offline one says so (its page with VODs and clips: step 8)
+- [x] Sidebar: Suivies, Parcourir, then up to 12 followed channels on air (avatar, name, category),
+      refreshed every 2 minutes; the user and sign-out at the bottom
+- [x] A Helix `SessionExpired` from any page signs the space out with its message
+- Moved to step 8: the channel page (header, live, VODs, clips)
+- Not in `smoke`: Helix needs the user's session; the capture tool is the live check
+- Verified in the app, signed in (screenshots, posted clicks and keys):
+  - "Suivies" with the user's live channels and their avatars;
+  - "Parcourir" with the categories, then "Just Chatting" with its lives on 4 columns;
+  - the search "zerator", channels with the live one first;
+  - the sidebar's live channels.
+- Not verified: the "Hors ligne" section (below the fold), the sidebar's refresh after 2 minutes, a
+  429, `SessionExpired` from a page
+- Exit: met. Followed channels and a category browse and open, signed in
 ### 8. VODs and clips
 - [ ] VODs: usher VOD master through the same proxy (no ads to filter, but the token stays out of mpv's
       URLs), seekable, resume is not tracked (Twitch has no resume API through Helix **[?]**)

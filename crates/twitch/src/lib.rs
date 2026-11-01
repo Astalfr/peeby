@@ -13,6 +13,7 @@ pub mod auth;
 mod client;
 mod error;
 pub mod gql;
+pub mod helix;
 mod proxy;
 pub mod splice;
 pub mod time;
@@ -22,3 +23,14 @@ pub use client::{Client, Master};
 pub use error::{Error, Result};
 pub use gql::{PlaybackToken, Target};
 pub use proxy::Proxy;
+
+/// Runs `future` to its end on a new single-thread runtime, for command-line tools and examples
+/// (the app runs this crate on its own network runtime).
+pub fn block_on<F: std::future::Future>(future: F) -> std::io::Result<F::Output> {
+  Ok(
+    tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()?
+      .block_on(future),
+  )
+}

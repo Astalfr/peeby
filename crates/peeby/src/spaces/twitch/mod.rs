@@ -1,12 +1,16 @@
 //! The Twitch space (ADR 0010, docs/twitch-plan.md): nothing without signing in (the user's
 //! choice), so its only page while signed out is the sign-in card. Signed in, it keeps the Helix
 //! session (refreshed one at a time, validated at startup and every hour, as Twitch requires), the
-//! optional web `auth-token` its playback client sends to GQL, and a stack of pages: "Suivies",
-//! then a channel's live on top.
+//! optional web `auth-token` its playback client sends to GQL, the Helix client of its pages, and a
+//! stack of pages: "Suivies", "Parcourir" or the search, then categories and lives on top. The
+//! sidebar lists the followed channels on air, refreshed every two minutes.
 
+pub mod browse;
+pub mod cards;
 pub mod following;
 pub mod login;
 pub mod play;
+pub mod search;
 pub mod session;
 pub mod settings_page;
 pub mod watch;
@@ -20,29 +24,56 @@ use gpui::{
 };
 use twitch::Error;
 use twitch::auth::{Auth, Session, Validation};
+use twitch::helix::{Helix, Stream};
 use ui::assets::Icon;
+use ui::images::Images;
 use ui::player::PlayerView;
 use ui::theme::Accent;
 use ui::{runtime, theme};
 
 use crate::settings::Settings;
 use crate::shell::space::{Avatar, MenuEntry, Space, SpaceEvent, SpaceInfo};
+use browse::{BrowseView, CategoryView};
+use cards::Avatars;
 use following::FollowingView;
 use login::{LoginView, SignedIn};
+use search::SearchView;
 use session::Secrets;
 use settings_page::SettingsView;
 use watch::WatchView;
 
 /// Twitch requires validating the token every hour.
 const VALIDATE_EVERY: Duration = Duration::from_secs(3600);
+/// How often the sidebar's live channels are read again.
+const SIDEBAR_EVERY: Duration = Duration::from_secs(120);
+/// Live channels listed in the sidebar.
+const SIDEBAR_LIVE: usize = 12;
 
 /// A page of the space.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {
-  /// "Suivies" (a field to open a channel until step 7).
+  /// "Suivies": the followed channels.
   Following,
+  /// "Parcourir": the top categories.
+  Browse,
+  /// A category's live streams.
+  Category {
+    /// Category id.
+    id: String,
+    /// Its name, for the title.
+    name: String,
+  },
+  /// The search page.
+  Search,
   /// A channel's live, by login.
   Watch(String),
+}
+
+impl Route {
+  /// Sidebar pages and the search reset the stack; categories and lives are pushed.
+  fn is_top_level(&self) -> bool {
+    matches!(self, Self::Following | Self::Browse | Self::Search)
+  }
 }
 
 struct Page {
@@ -53,15 +84,21 @@ struct Page {
 /// The signed-in part.
 struct Signed {
   session: Session,
+  helix: Helix,
   login: String,
+  user_id: String,
+  /// The followed channels on air, for the sidebar, with their avatars.
+  live: Vec<Stream>,
+  avatars: Avatars,
   _validate: Task<()>,
+  _sidebar: Task<()>,
 }
 
 enum State {
   /// A saved session is being restored (its refresh token exchanged, then validated).
   Restoring,
   SignedOut,
-  SignedIn(Signed),
+  SignedIn(Box<Signed>),
 }
 
 pub struct TwitchSpace {
@@ -114,6 +151,15 @@ impl TwitchSpace {
       _login_subscription: None,
     };
     space.set_auth_token(secrets.auth_token, cx);
+    // The sidebar's avatars arrive through the image store.
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |this, _, cx| {
+        if matches!(this.state, State::SignedIn(_)) {
+          cx.notify();
+        }
+      })
+      .detach();
+    }
     // Twitch may have changed its web Client-ID: read the current one from its page.
     if let Some(client) = space.client.clone() {
       drop(runtime::spawn(cx, async move {
@@ -202,11 +248,58 @@ impl TwitchSpace {
         }
       }
     });
-    self.state = State::SignedIn(Signed {
-      session,
-      login: validation.login,
-      _validate: validate,
+    let helix = match Helix::new(session.clone()) {
+      Ok(helix) => helix,
+      Err(e) => {
+        tracing::error!("cannot create the Helix client: {e}");
+        return self.sign_out(Some(login::describe(&e)), cx);
+      }
+    };
+    let sidebar = cx.spawn({
+      let (helix, user_id) = (helix.clone(), validation.user_id.clone());
+      async move |this, cx| {
+        loop {
+          let (helix, user_id) = (helix.clone(), user_id.clone());
+          let Ok(fetch) = this.update(cx, |_, cx| {
+            runtime::spawn(cx, async move {
+              let mut live = helix.followed_streams(&user_id, None).await?.items;
+              live.truncate(SIDEBAR_LIVE);
+              let ids = live.iter().map(|s| s.user_id.clone()).collect();
+              let avatars = cards::avatars(&helix, ids).await;
+              Ok::<_, Error>((live, avatars))
+            })
+          }) else {
+            return;
+          };
+          let result = fetch.await;
+          let alive = this.update(cx, |this, cx| match result {
+            Some(Ok((live, avatars))) => {
+              if let State::SignedIn(signed) = &mut this.state {
+                signed.live = live;
+                signed.avatars = avatars;
+              }
+              cx.notify();
+            }
+            Some(Err(e)) => this.handle_error(&e, cx),
+            None => {}
+          });
+          if alive.is_err() {
+            return;
+          }
+          cx.background_executor().timer(SIDEBAR_EVERY).await;
+        }
+      }
     });
+    self.state = State::SignedIn(Box::new(Signed {
+      session,
+      helix,
+      login: validation.login,
+      user_id: validation.user_id,
+      live: Vec::new(),
+      avatars: Avatars::new(),
+      _validate: validate,
+      _sidebar: sidebar,
+    }));
     self.login = None;
     self.login_message = None;
     self._login_subscription = None;
@@ -245,7 +338,8 @@ impl TwitchSpace {
     self.sign_out(None, cx);
   }
 
-  /// Shows `route`: "Suivies" resets the stack, a live is pushed (on top of another one too).
+  /// Shows `route`: sidebar pages reset the stack, categories and lives are pushed. The search
+  /// needs the window: [`Space::open_search`].
   pub fn open(&mut self, route: Route, cx: &mut Context<Self>) {
     let State::SignedIn(signed) = &self.state else {
       return;
@@ -254,11 +348,20 @@ impl TwitchSpace {
       return;
     }
     let nav = cx.weak_entity();
+    let helix = signed.helix.clone();
     let view: AnyView = match &route {
       Route::Following => {
-        let login = signed.login.clone();
-        cx.new(|_| FollowingView::new(nav, login)).into()
+        let user_id = signed.user_id.clone();
+        cx.new(|cx| FollowingView::new(nav, helix, user_id, cx))
+          .into()
       }
+      Route::Browse => cx.new(|cx| BrowseView::new(nav, helix, cx)).into(),
+      Route::Category { id, name } => {
+        let (id, name) = (id.clone(), name.clone());
+        cx.new(|cx| CategoryView::new(nav, helix, id, name, cx))
+          .into()
+      }
+      Route::Search => return,
       Route::Watch(login) => {
         let Some(client) = self.client.clone() else {
           return;
@@ -267,12 +370,27 @@ impl TwitchSpace {
         cx.new(|cx| WatchView::new(login, client, nav, cx)).into()
       }
     };
-    if route == Route::Following {
+    self.push(route, view, cx);
+  }
+
+  fn push(&mut self, route: Route, view: AnyView, cx: &mut Context<Self>) {
+    if route.is_top_level() {
       self.stack.clear();
     }
     self.cover_top(true, cx);
     self.stack.push(Page { route, view });
     cx.notify();
+  }
+
+  /// Reacts to an error of any page: an expired session signs out, the rest is logged.
+  pub fn handle_error(&mut self, error: &Error, cx: &mut Context<Self>) {
+    match error {
+      Error::SessionExpired => self.sign_out(
+        Some("Votre session Twitch a expiré. Reconnectez-vous.".into()),
+        cx,
+      ),
+      other => tracing::warn!("Twitch: {other}"),
+    }
   }
 
   pub fn back(&mut self, cx: &mut Context<Self>) {
@@ -346,6 +464,23 @@ impl TwitchSpace {
   }
 }
 
+/// What the user reads for a Helix error of a page.
+pub fn error_text(error: &Error) -> String {
+  match error {
+    Error::SessionExpired => "Votre session Twitch a expiré.".into(),
+    Error::RateLimited => "Trop de requêtes vers Twitch. Réessayez dans un instant.".into(),
+    Error::Http(_) => "Twitch est injoignable. Vérifiez votre connexion.".into(),
+    other => format!("Twitch a répondu par une erreur : {other}"),
+  }
+}
+
+/// Shorthand for pages: hands an error to the space.
+pub fn report(nav: &gpui::WeakEntity<TwitchSpace>, error: &Error, cx: &mut App) {
+  nav
+    .update(cx, |space, cx| space.handle_error(error, cx))
+    .ok();
+}
+
 impl EventEmitter<SpaceEvent> for TwitchSpace {}
 
 impl Space for TwitchSpace {
@@ -357,7 +492,8 @@ impl Space for TwitchSpace {
     }
   }
 
-  /// "Suivies", then the user (opening the settings) and sign-out at the bottom.
+  /// "Suivies", "Parcourir", the followed channels on air, then the user (opening the settings)
+  /// and sign-out at the bottom.
   fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
     let State::SignedIn(signed) = &self.state else {
       return Vec::new();
@@ -370,15 +506,47 @@ impl Space for TwitchSpace {
       .to_uppercase()
       .to_string()
       .into();
-    let following = self
-      .stack
-      .first()
-      .is_some_and(|p| p.route == Route::Following);
-    vec![
+    let root = self.stack.first().map(|p| &p.route);
+    let top = self.stack.last().map(|p| &p.route);
+    let mut entries = vec![
       MenuEntry {
-        active: following,
+        active: root == Some(&Route::Following),
         ..MenuEntry::new("following", "Suivies", Icon::Subscriptions)
       },
+      MenuEntry {
+        active: root == Some(&Route::Browse),
+        ..MenuEntry::new("browse", "Parcourir", Icon::Grid)
+      },
+    ];
+    for (i, stream) in signed.live.iter().enumerate() {
+      let initial: SharedString = stream
+        .user_name
+        .chars()
+        .next()
+        .unwrap_or('?')
+        .to_uppercase()
+        .to_string()
+        .into();
+      let watching = top == Some(&Route::Watch(stream.user_login.clone()));
+      entries.push(MenuEntry {
+        active: watching,
+        heading: (i == 0).then(|| "En direct".into()),
+        avatar: Some(Avatar {
+          picture: signed
+            .avatars
+            .get(&stream.user_id)
+            .map(|url| cards::template(url)),
+          initial,
+        }),
+        detail: Some(stream.game_name.clone().into()),
+        ..MenuEntry::new(
+          format!("live:{}", stream.user_login),
+          stream.user_name.clone(),
+          Icon::Tv,
+        )
+      });
+    }
+    entries.extend([
       MenuEntry {
         bottom: true,
         avatar: Some(Avatar {
@@ -392,16 +560,38 @@ impl Space for TwitchSpace {
         bottom: true,
         ..MenuEntry::new("sign-out", "Se déconnecter", Icon::SignOut)
       },
-    ]
+    ]);
+    entries
   }
 
   fn open_entry(&mut self, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
     match id {
       "following" => self.open(Route::Following, cx),
+      "browse" => self.open(Route::Browse, cx),
       "account" => cx.emit(SpaceEvent::OpenSettings),
       "sign-out" => self.log_out(cx),
-      _ => {}
+      _ => {
+        if let Some(login) = id.strip_prefix("live:") {
+          self.open(Route::Watch(login.to_owned()), cx);
+        }
+      }
     }
+  }
+
+  fn searchable(&self) -> bool {
+    matches!(self.state, State::SignedIn(_))
+  }
+
+  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let State::SignedIn(signed) = &self.state else {
+      return;
+    };
+    if self.stack.last().is_some_and(|p| p.route == Route::Search) {
+      return;
+    }
+    let (nav, helix) = (cx.weak_entity(), signed.helix.clone());
+    let view = cx.new(|cx| SearchView::new(nav, helix, window, cx));
+    self.push(Route::Search, view.into(), cx);
   }
 
   fn can_go_back(&self) -> bool {

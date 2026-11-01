@@ -25,6 +25,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBY_RESOLVER=ytdl` for yt-dlp)
 - Twitch live check (counts only): `cargo run -p twitch --example smoke -- [login]`
+- Twitch Helix fixtures: `cargo run -p peeby --example twitch_capture` (the user's session from the Credential
+  Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data)
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_USHER=v1`, `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.

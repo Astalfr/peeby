@@ -1,0 +1,32 @@
+{
+  "total": 120,
+  "data": [
+    {
+      "broadcaster_id": "200000001",
+      "broadcaster_login": "followed_1",
+      "broadcaster_name": "Followed1",
+      "followed_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "broadcaster_id": "200000002",
+      "broadcaster_login": "followed_2",
+      "broadcaster_name": "Followed2",
+      "followed_at": "2024-01-02T00:00:00Z"
+    },
+    {
+      "broadcaster_id": "200000003",
+      "broadcaster_login": "followed_3",
+      "broadcaster_name": "Followed3",
+      "followed_at": "2024-01-03T00:00:00Z"
+    },
+    {
+      "broadcaster_id": "200000004",
+      "broadcaster_login": "followed_4",
+      "broadcaster_name": "Followed4",
+      "followed_at": "2024-01-04T00:00:00Z"
+    }
+  ],
+  "pagination": {
+    "cursor": "REDACTED_CURSOR"
+  }
+}

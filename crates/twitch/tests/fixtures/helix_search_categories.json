@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/516575-52x72.jpg",
+      "id": "516575",
+      "name": "VALORANT"
+    },
+    {
+      "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/190428604_IGDB-52x72.jpg",
+      "id": "190428604",
+      "name": "Valora Survival"
+    },
+    {
+      "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/2125330172_IGDB-52x72.jpg",
+      "id": "2125330172",
+      "name": "VALORANT Mobile"
+    }
+  ],
+  "pagination": {
+    "cursor": "Mw=="
+  }
+}

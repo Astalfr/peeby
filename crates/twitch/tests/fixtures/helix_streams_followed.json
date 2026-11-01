@@ -1,0 +1,83 @@
+{
+  "data": [
+    {
+      "id": "300000001",
+      "user_id": "200000001",
+      "user_login": "followed_1",
+      "user_name": "Followed1",
+      "game_id": "509658",
+      "game_name": "Just Chatting",
+      "type": "live",
+      "title": "Live title 1",
+      "viewer_count": 1000,
+      "started_at": "2026-11-01T11:00:00Z",
+      "language": "fr",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/previews-ttv/live_user_followed_1-{width}x{height}.jpg",
+      "tag_ids": [],
+      "tags": [
+        "Français"
+      ],
+      "is_mature": false
+    },
+    {
+      "id": "300000002",
+      "user_id": "200000002",
+      "user_login": "followed_2",
+      "user_name": "Followed2",
+      "game_id": "509658",
+      "game_name": "Just Chatting",
+      "type": "live",
+      "title": "Live title 2",
+      "viewer_count": 2000,
+      "started_at": "2026-11-01T12:00:00Z",
+      "language": "fr",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/previews-ttv/live_user_followed_2-{width}x{height}.jpg",
+      "tag_ids": [],
+      "tags": [
+        "Français"
+      ],
+      "is_mature": false
+    },
+    {
+      "id": "300000003",
+      "user_id": "200000003",
+      "user_login": "followed_3",
+      "user_name": "Followed3",
+      "game_id": "509658",
+      "game_name": "Just Chatting",
+      "type": "live",
+      "title": "Live title 3",
+      "viewer_count": 3000,
+      "started_at": "2026-11-01T13:00:00Z",
+      "language": "fr",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/previews-ttv/live_user_followed_3-{width}x{height}.jpg",
+      "tag_ids": [],
+      "tags": [
+        "Français"
+      ],
+      "is_mature": false
+    },
+    {
+      "id": "300000004",
+      "user_id": "200000004",
+      "user_login": "followed_4",
+      "user_name": "Followed4",
+      "game_id": "509658",
+      "game_name": "Just Chatting",
+      "type": "live",
+      "title": "Live title 4",
+      "viewer_count": 4000,
+      "started_at": "2026-11-01T14:00:00Z",
+      "language": "fr",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/previews-ttv/live_user_followed_4-{width}x{height}.jpg",
+      "tag_ids": [],
+      "tags": [
+        "Français"
+      ],
+      "is_mature": false
+    }
+  ],
+  "pagination": {
+    "cursor": "REDACTED_CURSOR"
+  }
+}
