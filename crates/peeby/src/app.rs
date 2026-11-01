@@ -12,16 +12,17 @@ use gpui_component::{TitleBar, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
 use crate::account::AccountView;
-use crate::assets::Icon;
 use crate::channels::ChannelsView;
 use crate::feed::{FeedView, Source};
-use crate::images::Images;
 use crate::playlists::{PlaylistView, PlaylistsView};
 use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
-use crate::{assets, bell, inbox, prefetch, runtime, save, settings, theme};
+use crate::{bell, inbox, prefetch, save, settings};
+use ui::assets::Icon;
+use ui::images::Images;
+use ui::{assets, runtime, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]

@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, step 1 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–2 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -77,12 +77,15 @@ Principles:
 - [x] CLAUDE.md, README and architecture updated (workspace version 0.2.0, `PEEBY_DISPLAY` to pick the screen)
 
 ### 2. `ui` crate
-- [ ] Move `theme` (accent per space, re-applied on tab switch), `motion`, `assets`, `runtime`
-- [ ] Image store: union of both versions (URL keys, blurhash, `get_sized`, cache size and clear), with a
-      fetcher that does not depend on a service client
-- [ ] Components: `MediaCard` and its shapes, list row, compact card, scrolling row with arrows, virtual
-      grid (from `feed.rs`), hero carousel, skeletons, loader, notice, settings rows
-- [ ] YouTube pages moved onto these components, no visual change
+- [x] Move `theme` (accent switchable with `theme::set_accent`, used from step 4), `motion`, `assets`, `runtime`
+- [x] Image store with `get_sized` and cache size and clear, downloading through a `Fetch` the app provides
+      (blurhash comes with the Jellyfin space, step 6, with the `blurhash` dependency)
+- [x] Components: `Picture` and `image_fill`, `MediaCard` (grid, compact, row, numbered), skeletons, loader,
+      notice, settings rows (`ui::form`)
+- [x] YouTube pages moved onto these components, no visual change (checked on screenshots: Home, watch page)
+- Moved to step 6, where Jellyfin is their second user: poster shapes and badges of `MediaCard` (progress,
+  watched, unplayed count), scrolling row with arrows, hero carousel, and a virtual grid shared by
+  `feed.rs` and the Jellyfin library
 
 ### 3. Generic player
 - [ ] `PlayerView` takes a playback source and emits events (see principles); YouTube's stream, captions

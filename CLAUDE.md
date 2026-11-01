@@ -89,5 +89,5 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
   regenerating vendor/gpui-pre-windows.patch, and re-apply the patch whenever GPUI is bumped.
 - `line_clamp` limits wrapped lines only: cut explicit line breaks before clamping (descriptions).
 - Icons that gpui-component widgets draw themselves (spinner: `loader`, toasts: `info`, `circle-check`…) must be in
-  `COMPONENT` in `assets.rs`: a missing SVG renders as nothing, without an error.
+  `COMPONENT` in `crates/ui/src/assets.rs`: a missing SVG renders as nothing, without an error.
 - shinchiro deletes old libmpv releases: when fetch-mpv.ps1 gets a 404, bump the pin (version, URL, SHA-256).

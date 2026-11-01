@@ -27,16 +27,18 @@ use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
 use crate::app::{AppView, Route};
-use crate::assets::Icon;
-use crate::images::Images;
+use crate::cards::{compact_card, playlist_row};
 use crate::player_view::{PlayerEvent, PlayerView};
 use crate::queue::{Queue, QueueEvent};
 use crate::settings::Settings;
-use crate::ui::{
-  compact_card, error_text, image_fill, loading_more, near_scroll_end, playlist_row,
-  skeleton_compact,
-};
-use crate::{bell, prefetch, runtime, save, theme, tools};
+use crate::youtube::{self, error_text};
+use crate::{bell, prefetch, save, tools};
+use ui::assets::Icon;
+use ui::card::skeleton_compact;
+use ui::images::Images;
+use ui::picture::image_fill;
+use ui::widgets::{loading_more, near_scroll_end};
+use ui::{runtime, theme};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
@@ -714,8 +716,9 @@ impl WatchView {
     };
     let avatar = (!page.channel_avatar.is_empty()).then(|| {
       div().size(px(40.)).flex_none().child(image_fill(
-        &page.channel_avatar,
+        &youtube::picture(&page.channel_avatar),
         40.,
+        1.,
         px(20.),
         window,
         cx,
@@ -954,7 +957,7 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
       width: 88,
       height: 88,
     }];
-    image_fill(&sizes, 36., px(18.), window, cx)
+    image_fill(&youtube::picture(&sizes), 36., 1., px(18.), window, cx)
   });
   // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
   // only, comments are not rated from the app.

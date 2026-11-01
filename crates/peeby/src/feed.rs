@@ -16,13 +16,14 @@ use gpui_component::{IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Feed, VideoItem};
 
 use crate::app::{AppView, Route};
-use crate::assets::Icon;
-use crate::images::Images;
+use crate::cards::{video_card, video_row};
 use crate::settings::{FeedLayout, Settings};
-use crate::ui::{
-  error_text, loading_more, notice, page_title, skeleton_card, skeleton_row, video_card, video_row,
-};
-use crate::{motion, runtime, theme};
+use crate::youtube::error_text;
+use ui::assets::Icon;
+use ui::card::{skeleton_card, skeleton_row};
+use ui::images::Images;
+use ui::widgets::{loading_more, notice, page_title};
+use ui::{motion, runtime, theme};
 
 /// Narrowest card, logical pixels: a row holds as many cards as fit at this width, then they
 /// widen to fill it.

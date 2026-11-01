@@ -15,10 +15,11 @@ use gpui_component::popover::Popover;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{ChannelNotifications, Error, NotificationLevel};
 
-use crate::assets::Icon;
 use crate::save::Session;
-use crate::ui::{error_text, loader};
-use crate::{runtime, theme};
+use crate::youtube::error_text;
+use ui::assets::Icon;
+use ui::widgets::loader;
+use ui::{runtime, theme};
 
 /// Levels set in this session, by channel id, over the ones the pages parsed (the watch page
 /// and the channels page agree after a change), and the channels whose change is waiting for

@@ -22,10 +22,10 @@ use innertube::Stream;
 use innertube::hls::Variant;
 use player::{Choice, Event, Player, StartOptions};
 
-use crate::assets::Icon;
-use crate::images::Images;
 use crate::settings::Settings;
-use crate::theme;
+use ui::assets::Icon;
+use ui::images::Images;
+use ui::theme;
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);

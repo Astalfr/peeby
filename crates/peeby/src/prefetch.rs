@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use gpui::{App, AppContext, Context, Entity, Global};
 use innertube::{Client, Stream};
 
-use crate::runtime;
 use crate::settings::Settings;
+use ui::runtime;
 
 /// The mouse must rest this long on a card: sweeping over a grid fetches nothing.
 const HOVER_DELAY: Duration = Duration::from_millis(300);

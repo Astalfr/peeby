@@ -2,15 +2,14 @@
 //! are saved to `settings.toml`.
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, Context, FontWeight, SharedString, WeakEntity, Window, div, px};
-use gpui_component::button::{Button, ButtonVariants};
+use gpui::{Context, WeakEntity, Window, div, px};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Sizable, h_flex, v_flex};
+use gpui_component::v_flex;
 
 use crate::app::AppView;
 use crate::settings::{LANGUAGES, QUALITIES, Settings};
-use crate::theme;
-use crate::ui::page_title;
+use ui::form::{OnClick, choices, row, section};
+use ui::widgets::page_title;
 
 pub struct SettingsView {
   nav: WeakEntity<AppView>,
@@ -20,77 +19,6 @@ impl SettingsView {
   pub fn new(nav: WeakEntity<AppView>) -> Self {
     Self { nav }
   }
-}
-
-/// What a choice does when clicked.
-type OnClick = Box<dyn Fn(&mut Window, &mut App)>;
-
-/// A group of choices; the selected one is red.
-fn choices(
-  id: &str,
-  options: impl IntoIterator<Item = (String, bool, OnClick)>,
-) -> impl IntoElement {
-  h_flex()
-    .flex_wrap()
-    .justify_end()
-    .gap_1()
-    .children(
-      options
-        .into_iter()
-        .enumerate()
-        .map(|(i, (label, selected, on_click))| {
-          Button::new(SharedString::from(format!("{id}-{i}")))
-            .small()
-            .label(label)
-            .when(selected, |b| b.primary())
-            .when(!selected, |b| b.ghost())
-            .on_click(move |_, window, cx| on_click(window, cx))
-        }),
-    )
-}
-
-/// A settings row: title and description on the left, the control on the right.
-fn row(title: &str, description: &str, control: impl IntoElement) -> impl IntoElement {
-  h_flex()
-    .px_5()
-    .py_4()
-    .gap_6()
-    .items_center()
-    .rounded(theme::RADIUS)
-    .bg(theme::surface())
-    .child(
-      v_flex()
-        .flex_1()
-        .min_w_0()
-        .gap_0p5()
-        .child(
-          div()
-            .text_sm()
-            .font_weight(FontWeight::MEDIUM)
-            .child(title.to_owned()),
-        )
-        .child(
-          div()
-            .text_xs()
-            .text_color(theme::muted())
-            .child(description.to_owned()),
-        ),
-    )
-    .child(div().flex_none().max_w(px(420.)).child(control))
-}
-
-/// A titled group of rows.
-fn section(title: &str, rows: Vec<AnyElement>) -> impl IntoElement {
-  v_flex()
-    .gap_1()
-    .child(
-      div()
-        .pb_2()
-        .text_base()
-        .font_weight(FontWeight::SEMIBOLD)
-        .child(title.to_owned()),
-    )
-    .children(rows)
 }
 
 impl Render for SettingsView {

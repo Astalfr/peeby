@@ -10,7 +10,7 @@ struct NetRuntime(tokio::runtime::Runtime);
 impl Global for NetRuntime {}
 
 /// Starts the network runtime. Call once at startup.
-pub fn init(cx: &mut App) -> anyhow::Result<()> {
+pub fn init(cx: &mut App) -> std::io::Result<()> {
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .worker_threads(2)
     .thread_name("peeby-net")

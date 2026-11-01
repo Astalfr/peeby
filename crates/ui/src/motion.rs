@@ -1,5 +1,4 @@
-//! Small value animations for hover effects and fades (docs/design.md, "Motion"), copied from
-//! peeby.
+//! Small value animations for hover effects and fades (docs/design.md, "Motion").
 //!
 //! GPUI animates elements that appear (`with_animation`) but has no transitions between
 //! states. [`tween`] keeps a value per element id and eases it toward its target, asking for

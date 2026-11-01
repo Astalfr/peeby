@@ -18,16 +18,18 @@ use gpui_component::{Disableable, IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Playlist, PlaylistSummary};
 
 use crate::app::{AppView, Route};
-use crate::assets::Icon;
-use crate::images::Images;
+use crate::cards::playlist_row;
 use crate::queue::Queue;
 use crate::save::{self, EntryRemoved};
 use crate::settings::Settings;
-use crate::ui::{
-  error_text, image_fill, loader, loading_more, near_scroll_end, notice, page_title, playlist_row,
-  skeleton_card,
-};
-use crate::{motion, runtime, theme};
+use crate::youtube::{self, error_text};
+use ui::assets::Icon;
+use ui::card::WIDE;
+use ui::card::skeleton_card;
+use ui::images::Images;
+use ui::picture::image_fill;
+use ui::widgets::{loader, loading_more, near_scroll_end, notice, page_title};
+use ui::{motion, runtime, theme};
 
 /// Width of a playlist card, and of a playlist page's cover.
 const CARD_WIDTH: f32 = 320.;
@@ -151,8 +153,9 @@ fn playlist_card(
     cx,
   );
   let thumb = image_fill(
-    &playlist.thumbnails,
+    &youtube::picture(&playlist.thumbnails),
     CARD_WIDTH,
+    WIDE,
     theme::RADIUS_LG,
     window,
     cx,
@@ -513,8 +516,9 @@ impl PlaylistView {
 
   fn header(&self, playlist: &Playlist, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let cover = image_fill(
-      &playlist.thumbnails,
+      &youtube::picture(&playlist.thumbnails),
       CARD_WIDTH,
+      WIDE,
       theme::RADIUS_LG,
       window,
       cx,

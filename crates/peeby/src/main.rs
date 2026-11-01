@@ -5,31 +5,30 @@
 
 mod account;
 mod app;
-mod assets;
 mod bell;
+mod cards;
 mod channels;
 mod feed;
-mod images;
 mod inbox;
-mod motion;
 mod player_view;
 mod playlists;
 mod prefetch;
 mod queue;
-mod runtime;
 mod save;
 mod settings;
 mod settings_page;
-mod theme;
 mod tools;
-mod ui;
 mod watch;
+mod youtube;
+
+use std::sync::Arc;
 
 use gpui::{
   App, AppContext, Bounds, DisplayId, TitlebarOptions, WindowBounds, WindowOptions, px, size,
 };
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
+use ui::{assets, images, runtime, theme};
 
 fn main() {
   tracing_subscriber::fmt()
@@ -81,7 +80,7 @@ fn main() {
       cx.set_global(prefs);
       match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
-          images::init(anonymous.clone(), cx);
+          images::init(Arc::new(youtube::ImageFetch(anonymous.clone())), cx);
           prefetch::init(anonymous, cx);
         }
         Err(e) => tracing::error!("cannot create the HTTP client: {e}"),

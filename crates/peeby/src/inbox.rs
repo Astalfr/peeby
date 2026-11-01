@@ -21,11 +21,14 @@ use gpui_component::{h_flex, v_flex};
 use innertube::{Error, NotificationPage, NotificationSection};
 
 use crate::app::{AppView, Route};
-use crate::assets::Icon;
-use crate::images::Images;
 use crate::save::Session;
-use crate::ui::{error_text, image_fill, loading_more, near_scroll_end};
-use crate::{runtime, theme};
+use crate::youtube::{self, error_text};
+use ui::assets::Icon;
+use ui::card::WIDE;
+use ui::images::Images;
+use ui::picture::image_fill;
+use ui::widgets::{loading_more, near_scroll_end};
+use ui::{runtime, theme};
 
 /// How often the unseen count is read again.
 const POLL: Duration = Duration::from_secs(30 * 60);
@@ -343,8 +346,9 @@ impl InboxPanel {
           .when(!n.read, |el| el.bg(theme::accent())),
       )
       .child(div().size(px(AVATAR)).flex_none().child(image_fill(
-        &n.avatar,
+        &youtube::picture(&n.avatar),
         AVATAR,
+        1.,
         px(AVATAR / 2.),
         window,
         cx,
@@ -369,8 +373,9 @@ impl InboxPanel {
             .h(px(THUMB_WIDTH * 9. / 16.))
             .flex_none()
             .child(image_fill(
-              &n.thumbnails,
+              &youtube::picture(&n.thumbnails),
               THUMB_WIDTH,
+              WIDE,
               theme::RADIUS,
               window,
               cx,

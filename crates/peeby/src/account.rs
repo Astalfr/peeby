@@ -11,10 +11,12 @@ use gpui_component::{Disableable, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
 use crate::app::AppView;
-use crate::assets::Icon;
+use crate::settings;
 use crate::settings::Settings;
-use crate::ui::{error_text, page_title};
-use crate::{runtime, settings, theme};
+use crate::youtube::error_text;
+use ui::assets::Icon;
+use ui::widgets::page_title;
+use ui::{runtime, theme};
 
 enum Status {
   Idle,

@@ -1,7 +1,7 @@
-//! Peeby's look: a neutral dark palette with a red accent, Fluent-style shapes (Windows 11),
-//! applied to gpui-component's theme so its widgets follow. Adapted from peeby's theme; see
-//! docs/design.md.
+//! Peeby's look: a neutral dark palette with the accent of the open space, Fluent-style shapes
+//! (Windows 11), applied to gpui-component's theme so its widgets follow. See docs/design.md.
 
+use std::cell::Cell;
 use std::time::Duration;
 
 use gpui::{App, Hsla, Pixels, Rgba, WindowAppearance, WindowBackgroundAppearance, px, rgb};
@@ -64,12 +64,15 @@ pub fn surface() -> Hsla {
 pub fn surface_hover() -> Hsla {
   color(0x27272b)
 }
+/// Borders and separators.
 pub fn border() -> Hsla {
   color(0x2f2f34)
 }
+/// Text.
 pub fn foreground() -> Hsla {
   color(0xf2f2f3)
 }
+/// Secondary text.
 pub fn muted() -> Hsla {
   color(0xa1a1aa)
 }
@@ -77,15 +80,53 @@ pub fn muted() -> Hsla {
 pub fn subtle() -> Hsla {
   color(0x71717a)
 }
-/// Red: primary actions, progress, selection, focus.
+/// The accent color of a space and its hover and pressed shades.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Accent {
+  /// Primary actions, progress, selection, focus.
+  pub base: Hsla,
+  /// Hovered accent elements and titles.
+  pub hover: Hsla,
+  /// Pressed accent elements.
+  pub active: Hsla,
+}
+
+impl Accent {
+  /// YouTube red.
+  pub fn red() -> Self {
+    Self {
+      base: color(0xff4e45),
+      hover: color(0xff6b63),
+      active: color(0xe63e36),
+    }
+  }
+}
+
+thread_local! {
+  // The accent of the open space. Kept per thread rather than as a GPUI global so the palette
+  // functions below need no `cx`: they are called from every render, and GPUI renders on the
+  // UI thread only.
+  static ACCENT: Cell<Accent> = Cell::new(Accent::red());
+}
+
+/// Makes `accent` the app's accent and re-applies the theme so gpui-component's widgets follow.
+/// Windows must be refreshed afterwards (`cx.refresh_windows()`).
+pub fn set_accent(accent: Accent, cx: &mut App) {
+  ACCENT.set(accent);
+  apply(cx);
+}
+
+/// The accent: primary actions, progress, selection, focus.
 pub fn accent() -> Hsla {
-  color(0xff4e45)
+  ACCENT.get().base
 }
+/// Hovered accent elements and titles.
 pub fn accent_hover() -> Hsla {
-  color(0xff6b63)
+  ACCENT.get().hover
 }
+/// Pressed accent elements.
 pub fn accent_active() -> Hsla {
-  color(0xe63e36)
+  ACCENT.get().active
 }
 /// Text on the accent.
 pub fn on_accent() -> Hsla {
@@ -93,7 +134,7 @@ pub fn on_accent() -> Hsla {
 }
 /// Tinted accent for selected rows and soft highlights.
 pub fn accent_soft() -> Hsla {
-  color_alpha(0xff4e45, 0.14)
+  accent().opacity(0.14)
 }
 /// Veil over Mica so it stays dark.
 fn mica_tint() -> Hsla {
@@ -148,7 +189,7 @@ pub fn apply(cx: &mut App) {
     t.input = border();
     t.ring = accent();
     t.caret = accent();
-    t.selection = color_alpha(0xff4e45, 0.3);
+    t.selection = accent().opacity(0.3);
     t.muted = surface();
     t.muted_foreground = muted();
     t.popover = surface();

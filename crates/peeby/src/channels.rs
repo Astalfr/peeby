@@ -12,10 +12,13 @@ use gpui_component::{IconName, h_flex, v_flex};
 use innertube::{Channel, Client, Error};
 
 use crate::app::{AppView, Route};
-use crate::assets::Icon;
-use crate::images::Images;
-use crate::ui::{error_text, image_fill, notice, page_title};
-use crate::{bell, motion, runtime, theme};
+use crate::bell;
+use crate::youtube::{self, error_text};
+use ui::assets::Icon;
+use ui::images::Images;
+use ui::picture::image_fill;
+use ui::widgets::{notice, page_title};
+use ui::{motion, runtime, theme};
 
 /// Width of a channel tile, and side of its avatar.
 const TILE_WIDTH: f32 = 168.;
@@ -157,8 +160,9 @@ impl ChannelsView {
           .border_color(gpui::transparent_black())
           .group_hover(group.clone(), |s| s.border_color(theme::accent()))
           .child(image_fill(
-            &channel.avatar,
+            &youtube::picture(&channel.avatar),
             AVATAR,
+            1.,
             px(AVATAR / 2.),
             window,
             cx,

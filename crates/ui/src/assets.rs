@@ -17,6 +17,8 @@ use crate::images;
 macro_rules! icons {
   ($($name:ident => $file:literal,)*) => {
     /// Icons used by Peeby.
+    // Each variant is named after what its icon shows; a doc line per variant would repeat it.
+    #[allow(missing_docs)]
     #[derive(Clone, Copy, Debug)]
     pub enum Icon {
       $($name,)*

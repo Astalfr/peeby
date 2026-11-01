@@ -1,6 +1,6 @@
 # Design
 
-Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent, discreet motion), with YouTube's red as the accent ([ADR 0006](decisions/0006-peeby-visual-system.md)). The values live in `crates/peeby/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
+Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent, discreet motion), with YouTube's red as the accent ([ADR 0006](decisions/0006-peeby-visual-system.md)). The values live in `crates/ui/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
 
 ## Palette
 
@@ -68,6 +68,6 @@ Discreet and short; nothing loops except skeletons and spinners.
 | Busy button, list end | `ui::loader`: a faint ring with a round-capped arc turning inside it, stretching to 270° then shrinking to 12° as it turns (Material style), drawn on a canvas from a shared clock | 1.4 s per stretch, 2 s per turn |
 | Skeleton to content | `motion::crossfade` on the feeds | 300 ms |
 
-`motion.rs` is copied from peeby. GPUI only animates elements as they appear (`with_animation`); for state changes such as hover, `motion::tween` keeps a value per element id and eases it toward its target, requesting frames until it arrives. Ids must be unique per list (`card-…`, `related-…`): two elements with one id share GPUI's element state, so their hover flags overwrite each other on every frame and the card jumps up and down. Feeds therefore drop the videos YouTube repeats (the subscriptions feed repeats several per page).
+`ui::motion` comes from peeby. GPUI only animates elements as they appear (`with_animation`); for state changes such as hover, `motion::tween` keeps a value per element id and eases it toward its target, requesting frames until it arrives. Ids must be unique per list (`card-…`, `related-…`): two elements with one id share GPUI's element state, so their hover flags overwrite each other on every frame and the card jumps up and down. Feeds therefore drop the videos YouTube repeats (the subscriptions feed repeats several per page).
 
 GPUI takes a single `on_hover` listener per element (a second one is a debug assertion): on cards, the hover flag and the stream prefetch share it, so the prefetch keeps playback within the 1–2 s budget.

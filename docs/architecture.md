@@ -24,13 +24,14 @@
 | `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), the notification bell of a subscribed channel (`notification/modify_channel_preference`), the notifications inbox (`FEnotifications_inbox`, `notification/get_unseen_count`, `notification/record_interactions`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peeby` | Binary (was `peebtube`, ADR 0007): window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `ui` | Shared UI, no service types: theme with a switchable accent (`theme::set_accent`), motion, icons and logo (`assets`), the tokio bridge (`runtime`), the image store (`images`), pictures (`picture`), media cards in grid, compact, row and numbered layouts with their skeletons (`card::MediaCard`), notices and the loader (`widgets`), settings rows (`form`) | Spaces convert their data into these models ([refactor-plan.md](refactor-plan.md)) |
+| `peeby` | Binary (was `peebtube`, ADR 0007), YouTube adapters `cards` (videos as `MediaCard`s) and `youtube` (pictures, error texts): window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
 
 - **UI thread (GPUI).** Rendering and input only.
-- **Network.** `reqwest` needs tokio, GPUI has its own executor. `peeby::runtime` (from peeby) owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
+- **Network.** `reqwest` needs tokio, GPUI has its own executor. `ui::runtime` owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
 - **Player.** `Player::start` runs on GPUI's background executor (libmpv and D3D11 setup block briefly). mpv events and frames come back through channels (peeby's design).
 
 ## Startup
@@ -86,7 +87,7 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 
 ## Images
 
-`images::ImageStore` (from peeby): GPUI global entity, in-memory LRU of decoded images (256 MB), disk cache in `%LOCALAPPDATA%\peeby\images`, 8 parallel downloads. The thumbnail size is picked from YouTube's `sources` for the card's physical width.
+`ui::images::ImageStore`: GPUI global entity, in-memory LRU of decoded images (256 MB), disk cache in `%LOCALAPPDATA%\peeby\images`, 8 parallel downloads, `get_sized` for images decoded to an exact size, cache size and clearing for the settings. It downloads through a `ui::images::Fetch` the app gives it (today `youtube::ImageFetch`, an anonymous InnerTube client), so it knows no service. Components take a `ui::picture::Picture`: fixed sizes to pick from (YouTube) or a URL for any size (servers that resize). The thumbnail size is picked from YouTube's `sources` for the card's physical width.
 
 ## Persistence
 

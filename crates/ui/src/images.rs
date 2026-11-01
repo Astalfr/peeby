@@ -1,14 +1,16 @@
-//! Remote images (thumbnails, avatars): download on the network runtime, disk cache, decode off
-//! the UI thread, in-memory LRU of GPU-ready images. Adapted from peeby's image store.
+//! Remote images (thumbnails, posters, avatars): download on the network runtime, disk cache,
+//! decode off the UI thread, in-memory LRU of GPU-ready images. Shared by every space: the app
+//! gives the store a [`Fetch`], so it depends on no service client.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use gpui::{AppContext, Context, Entity, Global, RenderImage};
-use innertube::Client;
 use tokio::sync::Semaphore;
 
 use crate::runtime;
@@ -17,6 +19,15 @@ use crate::runtime;
 const MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 /// Parallel downloads, so a fast scroll does not queue dozens of requests at once.
 const MAX_DOWNLOADS: usize = 8;
+
+/// A download in progress: the image's bytes, or why it failed.
+pub type Download = Pin<Box<dyn Future<Output = Result<Vec<u8>, String>> + Send>>;
+
+/// Downloads images. Runs on the network runtime (tokio).
+pub trait Fetch: Send + Sync {
+  /// Starts downloading `url`.
+  fn fetch(&self, url: &str) -> Download;
+}
 
 /// Handle to the app-wide image store.
 #[derive(Clone)]
@@ -30,8 +41,9 @@ struct Cached {
   used: u64,
 }
 
+/// The image store: see the module documentation.
 pub struct ImageStore {
-  client: Client,
+  fetcher: Arc<dyn Fetch>,
   downloads: Arc<Semaphore>,
   cache_dir: Option<PathBuf>,
   ready: HashMap<String, Cached>,
@@ -43,15 +55,15 @@ pub struct ImageStore {
 }
 
 impl ImageStore {
-  fn new(client: Client) -> Self {
-    let cache_dir = dirs::cache_dir().map(|d| d.join("peeby").join("images"));
+  fn new(fetcher: Arc<dyn Fetch>) -> Self {
+    let cache_dir = disk_cache_dir();
     if let Some(dir) = &cache_dir
       && let Err(e) = std::fs::create_dir_all(dir)
     {
       tracing::warn!("image disk cache disabled: {e}");
     }
     Self {
-      client,
+      fetcher,
       downloads: Arc::new(Semaphore::new(MAX_DOWNLOADS)),
       cache_dir,
       ready: HashMap::new(),
@@ -65,20 +77,49 @@ impl ImageStore {
   /// The image at `url` if it is ready; otherwise starts loading it and returns `None`.
   /// Observers of the store are notified when it arrives.
   pub fn get(&mut self, url: &str, cx: &mut Context<Self>) -> Option<Arc<RenderImage>> {
-    self.clock += 1;
-    if let Some(cached) = self.ready.get_mut(url) {
-      cached.used = self.clock;
-      return Some(cached.image.clone());
+    if let Some(image) = self.touch(url) {
+      return Some(image);
     }
     if !self.pending.contains(url) && !self.failed.contains(url) {
-      self.load(url.to_owned(), cx);
+      self.load(url.to_owned(), url.to_owned(), None, cx);
     }
     None
   }
 
-  fn load(&mut self, url: String, cx: &mut Context<Self>) {
-    self.pending.insert(url.clone());
-    let client = self.client.clone();
+  /// Like [`Self::get`], but scaled and cropped on the CPU to exactly `width`×`height` pixels.
+  /// For images the server cannot resize (avatars): GPUI samples without mipmaps, so a large
+  /// image drawn small looks pixelated.
+  pub fn get_sized(
+    &mut self,
+    url: &str,
+    width: u32,
+    height: u32,
+    cx: &mut Context<Self>,
+  ) -> Option<Arc<RenderImage>> {
+    let key = format!("{url}#{width}x{height}");
+    if let Some(image) = self.touch(&key) {
+      return Some(image);
+    }
+    if !self.pending.contains(&key) && !self.failed.contains(&key) {
+      self.load(url.to_owned(), key, Some((width, height)), cx);
+    }
+    None
+  }
+
+  /// The ready image under `key`, marked as just used. Every card asks on every frame, so this
+  /// stays O(1); the scan for the least recently used image happens on eviction only.
+  fn touch(&mut self, key: &str) -> Option<Arc<RenderImage>> {
+    self.clock += 1;
+    let cached = self.ready.get_mut(key)?;
+    cached.used = self.clock;
+    Some(cached.image.clone())
+  }
+
+  /// Loads `url` into the store under `key`, scaled to `size` when given. The disk cache keeps
+  /// the downloaded file, whatever the size.
+  fn load(&mut self, url: String, key: String, size: Option<(u32, u32)>, cx: &mut Context<Self>) {
+    self.pending.insert(key.clone());
+    let fetcher = self.fetcher.clone();
     let downloads = self.downloads.clone();
     let path = self
       .cache_dir
@@ -104,8 +145,8 @@ impl ImageStore {
             let url = url.clone();
             runtime::spawn(cx, async move {
               let _permit = downloads.acquire_owned().await.ok()?;
-              client
-                .fetch_bytes(&url)
+              fetcher
+                .fetch(&url)
                 .await
                 .map_err(|e| tracing::debug!("image: {e}"))
                 .ok()
@@ -126,16 +167,16 @@ impl ImageStore {
       };
       // 3. Decode off the UI thread.
       let image = match bytes {
-        Some(bytes) => executor.spawn(async move { decode(&bytes, None) }).await,
+        Some(bytes) => executor.spawn(async move { decode(&bytes, size) }).await,
         None => None,
       };
       this
         .update(cx, |store, cx| {
-          store.pending.remove(&url);
+          store.pending.remove(&key);
           match image {
-            Some(image) => store.insert(url, image, cx),
+            Some(image) => store.insert(key, image, cx),
             None => {
-              store.failed.insert(url);
+              store.failed.insert(key);
             }
           }
           cx.notify();
@@ -190,17 +231,51 @@ pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>
   }
   let rgba = image.into_rgba8();
   let (w, h) = rgba.dimensions();
-  let mut pixels = rgba.into_raw();
-  // GPUI sprites are BGRA: swap the red and blue channels.
+  bgra_image(w, h, rgba.into_raw())
+}
+
+/// GPUI sprites are BGRA: swap the red and blue channels of RGBA pixels.
+pub fn bgra_image(width: u32, height: u32, mut pixels: Vec<u8>) -> Option<Arc<RenderImage>> {
   for px in pixels.as_chunks_mut::<4>().0 {
     px.swap(0, 2);
   }
-  let buffer = image::RgbaImage::from_raw(w, h, pixels)?;
+  let buffer = image::RgbaImage::from_raw(width, height, pixels)?;
   Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
 }
 
+/// Folder of the image disk cache.
+pub fn disk_cache_dir() -> Option<PathBuf> {
+  dirs::cache_dir().map(|d| d.join("peeby").join("images"))
+}
+
+/// Total size of the image disk cache, bytes. Blocking: call it off the UI thread.
+pub fn disk_cache_size() -> u64 {
+  let Some(entries) = disk_cache_dir().and_then(|dir| std::fs::read_dir(dir).ok()) else {
+    return 0;
+  };
+  entries
+    .filter_map(|e| e.ok()?.metadata().ok())
+    .filter(|m| m.is_file())
+    .map(|m| m.len())
+    .sum()
+}
+
+/// Deletes the cached image files. Blocking: call it off the UI thread.
+pub fn clear_disk_cache() {
+  let Some(entries) = disk_cache_dir().and_then(|dir| std::fs::read_dir(dir).ok()) else {
+    return;
+  };
+  for entry in entries.flatten() {
+    if entry.path().is_file()
+      && let Err(e) = std::fs::remove_file(entry.path())
+    {
+      tracing::warn!("cannot delete {}: {e}", entry.path().display());
+    }
+  }
+}
+
 /// Creates the store and registers it as a global.
-pub fn init(client: Client, cx: &mut gpui::App) {
-  let images = Images(cx.new(|_| ImageStore::new(client)));
+pub fn init(fetcher: Arc<dyn Fetch>, cx: &mut gpui::App) {
+  let images = Images(cx.new(|_| ImageStore::new(fetcher)));
   cx.set_global(images);
 }
