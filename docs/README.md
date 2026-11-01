@@ -23,6 +23,7 @@ PeebTube is a native YouTube client for Windows, written in Rust with [GPUI](htt
 ## Index
 
 - [roadmap.md](roadmap.md): milestones and status
+- [refactor-plan.md](refactor-plan.md): the move to Peeby, a multi-space app (YouTube, Jellyfin, Twitch), with its checklists
 - [architecture.md](architecture.md): crates, threads, data flow
 - [design.md](design.md): palette, layout, pages and motion
 - [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
