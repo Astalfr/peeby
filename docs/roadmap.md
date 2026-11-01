@@ -15,6 +15,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.
 - Then: the subscribed channels moved from the sidebar to a **Channels page** (grid with a filter, opened from "Toutes les chaînes" on the subscriptions page); grid rows align cards at the top (titles at most two lines); feeds drop repeated videos, which made hovered cards jump (shared hover state).
+- Subscriptions page: grid or list mode, saved in `settings.toml` (`subscriptions_layout`). Verified: the switch, the rows, hover, and the saved value.
 - Verified by driving the mouse: hover on Home and on the subscriptions page (one hover event in, one out, even at the bottom edge of a card), rows aligned at the top with one- and two-line titles, the channels page (475 channels, filter, hover, a click opens the channel). Playback: 1.7 s on a test video. **Not verified:** page fades by eye.
 
 ## Milestone 4 status

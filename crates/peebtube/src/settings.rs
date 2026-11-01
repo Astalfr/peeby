@@ -30,6 +30,17 @@ pub const LANGUAGES: &[(&str, &str, &str)] = &[
 /// Default qualities offered, as video heights.
 pub const QUALITIES: &[u32] = &[2160, 1440, 1080, 720, 480, 360];
 
+/// How the subscriptions page shows its videos.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeedLayout {
+  /// Cards in a wrapping grid.
+  #[default]
+  Grid,
+  /// One row per video, thumbnail on the left.
+  List,
+}
+
 /// The user's settings, a GPUI global. Unknown or missing keys take their default, so an old
 /// or hand-edited file still loads.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -45,6 +56,8 @@ pub struct Settings {
   pub volume: f64,
   /// Player muted.
   pub muted: bool,
+  /// Layout of the subscriptions page.
+  pub subscriptions_layout: FeedLayout,
 }
 
 impl Default for Settings {
@@ -55,6 +68,7 @@ impl Default for Settings {
       max_height: 1080,
       volume: 100.0,
       muted: false,
+      subscriptions_layout: FeedLayout::Grid,
     }
   }
 }

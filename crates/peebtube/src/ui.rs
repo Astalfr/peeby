@@ -4,7 +4,7 @@
 use gpui::prelude::*;
 use gpui::{
   AnyElement, App, ElementId, Entity, FontWeight, ImageSource, ObjectFit, Pixels, SharedString,
-  WeakEntity, Window, div, img, px,
+  WeakEntity, Window, div, img, px, relative,
 };
 use gpui_component::skeleton::Skeleton;
 use gpui_component::{IconNamed, Sizable, h_flex, v_flex};
@@ -283,6 +283,106 @@ pub fn compact_card(
         ),
     )
     .into_any_element()
+}
+
+/// Width of a list row's thumbnail.
+const ROW_WIDTH: f32 = 246.;
+
+/// List row (subscriptions in list mode, as YouTube showed them until about 2023): thumbnail
+/// on the left, then the title, the channel with its avatar and views · date; a soft surface,
+/// a play button and a red title on hover.
+pub fn video_row(
+  video: &VideoItem,
+  nav: &WeakEntity<AppView>,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let (card, hovered, t) = hover_card(&format!("row-{}", video.id), video, nav, window, cx);
+  let thumb = image_fill(&video.thumbnails, ROW_WIDTH, theme::RADIUS, window, cx);
+  let channel = video.channel.clone().map(|name| {
+    h_flex()
+      .gap_2()
+      .items_center()
+      .when(!video.avatar.is_empty(), |el| {
+        el.child(div().size(px(20.)).flex_none().child(image_fill(
+          &video.avatar,
+          20.,
+          px(10.),
+          window,
+          cx,
+        )))
+      })
+      .child(div().min_w_0().truncate().child(name))
+  });
+  card
+    .w_full()
+    .p_2()
+    .rounded(theme::RADIUS_LG)
+    .bg(theme::surface().opacity(t))
+    .child(
+      h_flex()
+        .gap_4()
+        .items_start()
+        .child(
+          div()
+            .relative()
+            .w(px(ROW_WIDTH))
+            .h(px(ROW_WIDTH * 9. / 16.))
+            .flex_none()
+            .child(thumb)
+            .child(play_overlay(t, 44., theme::RADIUS))
+            .children(duration_badge(&video.duration)),
+        )
+        .child(
+          v_flex()
+            .flex_1()
+            .min_w_0()
+            .pt_1()
+            .gap_2()
+            .text_sm()
+            .text_color(theme::muted())
+            .child(
+              div()
+                .text_lg()
+                .line_height(px(24.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .line_clamp(2)
+                .text_color(if hovered {
+                  theme::accent_hover()
+                } else {
+                  theme::foreground()
+                })
+                .child(video.title.clone()),
+            )
+            .children(channel)
+            .child(div().truncate().child(video.metadata.join(" · "))),
+        ),
+    )
+    .into_any_element()
+}
+
+/// Placeholder shaped like a [`video_row`].
+pub fn skeleton_row() -> impl IntoElement {
+  h_flex()
+    .p_2()
+    .gap_4()
+    .items_start()
+    .child(
+      Skeleton::new()
+        .w(px(ROW_WIDTH))
+        .h(px(ROW_WIDTH * 9. / 16.))
+        .flex_none()
+        .rounded(theme::RADIUS),
+    )
+    .child(
+      v_flex()
+        .flex_1()
+        .pt_1()
+        .gap_3()
+        .child(Skeleton::new().w(relative(0.6)).h(px(20.)))
+        .child(Skeleton::new().w(px(160.)).h(px(14.)))
+        .child(Skeleton::new().w(px(200.)).h(px(14.))),
+    )
 }
 
 /// Channel, then views · date, in muted text.

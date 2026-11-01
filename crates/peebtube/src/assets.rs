@@ -49,6 +49,8 @@ icons! {
   Settings => "settings",
   Account => "circle-user",
   Search => "search",
+  Grid => "layout-grid",
+  List => "list",
 }
 
 macro_rules! files {
