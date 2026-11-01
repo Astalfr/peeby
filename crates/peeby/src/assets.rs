@@ -1,6 +1,6 @@
 //! Embedded SVG icons (Lucide, ISC license: assets/icons/LICENSE), served to GPUI, and the
-//! PeebTube logo. Adapted from peeby; gpui-component also draws some of the icons inside its
-//! widgets (window buttons).
+//! Peeby logo. Adapted from the Jellyfin-only peeby; gpui-component also draws some of the icons
+//! inside its widgets (window buttons).
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ use crate::images;
 
 macro_rules! icons {
   ($($name:ident => $file:literal,)*) => {
-    /// Icons used by PeebTube.
+    /// Icons used by Peeby.
     #[derive(Clone, Copy, Debug)]
     pub enum Icon {
       $($name,)*
@@ -110,7 +110,7 @@ struct LogoCache(HashMap<u32, Option<Arc<RenderImage>>>);
 
 impl Global for LogoCache {}
 
-/// The round PeebTube logo (peeby's, with the red play badge), `size` logical pixels wide. It is
+/// The round Peeby logo (with the red play badge), `size` logical pixels wide. It is
 /// scaled on the CPU to the exact device-pixel size: GPUI samples without mipmaps, so the 256 px
 /// file drawn small would look pixelated. Decoding the small embedded PNG is quick and happens
 /// once per size.

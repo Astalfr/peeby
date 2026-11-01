@@ -1,34 +1,37 @@
-# PeebTube
+# Peeby
 
-Native YouTube client for Windows, written in Rust with GPUI. Playback through libmpv, streams from YouTube's InnerTube API.
+Native media client for Windows, written in Rust with GPUI: one tab ("space") per service, YouTube now, Jellyfin
+and later Twitch being added (docs/refactor-plan.md, ADR 0007). Playback through libmpv, YouTube streams from the InnerTube API.
 Project docs: docs/README.md (start there). Decisions: docs/decisions/. Progress: docs/roadmap.md.
-The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied from peeby (`D:\DEV\peeby`), see ADR 0001.
+The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from the former Jellyfin-only peeby
+(`D:\DEV\peeby`, abandoned, ADR 0007): copy what the Jellyfin space needs from there, import nothing else.
 
 ## Commands
-- Build: `cargo build` · run: `cargo run -p peebtube` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top)
+- Build: `cargo build` · run: `cargo run -p peeby` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top);
+  `PEEBY_DISPLAY=secondary` (or `=2`) opens the window on another screen: use it for test runs
 - Lint (must pass): `cargo clippy --workspace --all-targets -- -D warnings`
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
 - Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt]`
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
-  (PowerShell: `"$env:APPDATA\peebtube\cookies.txt"`; `%APPDATA%` only works in cmd)
+  (PowerShell: `"$env:APPDATA\peeby\cookies.txt"`; `%APPDATA%` only works in cmd)
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
-- Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBTUBE_RESOLVER=ytdl` for yt-dlp)
+- Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBY_RESOLVER=ytdl` for yt-dlp)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 
 ## Product constraints (no exceptions)
 - Playback starts within about 1–2 s of the click. Streams come from the VISIONOS client as HLS (ADR 0003).
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
-- Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peebtube\cookies.txt`
+- Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.txt`
   (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004.
 - YouTube rotates session cookies through `Set-Cookie`: every signed-in request goes through `Client::send` /
   `keep_rotated_cookies`, which writes the jar back. Ignoring them invalidates the session within about an hour.
   Never give the user's file to yt-dlp (it rewrites it): give it a copy.
 - Stream URLs embed the user's IP and signatures: never log them at info level or above; the mpv log file is opt-in
-  (`PEEBTUBE_MPV_LOG`). Fixtures are redacted (IP 203.0.113.7, signatures `REDACTED`) before they are committed.
+  (`PEEBY_MPV_LOG`). Fixtures are redacted (IP 203.0.113.7, signatures `REDACTED`) before they are committed.
 - Nothing installed on the host: libmpv, yt-dlp and Deno ship with the app. yt-dlp always runs with `--ignore-config`,
   `--cache-dir` in the app's folder and an explicit `--js-runtimes`; versions are pinned with SHA-256 in fetch-tools.ps1.
 - Return YouTube Dislike: attribution is required (link to returnyoutubedislike.com), at most 100 requests/min and
@@ -38,7 +41,7 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
 ## Rust conventions
 - Indent with 2 spaces in every file type (.editorconfig, rustfmt.toml).
 - No `unwrap()`/`expect()` outside tests unless the invariant is explained in a comment next to it.
-- Errors: `thiserror` in library crates, `anyhow` in the `peebtube` binary.
+- Errors: `thiserror` in library crates, `anyhow` in the `peeby` binary.
 - `unsafe` only in FFI modules (`player::sys`, `player::d3d`, `gpui-video`), each block with a `// SAFETY:` comment.
 - Every `#[allow(...)]` carries a comment saying why.
 - Log with `tracing`. Cookies never appear in logs; stream URLs only at debug level, never in error messages.

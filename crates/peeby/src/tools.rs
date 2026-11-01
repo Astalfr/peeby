@@ -62,14 +62,14 @@ pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
       raw_options,
     }),
     // Opt-in only: the log contains stream URLs, which carry the user's IP.
-    log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
+    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
   })
 }
 
 /// yt-dlp's cache folder in the app's profile, created if needed.
 fn cache_dir() -> Option<PathBuf> {
-  let cache = dirs::cache_dir()?.join("peebtube").join("yt-dlp");
+  let cache = dirs::cache_dir()?.join("peeby").join("yt-dlp");
   if let Err(e) = std::fs::create_dir_all(&cache) {
     tracing::warn!("yt-dlp cache: {e}");
   }

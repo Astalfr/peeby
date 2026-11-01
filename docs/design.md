@@ -1,6 +1,6 @@
 # Design
 
-PeebTube looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent, discreet motion), with YouTube's red as the accent ([ADR 0006](decisions/0006-peeby-visual-system.md)). The values live in `crates/peebtube/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
+Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent, discreet motion), with YouTube's red as the accent ([ADR 0006](decisions/0006-peeby-visual-system.md)). The values live in `crates/peeby/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
 
 ## Palette
 
@@ -23,8 +23,8 @@ One accent: red marks what can be acted on or what is selected. Everything else 
 
 ## Window and layout
 
-- **Logo**: peeby's round logo with a small red play badge (the accent, `#ff4e45`) in a dark ring at the bottom right. `assets/logo.png` (256 px) is drawn in the title bar, scaled on the CPU to the exact device-pixel size (`assets::logo`, GPUI has no mipmaps); `assets/peebtube.ico` (16 to 256 px) is embedded in the exe by `build.rs` (`embed-resource`), and GPUI takes the window and taskbar icon from it (resource ID 1).
-- **Title bar** (44 px, a window drag area whose controls are occluded): a menu button (burger) that folds the sidebar, the back button, then PeebTube's mark (the 22 px round logo and the name). A video opens from the command line (`peebtube <url-or-id>`); there is no URL field.
+- **Logo**: peeby's round logo with a small red play badge (the accent, `#ff4e45`) in a dark ring at the bottom right. `assets/logo.png` (256 px) is drawn in the title bar, scaled on the CPU to the exact device-pixel size (`assets::logo`, GPUI has no mipmaps); `assets/peeby.ico` (16 to 256 px) is embedded in the exe by `build.rs` (`embed-resource`), and GPUI takes the window and taskbar icon from it (resource ID 1).
+- **Title bar** (44 px, a window drag area whose controls are occluded): a menu button (burger) that folds the sidebar, the back button, then Peeby's mark (the 22 px round logo and the name). A video opens from the command line (`peeby <url-or-id>`); there is no URL field.
 - **Sidebar** (232 px): Accueil, Abonnements, À regarder plus tard (that playlist's page, as a sidebar page) and Playlists; Compte and Réglages are pinned at the bottom above a separator. The subscribed channels are not listed there (hundreds of them), but on their own page. Entries are 40 px, muted until hovered; the entry of the page at the bottom of the stack has a light background and a 3×16 px red pill on its left edge, so Abonnements stays lit on the channels and channel pages opened from it. Folded (burger button, saved as `sidebar_collapsed` in `settings.toml`), it is 56 px wide: each entry shows its icon alone, centered, with its label as a tooltip, and keeps its pill.
 - **Content**: a panel with a 12 px top-left corner and a 1 px top and left border, over the chrome as in Windows 11 Settings. Pages have 32 px side margins.
 - **Shapes**: 8 px radius for controls, 12 px for cards and large surfaces. Font: Segoe UI Variable Text, else Segoe UI, at 15 px.

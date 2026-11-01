@@ -1,4 +1,4 @@
-//! PeebTube: native YouTube client for Windows built with GPUI.
+//! Peeby: native media client for Windows (YouTube, Jellyfin) built with GPUI.
 
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -25,7 +25,9 @@ mod tools;
 mod ui;
 mod watch;
 
-use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use gpui::{
+  App, AppContext, Bounds, DisplayId, TitlebarOptions, WindowBounds, WindowOptions, px, size,
+};
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
 
@@ -33,11 +35,11 @@ fn main() {
   tracing_subscriber::fmt()
     .with_env_filter(
       tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "peebtube=info,innertube=info".into()),
+        .unwrap_or_else(|_| "peeby=info,innertube=info".into()),
     )
     .init();
 
-  // `peebtube <url-or-id>…` opens those videos, the last one on top ("back" goes through the
+  // `peeby <url-or-id>…` opens those videos, the last one on top ("back" goes through the
   // others).
   let initial_videos: Vec<String> = std::env::args()
     .skip(1)
@@ -98,13 +100,15 @@ fn main() {
         }
       }));
 
-      let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
+      let display = chosen_display(cx);
+      let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
       let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        display_id: display,
         window_min_size: Some(size(px(960.), px(600.))),
         window_background: theme::window_background(cx),
         titlebar: Some(TitlebarOptions {
-          title: Some("PeebTube".into()),
+          title: Some("Peeby".into()),
           ..TitleBar::title_bar_options()
         }),
         ..TitleBar::window_options()
@@ -121,4 +125,22 @@ fn main() {
       cx.on_window_closed(|cx, _| cx.quit()).detach();
       cx.activate(true);
     });
+}
+
+/// The display the window opens on: `PEEBY_DISPLAY=2` for the second one (in Windows' order),
+/// `PEEBY_DISPLAY=secondary` for the first that is not the primary. Default: the system's choice.
+fn chosen_display(cx: &App) -> Option<DisplayId> {
+  let wanted = std::env::var("PEEBY_DISPLAY").ok()?;
+  let displays = cx.displays();
+  let display = if wanted.eq_ignore_ascii_case("secondary") {
+    let primary = cx.primary_display().map(|d| d.id());
+    displays.into_iter().find(|d| Some(d.id()) != primary)
+  } else {
+    let index = wanted.parse::<usize>().ok()?.checked_sub(1)?;
+    displays.into_iter().nth(index)
+  };
+  if display.is_none() {
+    tracing::warn!("PEEBY_DISPLAY={wanted}: no such display, using the default one");
+  }
+  display.map(|d| d.id())
 }

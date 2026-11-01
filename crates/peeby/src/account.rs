@@ -254,7 +254,7 @@ impl Render for AccountView {
                   )),
               )
               .child(div().text_xs().text_color(theme::subtle()).child(
-                "PeebTube garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
+                "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
                    donne accès à votre compte : ne le partagez pas.",
               ))
               .child(

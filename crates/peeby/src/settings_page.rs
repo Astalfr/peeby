@@ -135,7 +135,7 @@ impl Render for SettingsView {
               row(
                 "Langue et région",
                 "Langue des titres, des dates et des sous-titres, et région des \
-                 recommandations. L'interface de PeebTube reste en français.",
+                 recommandations. L'interface de Peeby reste en français.",
                 choices("language", languages),
               )
               .into_any_element(),
@@ -159,8 +159,8 @@ impl Render for SettingsView {
             vec![
               row(
                 "Fichiers",
-                "Réglages et cookies sont dans %APPDATA%\\peebtube, les caches (images, \
-                 yt-dlp) dans %LOCALAPPDATA%\\peebtube.",
+                "Réglages et cookies sont dans %APPDATA%\\peeby, les caches (images, \
+                 yt-dlp) dans %LOCALAPPDATA%\\peeby.",
                 div(),
               )
               .into_any_element(),

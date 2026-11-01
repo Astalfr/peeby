@@ -49,7 +49,7 @@ if (-not $Force -and (Test-Path $Stamp) -and ((Get-Content $Stamp -Raw).Trim() -
   exit 0
 }
 
-$Tmp = Join-Path ([System.IO.Path]::GetTempPath()) "peebtube-tools-$([guid]::NewGuid())"
+$Tmp = Join-Path ([System.IO.Path]::GetTempPath()) "peeby-tools-$([guid]::NewGuid())"
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   if (Test-Path $Dest) { Remove-Item -Recurse -Force $Dest }

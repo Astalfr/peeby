@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, not started. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, step 1 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -70,11 +70,11 @@ Principles:
 ## Steps
 
 ### 1. Rename to Peeby
-- [ ] Crate and binary `peeby`, window title and title-bar mark "Peeby", log filter, thread name
-- [ ] Icon: `peebtube.ico` renamed, `.rc` and `build.rs` updated, logo unchanged
-- [ ] Paths `%APPDATA%\peeby\` and `%LOCALAPPDATA%\peeby\`, env vars `PEEBY_COOKIES`, `PEEBY_MPV_LOG`
-- [ ] New ADR "multi-space app", superseding the "copies" consequence of ADR 0001; ADR 0004 path updated
-- [ ] CLAUDE.md, README and architecture updated
+- [x] Crate and binary `peeby`, window title and title-bar mark "Peeby", log filter, thread name
+- [x] Icon: `peebtube.ico` renamed, `.rc` and `build.rs` updated, logo unchanged
+- [x] Paths `%APPDATA%\peeby\` and `%LOCALAPPDATA%\peeby\`, env vars `PEEBY_COOKIES`, `PEEBY_MPV_LOG`
+- [x] New ADR "multi-space app", superseding the "copies" consequence of ADR 0001; ADR 0004 path updated
+- [x] CLAUDE.md, README and architecture updated (workspace version 0.2.0, `PEEBY_DISPLAY` to pick the screen)
 
 ### 2. `ui` crate
 - [ ] Move `theme` (accent per space, re-applied on tab switch), `motion`, `assets`, `runtime`

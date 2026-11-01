@@ -1,6 +1,6 @@
 # 0001: Foundations inherited from peeby
 
-- Status: accepted
+- Status: accepted; the "copies" consequence is superseded by [0007](0007-multi-space-app.md)
 - Date: 2026-11-01
 
 ## Context

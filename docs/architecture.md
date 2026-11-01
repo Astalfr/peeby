@@ -2,7 +2,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     peebtube (GPUI app)                      │
+│                       peeby (GPUI app)                       │
 │        Home · Watch (player + related) · …                   │
 │        │                         │                           │
 │        ▼                         ▼                           │
@@ -24,18 +24,18 @@
 | `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), the notification bell of a subscribed channel (`notification/modify_channel_preference`), the notifications inbox (`FEnotifications_inbox`, `notification/get_unseen_count`, `notification/record_interactions`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peeby` | Binary (was `peebtube`, ADR 0007): window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
 
 - **UI thread (GPUI).** Rendering and input only.
-- **Network.** `reqwest` needs tokio, GPUI has its own executor. `peebtube::runtime` (from peeby) owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
+- **Network.** `reqwest` needs tokio, GPUI has its own executor. `peeby::runtime` (from peeby) owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
 - **Player.** `Player::start` runs on GPUI's background executor (libmpv and D3D11 setup block briefly). mpv events and frames come back through channels (peeby's design).
 
 ## Startup
 
-1. `settings::load_cookies()` reads `%APPDATA%\peebtube\cookies.txt` (or `PEEBTUBE_COOKIES`) before the UI starts.
+1. `settings::load_cookies()` reads `%APPDATA%\peeby\cookies.txt` (or `PEEBY_COOKIES`) before the UI starts.
 2. In the background: `Client::refresh_client_version()` reads the current WEB `clientVersion` and a `visitorData` from the page's ytcfg.
 3. The Home page loads `FEwhat_to_watch`. Its response also carries a `visitorData`, kept for the stream resolver.
 
@@ -49,7 +49,7 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 ## Navigation
 
-`AppView` owns the title bar (menu button folding the sidebar, back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
+`AppView` owns the title bar (menu button folding the sidebar, back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peeby <url-or-id>` opens a video at startup.
 
 ## Feeds
 
@@ -86,12 +86,12 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 
 ## Images
 
-`images::ImageStore` (from peeby): GPUI global entity, in-memory LRU of decoded images (256 MB), disk cache in `%LOCALAPPDATA%\peebtube\cache\images`, 8 parallel downloads. The thumbnail size is picked from YouTube's `sources` for the card's physical width.
+`images::ImageStore` (from peeby): GPUI global entity, in-memory LRU of decoded images (256 MB), disk cache in `%LOCALAPPDATA%\peeby\images`, 8 parallel downloads. The thumbnail size is picked from YouTube's `sources` for the card's physical width.
 
 ## Persistence
 
 | Data | Location |
 |---|---|
-| Settings (language, region, default quality, volume) | `%APPDATA%\peebtube\settings.toml`, `settings::Settings` global |
-| Session cookies | `%APPDATA%\peebtube\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
-| Image cache | `%LOCALAPPDATA%\peebtube\cache\images\` |
+| Settings (language, region, default quality, volume) | `%APPDATA%\peeby\settings.toml`, `settings::Settings` global |
+| Session cookies | `%APPDATA%\peeby\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
+| Image cache | `%LOCALAPPDATA%\peeby\images\` |

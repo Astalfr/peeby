@@ -1258,7 +1258,7 @@ fn stream_options(
     http_headers: vec![format!("User-Agent: {user_agent}")],
     start_seconds,
     // Opt-in only: the log contains stream URLs, which carry the user's IP.
-    log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
+    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
   }
 }

@@ -414,18 +414,13 @@ impl AppView {
   }
 }
 
-/// PeebTube's mark: the round logo and the name.
+/// Peeby's mark: the round logo and the name.
 fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
   h_flex()
     .gap_2()
     .items_center()
     .child(assets::logo(22., window, cx))
-    .child(
-      div()
-        .text_sm()
-        .font_weight(FontWeight::BOLD)
-        .child("PeebTube"),
-    )
+    .child(div().text_sm().font_weight(FontWeight::BOLD).child("Peeby"))
 }
 
 impl Render for AppView {

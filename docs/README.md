@@ -1,6 +1,6 @@
-# PeebTube documentation
+# Peeby documentation
 
-PeebTube is a native YouTube client for Windows, written in Rust with [GPUI](https://www.gpui.rs/). It reuses the playback stack of peeby, a Jellyfin client by the same author.
+Peeby is a native media client for Windows, written in Rust with [GPUI](https://www.gpui.rs/), with one tab ("space") per service: YouTube today, Jellyfin and later Twitch on the way ([refactor-plan.md](refactor-plan.md)). It was PeebTube, a YouTube client reusing the playback stack of peeby, the author's Jellyfin client, which it now replaces ([ADR 0007](decisions/0007-multi-space-app.md)).
 
 ## Goals
 
@@ -18,6 +18,7 @@ PeebTube is a native YouTube client for Windows, written in Rust with [GPUI](htt
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
 | Look and motion | Peeby's visual system with a red accent | [0006](decisions/0006-peeby-visual-system.md) |
+| Multi-service app (YouTube, Jellyfin, later Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
 | UI language | French UI strings; code, comments and docs in English | — |
 
 ## Index

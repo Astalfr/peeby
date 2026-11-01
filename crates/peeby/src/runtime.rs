@@ -13,7 +13,7 @@ impl Global for NetRuntime {}
 pub fn init(cx: &mut App) -> anyhow::Result<()> {
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .worker_threads(2)
-    .thread_name("peebtube-net")
+    .thread_name("peeby-net")
     .enable_all()
     .build()?;
   cx.set_global(NetRuntime(runtime));

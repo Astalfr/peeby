@@ -11,6 +11,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Peeby refactor
+
+- Step 1 done (2026-11-01): PeebTube renamed Peeby (crate, exe, window, `%APPDATA%\peeby`, `PEEBY_*`), version 0.2.0, [ADR 0007](decisions/0007-multi-space-app.md); `PEEBY_DISPLAY` picks the screen the window opens on. Verified: build, clippy, tests, and `peeby <url>` playing after about 1.5 s. **Not verified:** which screen the window lands on with `PEEBY_DISPLAY=secondary` (no warning, so a second display was found). Next steps and checklists: [refactor-plan.md](refactor-plan.md).
+
 ## Notifications
 
 - Done (2026-11-01): the bell of subscribed channels, on the watch page (right of the channel) and on the channels page's tiles: "Toutes", "Personnalisées" or "Aucune" (those the channel offers), the icon showing the current level. Parsed and tested on `subscriptions_channels.json` and a new trimmed, redacted signed-in watch page (`next_signed_in.json`); the signed-out `next.json` carries a bell too but is not subscribed, so it shows none.

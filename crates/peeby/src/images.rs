@@ -44,7 +44,7 @@ pub struct ImageStore {
 
 impl ImageStore {
   fn new(client: Client) -> Self {
-    let cache_dir = dirs::cache_dir().map(|d| d.join("peebtube").join("images"));
+    let cache_dir = dirs::cache_dir().map(|d| d.join("peeby").join("images"));
     if let Some(dir) = &cache_dir
       && let Err(e) = std::fs::create_dir_all(dir)
     {

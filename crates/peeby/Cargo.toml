@@ -1,6 +1,6 @@
 [package]
-name = "peebtube"
-description = "Native YouTube client for Windows built with GPUI."
+name = "peeby"
+description = "Native media client for Windows (YouTube, Jellyfin) built with GPUI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

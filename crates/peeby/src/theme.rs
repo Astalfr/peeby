@@ -1,4 +1,4 @@
-//! PeebTube's look: a neutral dark palette with a red accent, Fluent-style shapes (Windows 11),
+//! Peeby's look: a neutral dark palette with a red accent, Fluent-style shapes (Windows 11),
 //! applied to gpui-component's theme so its widgets follow. Adapted from peeby's theme; see
 //! docs/design.md.
 

@@ -2,16 +2,16 @@
 //! measure the time from "play" to the first frame.
 //!
 //! Usage: `cargo run -p spike-yt-play --release -- <youtube-url>`
-//! - `PEEBTUBE_RESOLVER`: `visionos` (default: direct InnerTube call, muxed HLS, see visionos.rs)
+//! - `PEEBY_RESOLVER`: `visionos` (default: direct InnerTube call, muxed HLS, see visionos.rs)
 //!   or `ytdl` (libmpv `ytdl_hook` → yt-dlp). The options below are for `ytdl`.
-//! - `PEEBTUBE_START`: start position in seconds (visionos), to time a seek.
+//! - `PEEBY_START`: start position in seconds (visionos), to time a seek.
 //! - Tools are bundled, nothing is installed on the host: `tools/` next to the executable, else
 //!   `third_party/yt-dlp/` (filled by `scripts/fetch-tools.ps1`). `PATH` is only a last resort.
-//! - `PEEBTUBE_JS`: JS runtime for yt-dlp, `deno` (bundled, default) or `node` (from `PATH`).
-//! - `PEEBTUBE_SUB_LANGS`: subtitle languages for yt-dlp, default `none`: mpv opens external subtitles before playing (seconds lost), so load them on demand.
-//! - `PEEBTUBE_COOKIES`: optional cookies.txt for yt-dlp (age-restricted, members, Premium).
-//! - `PEEBTUBE_FORMAT`: yt-dlp format, default `bv*[height<=?1080]+ba/b`.
-//! - `PEEBTUBE_SOFTWARE_VIDEO=1`: force the software surface.
+//! - `PEEBY_JS`: JS runtime for yt-dlp, `deno` (bundled, default) or `node` (from `PATH`).
+//! - `PEEBY_SUB_LANGS`: subtitle languages for yt-dlp, default `none`: mpv opens external subtitles before playing (seconds lost), so load them on demand.
+//! - `PEEBY_COOKIES`: optional cookies.txt for yt-dlp (age-restricted, members, Premium).
+//! - `PEEBY_FORMAT`: yt-dlp format, default `bv*[height<=?1080]+ba/b`.
+//! - `PEEBY_SOFTWARE_VIDEO=1`: force the software surface.
 //! - The mpv log goes to `target/yt-play-mpv.log`.
 //!
 //! Keys: space pause · ←/→ seek 10 s · q quit.
@@ -41,7 +41,7 @@ fn main() {
     std::process::exit(2);
   };
 
-  let options = match std::env::var("PEEBTUBE_RESOLVER").as_deref() {
+  let options = match std::env::var("PEEBY_RESOLVER").as_deref() {
     Ok("ytdl") => ytdl_options(url),
     _ => visionos_options(&url),
   };
@@ -270,16 +270,16 @@ fn ytdl_options(url: String) -> (StartOptions, Instant) {
     "ignore-config=".to_owned(),
     format!("cache-dir={}", cache_dir.display()),
   ];
-  let js = std::env::var("PEEBTUBE_JS").unwrap_or_else(|_| "deno".into());
+  let js = std::env::var("PEEBY_JS").unwrap_or_else(|_| "deno".into());
   match tools.js_runtime(&js) {
     Some(runtime) => raw_options.push(format!("js-runtimes={runtime}")),
     None => eprintln!("warning: no bundled {js}, yt-dlp will look for a JS runtime in PATH"),
   }
   // Without `sub-langs`, ytdl_hook asks for every language (all automatic captions included),
   // which delays the start by seconds.
-  let langs = std::env::var("PEEBTUBE_SUB_LANGS").unwrap_or_else(|_| "none".into());
+  let langs = std::env::var("PEEBY_SUB_LANGS").unwrap_or_else(|_| "none".into());
   raw_options.push(format!("sub-langs={langs}"));
-  if let Ok(cookies) = std::env::var("PEEBTUBE_COOKIES") {
+  if let Ok(cookies) = std::env::var("PEEBY_COOKIES") {
     raw_options.push(format!("cookies={cookies}"));
   }
   let log_file = Path::new(ROOT).join("target/yt-play-mpv.log");
@@ -295,11 +295,11 @@ fn ytdl_options(url: String) -> (StartOptions, Instant) {
 
   let options = StartOptions {
     url,
-    force_software: std::env::var("PEEBTUBE_SOFTWARE_VIDEO").as_deref() == Ok("1"),
+    force_software: std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1"),
     ytdl: Some(Ytdl {
       ytdl_path,
       format: Some(
-        std::env::var("PEEBTUBE_FORMAT").unwrap_or_else(|_| "bv*[height<=?1080]+ba/b".into()),
+        std::env::var("PEEBY_FORMAT").unwrap_or_else(|_| "bv*[height<=?1080]+ba/b".into()),
       ),
       raw_options,
     }),
@@ -345,9 +345,9 @@ fn visionos_options(url: &str) -> (StartOptions, Instant) {
     url: stream.url,
     external_audio: stream.audio_url.into_iter().collect(),
     http_headers: vec![format!("User-Agent: {}", visionos::USER_AGENT)],
-    force_software: std::env::var("PEEBTUBE_SOFTWARE_VIDEO").as_deref() == Ok("1"),
+    force_software: std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1"),
     log_file: Some(Path::new(ROOT).join("target/yt-play-mpv.log")),
-    start_seconds: std::env::var("PEEBTUBE_START")
+    start_seconds: std::env::var("PEEBY_START")
       .ok()
       .and_then(|s| s.parse().ok())
       .unwrap_or(0.0),
