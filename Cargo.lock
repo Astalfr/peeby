@@ -6000,6 +6000,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spike-twitch-play"
+version = "0.2.0"
+dependencies = [
+ "async-channel",
+ "gpui-pre",
+ "gpui-pre-platform",
+ "gpui-video",
+ "player",
+ "reqwest",
+ "serde_json",
+]
+
+[[package]]
 name = "spike-yt-play"
 version = "0.2.0"
 dependencies = [
@@ -6728,6 +6741,10 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 dependencies = [
  "core_maths",
 ]
+
+[[package]]
+name = "twitch"
+version = "0.2.0"
 
 [[package]]
 name = "typenum"

@@ -1,0 +1,12 @@
+{
+  "data": {
+    "videoPlaybackAccessToken": {
+      "value": "{\"authorization\":\"REDACTED\",\"chansub\":\"REDACTED\",\"device_id\":\"REDACTED\",\"expires\":\"REDACTED\",\"https_required\":\"REDACTED\",\"privileged\":\"REDACTED\",\"user_id\":\"REDACTED\",\"version\":\"REDACTED\",\"vod_id\":\"REDACTED\",\"maximum_resolution\":\"REDACTED\",\"maximum_video_bitrate_kbps\":\"REDACTED\",\"maximum_resolution_reasons\":\"REDACTED\",\"maximum_video_bitrate_kbps_reasons\":\"REDACTED\",\"channel_name\":\"REDACTED\",\"is_dvr\":\"REDACTED\"}",
+      "signature": "REDACTED"
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 57,
+    "operationName": "PlaybackAccessToken_Template"
+  }
+}

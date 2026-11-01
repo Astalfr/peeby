@@ -1,0 +1,12 @@
+{
+  "data": {
+    "streamPlaybackAccessToken": {
+      "value": "{\"adblock\":\"REDACTED\",\"authorization\":\"REDACTED\",\"blackout_enabled\":\"REDACTED\",\"channel\":\"REDACTED\",\"channel_id\":\"REDACTED\",\"chansub\":\"REDACTED\",\"ci_gb\":\"REDACTED\",\"geoblock_reason\":\"REDACTED\",\"device_id\":\"REDACTED\",\"expires\":\"REDACTED\",\"extended_history_allowed\":\"REDACTED\",\"game\":\"REDACTED\",\"hide_ads\":\"REDACTED\",\"https_required\":\"REDACTED\",\"mature\":\"REDACTED\",\"notification_id\":\"REDACTED\",\"partner\":\"REDACTED\",\"platform\":\"REDACTED\",\"player_type\":\"REDACTED\",\"private\":\"REDACTED\",\"privileged\":\"REDACTED\",\"role\":\"REDACTED\",\"server_ads\":\"REDACTED\",\"show_ads\":\"REDACTED\",\"subscriber\":\"REDACTED\",\"turbo\":\"REDACTED\",\"user_id\":\"REDACTED\",\"user_ip\":\"REDACTED\",\"version\":\"REDACTED\",\"maximum_resolution\":\"REDACTED\",\"maximum_video_bitrate_kbps\":\"REDACTED\",\"maximum_resolution_reasons\":\"REDACTED\",\"maximum_video_bitrate_kbps_reasons\":\"REDACTED\"}",
+      "signature": "REDACTED"
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 28,
+    "operationName": "PlaybackAccessToken_Template"
+  }
+}

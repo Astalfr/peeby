@@ -105,25 +105,48 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 ## Steps
 
 ### 1. Playback spike (`spikes/twitch-play`)
-- [ ] `cargo run -p spike-twitch-play --release -- <login|vod-url>`, timing each stage as `spike-yt-play`:
-      GQL `PlaybackAccessToken` → usher master → mpv first frame
-- [ ] Try usher v2 then v1; the raw query (yt-dlp's) and the persisted one (Streamlink's hash); the web
-      Client-ID and yt-dlp's. Keep the combination that answers, note the others in twitch.md
-- [ ] The same through a throwaway proxy that forwards the master and the media playlist unchanged:
-      measure what the hop costs (target: the start stays within 1–2 s)
-- [ ] Save fixtures, redacted: the GQL answers (live and VOD), a master playlist, **media playlists
-      captured during an ad break** (at least the start, the middle and the end of one, so with
-      `EXT-X-DATERANGE` and discontinuities), a subscriber-only VOD's 403 body if one is at hand
-- [ ] Check what twitch.md marks [?]: muxed audio in the variants, the `audio_only` variant, whether
-      `supported_codecs=h264` alone gives 1080p60
+- [x] `cargo run -p spike-twitch-play --release -- <login|twitch.tv/videos/id|vod:login>`, timing each
+      stage as `spike-yt-play`: GQL `PlaybackAccessToken` → usher master → mpv first frame
+- [x] Try usher v2 then v1 (`PEEBY_USHER=v1`), the raw query, both Client-IDs, `playerType`s
+      (`PEEBY_PLAYER_TYPE`), codecs (`PEEBY_CODECS`). The persisted query was not needed
+- Moved to step 3: the proxy hop, measured with the real proxy rather than a throwaway one
+- [x] Fixtures, redacted: GQL answers (live and VOD), masters, media playlists across a pre-roll (start,
+      middle, end, with `EXT-X-DATERANGE` and discontinuities), a subscriber-only VOD's 403 body
+- [x] The [?] of twitch.md: muxed audio yes, `audio_only` yes, `supported_codecs=h264` gives 1080p60
 - Exit: a live and a VOD play from the spike, with measured times, and the fixtures are committed
-- Done so far (2026-11-01), with PowerShell probes run anonymously (scratchpad scripts, not in the repo):
-  - the raw query answers with both Client-IDs, and usher v2 and v1 both answer;
-  - live fixtures saved and redaction checked in `crates/twitch/tests/fixtures/`: both masters, 25
-    reloads across a pre-roll, and an `embed` backup playlist;
-  - muxed audio confirmed.
-- Still to do: the Rust spike with mpv and timings, the VOD, the GQL answers as fixtures (token `value`
-  and `signature` redacted), and the subscriber-only 403
+- Done (2026-11-01), anonymously. Probes with PowerShell scripts (in the scratchpad, not the repo), then
+  `spikes/twitch-play`:
+  - the raw query answers with both Client-IDs, and usher v2 and v1 both answer. Peeby uses v2 with
+    `playerType=embed`;
+  - **times from the click to playback**:
+
+    | Run | Total | Token | Master |
+    |---|---|---|---|
+    | Live, best of 5 | 0.98 s | 0.29–0.39 s | 0.46–0.58 s |
+    | Live, worst of 5 | 1.29 s | | |
+    | Public VOD | 1.29 s | | |
+
+    All in 1080p60 H.264 with D3D11 (GPU backend), without a pre-roll. The proxy hop is measured at
+    step 3 with the real proxy;
+  - fixtures saved, their redaction checked, in `crates/twitch/tests/fixtures/`:
+    - both masters;
+    - 25 reloads across a pre-roll;
+    - an `embed` backup playlist;
+    - the GQL token answers (live, VOD), the token's keys kept and their values replaced;
+    - a subscriber-only VOD's 403 (`usher_vod_restricted.json`);
+  - muxed audio confirmed. mpv reports a duration for a live (its 24–28 s window): `Source::live`
+    (step 4) is needed to hide the seek bar.
+- Learned on the way:
+  - **usher's error body repeats the request URL, token and signature included**: only its
+    `error_code` and `error` may be shown or logged;
+  - many channels keep their VODs for subscribers (`vod_manifest_restricted`). The VOD token says so
+    beforehand: `chansub.restricted_bitrates` lists every quality. So the space can mark such VODs
+    without asking usher;
+  - **signed out, the token caps the resolution**: `maximum_resolution_reasons` refuses `QUAD_HD` and
+    `ULTRA_HD` with `AUTHZ_NOT_LOGGED_IN`. A channel whose source is 1440p60 served 1080p60 H.264 at
+    most, even with `supported_codecs=av1,h265,h264`. HEVC/AV1 in landscape was not seen. Its test needs
+    the auth-token (step 10).
+- Not done: a subscriber VOD with the auth-token; a mid-roll
 
 ### 2. `twitch` crate: GQL, usher, errors
 - [ ] `Client` over `reqwest` (same features as `innertube`), `GqlConfig` (`client_id`, `hashes`) with

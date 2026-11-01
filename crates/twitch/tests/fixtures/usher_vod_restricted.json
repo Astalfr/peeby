@@ -1,0 +1,8 @@
+[
+  {
+    "url": "REDACTED",
+    "error": "Manifest is restricted",
+    "error_code": "vod_manifest_restricted",
+    "type": "error"
+  }
+]

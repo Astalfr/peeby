@@ -10,8 +10,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **3: player comfort** | ✅ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **Peeby refactor** | ✅ | One space per service (YouTube, Jellyfin), shared `ui` crate and player, tabs, mini-player, YouTube search, unified settings ([refactor-plan.md](refactor-plan.md), ADRs 0007–0010) | All ten steps of the plan; peeby's Jellyfin features in the Jellyfin space |
-| **Twitch space** | ⏳ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
+| **Twitch space** | 🚧 | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
+
+## Twitch space
+
+- Step 1 of [twitch-plan.md](twitch-plan.md) done (2026-11-01): `spikes/twitch-play` plays a live in 0.98–1.29 s and a public VOD in 1.29 s, anonymously: the raw GQL token query, `playerType=embed` (no pre-roll, unlike `site`), usher v2, 1080p60 H.264 on the GPU. Redacted fixtures in `crates/twitch/tests/fixtures/` (masters v1 and v2, 25 reloads across a pre-roll, a backup playlist, GQL tokens, a subscriber-only VOD's 403). The `twitch` crate exists, empty. **Not verified:** a mid-roll, HEVC/AV1 (capped at 1080p signed out), anything signed in.
 
 ## Peeby refactor
 
