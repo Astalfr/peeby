@@ -1,0 +1,20 @@
+[package]
+name = "spike-yt-play"
+description = "Spike: play a YouTube URL with peeby's player (libmpv ytdl_hook + yt-dlp) in GPUI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-channel = "2"
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10" }
+gpui-video = { workspace = true }
+player = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "blocking"] }
+serde_json = "1"
+
+[lints]
+workspace = true

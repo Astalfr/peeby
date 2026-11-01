@@ -1,0 +1,35 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "spikes/*"]
+exclude = ["vendor/*", "poc-home"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.98"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+player = { path = "crates/player" }
+gpui-video = { path = "crates/gpui-video" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# GPUI is far too slow to render unoptimized; our own crates stay at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Copied from peeby: patched GPUI Windows platform with external D3D11 textures (see vendor/README.md).
+[patch.crates-io]
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }

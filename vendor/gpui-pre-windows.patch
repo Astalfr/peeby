@@ -1,0 +1,304 @@
+--- a/src/directx_atlas.rs
++++ b/src/directx_atlas.rs
+@@ -1,18 +1,58 @@
++use std::collections::{HashMap, HashSet};
++use std::sync::{LazyLock, Mutex as StdMutex};
++
+ use etagere::BucketedAtlasAllocator;
+ use parking_lot::Mutex;
+-use windows::Win32::Graphics::{
+-    Direct3D11::{
+-        D3D11_BIND_SHADER_RESOURCE, D3D11_BOX, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
+-        ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView, ID3D11Texture2D,
++use windows::Win32::{
++    Foundation::HANDLE,
++    Graphics::{
++        Direct3D11::{
++            D3D11_BIND_SHADER_RESOURCE, D3D11_BOX, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
++            ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView, ID3D11Texture2D,
++        },
++        Dxgi::{Common::*, IDXGIKeyedMutex},
+     },
+-    Dxgi::Common::*,
+ };
++use windows::core::Interface;
+ 
+ use gpui::{
+     AtlasBackend, AtlasKey, AtlasState, AtlasTextureId, AtlasTextureKind, AtlasTextureList,
+-    AtlasTile, Bounds, DevicePixels, PlatformAtlas, Point, Size,
++    AtlasTile, Bounds, DevicePixels, PlatformAtlas, Point, Size, TileId,
+ };
+ 
++// PEEBY PATCH (external textures): a polychrome image whose bytes start with this magic,
++// followed by a little-endian u64 legacy DXGI shared handle, is not uploaded. The shared
++// D3D11 texture is opened on the renderer's device and drawn directly (zero copy).
++// See docs/player/video-surface.md in the Peeby repository.
++const EXTERNAL_TEXTURE_MAGIC: &[u8; 8] = b"GPUIEXT1";
++const EXTERNAL_TEXTURE_INDEX_BASE: u32 = 1 << 30;
++
++/// Shared handles the application registered. The magic in image bytes is only honored for
++/// these, so an arbitrary image (e.g. downloaded artwork) can never make GPUI open a handle.
++static REGISTERED_HANDLES: LazyLock<StdMutex<HashSet<u64>>> =
++    LazyLock::new(|| StdMutex::new(HashSet::new()));
++
++/// PEEBY PATCH: allows images carrying `handle` to be drawn as an external texture.
++pub fn register_external_texture(handle: u64) {
++    if let Ok(mut handles) = REGISTERED_HANDLES.lock() {
++        handles.insert(handle);
++    }
++}
++
++/// PEEBY PATCH: revokes a handle registered with [`register_external_texture`].
++pub fn unregister_external_texture(handle: u64) {
++    if let Ok(mut handles) = REGISTERED_HANDLES.lock() {
++        handles.remove(&handle);
++    }
++}
++
++fn is_registered(handle: u64) -> bool {
++    REGISTERED_HANDLES
++        .lock()
++        .map(|handles| handles.contains(&handle))
++        .unwrap_or(false)
++}
++
+ pub(crate) struct DirectXAtlas(Mutex<AtlasState<DirectXAtlasTextures>>);
+ 
+ struct DirectXAtlasTextures {
+@@ -21,6 +61,14 @@
+     monochrome_textures: AtlasTextureList<DirectXAtlasTexture>,
+     polychrome_textures: AtlasTextureList<DirectXAtlasTexture>,
+     subpixel_textures: AtlasTextureList<DirectXAtlasTexture>,
++    external_textures: HashMap<u32, ExternalTexture>,
++    next_external_index: u32,
++}
++
++struct ExternalTexture {
++    _texture: ID3D11Texture2D,
++    view: [Option<ID3D11ShaderResourceView>; 1],
++    keyed_mutex: Option<IDXGIKeyedMutex>,
+ }
+ 
+ struct DirectXAtlasTexture {
+@@ -40,9 +88,20 @@
+             monochrome_textures: Default::default(),
+             polychrome_textures: Default::default(),
+             subpixel_textures: Default::default(),
++            external_textures: HashMap::new(),
++            next_external_index: 0,
+         })))
+     }
+ 
++    /// PEEBY PATCH: keyed mutex of an external texture, if `id` is one and it has a mutex.
++    pub(crate) fn external_keyed_mutex(&self, id: AtlasTextureId) -> Option<IDXGIKeyedMutex> {
++        let lock = self.0.lock();
++        lock.backend
++            .external_textures
++            .get(&id.index)
++            .and_then(|t| t.keyed_mutex.clone())
++    }
++
+     /// Returns the view backing `id`, or `None` once every tile in it has been
+     /// removed. A scene can still reference such a texture when a cached view
+     /// replays a paint from before the image was dropped, so callers must skip
+@@ -52,6 +111,9 @@
+         id: AtlasTextureId,
+     ) -> Option<[Option<ID3D11ShaderResourceView>; 1]> {
+         let lock = self.0.lock();
++        if let Some(external) = lock.backend.external_textures.get(&id.index) {
++            return Some(external.view.clone());
++        }
+         let texture = lock.backend.texture(id)?;
+         Some(texture.view.clone())
+     }
+@@ -68,6 +130,7 @@
+             textures.monochrome_textures = AtlasTextureList::default();
+             textures.polychrome_textures = AtlasTextureList::default();
+             textures.subpixel_textures = AtlasTextureList::default();
++            textures.external_textures.clear();
+         });
+     }
+ }
+@@ -95,6 +158,18 @@
+         size: Size<DevicePixels>,
+         bytes: &[u8],
+     ) -> anyhow::Result<AtlasTile> {
++        if kind == AtlasTextureKind::Polychrome
++            && bytes.len() >= 16
++            && bytes[..8] == EXTERNAL_TEXTURE_MAGIC[..]
++        {
++            let mut handle = [0u8; 8];
++            handle.copy_from_slice(&bytes[8..16]);
++            let handle = u64::from_le_bytes(handle);
++            if is_registered(handle) {
++                return self.insert_external(size, handle);
++            }
++            // Not registered: treat it as ordinary pixels.
++        }
+         let tile = self
+             .allocate(size, kind)
+             .ok_or_else(|| anyhow::anyhow!("failed to allocate"))?;
+@@ -107,6 +182,9 @@
+ 
+     fn remove(&mut self, tile: AtlasTile) {
+         let id = tile.texture_id;
++        if self.external_textures.remove(&id.index).is_some() {
++            return;
++        }
+ 
+         let textures = match id.kind {
+             AtlasTextureKind::Monochrome => &mut self.monochrome_textures,
+@@ -131,6 +209,49 @@
+ }
+ 
+ impl DirectXAtlasTextures {
++    /// PEEBY PATCH: opens a shared texture and returns a tile covering all of it.
++    fn insert_external(
++        &mut self,
++        size: Size<DevicePixels>,
++        handle: u64,
++    ) -> anyhow::Result<AtlasTile> {
++        let mut texture: Option<ID3D11Texture2D> = None;
++        unsafe {
++            self.device
++                .OpenSharedResource(HANDLE(handle as usize as *mut _), &mut texture)?;
++        }
++        let texture =
++            texture.ok_or_else(|| anyhow::anyhow!("OpenSharedResource returned no texture"))?;
++        let mut view = None;
++        unsafe {
++            self.device
++                .CreateShaderResourceView(&texture, None, Some(&mut view))?;
++        }
++        let keyed_mutex = texture.cast::<IDXGIKeyedMutex>().ok();
++        let index = EXTERNAL_TEXTURE_INDEX_BASE + self.next_external_index;
++        self.next_external_index = self.next_external_index.wrapping_add(1);
++        self.external_textures.insert(
++            index,
++            ExternalTexture {
++                _texture: texture,
++                view: [view],
++                keyed_mutex,
++            },
++        );
++        Ok(AtlasTile {
++            texture_id: AtlasTextureId {
++                index,
++                kind: AtlasTextureKind::Polychrome,
++            },
++            tile_id: TileId(0),
++            padding: 0,
++            bounds: Bounds {
++                origin: Point::default(),
++                size,
++            },
++        })
++    }
++
+     fn allocate(
+         &mut self,
+         size: Size<DevicePixels>,
+--- a/src/directx_renderer.rs
++++ b/src/directx_renderer.rs
+@@ -800,7 +800,17 @@
+         let Some(texture_view) = self.atlas.get_texture_view(texture_id) else {
+             return Ok(());
+         };
+-        self.pipelines.poly_sprites.draw_range_with_texture(
++        // PEEBY PATCH: external textures written by another device are guarded by a keyed
++        // mutex (key 0 on both sides). The raw HRESULT is checked because WAIT_TIMEOUT is a
++        // success code that `windows::core::Result` would report as Ok.
++        let keyed_mutex = self.atlas.external_keyed_mutex(texture_id);
++        if let Some(mutex) = &keyed_mutex {
++            let hr = unsafe { (Interface::vtable(mutex).AcquireSync)(Interface::as_raw(mutex), 0, 100) };
++            if hr.0 != 0 {
++                return Ok(());
++            }
++        }
++        let result = self.pipelines.poly_sprites.draw_range_with_texture(
+             &devices.device_context,
+             &texture_view,
+             self.globals
+@@ -810,7 +820,11 @@
+             slice::from_ref(&self.globals.sampler),
+             start as u32,
+             len as u32,
+-        )
++        );
++        if let Some(mutex) = &keyed_mutex {
++            unsafe { mutex.ReleaseSync(0) }.ok();
++        }
++        result
+     }
+ 
+     fn draw_surfaces(&mut self, surfaces: &[PaintSurface]) -> Result<()> {
+--- a/src/gpui_windows.rs
++++ b/src/gpui_windows.rs
+@@ -39,5 +39,9 @@
+ pub(crate) use wrapper::*;
+ 
+ pub use platform::WindowsPlatform;
++// PEEBY PATCH: external textures must be registered before an image may reference them.
++pub use directx_atlas::{register_external_texture, unregister_external_texture};
++// PEEBY PATCH: hide the cursor while the video player's controls are hidden.
++pub use platform::hide_cursor_until_mouse_moves;
+ 
+ pub(crate) use windows::Win32::Foundation::HWND;
+--- a/src/platform.rs
++++ b/src/platform.rs
+@@ -29,7 +29,10 @@
+             Power::*,
+             SystemInformation::*,
+             SystemServices::POWER_REQUEST_CONTEXT_VERSION,
+-            Threading::{POWER_REQUEST_CONTEXT_SIMPLE_STRING, REASON_CONTEXT, REASON_CONTEXT_0},
++            Threading::{
++                GetCurrentThreadId, POWER_REQUEST_CONTEXT_SIMPLE_STRING, REASON_CONTEXT,
++                REASON_CONTEXT_0,
++            },
+         },
+         UI::{Input::KeyboardAndMouse::*, Shell::*, WindowsAndMessaging::*},
+     },
+@@ -39,6 +42,26 @@
+ use crate::*;
+ use gpui::*;
+ 
++/// PEEBY PATCH: the platform's cursor visibility flag, for [`hide_cursor_until_mouse_moves`].
++static CURSOR_VISIBLE: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
++
++/// PEEBY PATCH: hides the mouse cursor until the mouse moves again, when it is over a window of
++/// the calling (UI) thread. GPUI only does this itself while typing; the mouse-move handler
++/// restores the cursor as usual.
++pub fn hide_cursor_until_mouse_moves() {
++    let Some(visible) = CURSOR_VISIBLE.get() else {
++        return;
++    };
++    let mut point = POINT::default();
++    let over_own_window = unsafe {
++        GetCursorPos(&mut point).is_ok()
++            && GetWindowThreadProcessId(WindowFromPoint(point), None) == GetCurrentThreadId()
++    };
++    if over_own_window && visible.swap(false, Ordering::Relaxed) {
++        unsafe { SetCursor(None) };
++    }
++}
++
+ struct TrackedWindow {
+     handle: SafeHwnd,
+     frame_signal: Arc<PlatformFrameSignal>,
+@@ -119,12 +142,15 @@
+         let callbacks = PlatformCallbacks::default();
+         let jump_list = JumpList::new();
+         let current_cursor = load_cursor(CursorStyle::Arrow);
++        // PEEBY PATCH: shared with `hide_cursor_until_mouse_moves`.
++        let cursor_visible = Arc::new(AtomicBool::new(true));
++        let _ = CURSOR_VISIBLE.set(cursor_visible.clone());
+ 
+         Self {
+             callbacks,
+             jump_list: RefCell::new(jump_list),
+             current_cursor: Cell::new(current_cursor),
+-            cursor_visible: Arc::new(AtomicBool::new(true)),
++            cursor_visible,
+             draw_coordinator: Rc::new(DrawCoordinator::new()),
+             directx_devices: RefCell::new(directx_devices),
+             menus: RefCell::new(Vec::new()),

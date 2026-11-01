@@ -1,0 +1,6 @@
+/target/
+/poc-home/target/
+/third_party/mpv/
+/third_party/yt-dlp/
+*.local.toml
+cookies*.txt
