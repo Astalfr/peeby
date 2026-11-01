@@ -3,7 +3,8 @@
 //! offer, as the Jellyfin space sets them. Its events are printed.
 //!
 //! `cargo run -p ui --example player` · `PEEBY_START=150` starts in the credits ("up next") ·
-//! `PEEBY_DISPLAY=secondary` opens it on another screen.
+//! `PEEBY_DISPLAY=secondary` opens it on another screen · `PEEBY_SIZE=640x360` sets the window's
+//! size (panels larger than the player scroll).
 
 // The example reports the player's events on the console on purpose.
 #![allow(clippy::print_stderr)]
@@ -40,9 +41,17 @@ fn main() {
             .map(|d| d.id())
         })
         .flatten();
-      let bounds = Bounds::centered(display, size(px(1280.), px(720.)), cx);
+      let (width, height) = std::env::var("PEEBY_SIZE")
+        .ok()
+        .and_then(|s| {
+          let (w, h) = s.split_once('x')?;
+          Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
+        })
+        .unwrap_or((1280., 720.));
+      let bounds = Bounds::centered(display, size(px(width), px(height)), cx);
       let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(320.), px(180.))),
         display_id: display,
         titlebar: Some(TitlebarOptions {
           title: Some("Peeby player".into()),

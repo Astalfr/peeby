@@ -23,7 +23,9 @@ Reuse them as they are. The crates `player` and `gpui-video`, `vendor/gpui-pre-w
 PeebTube additions to `player`:
 - `StartOptions::external_audio` (`audio-files`, for HLS audio renditions);
 - `StartOptions::ytdl` (mpv's `ytdl_hook`, for the yt-dlp fallback);
-- `StartOptions::log_file`.
+- `StartOptions::log_file`;
+- `Player::add_subtitle` (`sub-add`, captions fetched on demand);
+- `Player::property`, read-only, for the player's statistics panel.
 
 PeebTube additions to `gpui-video`:
 - `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners).

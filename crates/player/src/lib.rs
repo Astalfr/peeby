@@ -433,6 +433,13 @@ impl Player {
     self.set("sub-delay", &format!("{seconds:.3}"));
   }
 
+  /// Reads an mpv property as text, for diagnostics (`video-codec`, `hwdec-current`,
+  /// `frame-drop-count`…); `None` when unavailable. Never read or log `path` or
+  /// `stream-open-filename`: stream URLs carry the user's IP.
+  pub fn property(&self, name: &str) -> Option<String> {
+    self.mpv.property(name)
+  }
+
   fn set(&self, name: &str, value: &str) {
     if let Err(e) = self.mpv.set_property(name, value) {
       tracing::warn!("{e}");

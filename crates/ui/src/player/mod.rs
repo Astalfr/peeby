@@ -8,6 +8,7 @@
 mod overlays;
 pub mod segments;
 mod source;
+mod stats;
 mod tracks;
 
 pub use overlays::format_step;
@@ -157,6 +158,14 @@ pub struct PlayerView {
   countdown_task: Option<Task<()>>,
   /// The shortcut help is open.
   help: bool,
+  /// The right-click menu is open, at this point of the player.
+  context_menu: Option<Point<Pixels>>,
+  /// The statistics panel is open; its lines and the task refreshing them.
+  stats: bool,
+  stats_rows: Vec<stats::Row>,
+  stats_task: Option<Task<()>>,
+  /// Where the player is in the window, for the right-click menu.
+  bounds: Rc<Cell<Bounds<Pixels>>>,
   title: SharedString,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
@@ -243,6 +252,11 @@ impl PlayerView {
       up_next: UpNext::Hidden,
       countdown_task: None,
       help: false,
+      context_menu: None,
+      stats: false,
+      stats_rows: Vec::new(),
+      stats_task: None,
+      bounds: Rc::default(),
       title: SharedString::default(),
       player: None,
       video: None,
@@ -763,9 +777,10 @@ impl PlayerView {
       "s" => self.skip(cx),
       "n" if self.queue.is_some_and(|(_, next)| next) => self.play_next(cx),
       "p" if self.queue.is_some_and(|(previous, _)| previous) => cx.emit(PlayerEvent::Previous),
-      "escape" if self.help || self.menu.is_some() => {
+      "escape" if self.help || self.menu.is_some() || self.context_menu.is_some() => {
         self.help = false;
         self.menu = None;
+        self.context_menu = None;
       }
       "t" if !window.is_fullscreen() && !window_layout => self.toggle_theater(cx),
       "f" => window.toggle_fullscreen(),
@@ -777,6 +792,20 @@ impl PlayerView {
     self.show_controls(cx);
   }
 
+  /// Right click on the picture: the menu with the shortcuts and the statistics, where the
+  /// mouse is.
+  fn on_right_click(
+    &mut self,
+    event: &MouseDownEvent,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    window.focus(&self.focus, cx);
+    self.menu = None;
+    self.context_menu = Some(event.position - self.bounds.get().origin);
+    self.show_controls(cx);
+  }
+
   /// Asks the page to switch theater mode.
   fn toggle_theater(&mut self, cx: &mut Context<Self>) {
     cx.emit(PlayerEvent::Theater);
@@ -785,7 +814,10 @@ impl PlayerView {
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
   fn on_video_click(&mut self, event: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
     window.focus(&self.focus, cx);
-    if self.menu.take().is_some() || std::mem::take(&mut self.help) {
+    let closed = self.menu.take().is_some()
+      | std::mem::take(&mut self.help)
+      | self.context_menu.take().is_some();
+    if closed {
       return cx.notify();
     }
     self.with_player(Player::toggle_pause);
@@ -1285,16 +1317,6 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Quality, cx))),
         )
       })
-      .child(
-        self
-          .control_button("help", cx)
-          .icon(Icon::Keyboard)
-          .tooltip("Raccourcis clavier (?)")
-          .on_click(cx.listener(|this, _, _, cx| {
-            this.help = !this.help;
-            this.show_controls(cx);
-          })),
-      )
       // In fullscreen the picture fills the window anyway.
       .when(!fullscreen && embedded, |row| {
         row.child(
@@ -1517,6 +1539,12 @@ impl Render for PlayerView {
       .bg(gpui::black())
       .track_focus(&self.focus)
       .on_key_down(cx.listener(Self::on_key))
+      .child({
+        let bounds = self.bounds.clone();
+        canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {})
+          .absolute()
+          .inset_0()
+      })
       .children(
         self
           .video
@@ -1530,6 +1558,7 @@ impl Render for PlayerView {
           .absolute()
           .inset_0()
           .on_click(cx.listener(Self::on_video_click))
+          .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_click))
           .on_scroll(cx.listener(Self::on_wheel))
           .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx))),
       );
@@ -1633,8 +1662,14 @@ impl Render for PlayerView {
         root = root.child(self.render_menu(menu, cx));
       }
     }
+    if self.stats {
+      root = root.child(self.render_stats(cx));
+    }
     if self.help {
       root = root.child(self.render_help(cx));
+    }
+    if let Some(at) = self.context_menu {
+      root = root.child(self.render_context_menu(at, cx));
     }
     root
   }

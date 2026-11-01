@@ -5,8 +5,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, FontWeight, SharedString, Window, WindowControlArea, div, linear_color_stop,
-  linear_gradient, px,
+  AnyElement, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea, div,
+  linear_color_stop, linear_gradient, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
@@ -37,6 +37,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     "Fermer le menu, quitter le plein écran, puis revenir",
   ),
   ("?", "Cette aide"),
+  ("Clic droit", "Raccourcis clavier, statistiques"),
 ];
 
 /// `10 s`, `1 min`, `1 min 30 s`.
@@ -413,9 +414,12 @@ impl PlayerView {
       format_step(self.prefs.seek_step),
       format_step(self.prefs.seek_step_large)
     );
+    // Padded so the panel keeps clear of the player's edges; it scrolls when the player is too
+    // small for it.
     div()
       .absolute()
       .inset_0()
+      .p_3()
       .flex()
       .items_center()
       .justify_center()
@@ -423,19 +427,36 @@ impl PlayerView {
         v_flex()
           .id("help")
           .occlude()
+          .w(px(520.))
+          .max_w_full()
+          .max_h_full()
+          .overflow_y_scroll()
           .p_6()
           .gap_2()
-          .min_w(px(480.))
           .rounded_lg()
           .bg(popover)
           .border_1()
           .border_color(border)
           .child(
-            div()
-              .text_lg()
-              .font_weight(FontWeight::SEMIBOLD)
+            h_flex()
               .pb_2()
-              .child("Raccourcis clavier"),
+              .justify_between()
+              .child(
+                div()
+                  .text_lg()
+                  .font_weight(FontWeight::SEMIBOLD)
+                  .child("Raccourcis clavier"),
+              )
+              .child(
+                Button::new("help-close")
+                  .ghost()
+                  .xsmall()
+                  .icon(IconName::Close)
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    this.help = false;
+                    cx.notify();
+                  })),
+              ),
           )
           .children(
             SHORTCUTS
@@ -461,6 +482,65 @@ impl PlayerView {
               }),
           ),
       )
+  }
+
+  /// The right-click menu at `at` (relative to the player), kept inside the player.
+  pub(super) fn render_context_menu(
+    &self,
+    at: Point<Pixels>,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    const WIDTH: f32 = 220.;
+    const HEIGHT: f32 = 92.;
+    let theme = cx.theme();
+    let (popover, border) = (theme.popover, theme.border);
+    let size = self.bounds.get().size;
+    let left = f32::from(at.x)
+      .min(f32::from(size.width) - WIDTH - 8.)
+      .max(8.);
+    let top = f32::from(at.y)
+      .min(f32::from(size.height) - HEIGHT - 8.)
+      .max(8.);
+    let entry = |id: &'static str, label: &'static str, checked: bool| {
+      Button::new(id)
+        .ghost()
+        .w_full()
+        .justify_start()
+        .label(label)
+        .when(checked, |b| b.icon(IconName::Check))
+    };
+    v_flex()
+      .id("context-menu")
+      .occlude()
+      .absolute()
+      .left(px(left))
+      .top(px(top))
+      .w(px(WIDTH))
+      .p_1()
+      .gap_0p5()
+      .rounded_lg()
+      .bg(popover)
+      .border_1()
+      .border_color(border)
+      .shadow_lg()
+      .child(
+        entry("context-help", "Raccourcis clavier", self.help).on_click(cx.listener(
+          |this, _, _, cx| {
+            this.context_menu = None;
+            this.help = !this.help;
+            this.show_controls(cx);
+          },
+        )),
+      )
+      .child(
+        entry("context-stats", "Statistiques", self.stats).on_click(cx.listener(
+          |this, _, _, cx| {
+            this.context_menu = None;
+            this.toggle_stats(cx);
+          },
+        )),
+      )
+      .into_any_element()
   }
 
   /// Why the video cannot play, with a way back in the full-window layout.

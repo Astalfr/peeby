@@ -101,6 +101,10 @@ Principles:
 - [x] Events for Jellyfin's reports: `Started`, `Paused`, `Seeked`, `TracksChanged` (only on a change),
       `Close`; `position()`, `duration()`, `is_paused()`, `selected_tracks()`, `finished()`
 - [x] One shortcut table (below), with the `?` help overlay (French)
+- [x] Right click on the picture: a menu with "Raccourcis clavier" (the help) and "Statistiques" (mpv's codecs,
+      resolution, decoding, frame rates, dropped frames, A/V sync, audio output, bitrates, buffer, read once a
+      second through `Player::property`). No shortcut button in the bar. Both panels stay inside the player and
+      scroll when it is smaller (checked at 640×360 by sending the clicks to the window, cursor untouched)
 - [x] Two layouts: `Layout::Embedded` (YouTube) and `Layout::Window` (top bar with back, title and subtitle,
       window buttons; Esc/Backspace close; wheel volume)
 - [x] `cargo run -p ui --example player`: the full-window layout on a video mpv generates (two audio tracks,
@@ -170,6 +174,7 @@ Principles:
 | Esc | Close menu or help, else leave fullscreen, else close the full-window player |
 | Backspace | Close the full-window player |
 | ? | Shortcut help |
+| Right click | Menu: shortcut help, statistics |
 
 ## Jellyfin parity checklist
 
