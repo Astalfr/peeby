@@ -15,10 +15,10 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Feed, VideoItem};
 
-use crate::app::{AppView, Route};
-use crate::cards::{video_card, video_row};
 use crate::settings::{FeedLayout, Settings};
-use crate::youtube::error_text;
+use crate::spaces::youtube::cards::{video_card, video_row};
+use crate::spaces::youtube::convert::error_text;
+use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::card::{skeleton_card, skeleton_row};
 use ui::images::Images;
@@ -76,7 +76,7 @@ impl Shape {
 pub struct FeedView {
   client: Client,
   source: Source,
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   state: State,
   videos: Vec<VideoItem>,
   continuation: Option<String>,
@@ -101,7 +101,7 @@ impl FeedView {
   pub fn new(
     client: Client,
     source: Source,
-    nav: WeakEntity<AppView>,
+    nav: WeakEntity<YouTubeSpace>,
     cx: &mut Context<Self>,
   ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {

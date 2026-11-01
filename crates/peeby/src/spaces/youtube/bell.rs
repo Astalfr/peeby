@@ -15,8 +15,8 @@ use gpui_component::popover::Popover;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{ChannelNotifications, Error, NotificationLevel};
 
-use crate::save::Session;
-use crate::youtube::error_text;
+use crate::spaces::youtube::convert::error_text;
+use crate::spaces::youtube::save::Session;
 use ui::assets::Icon;
 use ui::widgets::loader;
 use ui::{runtime, theme};

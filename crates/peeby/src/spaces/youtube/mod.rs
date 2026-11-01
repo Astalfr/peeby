@@ -1,28 +1,43 @@
-//! Root view: title bar (back, notifications), sidebar (home, subscriptions,
-//! playlists, account, settings) and a stack of pages. In fullscreen only the page is shown.
+//! The YouTube space: its routes, its stack of pages (it renders the one on top) and the
+//! modules of its pages.
+
+pub mod account;
+pub mod bell;
+pub mod cards;
+pub mod channels;
+pub mod convert;
+pub mod feed;
+pub mod inbox;
+pub mod playlists;
+pub mod prefetch;
+pub mod queue;
+pub mod save;
+pub mod settings_page;
+pub mod tools;
+pub mod watch;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyView, App, Context, Entity, FontWeight, SharedString, Window, div,
-  ease_out_quint, px,
+  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString,
+  WeakEntity, Window, div, ease_out_quint, px,
 };
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::{TitleBar, h_flex, v_flex};
+use gpui_component::popover::PopoverState;
 use innertube::{Client, Cookies};
-
-use crate::account::AccountView;
-use crate::channels::ChannelsView;
-use crate::feed::{FeedView, Source};
-use crate::playlists::{PlaylistView, PlaylistsView};
-use crate::queue::Queue;
-use crate::settings::Settings;
-use crate::settings_page::SettingsView;
-use crate::watch::WatchView;
-use crate::{bell, inbox, prefetch, save, settings};
 use ui::assets::Icon;
 use ui::images::Images;
-use ui::{assets, runtime, theme};
+use ui::player::PlayerView;
+use ui::theme::Accent;
+use ui::{runtime, theme};
+
+use crate::settings;
+use crate::settings::Settings;
+use crate::shell::space::{MenuEntry, Space, SpaceEvent, SpaceInfo};
+use account::AccountView;
+use channels::ChannelsView;
+use feed::{FeedView, Source};
+use playlists::{PlaylistView, PlaylistsView};
+use queue::Queue;
+use watch::WatchView;
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -31,7 +46,6 @@ pub enum Route {
   Subscriptions,
   /// Session state and cookie import.
   Account,
-  Settings,
   /// The subscribed channels.
   Channels,
   /// A channel's videos.
@@ -62,7 +76,7 @@ impl Route {
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
-      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Settings => true,
+      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
     }
@@ -74,14 +88,14 @@ struct Page {
   view: AnyView,
 }
 
-pub struct AppView {
+pub struct YouTubeSpace {
   client: Client,
   stack: Vec<Page>,
   /// Page to open at the next render (it needs the window), after a session change.
   reset_to: Option<Route>,
 }
 
-impl AppView {
+impl YouTubeSpace {
   /// The app on the home page, then on `initial_videos` in order (command-line URLs or ids).
   pub fn new(
     client: Client,
@@ -160,10 +174,9 @@ impl AppView {
       let cookies = load.await;
       this
         .update(cx, |this, cx| {
+          // Home is rebuilt with the new client the next time the space shows (the settings
+          // page is the shell's, so the space is not on screen meanwhile).
           this.set_session(cookies, cx);
-          // Stay on the settings page; Home is rebuilt when opened.
-          this.reset_to = None;
-          this.stack.retain(|page| page.route.is_top_level());
         })
         .ok();
     })
@@ -190,7 +203,6 @@ impl AppView {
       Route::Subscriptions => cx
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
-      Route::Settings => cx.new(|_| SettingsView::new(nav)).into(),
       Route::Channels => cx
         .new(|cx| ChannelsView::new(client, nav, window, cx))
         .into(),
@@ -269,215 +281,131 @@ impl AppView {
     }
   }
 
-  fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> TitleBar {
-    let collapsed = Settings::get(cx).sidebar_collapsed;
-    let menu = Button::new("menu")
-      .ghost()
-      .icon(Icon::Menu)
-      .tooltip(if collapsed {
-        "Développer le menu"
-      } else {
-        "Réduire le menu"
-      })
-      .on_click(cx.listener(|_, _, _, cx| {
-        Settings::update(cx, |s| s.sidebar_collapsed = !s.sidebar_collapsed);
-        cx.notify();
-      }));
-    let back = (self.stack.len() > 1).then(|| {
-      Button::new("back")
-        .ghost()
-        .icon(Icon::ArrowLeft)
-        .tooltip("Retour")
-        .on_click(cx.listener(|this, _, _, cx| this.back(cx)))
-    });
-    TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
-      h_flex()
-        .h_full()
-        .w_full()
-        .gap_3()
-        .items_center()
-        // The bar is a window drag area; occluding the controls keeps their clicks.
-        .child(div().occlude().child(menu))
-        .children(back.map(|b| div().occlude().child(b)))
-        .child(mark(window, cx))
-        .child(div().flex_1())
-        .children(
-          inbox::bell_button(cx.weak_entity(), cx).map(|bell| div().occlude().mr_2().child(bell)),
-        ),
-    )
+  /// Asks the shell to show this space (a notification was clicked from another tab).
+  pub fn request_focus(&mut self, cx: &mut Context<Self>) {
+    cx.emit(SpaceEvent::Activate);
   }
 
-  /// A sidebar entry: icon and label, muted until hovered or active; the active
-  /// one has a light background and a red pill on its left edge. `collapsed`: the icon alone,
-  /// centered.
-  fn entry(id: SharedString, active: bool, collapsed: bool) -> gpui::Stateful<gpui::Div> {
-    h_flex()
-      .id(id)
-      .relative()
-      .flex_none()
-      .h(px(40.))
-      .map(|el| {
-        if collapsed {
-          el.justify_center()
-        } else {
-          el.px_3().gap_3()
-        }
-      })
-      .items_center()
-      .rounded(px(6.))
-      .cursor_pointer()
-      .text_sm()
-      .text_color(if active {
-        theme::foreground()
-      } else {
-        theme::muted()
-      })
-      .when(active, |el| {
-        el.bg(gpui::white().opacity(0.06))
-          .font_weight(FontWeight::MEDIUM)
-          .child(
-            div()
-              .absolute()
-              .left_0()
-              .top(px(12.))
-              .w(px(3.))
-              .h(px(16.))
-              .rounded_full()
-              .bg(theme::accent()),
-          )
-      })
-      .hover(|s| {
-        s.bg(gpui::white().opacity(0.04))
-          .text_color(theme::foreground())
-      })
+  /// The route of a sidebar entry.
+  fn entry_route(id: &str) -> Option<Route> {
+    Some(match id {
+      "home" => Route::Home,
+      "subscriptions" => Route::Subscriptions,
+      "watch-later" => Route::watch_later(),
+      "playlists" => Route::Playlists,
+      "account" => Route::Account,
+      _ => return None,
+    })
+  }
+}
+
+impl EventEmitter<SpaceEvent> for YouTubeSpace {}
+
+impl Space for YouTubeSpace {
+  fn info(&self) -> SpaceInfo {
+    SpaceInfo {
+      name: "YouTube".into(),
+      badge: "YT".into(),
+      accent: Accent::red(),
+    }
   }
 
-  /// The entry of the page at the bottom of the stack is active, so Subscriptions stays lit
-  /// on the channels and channel pages opened from it. Collapsed, entries show their icon
-  /// alone and their label as a tooltip.
-  fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  /// The entry of the page at the bottom of the stack is active, so Subscriptions stays lit on
+  /// the channels and channel pages opened from it.
+  fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
     let root = self.stack.first().map(|page| page.route.clone());
-    let collapsed = Settings::get(cx).sidebar_collapsed;
-    let nav = |label: &'static str, icon: Icon, route: Route, cx: &mut Context<Self>| {
-      let active = root.as_ref() == Some(&route);
-      Self::entry(SharedString::from(label), active, collapsed)
-        .child(gpui_component::Icon::new(icon).size(px(18.)).flex_none())
-        .map(|el| {
-          if collapsed {
-            el.tooltip(move |window, cx| {
-              gpui_component::tooltip::Tooltip::new(label).build(window, cx)
-            })
-          } else {
-            el.child(div().truncate().child(label))
-          }
-        })
-        .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
-    };
-    v_flex()
-      .w(theme::sidebar_width(collapsed))
-      .h_full()
-      .flex_none()
-      .child(
-        v_flex()
-          .id("sidebar")
-          .flex_1()
-          .min_h_0()
-          .px_2()
-          .pt_2()
-          .gap_1()
-          .overflow_y_scrollbar()
-          .child(nav("Accueil", Icon::Home, Route::Home, cx))
-          .child(nav(
-            "Abonnements",
-            Icon::Subscriptions,
-            Route::Subscriptions,
-            cx,
-          ))
-          .child(nav(
-            save::WATCH_LATER_TITLE,
-            Icon::WatchLater,
-            Route::watch_later(),
-            cx,
-          ))
-          .child(nav("Playlists", Icon::Playlists, Route::Playlists, cx)),
-      )
-      .child(
-        v_flex()
-          .flex_none()
-          .px_2()
-          .py_2()
-          .gap_1()
-          .border_t_1()
-          .border_color(theme::border())
-          .child(nav("Compte", Icon::Account, Route::Account, cx))
-          .child(nav("Réglages", Icon::Settings, Route::Settings, cx)),
-      )
+    [
+      ("home", "Accueil", Icon::Home, false),
+      ("subscriptions", "Abonnements", Icon::Subscriptions, false),
+      (
+        "watch-later",
+        save::WATCH_LATER_TITLE,
+        Icon::WatchLater,
+        false,
+      ),
+      ("playlists", "Playlists", Icon::Playlists, false),
+      ("account", "Compte", Icon::Account, true),
+    ]
+    .into_iter()
+    .map(|(id, label, icon, bottom)| MenuEntry {
+      id: id.into(),
+      label: label.into(),
+      icon,
+      active: root.is_some() && Self::entry_route(id) == root,
+      bottom,
+    })
+    .collect()
+  }
+
+  fn open_entry(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    if let Some(route) = Self::entry_route(id) {
+      self.open(route, window, cx);
+    }
+  }
+
+  fn can_go_back(&self) -> bool {
+    self.stack.len() > 1
+  }
+
+  fn back(&mut self, cx: &mut Context<Self>) {
+    YouTubeSpace::back(self, cx);
+  }
+
+  fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
+    let watch = self
+      .stack
+      .last()?
+      .view
+      .clone()
+      .downcast::<WatchView>()
+      .ok()?;
+    Some(watch.read(cx).player())
+  }
+
+  fn unseen(&self, cx: &App) -> Option<usize> {
+    inbox::unseen(cx)
+  }
+
+  fn notifications(
+    &self,
+    popover: WeakEntity<PopoverState>,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    inbox::unseen(cx)?;
+    Some(inbox::panel(cx.weak_entity(), popover, window, cx))
   }
 }
 
-/// Peeby's mark: the round logo and the name.
-fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
-  h_flex()
-    .gap_2()
-    .items_center()
-    .child(assets::logo(22., window, cx))
-    .child(div().text_sm().font_weight(FontWeight::BOLD).child("Peeby"))
-}
-
-impl Render for AppView {
+impl Render for YouTubeSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     if let Some(route) = self.reset_to.take() {
       // The account page stays on screen with its message; Home is rebuilt underneath.
       let on_account = matches!(self.stack.last().map(|p| &p.route), Some(Route::Account));
       if !on_account {
+        // Every page holds the old client: start over, even if Home is on top.
+        self.stack.clear();
         self.open(route, window, cx);
       } else {
         self.stack.retain(|page| page.route == Route::Account);
       }
     }
-    let root = v_flex()
-      .size_full()
-      .bg(theme::chrome(cx))
-      .text_color(theme::foreground());
-    // Fullscreen belongs to the player: no title bar, no sidebar.
-    if window.is_fullscreen() {
-      return root.children(self.stack.last().map(|page| page.view.clone()));
+    let Some(page) = self.stack.last() else {
+      return div().size_full().into_any_element();
+    };
+    let view = div().size_full().relative().child(page.view.clone());
+    // A short fade and rise each time a page appears. Not on the watch page: its video surface
+    // is an external texture, and leaving fullscreen would replay the fade.
+    if matches!(page.route, Route::Watch(_)) || window.is_fullscreen() {
+      return view.into_any_element();
     }
-    let page = self.stack.last().map(|page| {
-      let view = div().size_full().relative().child(page.view.clone());
-      // A short fade and rise each time a page appears. Not on the watch page: its video
-      // surface is an external texture, and leaving fullscreen would replay the fade.
-      if matches!(page.route, Route::Watch(_)) {
-        return view.into_any_element();
-      }
-      view
-        .with_animation(
-          SharedString::from(format!("page-{}-{:?}", self.stack.len(), page.route)),
-          Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
-          |el, t| el.opacity(t).top(px(8. * (1. - t))),
-        )
-        .into_any_element()
-    });
-    root.child(self.title_bar(window, cx)).child(
-      h_flex()
-        .flex_1()
-        .min_h_0()
-        .items_start()
-        .child(self.sidebar(cx))
-        .child(
-          div()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .rounded_tl(theme::RADIUS_LG)
-            .border_t_1()
-            .border_l_1()
-            .border_color(theme::border())
-            .bg(theme::background())
-            .overflow_hidden()
-            .children(page),
-        ),
-    )
+    view
+      .with_animation(
+        SharedString::from(format!("page-{}-{:?}", self.stack.len(), page.route)),
+        Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
+        |el, t| el.opacity(t).top(px(8. * (1. - t))),
+      )
+      .into_any_element()
   }
 }
 

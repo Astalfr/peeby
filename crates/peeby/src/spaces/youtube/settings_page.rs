@@ -6,17 +6,17 @@ use gpui::{Context, WeakEntity, Window, div, px};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::v_flex;
 
-use crate::app::AppView;
 use crate::settings::{LANGUAGES, QUALITIES, Settings};
+use crate::spaces::youtube::YouTubeSpace;
 use ui::form::{OnClick, choices, row, section};
 use ui::widgets::page_title;
 
 pub struct SettingsView {
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
 }
 
 impl SettingsView {
-  pub fn new(nav: WeakEntity<AppView>) -> Self {
+  pub fn new(nav: WeakEntity<YouTubeSpace>) -> Self {
     Self { nav }
   }
 }

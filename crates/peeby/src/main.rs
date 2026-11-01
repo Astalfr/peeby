@@ -3,23 +3,11 @@
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod account;
-mod app;
-mod bell;
-mod cards;
-mod channels;
-mod feed;
-mod inbox;
-mod playlists;
-mod prefetch;
-mod queue;
-mod save;
 mod settings;
-mod settings_page;
-mod tools;
-mod watch;
-mod youtube;
+mod shell;
+mod spaces;
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
@@ -27,6 +15,10 @@ use gpui::{
 };
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
+use shell::Shell;
+use shell::space::SpaceHandle;
+use spaces::jellyfin::JellyfinSpace;
+use spaces::youtube::{YouTubeSpace, convert, prefetch, tools};
 use ui::{assets, images, runtime, theme};
 
 fn main() {
@@ -41,7 +33,7 @@ fn main() {
   // others).
   let initial_videos: Vec<String> = std::env::args()
     .skip(1)
-    .filter_map(|arg| app::video_id(&arg).map(str::to_owned))
+    .filter_map(|arg| spaces::youtube::video_id(&arg).map(str::to_owned))
     .collect();
 
   // Small local file, read before the UI starts.
@@ -79,7 +71,7 @@ fn main() {
       cx.set_global(prefs);
       match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
-          images::init(Arc::new(youtube::ImageFetch(anonymous.clone())), cx);
+          images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);
           prefetch::init(anonymous, cx);
         }
         Err(e) => tracing::error!("cannot create the HTTP client: {e}"),
@@ -112,15 +104,27 @@ fn main() {
         ..TitleBar::window_options()
       };
       let opened = cx.open_window(options, |window, cx| {
-        let app = cx.new(|cx| app::AppView::new(client, initial_videos, window, cx));
-        cx.new(|cx| Root::new(app, window, cx))
+        let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, window, cx));
+        let jellyfin = cx.new(|_| JellyfinSpace);
+        let spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
+        let shell = cx.new(|cx| Shell::new(spaces, youtube.downgrade(), window, cx));
+        cx.new(|cx| Root::new(shell, window, cx))
       });
-      if let Err(e) = opened {
-        tracing::error!("cannot open the main window: {e:#}");
-        cx.quit();
-        return;
-      }
-      cx.on_window_closed(|cx, _| cx.quit()).detach();
+      let main = match opened {
+        Ok(main) => main.window_id(),
+        Err(e) => {
+          tracing::error!("cannot open the main window: {e:#}");
+          cx.quit();
+          return;
+        }
+      };
+      // The app ends with its main window, not with the mini-player's.
+      cx.on_window_closed(move |cx, closed| {
+        if closed == main {
+          cx.quit();
+        }
+      })
+      .detach();
       cx.activate(true);
     });
 }

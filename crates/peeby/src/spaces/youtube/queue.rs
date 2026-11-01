@@ -9,8 +9,8 @@ use std::hash::{BuildHasher, Hasher};
 use gpui::{Context, EventEmitter, Subscription};
 use innertube::{Client, VideoItem};
 
-use crate::prefetch;
-use crate::save::{self, EntryRemoved};
+use crate::spaces::youtube::prefetch;
+use crate::spaces::youtube::save::{self, EntryRemoved};
 use ui::runtime;
 
 /// Load the next videos when fewer than this many are left to play.

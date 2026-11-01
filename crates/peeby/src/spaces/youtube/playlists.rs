@@ -17,12 +17,12 @@ use gpui_component::skeleton::Skeleton;
 use gpui_component::{Disableable, IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Playlist, PlaylistSummary};
 
-use crate::app::{AppView, Route};
-use crate::cards::playlist_row;
-use crate::queue::Queue;
-use crate::save::{self, EntryRemoved};
 use crate::settings::Settings;
-use crate::youtube::{self, error_text};
+use crate::spaces::youtube::cards::playlist_row;
+use crate::spaces::youtube::convert::{self, error_text};
+use crate::spaces::youtube::queue::Queue;
+use crate::spaces::youtube::save::{self, EntryRemoved};
+use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::card::WIDE;
 use ui::card::skeleton_card;
@@ -54,7 +54,7 @@ impl<T> State<T> {
 }
 
 /// The notice of a page that needs a session, with a link to the account page.
-fn signed_out(nav: &WeakEntity<AppView>) -> AnyElement {
+fn signed_out(nav: &WeakEntity<YouTubeSpace>) -> AnyElement {
   let nav = nav.clone();
   notice(
     Icon::Account,
@@ -84,12 +84,12 @@ fn failed(title: &'static str, error: SharedString) -> gpui::Div {
 
 pub struct PlaylistsView {
   client: Client,
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   state: State<Vec<PlaylistSummary>>,
 }
 
 impl PlaylistsView {
-  pub fn new(client: Client, nav: WeakEntity<AppView>, cx: &mut Context<Self>) -> Self {
+  pub fn new(client: Client, nav: WeakEntity<YouTubeSpace>, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -137,7 +137,7 @@ impl PlaylistsView {
 /// then the title and details. On hover it rises, a red ring fades in and the title turns red.
 fn playlist_card(
   playlist: &PlaylistSummary,
-  nav: &WeakEntity<AppView>,
+  nav: &WeakEntity<YouTubeSpace>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -153,7 +153,7 @@ fn playlist_card(
     cx,
   );
   let thumb = image_fill(
-    &youtube::picture(&playlist.thumbnails),
+    &convert::picture(&playlist.thumbnails),
     CARD_WIDTH,
     WIDE,
     theme::RADIUS_LG,
@@ -344,7 +344,7 @@ pub struct PlaylistView {
   id: String,
   /// Title from the playlists page, shown until the playlist has loaded.
   title: String,
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   state: State<Playlist>,
   loading_more: bool,
   /// The last next-page request failed: no automatic retry, the button retries.
@@ -357,7 +357,7 @@ impl PlaylistView {
     client: Client,
     id: String,
     title: String,
-    nav: WeakEntity<AppView>,
+    nav: WeakEntity<YouTubeSpace>,
     cx: &mut Context<Self>,
   ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
@@ -516,7 +516,7 @@ impl PlaylistView {
 
   fn header(&self, playlist: &Playlist, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let cover = image_fill(
-      &youtube::picture(&playlist.thumbnails),
+      &convert::picture(&playlist.thumbnails),
       CARD_WIDTH,
       WIDE,
       theme::RADIUS_LG,

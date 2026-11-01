@@ -50,7 +50,11 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 ## Navigation
 
-`AppView` owns the title bar (menu button folding the sidebar, back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peeby <url-or-id>` opens a video at startup.
+`shell::Shell` is the window's root. It owns the top bar (menu button folding the sidebar, back, logo, the spaces as tabs, search, notifications, settings), the sidebar, filled with the open space's entries, and the content panel, which renders the open space's entity (or the settings page, opened by the gear). It knows the spaces only through the `shell::space::Space` trait: name, badge and accent, sidebar entries and opening one, back, the player of the page on top, unread notifications and the space's section of the notifications panel, and a `SpaceEvent::Activate` to be shown (a notification clicked from another tab). Adding a service means implementing `Space` and adding it to the list in `main.rs`. Switching tabs re-applies the space's accent (`theme::set_accent`) and does not pause anything.
+
+Each space keeps its own stack of pages. `spaces::youtube::YouTubeSpace` (formerly `AppView`) renders its top page with the page fade; sidebar pages reset its stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed, and a covered watch page pauses its player. `spaces::jellyfin::JellyfinSpace` is a placeholder until step 6. `peeby <url-or-id>` opens a video at startup.
+
+**Mini-player** ([ADR 0008](decisions/0008-mini-player-window.md)): leaving a page whose video plays (another tab, the settings) opens `shell::mini_player`, a `WindowKind::PopUp` window above every other one, at the bottom right of the main window's screen, drawing the same `VideoView`. It asks its space for the current player at each render (a queue carries on), closes when the page shows again (its tab, or its own "Revenir à la page" button) and pauses then closes on "×". `ui::player::NowPlaying` keeps one sound at a time. The app quits with its main window only.
 
 ## Feeds
 

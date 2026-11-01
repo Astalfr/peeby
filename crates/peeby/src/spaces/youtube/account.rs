@@ -10,10 +10,10 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
-use crate::app::AppView;
 use crate::settings;
 use crate::settings::Settings;
-use crate::youtube::error_text;
+use crate::spaces::youtube::YouTubeSpace;
+use crate::spaces::youtube::convert::error_text;
 use ui::assets::Icon;
 use ui::widgets::page_title;
 use ui::{runtime, theme};
@@ -26,13 +26,13 @@ enum Status {
 }
 
 pub struct AccountView {
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   signed_in: bool,
   status: Status,
 }
 
 impl AccountView {
-  pub fn new(nav: WeakEntity<AppView>, signed_in: bool) -> Self {
+  pub fn new(nav: WeakEntity<YouTubeSpace>, signed_in: bool) -> Self {
     Self {
       nav,
       signed_in,

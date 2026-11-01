@@ -1,0 +1,171 @@
+//! What the shell asks of a space (YouTube, Jellyfin, later Twitch), and a handle that hides
+//! the space's type. A space is a GPUI entity that renders its current page; the shell draws
+//! the top bar, the sidebar from the space's entries, and the mini-player.
+
+use std::rc::Rc;
+
+use gpui::prelude::*;
+use gpui::{
+  AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString, Subscription, WeakEntity,
+  Window,
+};
+use gpui_component::popover::PopoverState;
+use ui::assets::Icon;
+use ui::player::PlayerView;
+use ui::theme::Accent;
+
+/// How a space shows in the tabs.
+#[derive(Clone)]
+pub struct SpaceInfo {
+  /// Tab label, e.g. `YouTube`.
+  pub name: SharedString,
+  /// Two letters on the tab's colored badge, e.g. `YT`.
+  pub badge: SharedString,
+  /// The app's accent while the space is open.
+  pub accent: Accent,
+}
+
+/// An entry of the sidebar.
+#[derive(Clone)]
+pub struct MenuEntry {
+  /// Passed back to [`Space::open_entry`].
+  pub id: SharedString,
+  /// Label, and tooltip of the folded sidebar.
+  pub label: SharedString,
+  /// Icon.
+  pub icon: Icon,
+  /// The page shown belongs to this entry.
+  pub active: bool,
+  /// Pinned at the bottom of the sidebar (account).
+  pub bottom: bool,
+}
+
+/// What a space asks of the shell.
+pub enum SpaceEvent {
+  /// Show this space (a notification of it was clicked from another tab).
+  Activate,
+}
+
+/// A service's part of the app: its pages, its sidebar entries and what it plays.
+pub trait Space: Render + EventEmitter<SpaceEvent> {
+  /// Name, badge and accent.
+  fn info(&self) -> SpaceInfo;
+
+  /// Sidebar entries, top to bottom.
+  fn menu(&self, cx: &App) -> Vec<MenuEntry>;
+
+  /// Opens the page of a sidebar entry.
+  fn open_entry(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>);
+
+  /// Whether "back" leads somewhere within the space.
+  fn can_go_back(&self) -> bool;
+
+  /// Goes back one page.
+  fn back(&mut self, cx: &mut Context<Self>);
+
+  /// The player of the page on top, if it has one. The shell moves it to the mini-player
+  /// when another tab opens while it plays.
+  fn player(&self, _cx: &App) -> Option<Entity<PlayerView>> {
+    None
+  }
+
+  /// Unread notifications; `None` when the space has none to show (no inbox, signed out).
+  fn unseen(&self, _cx: &App) -> Option<usize> {
+    None
+  }
+
+  /// The space's section of the notifications panel; `popover` closes the panel.
+  fn notifications(
+    &self,
+    _popover: WeakEntity<PopoverState>,
+    _window: &mut Window,
+    _cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    None
+  }
+}
+
+/// A space whatever its type, as the shell holds it.
+pub trait AnySpace {
+  /// The space's entity as a view (its current page).
+  fn view(&self) -> AnyView;
+  /// See [`Space::info`].
+  fn info(&self, cx: &App) -> SpaceInfo;
+  /// See [`Space::menu`].
+  fn menu(&self, cx: &App) -> Vec<MenuEntry>;
+  /// See [`Space::open_entry`].
+  fn open_entry(&self, id: &str, window: &mut Window, cx: &mut App);
+  /// See [`Space::can_go_back`].
+  fn can_go_back(&self, cx: &App) -> bool;
+  /// See [`Space::back`].
+  fn back(&self, cx: &mut App);
+  /// See [`Space::player`].
+  fn player(&self, cx: &App) -> Option<Entity<PlayerView>>;
+  /// See [`Space::unseen`].
+  fn unseen(&self, cx: &App) -> Option<usize>;
+  /// See [`Space::notifications`].
+  fn notifications(
+    &self,
+    popover: WeakEntity<PopoverState>,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> Option<AnyElement>;
+  /// Calls `on_change` whenever the space changes (a page opened or replaced).
+  fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription;
+  /// Calls `on_activate` when the space asks to be shown.
+  fn on_activate(&self, cx: &mut App, on_activate: Box<dyn Fn(&mut App)>) -> Subscription;
+}
+
+impl<T: Space> AnySpace for Entity<T> {
+  fn view(&self) -> AnyView {
+    self.clone().into()
+  }
+
+  fn info(&self, cx: &App) -> SpaceInfo {
+    self.read(cx).info()
+  }
+
+  fn menu(&self, cx: &App) -> Vec<MenuEntry> {
+    self.read(cx).menu(cx)
+  }
+
+  fn open_entry(&self, id: &str, window: &mut Window, cx: &mut App) {
+    self.update(cx, |space, cx| space.open_entry(id, window, cx));
+  }
+
+  fn can_go_back(&self, cx: &App) -> bool {
+    self.read(cx).can_go_back()
+  }
+
+  fn back(&self, cx: &mut App) {
+    self.update(cx, |space, cx| space.back(cx));
+  }
+
+  fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
+    self.read(cx).player(cx)
+  }
+
+  fn unseen(&self, cx: &App) -> Option<usize> {
+    self.read(cx).unseen(cx)
+  }
+
+  fn notifications(
+    &self,
+    popover: WeakEntity<PopoverState>,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> Option<AnyElement> {
+    self.update(cx, |space, cx| space.notifications(popover, window, cx))
+  }
+
+  fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription {
+    cx.observe(self, move |_, cx| on_change(cx))
+  }
+
+  fn on_activate(&self, cx: &mut App, on_activate: Box<dyn Fn(&mut App)>) -> Subscription {
+    cx.subscribe(self, move |_, SpaceEvent::Activate, cx| on_activate(cx))
+  }
+}
+
+/// A space as the shell holds it.
+pub type SpaceHandle = Rc<dyn AnySpace>;

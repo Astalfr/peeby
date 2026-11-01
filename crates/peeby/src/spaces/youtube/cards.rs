@@ -5,13 +5,13 @@ use gpui::{AnyElement, App, WeakEntity, Window};
 use innertube::VideoItem;
 use ui::card::{Hover, MediaCard, RowAction};
 
-use crate::app::{AppView, Route};
-use crate::{save, youtube};
+use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{convert, save};
 
 /// Opens the watch page of `video`.
 fn open_video(
   video: &VideoItem,
-  nav: &WeakEntity<AppView>,
+  nav: &WeakEntity<YouTubeSpace>,
 ) -> impl Fn(&mut Window, &mut App) + use<> {
   let nav = nav.clone();
   let route = Route::Watch(video.id.clone());
@@ -30,21 +30,21 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
     id.to_owned(),
     hover,
     video.title.clone(),
-    youtube::picture(&video.thumbnails),
+    convert::picture(&video.thumbnails),
   )
   .lines([
     video.channel.clone().unwrap_or_default(),
     video.metadata.join(" · "),
   ])
   .badge(video.duration.clone())
-  .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, hovered, cx))
+  .on_hover(move |hovered, cx| crate::spaces::youtube::prefetch::hover(&video_id, hovered, cx))
 }
 
 /// Grid card, `width` wide, with the channel avatar and the save buttons.
 pub fn video_card(
   video: &VideoItem,
   width: f32,
-  nav: &WeakEntity<AppView>,
+  nav: &WeakEntity<YouTubeSpace>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -52,7 +52,7 @@ pub fn video_card(
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
   card(&id, hover, video)
-    .avatar(Some(youtube::picture(&video.avatar)))
+    .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t))
     .on_click(open_video(video, nav))
@@ -62,7 +62,7 @@ pub fn video_card(
 /// Compact card (related videos).
 pub fn compact_card(
   video: &VideoItem,
-  nav: &WeakEntity<AppView>,
+  nav: &WeakEntity<YouTubeSpace>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -77,7 +77,7 @@ pub fn compact_card(
 /// channel avatar and the save buttons.
 pub fn video_row(
   video: &VideoItem,
-  nav: &WeakEntity<AppView>,
+  nav: &WeakEntity<YouTubeSpace>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -85,7 +85,7 @@ pub fn video_row(
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
   card(&id, hover, video)
-    .avatar(Some(youtube::picture(&video.avatar)))
+    .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t))
     .on_click(open_video(video, nav))

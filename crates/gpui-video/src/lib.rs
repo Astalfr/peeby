@@ -157,9 +157,10 @@ fn marker_image(width: u32, height: u32, handle: u64) -> Option<Arc<RenderImage>
 }
 
 impl Render for VideoView {
-  fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // From every window: the view may have been drawn in another one (the mini-player).
     for image in self.stale.drain(..) {
-      let _ = window.drop_image(image);
+      cx.drop_image(image, Some(window));
     }
     let on_resize = self.on_resize.clone();
     let frame = self.frame();

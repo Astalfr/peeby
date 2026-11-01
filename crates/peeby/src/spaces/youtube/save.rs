@@ -26,13 +26,13 @@ use gpui_component::skeleton::Skeleton;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Error, PlaylistChoice};
 
-use crate::youtube::error_text;
+use crate::spaces::youtube::convert::error_text;
 use ui::assets::Icon;
 use ui::card::RowAction;
 use ui::widgets::loader;
 use ui::{runtime, theme};
 
-/// The app's current client, for actions started from any page. `AppView` sets it at startup
+/// The app's current client, for actions started from any page. `YouTubeSpace` sets it at startup
 /// and on every session change.
 pub struct Session(pub Client);
 

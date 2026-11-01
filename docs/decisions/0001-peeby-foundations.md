@@ -28,7 +28,8 @@ PeebTube additions to `player`:
 - `Player::property`, read-only, for the player's statistics panel.
 
 PeebTube additions to `gpui-video`:
-- `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners).
+- `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners);
+- `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window.
 
 The app's `player_view.rs` adapts peeby's `player_page.rs` (seek bar, volume slider, control buttons, auto-hide, OSD, shortcuts) without its Jellyfin parts.
 

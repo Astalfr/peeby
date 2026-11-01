@@ -11,19 +11,17 @@ use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, App, Context, ElementId, Entity, FontWeight, Global, ScrollHandle, SharedString,
+  AnyElement, App, Context, ElementId, Entity, FontWeight, Global, ScrollHandle, SharedString,
   WeakEntity, Window, div, px,
 };
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::popover::{Popover, PopoverState};
+use gpui_component::popover::PopoverState;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::{h_flex, v_flex};
 use innertube::{Error, NotificationPage, NotificationSection};
 
-use crate::app::{AppView, Route};
-use crate::save::Session;
-use crate::youtube::{self, error_text};
-use ui::assets::Icon;
+use crate::spaces::youtube::convert::{self, error_text};
+use crate::spaces::youtube::save::Session;
+use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::card::WIDE;
 use ui::images::Images;
 use ui::picture::image_fill;
@@ -32,7 +30,6 @@ use ui::{runtime, theme};
 
 /// How often the unseen count is read again.
 const POLL: Duration = Duration::from_secs(30 * 60);
-const PANEL_WIDTH: f32 = 440.;
 const AVATAR: f32 = 40.;
 const THUMB_WIDTH: f32 = 86.;
 
@@ -109,59 +106,31 @@ pub fn reset(cx: &mut App) {
 
 /// The bell of the title bar: the unseen count on a red badge, the inbox on click. Signed
 /// out, nothing.
-pub fn bell_button(nav: WeakEntity<AppView>, cx: &App) -> Option<impl IntoElement + use<>> {
+/// Unread notifications; `None` signed out, when YouTube has no inbox to show.
+pub fn unseen(cx: &App) -> Option<usize> {
   let signed_in = cx.try_global::<Session>().is_some_and(|s| s.0.signed_in());
   if !signed_in {
     return None;
   }
-  let unseen = cx
-    .try_global::<InboxHandle>()
-    .map_or(0, |h| h.0.read(cx).unseen);
-  let badge = (unseen > 0).then(|| {
-    div()
-      .absolute()
-      .top(px(0.))
-      .right(px(0.))
-      .min_w(px(16.))
-      .h(px(16.))
-      .px(px(4.))
-      .rounded_full()
-      .flex()
-      .items_center()
-      .justify_center()
-      .bg(theme::accent())
-      .text_color(theme::on_accent())
-      .text_size(px(10.))
-      .font_weight(FontWeight::BOLD)
-      .child(if unseen > 9 {
-        "9+".to_owned()
-      } else {
-        unseen.to_string()
-      })
-  });
-  let trigger = Button::new("inbox-button")
-    .ghost()
-    .icon(Icon::Bell)
-    .tooltip("Notifications");
   Some(
-    div()
-      .relative()
-      .child(
-        Popover::new("inbox")
-          .anchor(Anchor::TopRight)
-          .trigger(trigger)
-          .content(move |_, window, cx| {
-            let nav = nav.clone();
-            let popover = cx.entity().downgrade();
-            let panel =
-              window.use_keyed_state(ElementId::Name("inbox-panel".into()), cx, |_, cx| {
-                InboxPanel::new(nav, popover, cx)
-              });
-            div().w(px(PANEL_WIDTH)).child(panel)
-          }),
-      )
-      .children(badge),
+    cx.try_global::<InboxHandle>()
+      .map_or(0, |h| h.0.read(cx).unseen as usize),
   )
+}
+
+/// YouTube's section of the notifications panel. It lives in the popover's element state, so
+/// it starts over (and reloads) each time the panel opens; `popover` closes the panel.
+pub fn panel(
+  nav: WeakEntity<YouTubeSpace>,
+  popover: WeakEntity<PopoverState>,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  window
+    .use_keyed_state(ElementId::Name("inbox-panel".into()), cx, |_, cx| {
+      InboxPanel::new(nav, popover, cx)
+    })
+    .into_any_element()
 }
 
 enum State {
@@ -173,7 +142,7 @@ enum State {
 /// The open inbox. It lives in the popover's element state, so it starts over (and reloads)
 /// each time the popover opens.
 struct InboxPanel {
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   popover: WeakEntity<PopoverState>,
   state: State,
   sections: Vec<NotificationSection>,
@@ -186,7 +155,7 @@ struct InboxPanel {
 
 impl InboxPanel {
   fn new(
-    nav: WeakEntity<AppView>,
+    nav: WeakEntity<YouTubeSpace>,
     popover: WeakEntity<PopoverState>,
     cx: &mut Context<Self>,
   ) -> Self {
@@ -314,7 +283,10 @@ impl InboxPanel {
       .ok();
     self
       .nav
-      .update(cx, |app, cx| app.open(Route::Watch(video_id), window, cx))
+      .update(cx, |space, cx| {
+        space.request_focus(cx);
+        space.open(Route::Watch(video_id), window, cx);
+      })
       .ok();
   }
 
@@ -346,7 +318,7 @@ impl InboxPanel {
           .when(!n.read, |el| el.bg(theme::accent())),
       )
       .child(div().size(px(AVATAR)).flex_none().child(image_fill(
-        &youtube::picture(&n.avatar),
+        &convert::picture(&n.avatar),
         AVATAR,
         1.,
         px(AVATAR / 2.),
@@ -373,7 +345,7 @@ impl InboxPanel {
             .h(px(THUMB_WIDTH * 9. / 16.))
             .flex_none()
             .child(image_fill(
-              &youtube::picture(&n.thumbnails),
+              &convert::picture(&n.thumbnails),
               THUMB_WIDTH,
               WIDE,
               theme::RADIUS,
@@ -397,11 +369,6 @@ fn inbox_error(error: &Error) -> String {
 
 impl Render for InboxPanel {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let header = div()
-      .px_2()
-      .pb_1()
-      .font_weight(FontWeight::SEMIBOLD)
-      .child("Notifications");
     let body = match &self.state {
       State::Loading => v_flex()
         .gap_3()
@@ -470,6 +437,7 @@ impl Render for InboxPanel {
         list.into_any_element()
       }
     };
-    v_flex().gap_2().child(header).child(body)
+    // The shell's panel draws the title and the space's name above.
+    body
   }
 }

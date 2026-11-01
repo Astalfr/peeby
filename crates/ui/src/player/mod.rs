@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, ClickEvent, Context, Corners, DispatchPhase,
-  Entity, EventEmitter, FocusHandle, FontWeight, ImageSource, KeyDownEvent, MouseButton,
+  Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent, MouseButton,
   MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
   SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint, img, linear_color_stop,
   linear_gradient, px, relative,
@@ -81,6 +81,18 @@ pub enum PlayerEvent {
   /// The user asked to leave the player (full-window layout: back button, Escape, Backspace),
   /// or mpv quit.
   Close,
+}
+
+/// The player that started last, as a global the shell observes (its mini-player shows only
+/// that one).
+#[derive(Default)]
+pub struct NowPlaying(Option<WeakEntity<PlayerView>>);
+
+impl Global for NowPlaying {}
+
+/// The player that started last, while it exists.
+pub fn now_playing(cx: &App) -> Option<Entity<PlayerView>> {
+  cx.try_global::<NowPlaying>()?.0.as_ref()?.upgrade()
 }
 
 /// Where the player sits.
@@ -335,6 +347,32 @@ impl PlayerView {
     self.paused
   }
 
+  /// The picture, for a mini-player showing this player elsewhere.
+  pub fn video(&self) -> Option<Entity<VideoView>> {
+    self.video.clone()
+  }
+
+  /// Plays or pauses.
+  pub fn toggle_pause(&self) {
+    self.with_player(Player::toggle_pause);
+  }
+
+  /// Pauses.
+  pub fn pause(&self) {
+    self.with_player(|p| p.set_paused(true));
+  }
+
+  /// Becomes the player that plays, pausing the previous one: one sound at a time.
+  fn take_over(&self, cx: &mut Context<Self>) {
+    let me = cx.entity();
+    if let Some(previous) = now_playing(cx)
+      && previous != me
+    {
+      previous.read(cx).pause();
+    }
+    cx.set_global(NowPlaying(Some(me.downgrade())));
+  }
+
   /// Asks the page to close the player (full-window layout).
   fn close(&mut self, cx: &mut Context<Self>) {
     cx.emit(PlayerEvent::Close);
@@ -558,6 +596,7 @@ impl PlayerView {
         self.buffering = false;
         if !self.started {
           self.started = true;
+          self.take_over(cx);
           cx.emit(PlayerEvent::Started);
         }
       }

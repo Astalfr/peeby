@@ -60,6 +60,12 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
 - The WEB `clientVersion` is one constant (`WEB_CLIENT_VERSION`), refreshed at startup from the page's ytcfg.
 - VISIONOS needs a session `visitorData` (else `LOGIN_REQUIRED`); refresh it once and retry before failing.
 
+## Spaces
+- A service is a space under `crates/peeby/src/spaces/<name>/` implementing `shell::space::Space`; the shell and the
+  `ui` crate know no service. Pages of a space keep a `WeakEntity` to their space to navigate.
+- The mini-player is a second window (ADR 0008): never update a window from inside its own event (defer), and add
+  window mouse listeners only while painting (a `canvas` paint callback), never from `render`.
+
 ## Player
 - `ui::player` (crates/ui/src/player/) is the shared player, built from peeby's `player_page.rs`: take controls and
   behavior from there first, keeping service data out of it (spaces give it a `Source`; peeby is at

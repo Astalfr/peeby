@@ -19,6 +19,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
 | Look and motion | Peeby's visual system with a red accent | [0006](decisions/0006-peeby-visual-system.md) |
 | Multi-service app (YouTube, Jellyfin, later Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
+| Mini-player | A window of its own above the others (PopUp), the same video surface, one sound at a time | [0008](decisions/0008-mini-player-window.md) |
 | UI language | French UI strings; code, comments and docs in English | — |
 
 ## Index

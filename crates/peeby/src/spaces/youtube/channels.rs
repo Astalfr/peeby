@@ -11,9 +11,9 @@ use gpui_component::skeleton::Skeleton;
 use gpui_component::{IconName, h_flex, v_flex};
 use innertube::{Channel, Client, Error};
 
-use crate::app::{AppView, Route};
-use crate::bell;
-use crate::youtube::{self, error_text};
+use crate::spaces::youtube::bell;
+use crate::spaces::youtube::convert::{self, error_text};
+use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::images::Images;
 use ui::picture::image_fill;
@@ -34,7 +34,7 @@ enum State {
 
 pub struct ChannelsView {
   client: Client,
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   state: State,
   filter: Entity<InputState>,
   _filter_subscription: Subscription,
@@ -43,7 +43,7 @@ pub struct ChannelsView {
 impl ChannelsView {
   pub fn new(
     client: Client,
-    nav: WeakEntity<AppView>,
+    nav: WeakEntity<YouTubeSpace>,
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
@@ -160,7 +160,7 @@ impl ChannelsView {
           .border_color(gpui::transparent_black())
           .group_hover(group.clone(), |s| s.border_color(theme::accent()))
           .child(image_fill(
-            &youtube::picture(&channel.avatar),
+            &convert::picture(&channel.avatar),
             AVATAR,
             1.,
             px(AVATAR / 2.),

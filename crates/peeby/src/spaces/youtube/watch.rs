@@ -26,12 +26,12 @@ use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
-use crate::app::{AppView, Route};
-use crate::cards::{compact_card, playlist_row};
-use crate::queue::{Queue, QueueEvent};
 use crate::settings::Settings;
-use crate::youtube::{self, error_text};
-use crate::{bell, prefetch, save, tools};
+use crate::spaces::youtube::cards::{compact_card, playlist_row};
+use crate::spaces::youtube::convert::{self, error_text};
+use crate::spaces::youtube::queue::{Queue, QueueEvent};
+use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{bell, prefetch, save, tools};
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
 use ui::images::Images;
@@ -84,7 +84,7 @@ struct Replies {
 pub struct WatchView {
   client: Client,
   video_id: String,
-  nav: WeakEntity<AppView>,
+  nav: WeakEntity<YouTubeSpace>,
   player: Entity<PlayerView>,
   page: Option<WatchPage>,
   votes: Option<Votes>,
@@ -110,7 +110,7 @@ impl WatchView {
     client: Client,
     video_id: String,
     queue: Option<Entity<Queue>>,
-    nav: WeakEntity<AppView>,
+    nav: WeakEntity<YouTubeSpace>,
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
@@ -347,6 +347,11 @@ impl WatchView {
     )
   }
 
+  /// The page's player.
+  pub fn player(&self) -> Entity<PlayerView> {
+    self.player.clone()
+  }
+
   /// Pauses the player while another page covers this one.
   pub fn set_covered(&mut self, covered: bool, cx: &mut Context<Self>) {
     self
@@ -363,7 +368,7 @@ impl WatchView {
         stream.codecs
       );
       self.player.update(cx, |player, cx| {
-        player.start(youtube::source(stream), clicked, cx)
+        player.start(convert::source(stream), clicked, cx)
       });
       return;
     }
@@ -383,7 +388,7 @@ impl WatchView {
           );
           player
             .update(cx, |player, cx| {
-              player.start(youtube::source(stream), clicked, cx)
+              player.start(convert::source(stream), clicked, cx)
             })
             .ok();
           return;
@@ -749,7 +754,7 @@ impl WatchView {
     };
     let avatar = (!page.channel_avatar.is_empty()).then(|| {
       div().size(px(40.)).flex_none().child(image_fill(
-        &youtube::picture(&page.channel_avatar),
+        &convert::picture(&page.channel_avatar),
         40.,
         1.,
         px(20.),
@@ -990,7 +995,7 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
       width: 88,
       height: 88,
     }];
-    image_fill(&youtube::picture(&sizes), 36., 1., px(18.), window, cx)
+    image_fill(&convert::picture(&sizes), 36., 1., px(18.), window, cx)
   });
   // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
   // only, comments are not rated from the app.

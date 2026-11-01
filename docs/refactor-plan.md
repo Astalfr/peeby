@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–3 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–4 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -121,15 +121,29 @@ Principles:
   Up/Down were not clicked or pressed (the tests do not take the mouse or the keyboard)
 
 ### 4. Shell
-- [ ] Top bar: logo, tabs, search, bell, gear, window buttons
-- [ ] Sidebar with the active space's entries, folding as today
-- [ ] One page stack per space, page fade
-- [ ] `NowPlaying` and the mini-player window (always on top, outside the main window). Checked 2026-11-01 with
+- [x] Top bar: logo, tabs, search (disabled until a space searches), aggregated bell, gear, window buttons
+- [x] Sidebar with the active space's entries, folding as today
+- [x] One page stack per space, page fade; the `Space` trait (`shell/space.rs`); YouTube under `spaces/youtube/`
+- [x] Accent per space on tab switch; a placeholder Jellyfin tab (one "Accueil" page) until step 6
+- [x] Settings behind the gear (the current YouTube settings page; unified at step 8); Compte stays in YouTube's
+      sidebar until then
+- [x] `NowPlaying` and the mini-player window (always on top, outside the main window), ADR 0008. Checked 2026-11-01 with
       `PEEBY_PIP=1 spike-yt-play`: the same `VideoView` moves into a `WindowKind::PopUp` window and back, zero-copy,
       without restarting mpv. To do: give the window its display (`display_id`), drag to move
       (`start_window_move`), resizing (the PopUp style has no frame), and release a moved view's atlas
       entries in every window (`cx.drop_image(…, None)` in `gpui-video`)
-- [ ] YouTube as the only space
+- Verified on the second screen with messages posted to the windows (cursor untouched): tabs and accent,
+  the mini-player opening on a tab switch with the video playing, "Revenir à la page" (back to YouTube, the
+  video playing in the page), "×" (paused, app still open), closing the main window with the mini-player open
+  (the app quits), the gear's page, the bell's panel with its YouTube section. **Not verified:** moving the
+  mini-player by its strip and resizing it with its grip (posted messages carry no real button state, so the
+  grip's drag ends at once), its controls showing on a real hover (posted moves get an immediate
+  `WM_MOUSELEAVE`; the controls were checked with a test build that always shows them); a notification clicked from
+  another tab (it posts `notification/record_interactions`, a write to the account), a queue moving to its next
+  video while in the mini-player, and the "one sound at a time" rule (needs a second space that plays)
+- Also verified: the sidebar's Abonnements and Compte, back from the watch page, and a language change from
+  the gear rebuilding YouTube's Home in the new language (then set back to French). A playing video stops on a
+  language change, as before step 4 (every page holds the old client)
 
 ### 5. `jellyfin-api`
 - [ ] Copy the crate and its fixture tests from peeby; workspace dependencies `keyring`, `uuid`, `url`,
