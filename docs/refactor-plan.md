@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–9 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, all ten steps done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -206,7 +206,9 @@ Principles:
       chat, animated images, the ad-removing layer if chosen, refreshable GQL settings (table in twitch.md)
 
 ### 10. Documentation
-- [ ] architecture.md, design.md, roadmap.md, CLAUDE.md, README updated
+- [x] architecture.md (diagram, crates, startup, navigation, persistence), design.md (accent per space, top bar,
+      sidebars, settings, YouTube search, Jellyfin pages, motion), roadmap.md, CLAUDE.md, docs/README.md (goals,
+      decisions) updated; the stale names (`AppView`, `player_view`, the title bar's bell, the account page) gone
 
 ## Shortcuts (proposed single table)
 

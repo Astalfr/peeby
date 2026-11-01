@@ -1,12 +1,14 @@
 # Peeby documentation
 
-Peeby is a native media client for Windows, written in Rust with [GPUI](https://www.gpui.rs/), with one tab ("space") per service: YouTube today, Jellyfin and later Twitch on the way ([refactor-plan.md](refactor-plan.md)). It was PeebTube, a YouTube client reusing the playback stack of peeby, the author's Jellyfin client, which it now replaces ([ADR 0007](decisions/0007-multi-space-app.md)).
+Peeby is a native media client for Windows, written in Rust with [GPUI](https://www.gpui.rs/), with one tab ("space") per service: YouTube and Jellyfin, Twitch prepared ([refactor-plan.md](refactor-plan.md), [twitch.md](twitch.md)). It was PeebTube, a YouTube client reusing the playback stack of peeby, the author's Jellyfin client, which it now replaces ([ADR 0007](decisions/0007-multi-space-app.md)).
 
 ## Goals
 
-1. **The YouTube pages that matter**: Home (recommendations), subscriptions and their latest videos, watch page with comments and a like/dislike bar ([Return YouTube Dislike](https://returnyoutubedislike.com)).
-2. **Fast playback**: about 1 s from click to first frame, 1080p, hardware decoding.
-3. **Nothing installed on the host**: libmpv, yt-dlp and Deno ship with the app.
+1. **The YouTube pages that matter**: Home (recommendations), subscriptions and their latest videos, search, playlists, watch page with comments and a like/dislike bar ([Return YouTube Dislike](https://returnyoutubedislike.com)).
+2. **Everything the former peeby did for Jellyfin**: home with what to resume and watch next, libraries, a title's page, search, Direct Play with progress reports, skippable segments and the next episode.
+3. **One app**: the services as tabs over the same components and player; a video keeps playing in a mini-player when another tab opens.
+4. **Fast playback**: about 1 s from click to first frame, 1080p, hardware decoding.
+5. **Nothing installed on the host**: libmpv, yt-dlp and Deno ship with the app.
 
 ## Scope decisions
 
@@ -17,7 +19,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Streams | VISIONOS client, HLS (no JS challenge, no `available_at` wait) | [0003](decisions/0003-visionos-hls-streams.md) |
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
-| Look and motion | Peeby's visual system with a red accent | [0006](decisions/0006-peeby-visual-system.md) |
+| Look and motion | Peeby's visual system, one accent per space (YouTube red, Jellyfin amber) | [0006](decisions/0006-peeby-visual-system.md) |
 | Multi-service app (YouTube, Jellyfin, later Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
 | Mini-player | A window of its own above the others (PopUp), the same video surface, one sound at a time | [0008](decisions/0008-mini-player-window.md) |
 | Jellyfin | 12.0 or newer, one server, one account, token in the Credential Manager | [0009](decisions/0009-jellyfin-12-single-account.md) |

@@ -9,10 +9,13 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **2: YouTube pages** | ✅ (RSS fallback moved to the backlog) | Subscriptions list and feed (`FEsubscriptions`, RSS fallback), comments (`commentEntityPayload`) and replies, Return YouTube Dislike bar (cache, attribution), channel page, infinite scroll | — |
 | **3: player comfort** | ✅ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
+| **Peeby refactor** | ✅ | One space per service (YouTube, Jellyfin), shared `ui` crate and player, tabs, mini-player, YouTube search, unified settings ([refactor-plan.md](refactor-plan.md), ADRs 0007–0010) | All ten steps of the plan; peeby's Jellyfin features in the Jellyfin space |
+| **Twitch space** | ⏳ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
 ## Peeby refactor
 
+- Step 10 done (2026-11-01): the docs reread and brought up to date (architecture, design, docs/README.md, CLAUDE.md). The refactor plan is complete; what was not verified is listed under each step of [refactor-plan.md](refactor-plan.md).
 - Step 9 done (2026-11-01): [twitch.md](twitch.md) (the research with its sources, and what the architecture covers) and [ADR 0010](decisions/0010-twitch-space.md): ads removed by a playlist-rewriting layer, the web `auth-token` asked for with a tutorial (the user's choices). No code.
 - Step 8 done (2026-11-01): one settings page behind the gear, with the app's sections, a shared `[player]` section used by both spaces, and a part per space (`Space::settings`); YouTube's account moved there from its sidebar. Verified on screenshots; see the plan.
 - Step 7 done (2026-11-01): YouTube search (`Client::search`, `search_more`, `parse_search` tested on two new redacted fixtures, a results page behind the top bar's search button with next pages on scroll). Verified signed out; see the plan.

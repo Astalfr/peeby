@@ -1,10 +1,10 @@
 # Peeby
 
-Native media client for Windows, written in Rust with GPUI: one tab ("space") per service, YouTube now, Jellyfin
-and later Twitch being added (docs/refactor-plan.md, ADR 0007). Playback through libmpv, YouTube streams from the InnerTube API.
+Native media client for Windows, written in Rust with GPUI: one tab ("space") per service, YouTube and Jellyfin, Twitch
+prepared (docs/twitch.md, ADR 0010). Playback through libmpv, YouTube streams from the InnerTube API, Jellyfin's by Direct Play.
 Project docs: docs/README.md (start there). Decisions: docs/decisions/. Progress: docs/roadmap.md.
-The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from the former Jellyfin-only peeby
-(`D:\DEV\peeby`, abandoned, ADR 0007): copy what the Jellyfin space needs from there, import nothing else.
+The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`), `jellyfin-api` and the Jellyfin pages came from
+the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import nothing else from there.
 
 ## Commands
 - Build: `cargo build` · run: `cargo run -p peeby` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top);
