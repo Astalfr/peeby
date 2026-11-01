@@ -51,10 +51,10 @@ async fn main() {
     );
     check(
       "subscribed_channels",
-      client
-        .subscribed_channels()
-        .await
-        .map(|c| format!("{} channels", c.len())),
+      client.subscribed_channels().await.map(|c| {
+        let bells = c.iter().filter(|c| c.notifications.is_some()).count();
+        format!("{} channels · {bells} bells", c.len())
+      }),
     );
     let playlists = client.playlists().await;
     let first = playlists

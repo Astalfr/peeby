@@ -21,7 +21,7 @@ use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
-use crate::{prefetch, runtime, save, settings, theme};
+use crate::{bell, prefetch, runtime, save, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -93,6 +93,7 @@ impl AppView {
     }
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
+    bell::reset(cx);
     let mut app = Self {
       client,
       stack: Vec::new(),

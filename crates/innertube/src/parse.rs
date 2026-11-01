@@ -7,15 +7,17 @@
 //! - the playlists library: playlist `lockupViewModel`s with a `collectionThumbnailViewModel`;
 //! - a playlist's videos: video `lockupViewModel`s, or `playlistVideoRenderer`s for "Watch
 //!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
-//!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists).
+//!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists);
+//! - a subscribed channel's bell: `subscriptionNotificationToggleButtonRenderer` in the
+//!   `subscribeButtonRenderer` of the watch page's owner and of `FEchannels` entries.
 
 use serde_json::Value;
 
 use std::collections::HashMap;
 
 use crate::models::{
-  Caption, Channel, Comment, CommentPage, Feed, LikeParams, LikeStatus, Playlist, PlaylistChoice,
-  PlaylistSummary, Thumbnail, VideoItem, WatchPage,
+  Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
+  NotificationLevel, Playlist, PlaylistChoice, PlaylistSummary, Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -82,6 +84,45 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     comments_continuation,
     like_status,
     like_params,
+    notifications: parse_notification_bell(&secondary["subscribeButton"]),
+  }
+}
+
+/// The notification bell of a subscribe button: `None` signed out or not subscribed (the
+/// button then carries a bell anyway, for after a subscription). The current level is the icon
+/// of the state `currentStateId` names; the options are the menu items calling
+/// `modifyChannelNotificationPreferenceEndpoint` (not "Se désabonner").
+fn parse_notification_bell(subscribe_button: &Value) -> Option<ChannelNotifications> {
+  let button = &subscribe_button["subscribeButtonRenderer"];
+  if button["subscribed"] != true {
+    return None;
+  }
+  let toggle = find_key(button, "subscriptionNotificationToggleButtonRenderer")?;
+  let level = toggle["states"]
+    .as_array()?
+    .iter()
+    .find(|s| s["stateId"] == toggle["currentStateId"])
+    .and_then(|s| notification_level(&s["state"]["buttonRenderer"]["icon"]))?;
+  let mut items = Vec::new();
+  find_all(&toggle["command"], "menuServiceItemRenderer", &mut items);
+  let options = items
+    .into_iter()
+    .filter_map(|item| {
+      let params = item["serviceEndpoint"]["modifyChannelNotificationPreferenceEndpoint"]["params"]
+        .as_str()?;
+      Some((notification_level(&item["icon"])?, params.to_owned()))
+    })
+    .collect::<Vec<_>>();
+  (!options.is_empty()).then_some(ChannelNotifications { level, options })
+}
+
+/// The level a bell icon stands for.
+fn notification_level(icon: &Value) -> Option<NotificationLevel> {
+  match icon["iconType"].as_str()? {
+    "NOTIFICATIONS_ACTIVE" => Some(NotificationLevel::All),
+    "NOTIFICATIONS_NONE" => Some(NotificationLevel::Personalized),
+    "NOTIFICATIONS_OFF" => Some(NotificationLevel::None),
+    _ => None,
   }
 }
 
@@ -150,6 +191,7 @@ pub fn parse_channels(response: &Value) -> Vec<Channel> {
         handle: non_empty(text(&c["subscriberCountText"])).filter(|h| h.starts_with('@')),
         subscribers: non_empty(text(&c["videoCountText"])),
         avatar: thumbnails(&c["thumbnail"]["thumbnails"]),
+        notifications: parse_notification_bell(&c["subscribeButton"]),
       })
     })
     .collect()

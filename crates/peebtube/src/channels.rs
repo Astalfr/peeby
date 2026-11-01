@@ -1,4 +1,5 @@
-//! Subscribed channels: a filterable grid of avatars, each opening the channel's videos.
+//! Subscribed channels: a filterable grid of avatars, each opening the channel's videos, with
+//! the channel's notification bell in a corner.
 //! Opened from the subscriptions page.
 
 use gpui::prelude::*;
@@ -14,7 +15,7 @@ use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
 use crate::ui::{error_text, image_fill, notice, page_title};
-use crate::{motion, runtime, theme};
+use crate::{bell, motion, runtime, theme};
 
 /// Width of a channel tile, and side of its avatar.
 const TILE_WIDTH: f32 = 168.;
@@ -96,7 +97,8 @@ impl ChannelsView {
     .detach();
   }
 
-  /// A channel: round avatar, name and subscriber count, on a soft surface while hovered.
+  /// A channel: round avatar, name and subscriber count, on a soft surface while hovered, and
+  /// its notification bell at the top right.
   fn tile(
     &self,
     channel: &Channel,
@@ -131,6 +133,21 @@ impl ChannelsView {
           .update(cx, |app, cx| app.open(route.clone(), window, cx))
           .ok();
       })
+      .relative()
+      .children(channel.notifications.as_ref().map(|notifications| {
+        div()
+          .absolute()
+          .top(px(4.))
+          .right(px(4.))
+          .text_color(theme::muted())
+          .child(bell::bell_button(
+            &channel.id,
+            &channel.id,
+            notifications,
+            true,
+            cx,
+          ))
+      }))
       .child(
         div()
           .size(px(AVATAR))

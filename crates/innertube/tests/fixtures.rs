@@ -5,8 +5,8 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  Error, LikeStatus, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_watch,
+  Error, LikeStatus, NotificationLevel, hls, hls_manifest_url, parse_feed, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_watch,
 };
 use serde_json::Value;
 
@@ -69,6 +69,8 @@ fn watch_page() {
   ] {
     assert!(page.like_params.get(status).is_some(), "{status:?}");
   }
+  // Not subscribed: the subscribe button carries a bell for later, which is not the channel's.
+  assert_eq!(page.notifications, None);
 
   assert_eq!(page.related.len(), 20);
   let related = &page.related[0];
@@ -82,6 +84,30 @@ fn watch_page() {
   );
   assert_eq!(related.metadata.len(), 2);
   assert!(!related.avatar.is_empty());
+}
+
+#[test]
+fn signed_in_watch_page_has_the_channel_bell() {
+  let page = parse_watch("0-k6i8tBwAU", &fixture("next_signed_in.json"));
+  assert_eq!(page.channel_id.as_deref(), Some("UCQeRaTukNYft1_6AZPACnog"));
+  let bell = page.notifications.unwrap();
+  assert_eq!(bell.level, NotificationLevel::All);
+  let levels = bell.options.iter().map(|(l, _)| *l).collect::<Vec<_>>();
+  assert_eq!(
+    levels,
+    [
+      NotificationLevel::All,
+      NotificationLevel::Personalized,
+      NotificationLevel::None
+    ]
+  );
+  // Params as the menu sends them, still URL-encoded.
+  assert!(
+    bell
+      .params(NotificationLevel::None)
+      .unwrap()
+      .ends_with("%3D")
+  );
 }
 
 #[test]
@@ -155,6 +181,25 @@ fn subscribed_channels() {
       .is_some_and(|s| s.contains("abonnés"))
   );
   assert!(first.avatar.iter().all(|a| a.url.starts_with("https://")));
+  // Bells: the first channel sends every notification, the others are personalized. The menu's
+  // "Se désabonner" is not a level.
+  let levels = channels
+    .iter()
+    .map(|c| c.notifications.as_ref().map(|n| n.level))
+    .collect::<Vec<_>>();
+  assert_eq!(
+    levels,
+    [
+      Some(NotificationLevel::All),
+      Some(NotificationLevel::Personalized),
+      Some(NotificationLevel::Personalized)
+    ]
+  );
+  for channel in &channels {
+    let bell = channel.notifications.as_ref().unwrap();
+    assert_eq!(bell.options.len(), 3);
+    assert!(bell.options.iter().all(|(_, params)| !params.is_empty()));
+  }
 }
 
 #[test]

@@ -235,6 +235,18 @@ impl Client {
     Ok(())
   }
 
+  /// Sets how much YouTube notifies the user about a subscribed channel. `params` come from
+  /// [`crate::ChannelNotifications::params`], as the bell's menu sends them. Needs cookies. No
+  /// response of this endpoint is saved yet: an HTTP success counts as done.
+  pub async fn set_channel_notifications(&self, params: &str) -> Result<()> {
+    self.require_session()?;
+    let body = json!({ "params": params });
+    self
+      .web("notification/modify_channel_preference", body, true)
+      .await?;
+    Ok(())
+  }
+
   /// Likes and estimated dislikes from Return YouTube Dislike.
   pub async fn votes(&self, video_id: &str) -> Result<Votes> {
     let response = self

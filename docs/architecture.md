@@ -21,10 +21,10 @@
 
 | Crate | Role | Notes |
 |---|---|---|
-| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
+| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), the notification bell of a subscribed channel (`notification/modify_channel_preference`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -66,6 +66,14 @@ Saving a video: `Client::playlist_choices` (`playlist/get_add_to_playlist`) list
 Removing from a playlist: entries of a playlist the user can edit carry a `setVideoId` in an `ACTION_REMOVE_VIDEO` of their menu (`VideoItem::set_video_id`; "Watch later" and the user's own playlists, which list `playlistVideoRenderer`s). `Client::remove_playlist_entry` posts that action, so a video in a playlist twice loses only that entry. On success `save::edits` emits `EntryRemoved`; the playlist page and every queue of that playlist drop the entry (a queue keeps the video it is playing).
 
 Shuffling uses a small xorshift generator (no dependency) and mixes the videos loaded so far: a long playlist's next pages are inserted at random places after the current video as they arrive.
+
+## Channel notifications
+
+A subscribed channel's subscribe button carries a `subscriptionNotificationToggleButtonRenderer`: the current level is the icon of the state `currentStateId` names, and the menu's items calling `modifyChannelNotificationPreferenceEndpoint` are the levels offered, each with its `params` (some channels offer only "Personnalisées" and "Aucune"). Not subscribed, YouTube still sends a bell, for after a subscription: it is only read when `subscribed` is true. The watch page (`WatchPage::notifications`) and `FEchannels` (`Channel::notifications`) parse it.
+
+`bell::bell_button` shows it. `Client::set_channel_notifications` posts the chosen option's `params` as they are (they embed the page's context, so each page keeps its own); the level set is kept by channel id in a global, so the watch page and the channels page agree, and it is forgotten on a session change. A change shows at once, blocks a second one for that channel while it runs, and goes back with a toast if YouTube refuses. No response of `modify_channel_preference` is saved yet: an HTTP success counts as done.
+
+The notifications inbox is not shown yet, see the roadmap.
 
 ## Session
 

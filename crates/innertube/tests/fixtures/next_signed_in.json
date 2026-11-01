@@ -1,0 +1,2152 @@
+{
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "c",
+            "value": "WEB"
+          },
+          {
+            "key": "cver",
+            "value": "2.20261029.11.00"
+          },
+          {
+            "key": "yt_li",
+            "value": "1"
+          },
+          {
+            "key": "GetWatchPage_rid",
+            "value": "0x239669ca51c85364"
+          }
+        ],
+        "service": "CSI"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GUIDED_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "client.version",
+            "value": "2.20261029"
+          },
+          {
+            "key": "client.name",
+            "value": "WEB"
+          }
+        ],
+        "service": "ECATCHER"
+      }
+    ]
+  },
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "dateText": {
+                  "simpleText": "1 nov. 2026"
+                },
+                "relativeDateText": {
+                  "accessibility": {
+                    "accessibilityData": {
+                      "label": "il y a 1 heure"
+                    }
+                  },
+                  "simpleText": "il y a 1 heure"
+                },
+                "title": {
+                  "runs": [
+                    {
+                      "text": "This guy is genuinely too good at this.."
+                    }
+                  ]
+                },
+                "trackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4U",
+                "updatedMetadataEndpoint": {
+                  "clickTrackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                  "commandMetadata": {
+                    "webCommandMetadata": {
+                      "apiUrl": "/youtubei/v1/updated_metadata",
+                      "sendPost": true
+                    }
+                  },
+                  "updatedMetadataEndpoint": {
+                    "initialDelayMs": 300000,
+                    "params": "IAE=",
+                    "videoId": "0-k6i8tBwAU"
+                  }
+                },
+                "videoActions": {
+                  "menuRenderer": {
+                    "accessibility": {
+                      "accessibilityData": {
+                        "label": "Autres actions"
+                      }
+                    },
+                    "flexibleItems": [
+                      {
+                        "menuFlexibleItemRenderer": {
+                          "menuItem": {
+                            "menuServiceItemRenderer": {
+                              "icon": {
+                                "iconType": "PLAYLIST_ADD"
+                              },
+                              "serviceEndpoint": {
+                                "addToPlaylistServiceEndpoint": {
+                                  "params": "R0FRJTNE",
+                                  "videoId": "0-k6i8tBwAU"
+                                },
+                                "clickTrackingParams": "CJUDEOuQCSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "apiUrl": "/youtubei/v1/playlist/get_add_to_playlist",
+                                    "sendPost": true
+                                  }
+                                }
+                              },
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "Enregistrer"
+                                  }
+                                ]
+                              },
+                              "trackingParams": "CJUDEOuQCSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                            }
+                          },
+                          "topLevelButton": {
+                            "buttonViewModel": {
+                              "accessibilityText": "Enregistrer dans une playlist",
+                              "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                              "iconName": "PLAYLIST_ADD",
+                              "isFullWidth": false,
+                              "onTap": {
+                                "serialCommand": {
+                                  "commands": [
+                                    {
+                                      "logGestureCommand": {
+                                        "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                        "trackingParams": "CJQDEOuQCSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                                      }
+                                    },
+                                    {
+                                      "innertubeCommand": {
+                                        "addToPlaylistServiceEndpoint": {
+                                          "params": "R0FRJTNE",
+                                          "videoId": "0-k6i8tBwAU"
+                                        },
+                                        "clickTrackingParams": "CJQDEOuQCSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "apiUrl": "/youtubei/v1/playlist/get_add_to_playlist",
+                                            "sendPost": true
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                              "title": "Enregistrer",
+                              "tooltip": "Enregistrer",
+                              "trackingParams": "CJQDEOuQCSITCJ6xnreV55cDFZMrVQgdS8keFA==",
+                              "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "menuFlexibleItemRenderer": {
+                          "menuItem": {
+                            "menuServiceItemDownloadRenderer": {
+                              "playerStateEntityKey": "Eh8veW91dHViZS9hcHAvd2F0Y2gvcGxheWVyX3N0YXRlIMMCKAE%3D",
+                              "serviceEndpoint": {
+                                "clickTrackingParams": "CJMDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                "offlineVideoEndpoint": {
+                                  "onAddCommand": {
+                                    "clickTrackingParams": "CJMDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                    "getDownloadActionCommand": {
+                                      "isCrossDeviceDownload": false,
+                                      "offlineabilityEntityKey": "Eg0KCzAtazZpOHRCd0FVIPYBKAE%3D",
+                                      "params": "CAEQAA%3D%3D",
+                                      "videoId": "0-k6i8tBwAU"
+                                    }
+                                  },
+                                  "videoId": "0-k6i8tBwAU"
+                                }
+                              },
+                              "trackingParams": "CJMDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                            }
+                          },
+                          "topLevelButton": {
+                            "downloadButtonRenderer": {
+                              "command": {
+                                "clickTrackingParams": "CJIDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                "offlineVideoEndpoint": {
+                                  "onAddCommand": {
+                                    "clickTrackingParams": "CJIDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                    "getDownloadActionCommand": {
+                                      "isCrossDeviceDownload": false,
+                                      "offlineabilityEntityKey": "Eg0KCzAtazZpOHRCd0FVIPYBKAE%3D",
+                                      "params": "CAEQAA%3D%3D",
+                                      "videoId": "0-k6i8tBwAU"
+                                    }
+                                  },
+                                  "videoId": "0-k6i8tBwAU"
+                                }
+                              },
+                              "hasLabel": true,
+                              "playerStateEntityKey": "Eh8veW91dHViZS9hcHAvd2F0Y2gvcGxheWVyX3N0YXRlIMMCKAE%3D",
+                              "size": "SIZE_DEFAULT",
+                              "style": "STYLE_DEFAULT",
+                              "targetId": "watch-download-button",
+                              "trackingParams": "CJIDENGqBSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                            }
+                          }
+                        }
+                      }
+                    ],
+                    "items": [
+                      {
+                        "listItemViewModel": {
+                          "elcShouldLogExplicitGestures": true,
+                          "entityKey": "Eh8veW91dHViZS9hcHAvd2F0Y2gvcGxheWVyX3N0YXRlIMMCKAE%3D",
+                          "entitySelectorType": "LIST_ITEM_VIEW_MODEL_ENTITY_SELECTOR_TYPE_REMOVE_ADS_AD_STATE",
+                          "leadingImage": {
+                            "sources": [
+                              {
+                                "clientResource": {
+                                  "imageName": "TV_OFF"
+                                }
+                              }
+                            ]
+                          },
+                          "rendererContext": {
+                            "commandContext": {
+                              "onTap": {
+                                "innertubeCommand": {
+                                  "clickTrackingParams": "CJwDEMLKCBgAIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                  "commandMetadata": {
+                                    "interactionLoggingCommandMetadata": {
+                                      "screenVisualElement": {
+                                        "uiType": 214295
+                                      }
+                                    }
+                                  },
+                                  "showDialogCommand": {
+                                    "panelLoadingStrategy": {
+                                      "requestTemplate": {
+                                        "panelId": "PApremium_upsell",
+                                        "params": "igkECAMYAA%3D%3D"
+                                      },
+                                      "screenVe": 214295
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "loggingContext": {
+                              "loggingDirectives": {
+                                "trackingParams": "CJwDEMLKCBgAIhMInrGet5XnlwMVkytVCB1LyR4U"
+                              }
+                            }
+                          },
+                          "title": {
+                            "content": "Regarder sans publicité"
+                          }
+                        }
+                      },
+                      {
+                        "menuServiceItemRenderer": {
+                          "icon": {
+                            "iconType": "FLAG"
+                          },
+                          "serviceEndpoint": {
+                            "clickTrackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                            "showEngagementPanelEndpoint": {
+                              "engagementPanelPresentationConfigs": {
+                                "engagementPanelPopupPresentationConfig": {
+                                  "popupType": "PANEL_POPUP_TYPE_DIALOG"
+                                }
+                              },
+                              "globalConfiguration": {
+                                "params": "qgdxCAESCzAtazZpOHRCd0FVGmBFZ3N3TFdzMmFUaDBRbmRCVlVBQldBQjRCWklCTWdvd0VpNW9kSFJ3Y3pvdkwya3VlWFJwYldjdVkyOXRMM1pwTHpBdGF6WnBPSFJDZDBGVkwyUmxabUYxYkhRdWFuQm4%3D"
+                              },
+                              "identifier": {
+                                "tag": "PAabuse_report"
+                              }
+                            }
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Signaler"
+                              }
+                            ]
+                          },
+                          "trackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4U"
+                        }
+                      }
+                    ],
+                    "topLevelButtons": [
+                      {
+                        "segmentedLikeDislikeButtonViewModel": {
+                          "dislikeButtonViewModel": {
+                            "dislikeButtonViewModel": {
+                              "dislikeEntityKey": "EgswLWs2aTh0QndBVSA-KAE%3D",
+                              "toggleButtonViewModel": {
+                                "toggleButtonViewModel": {
+                                  "defaultButtonViewModel": {
+                                    "buttonViewModel": {
+                                      "accessibilityId": "id.video.dislike.button",
+                                      "accessibilityText": "Je n'aime pas cette vidéo",
+                                      "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                                      "iconName": "DISLIKE",
+                                      "isFullWidth": false,
+                                      "onTap": {
+                                        "serialCommand": {
+                                          "commands": [
+                                            {
+                                              "logGestureCommand": {
+                                                "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                                "trackingParams": "CJkDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                                              }
+                                            },
+                                            {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CJkDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/like/dislike",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "likeEndpoint": {
+                                                  "dislikeParams": "Cg0KCzAtazZpOHRCd0FVEAAiCwipy53XBhDh3YNM",
+                                                  "status": "DISLIKE",
+                                                  "target": {
+                                                    "videoId": "0-k6i8tBwAU"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                                      "title": "Je n'aime pas",
+                                      "tooltip": "Je n'aime pas ce contenu",
+                                      "trackingParams": "CJkDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFA==",
+                                      "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                                    }
+                                  },
+                                  "isTogglingDisabled": false,
+                                  "toggledButtonViewModel": {
+                                    "buttonViewModel": {
+                                      "accessibilityId": "id.video.dislike.button",
+                                      "accessibilityText": "Je n'aime pas cette vidéo",
+                                      "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                                      "iconName": "DISLIKE",
+                                      "isFullWidth": false,
+                                      "onTap": {
+                                        "serialCommand": {
+                                          "commands": [
+                                            {
+                                              "logGestureCommand": {
+                                                "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                                "trackingParams": "CJgDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                                              }
+                                            },
+                                            {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CJgDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/like/removelike",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "likeEndpoint": {
+                                                  "removeLikeParams": "Cg0KCzAtazZpOHRCd0FVGAAqCwipy53XBhDigIRM",
+                                                  "status": "INDIFFERENT",
+                                                  "target": {
+                                                    "videoId": "0-k6i8tBwAU"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                                      "title": "Je n'aime pas",
+                                      "tooltip": "Je n'aime pas ce contenu",
+                                      "trackingParams": "CJgDEKiPCSITCJ6xnreV55cDFZMrVQgdS8keFA==",
+                                      "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                                    }
+                                  },
+                                  "trackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                }
+                              }
+                            }
+                          },
+                          "dynamicLikeCountUpdateData": {
+                            "placeholderLikeCountValuesKey": "like_count_placeholder_values_key",
+                            "updateDelayLoopId": "like_count_update_delay_loop_id",
+                            "updateDelaySec": 5,
+                            "updateStatusKey": "like_count_update_status_key"
+                          },
+                          "iconType": "LIKE_ICON_TYPE_UNKNOWN",
+                          "likeButtonViewModel": {
+                            "likeButtonViewModel": {
+                              "likeStatusEntity": {
+                                "key": "EgswLWs2aTh0QndBVSA-KAE%3D",
+                                "likeStatus": "INDIFFERENT"
+                              },
+                              "likeStatusEntityKey": "EgswLWs2aTh0QndBVSA-KAE%3D",
+                              "toggleButtonViewModel": {
+                                "toggleButtonViewModel": {
+                                  "defaultButtonViewModel": {
+                                    "buttonViewModel": {
+                                      "accessibilityId": "id.video.like.button",
+                                      "accessibilityText": "J'aime cette vidéo, comme 4 201 autres personnes avant moi",
+                                      "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                                      "iconName": "LIKE",
+                                      "isFullWidth": false,
+                                      "onTap": {
+                                        "serialCommand": {
+                                          "commands": [
+                                            {
+                                              "logGestureCommand": {
+                                                "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                                "trackingParams": "CJsDEKVBIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                              }
+                                            },
+                                            {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CJsDEKVBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/like/like",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "likeEndpoint": {
+                                                  "likeParams": "Cg0KCzAtazZpOHRCd0FVIAAyCwipy53XBhCVroFM",
+                                                  "status": "LIKE",
+                                                  "target": {
+                                                    "videoId": "0-k6i8tBwAU"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                                      "title": "4,2 k",
+                                      "tooltip": "J'aime ce contenu",
+                                      "trackingParams": "CJsDEKVBIhMInrGet5XnlwMVkytVCB1LyR4U",
+                                      "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                                    }
+                                  },
+                                  "identifier": "watch-like",
+                                  "isTogglingDisabled": false,
+                                  "toggledButtonViewModel": {
+                                    "buttonViewModel": {
+                                      "accessibilityId": "id.video.like.button",
+                                      "accessibilityText": "J'aime cette vidéo, comme 4 201 autres personnes avant moi",
+                                      "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                                      "iconName": "LIKE",
+                                      "isFullWidth": false,
+                                      "onTap": {
+                                        "serialCommand": {
+                                          "commands": [
+                                            {
+                                              "logGestureCommand": {
+                                                "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                                "trackingParams": "CJoDEKVBIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                              }
+                                            },
+                                            {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CJoDEKVBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/like/removelike",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "likeEndpoint": {
+                                                  "removeLikeParams": "Cg0KCzAtazZpOHRCd0FVGAAqCwipy53XBhDbiIJM",
+                                                  "status": "INDIFFERENT",
+                                                  "target": {
+                                                    "videoId": "0-k6i8tBwAU"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                                      "title": "4,2 k",
+                                      "tooltip": "Je n'aime plus",
+                                      "trackingParams": "CJoDEKVBIhMInrGet5XnlwMVkytVCB1LyR4U",
+                                      "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                                    }
+                                  },
+                                  "trackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                }
+                              }
+                            }
+                          },
+                          "likeCountEntity": {
+                            "expandedLikeCountIfDisliked": {
+                              "content": "4 200"
+                            },
+                            "expandedLikeCountIfIndifferent": {
+                              "content": "4 200"
+                            },
+                            "expandedLikeCountIfLiked": {
+                              "content": "4 201"
+                            },
+                            "key": "EgswLWs2aTh0QndBVSC9AygB",
+                            "likeButtonA11yText": {
+                              "content": "J'aime cette vidéo, comme 4 201 autres personnes avant moi"
+                            },
+                            "likeCountIfDisliked": {
+                              "content": "4,2 k"
+                            },
+                            "likeCountIfDislikedNumber": "4200",
+                            "likeCountIfIndifferent": {
+                              "content": "4,2 k"
+                            },
+                            "likeCountIfIndifferentNumber": "4200",
+                            "likeCountIfLiked": {
+                              "content": "4,2 k"
+                            },
+                            "likeCountIfLikedNumber": "4201",
+                            "likeCountLabel": {
+                              "content": "J'aime"
+                            },
+                            "sentimentFactoidA11yTextIfDisliked": {
+                              "content": "4 200 \"J'aime\""
+                            },
+                            "sentimentFactoidA11yTextIfLiked": {
+                              "content": "4 201 \"J'aime\""
+                            },
+                            "shouldExpandLikeCount": true
+                          },
+                          "teasersOrderEntityKey": "EgswLWs2aTh0QndBVSD8AygB"
+                        }
+                      },
+                      {
+                        "buttonViewModel": {
+                          "accessibilityId": "id.video.share.button",
+                          "accessibilityText": "Partager",
+                          "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                          "iconName": "SHARE",
+                          "isFullWidth": false,
+                          "onTap": {
+                            "serialCommand": {
+                              "commands": [
+                                {
+                                  "logGestureCommand": {
+                                    "gestureType": "GESTURE_EVENT_TYPE_LOG_GENERIC_CLICK",
+                                    "trackingParams": "CJYDEOWWARgDIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                  }
+                                },
+                                {
+                                  "innertubeCommand": {
+                                    "clickTrackingParams": "CJYDEOWWARgDIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/share/get_share_panel",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "shareEntityServiceEndpoint": {
+                                      "commands": [
+                                        {
+                                          "clickTrackingParams": "CJYDEOWWARgDIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                          "openPopupAction": {
+                                            "beReused": true,
+                                            "popup": {
+                                              "unifiedSharePanelRenderer": {
+                                                "showLoadingSpinner": true,
+                                                "trackingParams": "CJcDEI5iIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                              }
+                                            },
+                                            "popupType": "DIALOG"
+                                          }
+                                        }
+                                      ],
+                                      "serializedShareEntity": "CgswLWs2aTh0QndBVaABAQ%3D%3D"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                          "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                          "title": "Partager",
+                          "tooltip": "Partager",
+                          "trackingParams": "CJYDEOWWARgDIhMInrGet5XnlwMVkytVCB1LyR4U",
+                          "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+                        }
+                      }
+                    ],
+                    "trackingParams": "CJEDEMyrARgAIhMInrGet5XnlwMVkytVCB1LyR4U"
+                  }
+                },
+                "viewCount": {
+                  "videoViewCountRenderer": {
+                    "entityKey": "EgswLWs2aTh0QndBVSDCASgB",
+                    "extraShortViewCount": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "60 482 vues"
+                        }
+                      },
+                      "simpleText": "60 k"
+                    },
+                    "originalViewCount": "60482",
+                    "viewCount": {
+                      "simpleText": "60 482 vues"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "videoSecondaryInfoRenderer": {
+                "attributedDescription": {
+                  "attachmentRuns": [
+                    {
+                      "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                      "element": {
+                        "properties": {
+                          "layoutProperties": {
+                            "height": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 10
+                            },
+                            "margin": {
+                              "top": {
+                                "unit": "DIMENSION_UNIT_POINT",
+                                "value": 0.5
+                              }
+                            },
+                            "width": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            }
+                          }
+                        },
+                        "type": {
+                          "imageType": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://www.gstatic.com/youtube/img/watch/yt_favicon_ringo2.png"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "length": 0,
+                      "startIndex": 22
+                    },
+                    {
+                      "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                      "element": {
+                        "properties": {
+                          "layoutProperties": {
+                            "height": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            },
+                            "margin": {
+                              "top": {
+                                "unit": "DIMENSION_UNIT_POINT",
+                                "value": 0.5
+                              }
+                            },
+                            "width": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            }
+                          }
+                        },
+                        "type": {
+                          "imageType": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://www.gstatic.com/youtube/img/watch/social_media/twitch_1x.png"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "length": 0,
+                      "startIndex": 96
+                    },
+                    {
+                      "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                      "element": {
+                        "properties": {
+                          "layoutProperties": {
+                            "height": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            },
+                            "margin": {
+                              "top": {
+                                "unit": "DIMENSION_UNIT_POINT",
+                                "value": 0.5
+                              }
+                            },
+                            "width": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            }
+                          }
+                        },
+                        "type": {
+                          "imageType": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://www.gstatic.com/youtube/img/watch/social_media/reddit_1x.png"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "length": 0,
+                      "startIndex": 226
+                    },
+                    {
+                      "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                      "element": {
+                        "properties": {
+                          "layoutProperties": {
+                            "height": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            },
+                            "margin": {
+                              "top": {
+                                "unit": "DIMENSION_UNIT_POINT",
+                                "value": 0.5
+                              }
+                            },
+                            "width": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 14
+                            }
+                          }
+                        },
+                        "type": {
+                          "imageType": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://www.gstatic.com/youtube/img/watch/social_media/twitch_1x.png"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "length": 0,
+                      "startIndex": 282
+                    }
+                  ],
+                  "commandRuns": [
+                    {
+                      "length": 52,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 3832,
+                              "url": "/watch?v=zqDJYN5qppQ",
+                              "webPageType": "WEB_PAGE_TYPE_WATCH"
+                            }
+                          },
+                          "watchEndpoint": {
+                            "startTimeSeconds": 0,
+                            "videoId": "zqDJYN5qppQ",
+                            "watchEndpointSupportedOnesieConfig": {
+                              "html5PlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr2---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=cea0c960de6aa694&ip=203.0.113.7&initcwndbps=4195375&mt=1793549370&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "onTapOptions": {
+                        "accessibilityInfo": {
+                          "accessibilityLabel": "YouTube Channel Link: Man Meets Karma After Escaping Police 17 Times"
+                        }
+                      },
+                      "startIndex": 20
+                    },
+                    {
+                      "length": 15,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYnRpdzctWkxsZFczRFhSOTdZcGNxbXxBSTVJdTV2Y29FWlI0RnY3cnR0ZXhTV2JOUTRNOUlzWnk0enF5dnB2V2xyeXpILV9IM1pEdExCNHJndE04TC1EUkJpcmM4Y01TaHNkbU8wVmxhaVlDX01fRUZIRXZkMlh6R2Qz&q=https%3A%2F%2Fwww.twitch.tv%2Fzackrawrr&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYnRpdzctWkxsZFczRFhSOTdZcGNxbXxBSTVJdTV2Y29FWlI0RnY3cnR0ZXhTV2JOUTRNOUlzWnk0enF5dnB2V2xyeXpILV9IM1pEdExCNHJndE04TC1EUkJpcmM4Y01TaHNkbU8wVmxhaVlDX01fRUZIRXZkMlh6R2Qz&q=https%3A%2F%2Fwww.twitch.tv%2Fzackrawrr&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "onTapOptions": {
+                        "accessibilityInfo": {
+                          "accessibilityLabel": "Twitch Channel Link: zackrawrr"
+                        }
+                      },
+                      "startIndex": 95
+                    },
+                    {
+                      "length": 23,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWk9mV2NWZUdlT0dVSjBrNmVOX2pNdHxBSTVJdTV0TktMQnNiOTh1U0F2S0cyb2Z0WnVzU1MxUWllZlpabHIzVUlraWtlN05kUmxWalpXY3dqUmlMWFBBLVBzT2htLTh3QWZMUFZGVVpWamRMd1pfZWgtUlRPaFJJbDFZ&q=https%3A%2F%2Fx.com%2Fasmongold&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWk9mV2NWZUdlT0dVSjBrNmVOX2pNdHxBSTVJdTV0TktMQnNiOTh1U0F2S0cyb2Z0WnVzU1MxUWllZlpabHIzVUlraWtlN05kUmxWalpXY3dqUmlMWFBBLVBzT2htLTh3QWZMUFZGVVpWamRMd1pfZWgtUlRPaFJJbDFZ&q=https%3A%2F%2Fx.com%2Fasmongold&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "startIndex": 128
+                    },
+                    {
+                      "length": 26,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWlNITi1lZll5LVY1bWVkZV9GVTBubHxBSTVJdTV1dEpvMThLalQ0RUN6TERkNXI0T3B3V2QzNHh2dEhwdlJXTG1SbF9BU0NBUkc1ZmNQX21pUWJaMzd4T3c2UUN5SmpqeG9IdThjTWR6Rm02Y2dnc3BEbmNUekduTDJr&q=https%3A%2F%2Fkick.com%2Fasmongold&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWlNITi1lZll5LVY1bWVkZV9GVTBubHxBSTVJdTV1dEpvMThLalQ0RUN6TERkNXI0T3B3V2QzNHh2dEhwdlJXTG1SbF9BU0NBUkc1ZmNQX21pUWJaMzd4T3c2UUN5SmpqeG9IdThjTWR6Rm02Y2dnc3BEbmNUekduTDJr&q=https%3A%2F%2Fkick.com%2Fasmongold&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "startIndex": 172
+                    },
+                    {
+                      "length": 15,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYUlQUkkxQTFnNzdudGl6RUJJbFJUUnxBSTVJdTV0b2pueTFwY0RMUGZLUHRzTVYySEhoZzUyN3hqbHFOUzIwelBpWFRGZTh0V0w0QTVMOWdvTzlKbmk4TFhSUGpEVVI4SFVneVZtU2wxUDhfcTFKZG5oRV9WdDczUFJS&q=https%3A%2F%2Fwww.reddit.com%2Fr%2FAsmongold&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYUlQUkkxQTFnNzdudGl6RUJJbFJUUnxBSTVJdTV0b2pueTFwY0RMUGZLUHRzTVYySEhoZzUyN3hqbHFOUzIwelBpWFRGZTh0V0w0QTVMOWdvTzlKbmk4TFhSUGpEVVI4SFVneVZtU2wxUDhfcTFKZG5oRV9WdDczUFJS&q=https%3A%2F%2Fwww.reddit.com%2Fr%2FAsmongold&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "onTapOptions": {
+                        "accessibilityInfo": {
+                          "accessibilityLabel": "Reddit Channel Link: Asmongold"
+                        }
+                      },
+                      "startIndex": 225
+                    },
+                    {
+                      "length": 18,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWWN1TmQwN0pIRWtkSm9GMm9Td3NSNXxBSTVJdTV2SUlGcXJJWmkwM3RLcEtQNmZWT3lrZGY2VTBvQzFVbmNZejE4THc4VDV0b1lEdzZTZUJhbm0tUEtDbjhTNmJES1lLLXU0X3ZJeFlfZndnM0kxQWJHYksyWlpsaDRy&q=https%3A%2F%2Ftwitch.tv%2Fasmongold247&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWWN1TmQwN0pIRWtkSm9GMm9Td3NSNXxBSTVJdTV2SUlGcXJJWmkwM3RLcEtQNmZWT3lrZGY2VTBvQzFVbmNZejE4THc4VDV0b1lEdzZTZUJhbm0tUEtDbjhTNmJES1lLLXU0X3ZJeFlfZndnM0kxQWJHYksyWlpsaDRy&q=https%3A%2F%2Ftwitch.tv%2Fasmongold247&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "onTapOptions": {
+                        "accessibilityInfo": {
+                          "accessibilityLabel": "Twitch Channel Link: asmongold247"
+                        }
+                      },
+                      "startIndex": 281
+                    },
+                    {
+                      "length": 29,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYWFDNERvWWNZTEZhNzZkZC1zcEgzVnxBSTVJdTV2MlFlZHN2UmNsME93alMtS2lsSUJfNVd0Y1JnZ3cxR1B6MDdFbXFoR0U0WVpkS2JkRFZIbXNFLWM5XzM2VTkxVEppeGVhNlpWR1lDM3pLenRmUkFJc1JlV2FwdGJS&q=https%3A%2F%2Fkick.com%2Fasmongold247&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYWFDNERvWWNZTEZhNzZkZC1zcEgzVnxBSTVJdTV2MlFlZHN2UmNsME93alMtS2lsSUJfNVd0Y1JnZ3cxR1B6MDdFbXFoR0U0WVpkS2JkRFZIbXNFLWM5XzM2VTkxVEppeGVhNlpWR1lDM3pLenRmUkFJc1JlV2FwdGJS&q=https%3A%2F%2Fkick.com%2Fasmongold247&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "startIndex": 338
+                    },
+                    {
+                      "length": 23,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYVNLM3lQaXdmdGZEcmFkU3RjY0IxTXxBSTVJdTV1OUJfcGhJYlI3ZUloaDVRcU5Fei0xc3V5ckRfV2M3LU1WdGNvemowSWRaMWFDakw3Q1M5WktCS2JQcHctejU4aFBDeEZ5RUxidG01Q0x5dGYwaUxiaU9QRnNZbGUt&q=https%3A%2F%2Fx.com%2FCatDanyRU&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IYVNLM3lQaXdmdGZEcmFkU3RjY0IxTXxBSTVJdTV1OUJfcGhJYlI3ZUloaDVRcU5Fei0xc3V5ckRfV2M3LU1WdGNvemowSWRaMWFDakw3Q1M5WktCS2JQcHctejU4aFBDeEZ5RUxidG01Q0x5dGYwaUxiaU9QRnNZbGUt&q=https%3A%2F%2Fx.com%2FCatDanyRU&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "startIndex": 510
+                    },
+                    {
+                      "length": 24,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4USIWAh9q80c700wHKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 83769,
+                              "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWXlObEZvbVZpNC1TMkR5QXo4dE9EaXxBSTVJdTVzZkhwZU84N0tTQlVLeGp3UzBLa28xc0V6N1Z4b2JBQ25QR1dPU0ZtcFpGb3VwZy0wODRjdThLdC1ieGxrN2RXYWpIVjM0eEtXakNvZkR2a1pzdl9YbVVrdmYyWDlq&q=https%3A%2F%2Fx.com%2FDAsmongold&v=0-k6i8tBwAU",
+                              "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                            }
+                          },
+                          "urlEndpoint": {
+                            "nofollow": true,
+                            "target": "TARGET_NEW_WINDOW",
+                            "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUlxb01IWXlObEZvbVZpNC1TMkR5QXo4dE9EaXxBSTVJdTVzZkhwZU84N0tTQlVLeGp3UzBLa28xc0V6N1Z4b2JBQ25QR1dPU0ZtcFpGb3VwZy0wODRjdThLdC1ieGxrN2RXYWpIVjM0eEtXakNvZkR2a1pzdl9YbVVrdmYyWDlq&q=https%3A%2F%2Fx.com%2FDAsmongold&v=0-k6i8tBwAU"
+                          }
+                        }
+                      },
+                      "startIndex": 534
+                    }
+                  ],
+                  "content": "Asmongold reacts to    • Man Meets Karma After Escaping Police 17 T...  \n► Asmongold's Twitch:   / zackrawrr  \n► Asmongold's X: https://x.com/asmongold\n► Asmongold's Kick: https://kick.com/asmongold\n► Asmongold's Sub-Reddit:   / asmongold  \n► Asmongold's Twitch VOD Rerun Channel:   / asmongold247  \n► Asmongold's Kick VOD Rerun Channel: https://kick.com/asmongold247\n\nChannel Editors: CatDany & Daily Dose of Asmongold\nIf you own the copyright of content showed in this video and would like it to be removed:\nhttps://x.com/CatDanyRU\nhttps://x.com/DAsmongold",
+                  "decorationRuns": [
+                    {
+                      "textDecorator": {
+                        "highlightTextDecorator": {
+                          "backgroundCornerRadius": 8,
+                          "bottomPadding": 1,
+                          "highlightTextDecoratorExtensions": {
+                            "highlightTextDecoratorColorMapExtension": {
+                              "colorMap": [
+                                {
+                                  "key": "USER_INTERFACE_THEME_DARK",
+                                  "value": 452984831
+                                },
+                                {
+                                  "key": "USER_INTERFACE_THEME_LIGHT",
+                                  "value": 218103808
+                                }
+                              ]
+                            }
+                          },
+                          "length": 52,
+                          "startIndex": 20
+                        }
+                      }
+                    },
+                    {
+                      "textDecorator": {
+                        "highlightTextDecorator": {
+                          "backgroundCornerRadius": 8,
+                          "bottomPadding": 1,
+                          "highlightTextDecoratorExtensions": {
+                            "highlightTextDecoratorColorMapExtension": {
+                              "colorMap": [
+                                {
+                                  "key": "USER_INTERFACE_THEME_DARK",
+                                  "value": 452984831
+                                },
+                                {
+                                  "key": "USER_INTERFACE_THEME_LIGHT",
+                                  "value": 218103808
+                                }
+                              ]
+                            }
+                          },
+                          "length": 15,
+                          "startIndex": 95
+                        }
+                      }
+                    },
+                    {
+                      "textDecorator": {
+                        "highlightTextDecorator": {
+                          "backgroundCornerRadius": 8,
+                          "bottomPadding": 1,
+                          "highlightTextDecoratorExtensions": {
+                            "highlightTextDecoratorColorMapExtension": {
+                              "colorMap": [
+                                {
+                                  "key": "USER_INTERFACE_THEME_LIGHT",
+                                  "value": 218103808
+                                },
+                                {
+                                  "key": "USER_INTERFACE_THEME_DARK",
+                                  "value": 452984831
+                                }
+                              ]
+                            }
+                          },
+                          "length": 15,
+                          "startIndex": 225
+                        }
+                      }
+                    },
+                    {
+                      "textDecorator": {
+                        "highlightTextDecorator": {
+                          "backgroundCornerRadius": 8,
+                          "bottomPadding": 1,
+                          "highlightTextDecoratorExtensions": {
+                            "highlightTextDecoratorColorMapExtension": {
+                              "colorMap": [
+                                {
+                                  "key": "USER_INTERFACE_THEME_DARK",
+                                  "value": 452984831
+                                },
+                                {
+                                  "key": "USER_INTERFACE_THEME_LIGHT",
+                                  "value": 218103808
+                                }
+                              ]
+                            }
+                          },
+                          "length": 18,
+                          "startIndex": 281
+                        }
+                      }
+                    }
+                  ],
+                  "styleRuns": [
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 20,
+                      "startIndex": 0,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "length": 52,
+                      "startIndex": 20,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 23,
+                      "startIndex": 72,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "length": 15,
+                      "startIndex": 95,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 18,
+                      "startIndex": 110,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 23,
+                      "startIndex": 128,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4282296063
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4278607828
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 21,
+                      "startIndex": 151,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 26,
+                      "startIndex": 172,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4278607828
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4282296063
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 27,
+                      "startIndex": 198,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "length": 15,
+                      "startIndex": 225,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 41,
+                      "startIndex": 240,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "length": 18,
+                      "startIndex": 281,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 39,
+                      "startIndex": 299,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 29,
+                      "startIndex": 338,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4282296063
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4278607828
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 143,
+                      "startIndex": 367,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 23,
+                      "startIndex": 510,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4282296063
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4278607828
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 1,
+                      "startIndex": 533,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4294967295
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4279440147
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "fontFamilyName": "Roboto",
+                      "length": 24,
+                      "startIndex": 534,
+                      "styleRunExtensions": {
+                        "styleRunColorMapExtension": {
+                          "colorMap": [
+                            {
+                              "key": "USER_INTERFACE_THEME_LIGHT",
+                              "value": 4278607828
+                            },
+                            {
+                              "key": "USER_INTERFACE_THEME_DARK",
+                              "value": 4282296063
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "defaultExpanded": false,
+                "descriptionCollapsedLines": 3,
+                "headerRuns": [
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 20,
+                    "startIndex": 0
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 52,
+                    "startIndex": 20
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 23,
+                    "startIndex": 72
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 15,
+                    "startIndex": 95
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 18,
+                    "startIndex": 110
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 23,
+                    "startIndex": 128
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 21,
+                    "startIndex": 151
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 26,
+                    "startIndex": 172
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 27,
+                    "startIndex": 198
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 15,
+                    "startIndex": 225
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 41,
+                    "startIndex": 240
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 18,
+                    "startIndex": 281
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 39,
+                    "startIndex": 299
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 29,
+                    "startIndex": 338
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 143,
+                    "startIndex": 367
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 23,
+                    "startIndex": 510
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 1,
+                    "startIndex": 533
+                  },
+                  {
+                    "headerMapping": "ATTRIBUTED_STRING_HEADER_MAPPING_UNSPECIFIED",
+                    "length": 24,
+                    "startIndex": 534
+                  }
+                ],
+                "metadataRowContainer": {
+                  "metadataRowContainerRenderer": {
+                    "collapsedItemCount": 0,
+                    "trackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4U"
+                  }
+                },
+                "owner": {
+                  "videoOwnerRenderer": {
+                    "badges": [
+                      {
+                        "metadataBadgeRenderer": {
+                          "accessibilityData": {
+                            "label": "Validé"
+                          },
+                          "icon": {
+                            "iconType": "CHECK_CIRCLE_THICK"
+                          },
+                          "style": "BADGE_STYLE_TYPE_VERIFIED",
+                          "tooltip": "Validé",
+                          "trackingParams": "CJADEOE5IhMInrGet5XnlwMVkytVCB1LyR4U"
+                        }
+                      }
+                    ],
+                    "navigationEndpoint": {
+                      "browseEndpoint": {
+                        "browseId": "UCQeRaTukNYft1_6AZPACnog",
+                        "canonicalBaseUrl": "/@AsmonTV"
+                      },
+                      "clickTrackingParams": "CJADEOE5IhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                      "commandMetadata": {
+                        "webCommandMetadata": {
+                          "apiUrl": "/youtubei/v1/browse",
+                          "rootVe": 3611,
+                          "url": "/@AsmonTV",
+                          "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                        }
+                      }
+                    },
+                    "subscriberCountText": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "4,74 millions d’abonnés"
+                        }
+                      },
+                      "simpleText": "4,74 M d’abonnés"
+                    },
+                    "subscriptionButton": {
+                      "subscribed": true,
+                      "type": "FREE"
+                    },
+                    "thumbnail": {
+                      "thumbnails": [
+                        {
+                          "height": 48,
+                          "url": "https://yt3.ggpht.com/Hd1RtxUDPPfB9rl9cM0rLZq20iQus3jB1RD1LJugCPlPZ_Tcw_nm5-6SXOixZ-cSqk58c0UD=s48-c-k-c0x00ffffff-no-rj",
+                          "width": 48
+                        },
+                        {
+                          "height": 88,
+                          "url": "https://yt3.ggpht.com/Hd1RtxUDPPfB9rl9cM0rLZq20iQus3jB1RD1LJugCPlPZ_Tcw_nm5-6SXOixZ-cSqk58c0UD=s88-c-k-c0x00ffffff-no-rj",
+                          "width": 88
+                        },
+                        {
+                          "height": 176,
+                          "url": "https://yt3.ggpht.com/Hd1RtxUDPPfB9rl9cM0rLZq20iQus3jB1RD1LJugCPlPZ_Tcw_nm5-6SXOixZ-cSqk58c0UD=s176-c-k-c0x00ffffff-no-rj",
+                          "width": 176
+                        }
+                      ]
+                    },
+                    "title": {
+                      "runs": [
+                        {
+                          "navigationEndpoint": {
+                            "browseEndpoint": {
+                              "browseId": "UCQeRaTukNYft1_6AZPACnog",
+                              "canonicalBaseUrl": "/@AsmonTV"
+                            },
+                            "clickTrackingParams": "CJADEOE5IhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "apiUrl": "/youtubei/v1/browse",
+                                "rootVe": 3611,
+                                "url": "/@AsmonTV",
+                                "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                              }
+                            }
+                          },
+                          "text": "Asmongold TV  "
+                        }
+                      ]
+                    },
+                    "trackingParams": "CJADEOE5IhMInrGet5XnlwMVkytVCB1LyR4U"
+                  }
+                },
+                "showLessCommand": {
+                  "changeEngagementPanelVisibilityAction": {
+                    "targetId": "engagement-panel-structured-description",
+                    "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                  },
+                  "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ=="
+                },
+                "showLessText": {
+                  "simpleText": "Moins"
+                },
+                "showMoreCommand": {
+                  "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                  "commandExecutorCommand": {
+                    "commands": [
+                      {
+                        "changeEngagementPanelVisibilityAction": {
+                          "targetId": "engagement-panel-structured-description",
+                          "visibility": "ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"
+                        },
+                        "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ=="
+                      },
+                      {
+                        "clickTrackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                        "scrollToEngagementPanelCommand": {
+                          "targetId": "engagement-panel-structured-description"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "showMoreText": {
+                  "simpleText": "...afficher plus"
+                },
+                "subscribeButton": {
+                  "subscribeButtonRenderer": {
+                    "buttonText": {
+                      "runs": [
+                        {
+                          "text": "Abonné"
+                        }
+                      ]
+                    },
+                    "channelId": "UCQeRaTukNYft1_6AZPACnog",
+                    "enabled": true,
+                    "notificationPreferenceButton": {
+                      "subscriptionNotificationToggleButtonRenderer": {
+                        "command": {
+                          "clickTrackingParams": "CIUDEJf5ASITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                          "commandExecutorCommand": {
+                            "commands": [
+                              {
+                                "clickTrackingParams": "CIUDEJf5ASITCJ6xnreV55cDFZMrVQgdS8keFMoBBI9anDE=",
+                                "openPopupAction": {
+                                  "popup": {
+                                    "menuPopupRenderer": {
+                                      "items": [
+                                        {
+                                          "menuServiceItemRenderer": {
+                                            "icon": {
+                                              "iconType": "NOTIFICATIONS_ACTIVE"
+                                            },
+                                            "isSelected": true,
+                                            "serviceEndpoint": {
+                                              "clickTrackingParams": "CIwDEOu1BBgEIhMInrGet5XnlwMVkytVCB1LyR4UMhxQUkVGRVJFTkNFX0FMTF9OT1RJRklDQVRJT05TygEEj1qcMQ==",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "modifyChannelNotificationPreferenceEndpoint": {
+                                                "params": "ChhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cSAggCGAAgBFITCgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D"
+                                              }
+                                            },
+                                            "text": {
+                                              "simpleText": "Toutes"
+                                            },
+                                            "trackingParams": "CIwDEOu1BBgEIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                          }
+                                        },
+                                        {
+                                          "menuServiceItemRenderer": {
+                                            "icon": {
+                                              "iconType": "NOTIFICATIONS_NONE"
+                                            },
+                                            "isSelected": false,
+                                            "serviceEndpoint": {
+                                              "clickTrackingParams": "CIsDEOy1BBgFIhMInrGet5XnlwMVkytVCB1LyR4UMhJQUkVGRVJFTkNFX0RFRkFVTFTKAQSPWpwx",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "modifyChannelNotificationPreferenceEndpoint": {
+                                                "params": "ChhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cSAggBGAAgBFITCgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D"
+                                              }
+                                            },
+                                            "text": {
+                                              "simpleText": "Personnalisées"
+                                            },
+                                            "trackingParams": "CIsDEOy1BBgFIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                          }
+                                        },
+                                        {
+                                          "menuServiceItemRenderer": {
+                                            "icon": {
+                                              "iconType": "NOTIFICATIONS_OFF"
+                                            },
+                                            "isSelected": false,
+                                            "serviceEndpoint": {
+                                              "clickTrackingParams": "CIoDEO21BBgGIhMInrGet5XnlwMVkytVCB1LyR4UMhtQUkVGRVJFTkNFX05PX05PVElGSUNBVElPTlPKAQSPWpwx",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "modifyChannelNotificationPreferenceEndpoint": {
+                                                "params": "ChhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cSAggDGAAgBFITCgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D"
+                                              }
+                                            },
+                                            "text": {
+                                              "simpleText": "Aucune"
+                                            },
+                                            "trackingParams": "CIoDEO21BBgGIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                          }
+                                        },
+                                        {
+                                          "menuServiceItemRenderer": {
+                                            "icon": {
+                                              "iconType": "PERSON_MINUS"
+                                            },
+                                            "serviceEndpoint": {
+                                              "clickTrackingParams": "CIYDENuLChgHIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "signalServiceEndpoint": {
+                                                "actions": [
+                                                  {
+                                                    "clickTrackingParams": "CIYDENuLChgHIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                                                    "openPopupAction": {
+                                                      "popup": {
+                                                        "confirmDialogRenderer": {
+                                                          "cancelButton": {
+                                                            "buttonRenderer": {
+                                                              "accessibility": {
+                                                                "label": "Annuler"
+                                                              },
+                                                              "isDisabled": false,
+                                                              "size": "SIZE_DEFAULT",
+                                                              "style": "STYLE_TEXT",
+                                                              "text": {
+                                                                "runs": [
+                                                                  {
+                                                                    "text": "Annuler"
+                                                                  }
+                                                                ]
+                                                              },
+                                                              "trackingParams": "CIgDEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                                            }
+                                                          },
+                                                          "confirmButton": {
+                                                            "buttonRenderer": {
+                                                              "accessibility": {
+                                                                "label": "Se désabonner"
+                                                              },
+                                                              "isDisabled": false,
+                                                              "serviceEndpoint": {
+                                                                "clickTrackingParams": "CIkDEPBbIhMInrGet5XnlwMVkytVCB1LyR4UMgV3YXRjaMoBBI9anDE=",
+                                                                "commandMetadata": {
+                                                                  "webCommandMetadata": {
+                                                                    "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                    "sendPost": true
+                                                                  }
+                                                                },
+                                                                "unsubscribeEndpoint": {
+                                                                  "channelIds": [
+                                                                    "UCQeRaTukNYft1_6AZPACnog"
+                                                                  ],
+                                                                  "params": "CgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D"
+                                                                }
+                                                              },
+                                                              "size": "SIZE_DEFAULT",
+                                                              "style": "STYLE_BLUE_TEXT",
+                                                              "text": {
+                                                                "runs": [
+                                                                  {
+                                                                    "text": "Se désabonner"
+                                                                  }
+                                                                ]
+                                                              },
+                                                              "trackingParams": "CIkDEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                                            }
+                                                          },
+                                                          "dialogMessages": [
+                                                            {
+                                                              "runs": [
+                                                                {
+                                                                  "text": "Se désabonner de "
+                                                                },
+                                                                {
+                                                                  "text": "Asmongold TV  "
+                                                                },
+                                                                {
+                                                                  "text": " ?"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ],
+                                                          "primaryIsCancel": false,
+                                                          "trackingParams": "CIcDEMY4IhMInrGet5XnlwMVkytVCB1LyR4U"
+                                                        }
+                                                      },
+                                                      "popupType": "DIALOG"
+                                                    }
+                                                  }
+                                                ],
+                                                "signal": "CLIENT_SIGNAL"
+                                              }
+                                            },
+                                            "text": {
+                                              "runs": [
+                                                {
+                                                  "text": "Se désabonner"
+                                                }
+                                              ]
+                                            },
+                                            "trackingParams": "CIYDENuLChgHIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "popupType": "DROPDOWN"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "currentStateId": 2,
+                        "secondaryIcon": {
+                          "iconType": "EXPAND_MORE"
+                        },
+                        "states": [
+                          {
+                            "nextStateId": 2,
+                            "state": {
+                              "buttonRenderer": {
+                                "accessibility": {
+                                  "label": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Asmongold TV  ."
+                                },
+                                "accessibilityData": {
+                                  "accessibilityData": {
+                                    "label": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Asmongold TV  ."
+                                  }
+                                },
+                                "icon": {
+                                  "iconType": "NOTIFICATIONS_ACTIVE"
+                                },
+                                "isDisabled": false,
+                                "size": "SIZE_DEFAULT",
+                                "style": "STYLE_TEXT",
+                                "trackingParams": "CI8DEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                              }
+                            },
+                            "stateId": 2
+                          },
+                          {
+                            "nextStateId": 3,
+                            "state": {
+                              "buttonRenderer": {
+                                "accessibility": {
+                                  "label": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne Asmongold TV  ."
+                                },
+                                "accessibilityData": {
+                                  "accessibilityData": {
+                                    "label": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne Asmongold TV  ."
+                                  }
+                                },
+                                "icon": {
+                                  "iconType": "NOTIFICATIONS_NONE"
+                                },
+                                "isDisabled": false,
+                                "size": "SIZE_DEFAULT",
+                                "style": "STYLE_TEXT",
+                                "trackingParams": "CI4DEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                              }
+                            },
+                            "stateId": 3
+                          },
+                          {
+                            "nextStateId": 0,
+                            "state": {
+                              "buttonRenderer": {
+                                "accessibility": {
+                                  "label": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Asmongold TV  ."
+                                },
+                                "accessibilityData": {
+                                  "accessibilityData": {
+                                    "label": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Asmongold TV  ."
+                                  }
+                                },
+                                "icon": {
+                                  "iconType": "NOTIFICATIONS_OFF"
+                                },
+                                "isDisabled": false,
+                                "size": "SIZE_DEFAULT",
+                                "style": "STYLE_TEXT",
+                                "trackingParams": "CI0DEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                              }
+                            },
+                            "stateId": 0
+                          }
+                        ],
+                        "targetId": "notification-bell",
+                        "trackingParams": "CIUDEJf5ASITCJ6xnreV55cDFZMrVQgdS8keFA=="
+                      }
+                    },
+                    "onSubscribeEndpoints": [
+                      {
+                        "clickTrackingParams": "CIEDEJsrIhMInrGet5XnlwMVkytVCB1LyR4UKPgdMgV3YXRjaMoBBI9anDE=",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "apiUrl": "/youtubei/v1/subscription/subscribe",
+                            "sendPost": true
+                          }
+                        },
+                        "subscribeEndpoint": {
+                          "channelIds": [
+                            "UCQeRaTukNYft1_6AZPACnog"
+                          ],
+                          "params": "EgIIAxgAIgswLWs2aTh0QndBVQ%3D%3D"
+                        }
+                      }
+                    ],
+                    "onUnsubscribeEndpoints": [
+                      {
+                        "clickTrackingParams": "CIEDEJsrIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "sendPost": true
+                          }
+                        },
+                        "signalServiceEndpoint": {
+                          "actions": [
+                            {
+                              "clickTrackingParams": "CIEDEJsrIhMInrGet5XnlwMVkytVCB1LyR4UygEEj1qcMQ==",
+                              "openPopupAction": {
+                                "popup": {
+                                  "confirmDialogRenderer": {
+                                    "cancelButton": {
+                                      "buttonRenderer": {
+                                        "accessibility": {
+                                          "label": "Annuler"
+                                        },
+                                        "isDisabled": false,
+                                        "size": "SIZE_DEFAULT",
+                                        "style": "STYLE_TEXT",
+                                        "text": {
+                                          "runs": [
+                                            {
+                                              "text": "Annuler"
+                                            }
+                                          ]
+                                        },
+                                        "trackingParams": "CIMDEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                      }
+                                    },
+                                    "confirmButton": {
+                                      "buttonRenderer": {
+                                        "accessibility": {
+                                          "label": "Se désabonner"
+                                        },
+                                        "isDisabled": false,
+                                        "serviceEndpoint": {
+                                          "clickTrackingParams": "CIQDEPBbIhMInrGet5XnlwMVkytVCB1LyR4UKPgdMgV3YXRjaMoBBI9anDE=",
+                                          "commandMetadata": {
+                                            "webCommandMetadata": {
+                                              "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                              "sendPost": true
+                                            }
+                                          },
+                                          "unsubscribeEndpoint": {
+                                            "channelIds": [
+                                              "UCQeRaTukNYft1_6AZPACnog"
+                                            ],
+                                            "params": "CgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D"
+                                          }
+                                        },
+                                        "size": "SIZE_DEFAULT",
+                                        "style": "STYLE_BLUE_TEXT",
+                                        "text": {
+                                          "runs": [
+                                            {
+                                              "text": "Se désabonner"
+                                            }
+                                          ]
+                                        },
+                                        "trackingParams": "CIQDEPBbIhMInrGet5XnlwMVkytVCB1LyR4U"
+                                      }
+                                    },
+                                    "dialogMessages": [
+                                      {
+                                        "runs": [
+                                          {
+                                            "text": "Se désabonner de "
+                                          },
+                                          {
+                                            "text": "Asmongold TV  "
+                                          },
+                                          {
+                                            "text": " ?"
+                                          }
+                                        ]
+                                      }
+                                    ],
+                                    "primaryIsCancel": false,
+                                    "trackingParams": "CIIDEMY4IhMInrGet5XnlwMVkytVCB1LyR4U"
+                                  }
+                                },
+                                "popupType": "DIALOG"
+                              }
+                            }
+                          ],
+                          "signal": "CLIENT_SIGNAL"
+                        }
+                      }
+                    ],
+                    "showPreferences": false,
+                    "subscribeAccessibility": {
+                      "accessibilityData": {
+                        "label": "S'abonner à Asmongold TV  ."
+                      }
+                    },
+                    "subscribed": true,
+                    "subscribedButtonText": {
+                      "runs": [
+                        {
+                          "text": "Abonné"
+                        }
+                      ]
+                    },
+                    "subscribedEntityKey": "EhhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cgMygB",
+                    "targetId": "watch-subscribe",
+                    "trackingParams": "CIEDEJsrIhMInrGet5XnlwMVkytVCB1LyR4UKPgdMgV3YXRjaA==",
+                    "type": "FREE",
+                    "unsubscribeAccessibility": {
+                      "accessibilityData": {
+                        "label": "Se désabonner de Asmongold TV  ."
+                      }
+                    },
+                    "unsubscribeButtonText": {
+                      "runs": [
+                        {
+                          "text": "Se désabonner"
+                        }
+                      ]
+                    },
+                    "unsubscribedButtonText": {
+                      "runs": [
+                        {
+                          "text": "S’abonner"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "trackingParams": "CIADEM2rARgBIhMInrGet5XnlwMVkytVCB1LyR4U"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EgswLWs2aTh0QndBVSA-KAE%3D",
+          "payload": {
+            "likeStatusEntity": {
+              "key": "EgswLWs2aTh0QndBVSA-KAE%3D",
+              "likeStatus": "INDIFFERENT"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ1FlUmFUdWtOWWZ0MV82QVpQQUNub2cgMygB",
+              "subscribed": true
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhgwLWs2aTh0QndBVV9haV9zdW1tYXJpZXMgPigB",
+          "payload": {
+            "likeStatusEntity": {
+              "key": "EhgwLWs2aTh0QndBVV9haV9zdW1tYXJpZXMgPigB",
+              "likeStatus": "INDIFFERENT"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        }
+      ]
+    }
+  }
+}

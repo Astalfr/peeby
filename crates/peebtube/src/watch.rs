@@ -1,4 +1,4 @@
-//! Watch page: the player (autoplay), title, channel, like and dislike buttons (counts from
+//! Watch page: the player (autoplay), title, channel and its notification bell, like and dislike buttons (counts from
 //! Return YouTube Dislike), description, comments and related videos. In fullscreen only the player is shown;
 //! in theater mode (`Settings::theater`) the player spans the page above the two columns.
 //!
@@ -36,7 +36,7 @@ use crate::ui::{
   compact_card, error_text, image_fill, loading_more, near_scroll_end, playlist_row,
   skeleton_compact,
 };
-use crate::{prefetch, runtime, save, theme, tools};
+use crate::{bell, prefetch, runtime, save, theme, tools};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
@@ -768,6 +768,16 @@ impl WatchView {
                       .child(page.subscribers.clone().unwrap_or_default()),
                   ),
               ),
+          )
+          .children(
+            page
+              .channel_id
+              .as_deref()
+              .zip(page.notifications.as_ref())
+              .map(|(channel_id, notifications)| {
+                let key = format!("watch-{}", self.video_id);
+                bell::bell_button(&key, channel_id, notifications, false, cx)
+              }),
           )
           .child(div().flex_1())
           .child(save::save_button(&self.video_id))

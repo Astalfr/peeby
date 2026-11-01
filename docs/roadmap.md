@@ -11,6 +11,13 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Notifications
+
+- Done (2026-11-01): the bell of subscribed channels, on the watch page (right of the channel) and on the channels page's tiles: "Toutes", "Personnalisées" or "Aucune" (those the channel offers), the icon showing the current level. Parsed and tested on `subscriptions_channels.json` and a new trimmed, redacted signed-in watch page (`next_signed_in.json`); the signed-out `next.json` carries a bell too but is not subscribed, so it shows none.
+- Verified by driving the app: the watch page of a subscribed channel shows its bell ("Toutes"), the menu opens with the current level checked; the channels page shows the 475 bells (all three icons seen), a tile's bell opens its menu without opening the channel, and the grid still scrolls. `smoke` reads 475 bells out of 475 channels live.
+- **Not verified:** no level was changed: `notification/modify_channel_preference` was never sent (writing to the account needs the user's go-ahead), so its response has no fixture yet, and the toasts and the revert on failure were not seen. Scrolling smoothness of the channels page with 475 bells was not measured.
+- **Inbox, waiting for a fixture:** the title bar's bell with the unseen count and the list. Endpoints: `notification/get_unseen_count` (body `{}`, the count in `actions[].updateNotificationsUnseenCountAction.unseenCount`) and `notification/get_notification_menu` (body `{"notificationsMenuRequestType": "NOTIFICATIONS_MENU_REQUEST_TYPE_INBOX"}`, items expected as `notificationRenderer`s in `multiPageMenuNotificationSectionRenderer`). Checked live on 2026-11-01: count 1, but the menu held only the empty-state promo (`backgroundPromoRenderer`, "Vos notifications s'afficheront ici"), so there is no item to save as a fixture. Next step: once a real notification is in the account, save the menu response (trimmed, redacted), then write its parser and the panel.
+
 ## Smooth feeds
 
 - Done (2026-11-01): the feeds (Home, subscriptions in grid and list mode, channel) are a virtual list, so a scroll builds only the rows in view instead of every loaded card; their header stays at the top. List rows take the whole width; grid cards are 416 px.

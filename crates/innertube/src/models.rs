@@ -88,6 +88,8 @@ pub struct WatchPage {
   pub like_status: LikeStatus,
   /// What the page's like and dislike buttons send.
   pub like_params: LikeParams,
+  /// The channel's notification bell, when the user is subscribed to it.
+  pub notifications: Option<ChannelNotifications>,
 }
 
 /// A user's rating of a video, as `likeStatusEntity` gives it.
@@ -186,6 +188,42 @@ pub struct Channel {
   pub subscribers: Option<String>,
   /// Avatar sizes.
   pub avatar: Vec<Thumbnail>,
+  /// The channel's notification bell.
+  pub notifications: Option<ChannelNotifications>,
+}
+
+/// How much YouTube notifies the user about a subscribed channel's new videos.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NotificationLevel {
+  /// "Toutes": every new video (`NOTIFICATIONS_ACTIVE`).
+  All,
+  /// "Personnalisées": the ones YouTube picks (`NOTIFICATIONS_NONE`, the default).
+  Personalized,
+  /// "Aucune" (`NOTIFICATIONS_OFF`).
+  None,
+}
+
+/// A subscribed channel's notification bell (`subscriptionNotificationToggleButtonRenderer`):
+/// the current level and the levels it offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChannelNotifications {
+  /// The level now.
+  pub level: NotificationLevel,
+  /// The levels the menu offers, in its order, and the `params` of the
+  /// `notification/modify_channel_preference` call setting each one, as the menu carries
+  /// them. Some channels offer only "Personnalisées" and "Aucune".
+  pub options: Vec<(NotificationLevel, String)>,
+}
+
+impl ChannelNotifications {
+  /// The params setting `level`, if the menu offers it.
+  pub fn params(&self, level: NotificationLevel) -> Option<&str> {
+    self
+      .options
+      .iter()
+      .find(|(l, _)| *l == level)
+      .map(|(_, params)| params.as_str())
+  }
 }
 
 /// A comment (top-level or reply).
