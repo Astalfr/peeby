@@ -274,13 +274,13 @@ impl Shell {
       .space()
       .filter(|s| s.searchable(cx))
       .map(|s| s.info(cx).name);
-    let back = can_go_back.then(|| {
-      Button::new("back")
-        .ghost()
-        .icon(Icon::ArrowLeft)
-        .tooltip("Retour")
-        .on_click(cx.listener(|this, _, _, cx| this.back(cx)))
-    });
+    // Always present (disabled when there is nowhere to go) so the bar does not shift.
+    let back = Button::new("back")
+      .ghost()
+      .icon(Icon::ArrowLeft)
+      .disabled(!can_go_back)
+      .tooltip("Retour")
+      .on_click(cx.listener(|this, _, _, cx| this.back(cx)));
     TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
       h_flex()
         .h_full()
@@ -289,7 +289,7 @@ impl Shell {
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .child(div().occlude().child(menu))
-        .children(back.map(|b| div().occlude().child(b)))
+        .child(div().occlude().child(back))
         .child(mark(window, cx))
         .child(div().occlude().ml_4().child(self.tabs(cx)))
         .child(div().flex_1())
