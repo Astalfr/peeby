@@ -1,12 +1,11 @@
-//! Account page: session state, cookie import (checked against YouTube before it replaces the
-//! current session) and sign-out.
+//! The YouTube account, in the settings page: session state, cookie import (checked against
+//! YouTube before it replaces the current session) and sign-out.
 
 use std::path::PathBuf;
 
 use gpui::prelude::*;
 use gpui::{Context, FontWeight, PathPromptOptions, SharedString, WeakEntity, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
@@ -15,7 +14,6 @@ use crate::settings::Settings;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::convert::error_text;
 use ui::assets::Icon;
-use ui::widgets::page_title;
 use ui::{runtime, theme};
 
 enum Status {
@@ -156,124 +154,123 @@ impl Render for AccountView {
         )
         .child(div().pt(px(2.)).child(text))
     };
-    v_flex()
-      .id("account")
-      .size_full()
-      .overflow_y_scrollbar()
-      .child(
-        v_flex()
-          .px_8()
-          .py_6()
-          .gap_6()
-          .max_w(px(760.))
-          .child(page_title("Compte"))
-          .child(
-            h_flex()
-              .px_5()
-              .py_4()
-              .gap_4()
-              .items_center()
-              .rounded(theme::RADIUS_LG)
-              .bg(theme::surface())
-              .child(
-                div()
-                  .size(px(44.))
-                  .flex_none()
-                  .rounded_full()
-                  .flex()
-                  .items_center()
-                  .justify_center()
-                  .when(self.signed_in, |el| {
-                    el.bg(theme::accent()).text_color(theme::on_accent())
-                  })
-                  .when(!self.signed_in, |el| {
-                    el.bg(theme::surface_hover()).text_color(theme::muted())
-                  })
-                  .child(gpui_component::Icon::new(Icon::Account).size(px(22.))),
-              )
-              .child(
-                v_flex()
-                  .flex_1()
-                  .min_w_0()
-                  .gap_0p5()
-                  .child(
-                    div()
-                      .font_weight(FontWeight::SEMIBOLD)
-                      .child(if self.signed_in {
-                        "Connecté avec des cookies YouTube"
-                      } else {
-                        "Non connecté"
-                      }),
-                  )
-                  .child(
-                    div()
-                      .text_xs()
-                      .text_color(theme::muted())
-                      .truncate()
-                      .child(format!("Fichier : {path}")),
-                  ),
-              )
-              .when(self.signed_in, |row| {
-                row.child(
-                  Button::new("sign-out")
-                    .ghost()
-                    .label("Se déconnecter")
-                    .disabled(checking)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_out(cx))),
-                )
-              }),
-          )
-          .child(
-            v_flex()
-              .gap_4()
-              .p_5()
-              .rounded(theme::RADIUS_LG)
-              .border_1()
-              .border_color(theme::border())
-              .text_sm()
-              .child(
-                div()
-                  .font_weight(FontWeight::SEMIBOLD)
-                  .child("Exporter les cookies de youtube.com au format Netscape"),
-              )
-              .child(
-                v_flex()
-                  .gap_3()
-                  .text_color(theme::muted())
-                  .child(step(
-                    1,
-                    "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
-                  ))
-                  .child(step(
-                    2,
-                    "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
-                     cookies avec l'extension « Get cookies.txt LOCALLY ».",
-                  ))
-                  .child(step(
-                    3,
-                    "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
-                     ici.",
-                  )),
-              )
-              .child(div().text_xs().text_color(theme::subtle()).child(
-                "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
-                   donne accès à votre compte : ne le partagez pas.",
-              ))
-              .child(
-                h_flex().child(
-                  Button::new("import")
-                    .primary()
-                    .label(if checking {
-                      "Vérification…"
+    v_flex().child(
+      v_flex()
+        .gap_4()
+        .child(
+          div()
+            .pb_2()
+            .text_base()
+            .font_weight(FontWeight::SEMIBOLD)
+            .child("Compte"),
+        )
+        .child(
+          h_flex()
+            .px_5()
+            .py_4()
+            .gap_4()
+            .items_center()
+            .rounded(theme::RADIUS_LG)
+            .bg(theme::surface())
+            .child(
+              div()
+                .size(px(44.))
+                .flex_none()
+                .rounded_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(self.signed_in, |el| {
+                  el.bg(theme::accent()).text_color(theme::on_accent())
+                })
+                .when(!self.signed_in, |el| {
+                  el.bg(theme::surface_hover()).text_color(theme::muted())
+                })
+                .child(gpui_component::Icon::new(Icon::Account).size(px(22.))),
+            )
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap_0p5()
+                .child(
+                  div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(if self.signed_in {
+                      "Connecté avec des cookies YouTube"
                     } else {
-                      "Importer cookies.txt…"
-                    })
-                    .disabled(checking)
-                    .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),
+                      "Non connecté"
+                    }),
+                )
+                .child(
+                  div()
+                    .text_xs()
+                    .text_color(theme::muted())
+                    .truncate()
+                    .child(format!("Fichier : {path}")),
                 ),
+            )
+            .when(self.signed_in, |row| {
+              row.child(
+                Button::new("sign-out")
+                  .ghost()
+                  .label("Se déconnecter")
+                  .disabled(checking)
+                  .on_click(cx.listener(|this, _, _, cx| this.sign_out(cx))),
+              )
+            }),
+        )
+        .child(
+          v_flex()
+            .gap_4()
+            .p_5()
+            .rounded(theme::RADIUS_LG)
+            .border_1()
+            .border_color(theme::border())
+            .text_sm()
+            .child(
+              div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("Exporter les cookies de youtube.com au format Netscape"),
+            )
+            .child(
+              v_flex()
+                .gap_3()
+                .text_color(theme::muted())
+                .child(step(
+                  1,
+                  "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
+                ))
+                .child(step(
+                  2,
+                  "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
+                     cookies avec l'extension « Get cookies.txt LOCALLY ».",
+                ))
+                .child(step(
+                  3,
+                  "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
+                     ici.",
+                )),
+            )
+            .child(div().text_xs().text_color(theme::subtle()).child(
+              "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
+                   donne accès à votre compte : ne le partagez pas.",
+            ))
+            .child(
+              h_flex().child(
+                Button::new("import")
+                  .primary()
+                  .label(if checking {
+                    "Vérification…"
+                  } else {
+                    "Importer cookies.txt…"
+                  })
+                  .disabled(checking)
+                  .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),
               ),
-          )
-          .children(message.map(|(text, color)| div().text_color(color).child(text))),
-      )
+            ),
+        )
+        .children(message.map(|(text, color)| div().text_color(color).child(text))),
+    )
   }
 }

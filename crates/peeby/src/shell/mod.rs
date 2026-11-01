@@ -4,12 +4,13 @@
 //! the mini-player, a window of its own above the others (docs/design.md, ADR 0008).
 
 mod mini_player;
+mod settings_page;
 pub mod space;
 
 use gpui::prelude::*;
 use gpui::{
   Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, ObjectFit, SharedString,
-  Subscription, WeakEntity, Window, WindowHandle, div, img, px,
+  Subscription, Window, WindowHandle, div, img, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
@@ -21,10 +22,9 @@ use ui::player::{NowPlaying, PlayerView, now_playing};
 use ui::theme;
 
 use crate::settings::Settings;
-use crate::spaces::youtube::YouTubeSpace;
-use crate::spaces::youtube::settings_page::SettingsView;
 use mini_player::MiniPlayer;
-use space::{Avatar, MenuEntry, SpaceHandle};
+use settings_page::SettingsView;
+use space::{Avatar, MenuEntry, SpaceEvent, SpaceHandle};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
@@ -41,20 +41,13 @@ pub struct Shell {
   active: usize,
   /// The settings page (gear), shown instead of the space's page while open.
   settings: Option<AnyView>,
-  /// The YouTube space, for the settings page (language and region rebuild its clients).
-  youtube: WeakEntity<YouTubeSpace>,
   mini: Option<Mini>,
   _subscriptions: Vec<Subscription>,
 }
 
 impl Shell {
-  /// The shell over `spaces`, the first one open. `youtube` is also one of them.
-  pub fn new(
-    spaces: Vec<SpaceHandle>,
-    youtube: WeakEntity<YouTubeSpace>,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  /// The shell over `spaces`, the first one open.
+  pub fn new(spaces: Vec<SpaceHandle>, window: &mut Window, cx: &mut Context<Self>) -> Self {
     let mut subscriptions = Vec::new();
     for (index, space) in spaces.iter().enumerate() {
       let shell = cx.weak_entity();
@@ -68,16 +61,28 @@ impl Shell {
       ));
       let shell = cx.weak_entity();
       let handle = window.window_handle();
-      subscriptions.push(space.on_activate(
+      subscriptions.push(space.on_event(
         cx,
-        Box::new(move |cx| {
-          handle
-            .update(cx, |_, window, cx| {
-              shell
-                .update(cx, |shell, cx| shell.activate(index, window, cx))
-                .ok();
-            })
-            .ok();
+        Box::new(move |event, cx| {
+          let open_settings = matches!(event, SpaceEvent::OpenSettings);
+          let shell = shell.clone();
+          // Deferred: the event comes from inside the window (a click), which cannot be
+          // updated again from there.
+          cx.defer(move |cx| {
+            handle
+              .update(cx, |_, window, cx| {
+                shell
+                  .update(cx, |shell, cx| {
+                    if open_settings {
+                      shell.open_settings(window, cx)
+                    } else {
+                      shell.activate(index, window, cx)
+                    }
+                  })
+                  .ok();
+              })
+              .ok();
+          });
         }),
       ));
     }
@@ -95,7 +100,6 @@ impl Shell {
       spaces,
       active: 0,
       settings: None,
-      youtube,
       mini: None,
       _subscriptions: subscriptions,
     }
@@ -214,8 +218,8 @@ impl Shell {
       return;
     }
     self.leave_page(window, cx);
-    let youtube = self.youtube.clone();
-    self.settings = Some(cx.new(|_| SettingsView::new(youtube)).into());
+    let spaces = self.spaces.clone();
+    self.settings = Some(cx.new(|cx| SettingsView::new(spaces, cx)).into());
     cx.notify();
   }
 

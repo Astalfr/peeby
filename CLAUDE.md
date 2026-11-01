@@ -64,7 +64,8 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
 
 ## Spaces
 - A service is a space under `crates/peeby/src/spaces/<name>/` implementing `shell::space::Space`; the shell and the
-  `ui` crate know no service. Pages of a space keep a `WeakEntity` to their space to navigate.
+  `ui` crate know no service. Its settings are its part of the gear's page (`Space::settings`); player settings shared
+  by every space are `[player]` (`settings::Player`). Pages of a space keep a `WeakEntity` to their space to navigate.
 - The mini-player is a second window (ADR 0008): never update a window from inside its own event (defer), and add
   window mouse listeners only while painting (a `canvas` paint callback), never from `render`.
 - Jellyfin (ADR 0009): the token lives in the Credential Manager (blocking calls: before the UI or in the background),

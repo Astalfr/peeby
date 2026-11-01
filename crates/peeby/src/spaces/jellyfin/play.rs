@@ -19,14 +19,14 @@ use jellyfin_api::playback::{MediaSource, MediaStream, PlaybackReport};
 use jellyfin_api::{Client, Error, ItemId, Url};
 use player::StartOptions;
 use ui::player::segments::{Segment, SegmentKind};
-use ui::player::{Layout, PlayerEvent, PlayerView, Prefs, Previews, Source, Tile};
+use ui::player::{Layout, PlayerEvent, PlayerView, Previews, Source, Tile};
 use ui::runtime;
 
 use super::items::{TICKS_PER_SECOND, episode_number};
 use super::login::describe;
 use super::tracks::{StreamPref, SubtitlePref, TrackMap, TrackPrefs};
 use super::{JellyfinSpace, Route, report};
-use crate::settings::{JellyfinPlayback, Settings};
+use crate::settings::{JellyfinPlayback, Player, Settings};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
 /// Trickplay thumbnails at least this wide are picked (the player draws them 176 px wide).
@@ -90,16 +90,7 @@ impl PlayView {
     let clicked = Instant::now();
     let settings = Settings::get(cx);
     let prefs = settings.jellyfin.playback.clone();
-    let remember = prefs.remember_volume;
-    let player_prefs = Prefs {
-      volume: if remember { settings.volume } else { 100. },
-      muted: remember && settings.muted,
-      subtitle_language: None,
-      seek_step: prefs.seek_step,
-      seek_step_large: prefs.seek_step_large,
-      autoplay_next: prefs.autoplay_next,
-      autoplay_countdown: prefs.autoplay_countdown,
-    };
+    let player_prefs = Player::prefs(settings);
     let player = cx.new(|cx| {
       let mut player = PlayerView::new(player_prefs, false, cx);
       player.set_layout(Layout::Page, cx);
@@ -255,8 +246,7 @@ impl PlayView {
       source.default_audio_stream_index,
       source.default_subtitle_stream_index,
     );
-    let software = !self.prefs.hardware_acceleration;
-    let options = StartOptions {
+    let mut options = StartOptions {
       url,
       http_headers: vec![format!(
         "Authorization: {}",
@@ -267,12 +257,11 @@ impl PlayView {
       subtitle: Some(map.mpv_subtitle(subtitle)),
       external_subtitles,
       fonts_dir,
-      force_software: software || std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1"),
-      software_decoding: software,
       subtitle_scale: (self.prefs.subtitle_scale != 1.0).then_some(self.prefs.subtitle_scale),
       buffer_mb: Some(self.prefs.network_buffer_mb),
       ..Default::default()
     };
+    Settings::get(cx).player.apply(&mut options);
     let previews = trickplay.map(|info| {
       Rc::new(Trickplay {
         client: self.client.clone(),
@@ -328,15 +317,7 @@ impl PlayView {
         }
         self.send_report(ReportKind::Progress, cx);
       }
-      PlayerEvent::Sound { volume, muted } => {
-        if self.prefs.remember_volume {
-          let (volume, muted) = (*volume, *muted);
-          Settings::update(cx, |s| {
-            s.volume = volume;
-            s.muted = muted;
-          });
-        }
-      }
+      PlayerEvent::Sound { volume, muted } => Player::save_sound(*volume, *muted, cx),
       PlayerEvent::Ended => {
         self.finish(true, cx);
         self.close(cx);

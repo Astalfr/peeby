@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–7 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–8 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -184,9 +184,18 @@ Principles:
   verified:** a signed-in search (it goes to the account's search history)
 
 ### 8. Unified settings
-- [ ] Settings page behind the gear: general, player, YouTube (language, region, quality, cookies),
-      Jellyfin (home rows, server, sign-out), storage, about
-- [ ] Aggregated notifications panel
+- [x] Settings page behind the gear (`shell::settings_page`): general (folded menu), player (shared
+      `[player]`: autoplay and countdown, remember volume, seek steps, hardware acceleration, now also
+      used by YouTube), then each space's part (`Space::settings`): YouTube (account and cookie import,
+      language and region, default quality), Jellyfin (account with server and sign-out, start fullscreen,
+      network buffer, languages and subtitles, home rows); storage (image cache), about
+- [x] "Compte" left YouTube's sidebar; "Importer des cookies" buttons and Jellyfin's user entry open the
+      settings (`SpaceEvent::OpenSettings`); Jellyfin's own settings page is gone
+- [x] Aggregated notifications panel (done at step 4)
+- Verified on screenshots: the page and its parts (YouTube signed in, Jellyfin signed in), the accent of the
+  open space, Jellyfin's user entry opening it, YouTube's sidebar without "Compte". **Not verified:** a
+  change of each setting by hand, the cookie import and sign-outs from there (writes), YouTube with hardware
+  acceleration off
 
 ### 9. Twitch preparation
 - [ ] ADR and `docs/twitch.md` from the research (below)

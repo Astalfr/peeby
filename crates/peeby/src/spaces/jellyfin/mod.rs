@@ -1,6 +1,6 @@
 //! The Jellyfin space, from the former peeby (ADR 0007, 0009): the login page while signed out;
-//! then home, libraries, a title's page, search, playback in the content panel and the space's
-//! settings, as a stack of pages (it renders the one on top).
+//! then home, libraries, a title's page, search and playback in the content panel, as a stack of
+//! pages (it renders the one on top); its part of the settings page.
 
 pub mod detail;
 pub mod home;
@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyView, App, Context, Entity, EventEmitter, SharedString, Subscription,
-  Window, div, ease_out_quint, px, rgb,
+  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString,
+  Subscription, Window, div, ease_out_quint, px, rgb,
 };
 use jellyfin_api::models::{BaseItem, CollectionType, User};
 use jellyfin_api::{Client, Error, ItemId};
@@ -53,7 +53,6 @@ pub enum Route {
   },
   /// Playback of a movie or an episode.
   Play(ItemId),
-  Settings,
 }
 
 impl Route {
@@ -82,6 +81,8 @@ pub struct JellyfinSpace {
   /// Why the login page shows again (the session expired).
   login_message: Option<SharedString>,
   stack: Vec<Page>,
+  /// Its part of the settings page, made the first time it shows in a session.
+  settings: Option<Entity<SettingsView>>,
   /// Audio and subtitle choices per series, for the rest of the session.
   track_prefs: HashMap<ItemId, TrackPrefs>,
   /// The player went fullscreen by itself: leave fullscreen once another page shows.
@@ -116,6 +117,7 @@ impl JellyfinSpace {
       login: None,
       login_message: None,
       stack: Vec::new(),
+      settings: None,
       track_prefs: HashMap::new(),
       leave_fullscreen: false,
       _login_subscription: None,
@@ -162,6 +164,7 @@ impl JellyfinSpace {
     };
     session::route_images(signed.client.base_url().as_str(), None, cx);
     self.stack.clear();
+    self.settings = None;
     self.track_prefs.clear();
     self.login_message = message;
     session::forget(cx);
@@ -273,7 +276,6 @@ impl JellyfinSpace {
       Route::Play(id) => cx
         .new(|cx| PlayView::new(client, nav, id.clone(), window, cx))
         .into(),
-      Route::Settings => cx.new(|cx| SettingsView::new(client, nav, cx)).into(),
     };
     if route.is_top_level() {
       self.stack.clear();
@@ -339,7 +341,6 @@ impl JellyfinSpace {
     Some(match route {
       Route::Home => "home".into(),
       Route::Library(id) => format!("library:{id}"),
-      Route::Settings => "account".into(),
       _ => return None,
     })
   }
@@ -380,7 +381,7 @@ impl Space for JellyfinSpace {
     }
   }
 
-  /// Home, the video libraries, then the user (their settings) and sign-out at the bottom.
+  /// Home, the video libraries, then the user (opening the settings) and sign-out at the bottom.
   fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
     let Some(signed) = &self.signed else {
       return Vec::new();
@@ -428,7 +429,6 @@ impl Space for JellyfinSpace {
       .host_str()
       .map(|h| h.to_owned().into());
     entries.push(MenuEntry {
-      active: active("account"),
       bottom: true,
       avatar,
       detail: host,
@@ -444,7 +444,7 @@ impl Space for JellyfinSpace {
   fn open_entry(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
     let route = match id {
       "home" => Route::Home,
-      "account" => Route::Settings,
+      "account" => return cx.emit(SpaceEvent::OpenSettings),
       "sign-out" => return self.log_out(cx),
       _ => match id.strip_prefix("library:") {
         Some(library) => Route::Library(library.into()),
@@ -468,6 +468,24 @@ impl Space for JellyfinSpace {
 
   fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     self.open(Route::Search, window, cx);
+  }
+
+  fn settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let Some(client) = self.client().cloned() else {
+      return Some(
+        div()
+          .text_sm()
+          .text_color(theme::muted())
+          .child("Connectez-vous à votre serveur depuis l'onglet Jellyfin.")
+          .into_any_element(),
+      );
+    };
+    let nav = cx.weak_entity();
+    let view = self
+      .settings
+      .get_or_insert_with(|| cx.new(|cx| SettingsView::new(client, nav, cx)))
+      .clone();
+    Some(view.into_any_element())
   }
 
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {

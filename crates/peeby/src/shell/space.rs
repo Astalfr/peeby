@@ -77,6 +77,8 @@ impl MenuEntry {
 pub enum SpaceEvent {
   /// Show this space (a notification of it was clicked from another tab).
   Activate,
+  /// Open the settings (a page's "import cookies" button, the account entry).
+  OpenSettings,
 }
 
 /// A service's part of the app: its pages, its sidebar entries and what it plays.
@@ -115,6 +117,11 @@ pub trait Space: Render + EventEmitter<SpaceEvent> {
     None
   }
 
+  /// The space's part of the settings page (behind the gear), under its name.
+  fn settings(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<AnyElement> {
+    None
+  }
+
   /// The space's section of the notifications panel; `popover` closes the panel.
   fn notifications(
     &self,
@@ -125,6 +132,9 @@ pub trait Space: Render + EventEmitter<SpaceEvent> {
     None
   }
 }
+
+/// What the shell does with a space's [`SpaceEvent`]s.
+pub type EventHandler = dyn Fn(&SpaceEvent, &mut App);
 
 /// A space whatever its type, as the shell holds it.
 pub trait AnySpace {
@@ -155,10 +165,12 @@ pub trait AnySpace {
     window: &mut Window,
     cx: &mut App,
   ) -> Option<AnyElement>;
+  /// See [`Space::settings`].
+  fn settings(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
   /// Calls `on_change` whenever the space changes (a page opened or replaced).
   fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription;
-  /// Calls `on_activate` when the space asks to be shown.
-  fn on_activate(&self, cx: &mut App, on_activate: Box<dyn Fn(&mut App)>) -> Subscription;
+  /// Calls `on_event` with what the space asks of the shell.
+  fn on_event(&self, cx: &mut App, on_event: Box<EventHandler>) -> Subscription;
 }
 
 impl<T: Space> AnySpace for Entity<T> {
@@ -211,12 +223,16 @@ impl<T: Space> AnySpace for Entity<T> {
     self.update(cx, |space, cx| space.notifications(popover, window, cx))
   }
 
+  fn settings(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    self.update(cx, |space, cx| space.settings(window, cx))
+  }
+
   fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription {
     cx.observe(self, move |_, cx| on_change(cx))
   }
 
-  fn on_activate(&self, cx: &mut App, on_activate: Box<dyn Fn(&mut App)>) -> Subscription {
-    cx.subscribe(self, move |_, SpaceEvent::Activate, cx| on_activate(cx))
+  fn on_event(&self, cx: &mut App, on_event: Box<EventHandler>) -> Subscription {
+    cx.subscribe(self, move |_, event, cx| on_event(event, cx))
   }
 }
 

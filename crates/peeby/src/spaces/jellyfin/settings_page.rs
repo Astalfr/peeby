@@ -1,20 +1,16 @@
-//! The Jellyfin space's settings (its account entry in the sidebar): playback, languages, home,
-//! storage, advanced options, and the server, user and sign-out. Each control edits
+//! Jellyfin's part of the settings page (behind the gear): its own playback options, the
+//! languages, the home page, and the server, user and sign-out. Each control edits
 //! `Settings::jellyfin`, saved at once; most apply to the next video or the next visit of Home.
-//! Step 8 of docs/refactor-plan.md moves them behind the gear, with the shared ones.
+//! The player's shared options are the shell's ("Lecteur").
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, Context, SharedString, WeakEntity, Window, div, px};
+use gpui::{AnyElement, App, Context, WeakEntity, Window, div, px};
 use gpui_component::button::Button;
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::switch::Switch;
-use gpui_component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_component::{Sizable, h_flex, v_flex};
 use jellyfin_api::Client;
 use jellyfin_api::models::PublicSystemInfo;
-use ui::form::{OnClick, choices, row, section};
-use ui::player::format_step;
-use ui::widgets::page_title;
-use ui::{images, runtime, theme};
+use ui::form::{chips, row, section, toggle};
+use ui::{runtime, theme};
 
 use super::JellyfinSpace;
 use super::session::device_name;
@@ -46,8 +42,6 @@ pub struct SettingsView {
   client: Client,
   nav: WeakEntity<JellyfinSpace>,
   server: Option<PublicSystemInfo>,
-  cache_size: Option<u64>,
-  clearing: bool,
 }
 
 impl SettingsView {
@@ -68,45 +62,11 @@ impl SettingsView {
       }
     })
     .detach();
-    let mut view = Self {
+    Self {
       client,
       nav,
       server: None,
-      cache_size: None,
-      clearing: false,
-    };
-    view.measure_cache(cx);
-    view
-  }
-
-  fn measure_cache(&mut self, cx: &mut Context<Self>) {
-    let size = cx.background_spawn(async { images::disk_cache_size() });
-    cx.spawn(async move |this, cx| {
-      let size = size.await;
-      this
-        .update(cx, |this, cx| {
-          this.cache_size = Some(size);
-          cx.notify();
-        })
-        .ok();
-    })
-    .detach();
-  }
-
-  fn clear_cache(&mut self, cx: &mut Context<Self>) {
-    self.clearing = true;
-    cx.notify();
-    let clear = cx.background_spawn(async { images::clear_disk_cache() });
-    cx.spawn(async move |this, cx| {
-      clear.await;
-      this
-        .update(cx, |this, cx| {
-          this.clearing = false;
-          this.measure_cache(cx);
-        })
-        .ok();
-    })
-    .detach();
+    }
   }
 }
 
@@ -118,70 +78,14 @@ fn set_home(cx: &mut App, edit: impl FnOnce(&mut JellyfinHome)) {
   Settings::update(cx, |s| edit(&mut s.jellyfin.home));
 }
 
-/// Choice chips for `options`, the one equal to `selected` in the accent; a click calls
-/// `on_select` with its value.
-fn chips<T: Clone + PartialEq + 'static>(
-  id: &str,
-  options: Vec<(T, String)>,
-  selected: &T,
-  on_select: impl Fn(T, &mut App) + Clone + 'static,
-) -> impl IntoElement {
-  let options: Vec<(String, bool, OnClick)> = options
-    .into_iter()
-    .map(|(value, label)| {
-      let active = &value == selected;
-      let on_select = on_select.clone();
-      let on_click: OnClick = Box::new(move |_, cx| on_select(value.clone(), cx));
-      (label, active, on_click)
-    })
-    .collect();
-  choices(id, options)
-}
-
-fn toggle(id: &str, checked: bool, on_change: impl Fn(bool, &mut App) + 'static) -> Switch {
-  Switch::new(SharedString::from(id.to_owned()))
-    .checked(checked)
-    .on_click(move |checked, _, cx| on_change(*checked, cx))
-}
-
-fn format_size(bytes: u64) -> String {
-  let mb = bytes as f64 / (1024. * 1024.);
-  if mb >= 1024. {
-    format!("{:.1} Go", mb / 1024.)
-  } else {
-    format!("{mb:.0} Mo")
-  }
-}
-
 impl SettingsView {
   fn playback_section(&self, p: &JellyfinPlayback) -> impl IntoElement {
-    let countdowns = [5, 10, 15, 20, 30].map(|s| (s, format!("{s} s"))).to_vec();
-    let steps = [5, 10, 15, 30].map(|s| (s, format_step(s))).to_vec();
-    let large_steps = [30, 60, 120, 300].map(|s| (s, format_step(s))).to_vec();
+    let buffers = [150, 300, 600, 1000]
+      .map(|mb| (mb, format!("{mb} Mo")))
+      .to_vec();
     section(
       "Lecture",
       vec![
-        row(
-          "Lire l'épisode suivant automatiquement",
-          "Quand le générique commence, après un compte à rebours.",
-          toggle("autoplay", p.autoplay_next, |v, cx| {
-            set_playback(cx, |p| p.autoplay_next = v)
-          }),
-        )
-        .into_any_element(),
-        row(
-          "Compte à rebours",
-          "Avant de lancer l'épisode suivant.",
-          div()
-            .when(!p.autoplay_next, |el| el.opacity(0.5))
-            .child(chips(
-              "countdown",
-              countdowns,
-              &p.autoplay_countdown,
-              |v, cx| set_playback(cx, |p| p.autoplay_countdown = v),
-            )),
-        )
-        .into_any_element(),
         row(
           "Démarrer en plein écran",
           "La lecture s'ouvre en plein écran, et en sort au retour.",
@@ -191,26 +95,10 @@ impl SettingsView {
         )
         .into_any_element(),
         row(
-          "Mémoriser le volume",
-          "Garder le volume et la coupure du son d'une vidéo à l'autre.",
-          toggle("remember-volume", p.remember_volume, |v, cx| {
-            set_playback(cx, |p| p.remember_volume = v)
-          }),
-        )
-        .into_any_element(),
-        row(
-          "Saut",
-          "← / → et les boutons autour de lecture/pause.",
-          chips("seek", steps, &p.seek_step, |v, cx| {
-            set_playback(cx, |p| p.seek_step = v)
-          }),
-        )
-        .into_any_element(),
-        row(
-          "Grand saut",
-          "Maj + ← / →.",
-          chips("seek-large", large_steps, &p.seek_step_large, |v, cx| {
-            set_playback(cx, |p| p.seek_step_large = v)
+          "Mémoire tampon réseau",
+          "Jusqu'où le lecteur lit en avance. Plus aide les connexions lentes ou instables.",
+          chips("buffer", buffers, &p.network_buffer_mb, |v, cx| {
+            set_playback(cx, |p| p.network_buffer_mb = v)
           }),
         )
         .into_any_element(),
@@ -344,7 +232,7 @@ impl SettingsView {
       rows.push(
         row(
           &format!("Derniers ajouts dans {name}"),
-          "",
+          "Une rangée de l'accueil.",
           toggle(&format!("show-latest-{id}"), shown, move |v, cx| {
             let id = id.clone();
             set_home(cx, move |h| {
@@ -361,58 +249,7 @@ impl SettingsView {
     section("Accueil", rows)
   }
 
-  fn storage_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
-    let size = match self.cache_size {
-      Some(bytes) => format!("{} sur le disque.", format_size(bytes)),
-      None => "Calcul…".to_owned(),
-    };
-    section(
-      "Stockage",
-      vec![
-        row(
-          "Cache des images",
-          &format!("Affiches, miniatures et fonds gardés sur ce PC. {size}"),
-          Button::new("clear-cache")
-            .small()
-            .label("Vider")
-            .loading(self.clearing)
-            .disabled(self.clearing)
-            .on_click(cx.listener(|this, _, _, cx| this.clear_cache(cx))),
-        )
-        .into_any_element(),
-      ],
-    )
-  }
-
-  fn advanced_section(&self, p: &JellyfinPlayback) -> impl IntoElement {
-    let buffers = [150, 300, 600, 1000]
-      .map(|mb| (mb, format!("{mb} Mo")))
-      .to_vec();
-    section(
-      "Avancé",
-      vec![
-        row(
-          "Mémoire tampon réseau",
-          "Jusqu'où le lecteur lit en avance. Plus aide les connexions lentes ou instables.",
-          chips("buffer", buffers, &p.network_buffer_mb, |v, cx| {
-            set_playback(cx, |p| p.network_buffer_mb = v)
-          }),
-        )
-        .into_any_element(),
-        row(
-          "Accélération matérielle",
-          "Décoder et afficher la vidéo avec la carte graphique. À couper seulement pour un \
-           dépannage.",
-          toggle("hwaccel", p.hardware_acceleration, |v, cx| {
-            set_playback(cx, |p| p.hardware_acceleration = v)
-          }),
-        )
-        .into_any_element(),
-      ],
-    )
-  }
-
-  fn about_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+  fn account_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
     let server = match &self.server {
       Some(info) => format!(
         "{} · Jellyfin {}",
@@ -440,7 +277,7 @@ impl SettingsView {
         .child(div().text_sm().min_w_0().truncate().child(value))
     };
     section(
-      "À propos",
+      "Compte",
       vec![
         v_flex()
           .px_5()
@@ -452,10 +289,9 @@ impl SettingsView {
           .child(line("Adresse", self.client.base_url().to_string()))
           .child(line("Utilisateur", user))
           .child(line("Appareil", device_name()))
-          .child(line("Peeby", env!("CARGO_PKG_VERSION").to_owned()))
           .child(
             h_flex().pt_2().child(
-              Button::new("about-sign-out")
+              Button::new("jellyfin-sign-out")
                 .small()
                 .label("Se déconnecter")
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -474,25 +310,11 @@ impl Render for SettingsView {
     let jellyfin = Settings::get(cx).jellyfin.clone();
     let (p, h) = (jellyfin.playback, jellyfin.home);
     let sections: Vec<AnyElement> = vec![
+      self.account_section(cx).into_any_element(),
       self.playback_section(&p).into_any_element(),
       self.languages_section(&p).into_any_element(),
       self.home_section(&h, cx).into_any_element(),
-      self.storage_section(cx).into_any_element(),
-      self.advanced_section(&p).into_any_element(),
-      self.about_section(cx).into_any_element(),
     ];
-    v_flex()
-      .id("jellyfin-settings")
-      .size_full()
-      .overflow_y_scrollbar()
-      .child(
-        v_flex()
-          .w_full()
-          .max_w(px(920.))
-          .p_8()
-          .gap_8()
-          .child(page_title("Réglages de Jellyfin"))
-          .children(sections),
-      )
+    v_flex().gap_8().children(sections)
   }
 }

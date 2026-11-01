@@ -26,7 +26,7 @@ use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
-use crate::settings::Settings;
+use crate::settings::{Player, Settings};
 use crate::spaces::youtube::cards::{compact_card, playlist_row};
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
@@ -119,11 +119,8 @@ impl WatchView {
     }
     let settings = Settings::get(cx);
     let prefs = Prefs {
-      volume: settings.volume,
-      muted: settings.muted,
       subtitle_language: Some(settings.language.clone()),
-      // Seek steps and autoplay become settings with the unified settings page.
-      ..Prefs::default()
+      ..Player::prefs(settings)
     };
     let theater = settings.theater;
     let player = cx.new(|cx| PlayerView::new(prefs, theater, cx));
@@ -142,10 +139,7 @@ impl WatchView {
             player.update(cx, |player, cx| player.set_theater(theater, cx));
             cx.notify();
           }
-          PlayerEvent::Sound { volume, muted } => Settings::update(cx, |s| {
-            s.volume = volume;
-            s.muted = muted;
-          }),
+          PlayerEvent::Sound { volume, muted } => Player::save_sound(volume, muted, cx),
           PlayerEvent::Ended | PlayerEvent::Next => {
             if let Some(queue) = &this.queue {
               queue.update(cx, |q, cx| q.next(cx));
@@ -367,12 +361,14 @@ impl WatchView {
         stream.resolution,
         stream.codecs
       );
-      self.player.update(cx, |player, cx| {
-        player.start(convert::source(stream), clicked, cx)
-      });
+      let source = convert::source(stream, &Settings::get(cx).player);
+      self
+        .player
+        .update(cx, |player, cx| player.start(source, clicked, cx));
       return;
     }
     let max_height = Settings::get(cx).max_height;
+    let player_settings = Settings::get(cx).player.clone();
     let (client, id) = (self.client.clone(), self.video_id.clone());
     let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
     let player = self.player.downgrade();
@@ -386,10 +382,9 @@ impl WatchView {
             stream.resolution,
             stream.codecs
           );
+          let source = convert::source(stream, &player_settings);
           player
-            .update(cx, |player, cx| {
-              player.start(convert::source(stream), clicked, cx)
-            })
+            .update(cx, |player, cx| player.start(source, clicked, cx))
             .ok();
           return;
         }
@@ -408,7 +403,10 @@ impl WatchView {
       };
       player
         .update(cx, |player, cx| match fallback {
-          Some(options) => player.start_with(options, clicked, cx),
+          Some(mut options) => {
+            player_settings.apply(&mut options);
+            player.start_with(options, clicked, cx)
+          }
           None => {
             tracing::warn!("stream: {error}");
             player.fail(error_text(&error).into(), cx);

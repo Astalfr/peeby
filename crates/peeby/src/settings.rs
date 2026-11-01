@@ -52,10 +52,12 @@ pub struct Settings {
   pub region: String,
   /// Highest quality picked when a video starts, as a height in pixels.
   pub max_height: u32,
-  /// Player volume, 0–100.
+  /// Player volume, 0–100, kept when `player.remember_volume` is on.
   pub volume: f64,
   /// Player muted.
   pub muted: bool,
+  /// The player, in every space.
+  pub player: Player,
   /// Layout of the subscriptions page.
   pub subscriptions_layout: FeedLayout,
   /// Playlists shown and played last video first.
@@ -66,6 +68,73 @@ pub struct Settings {
   pub sidebar_collapsed: bool,
   /// The Jellyfin space.
   pub jellyfin: Jellyfin,
+}
+
+/// `[player]`: how the player behaves, in every space.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Player {
+  /// Play the next item (episode, video of a playlist) after a countdown, near the end.
+  pub autoplay_next: bool,
+  /// Countdown length, seconds.
+  pub autoplay_countdown: u32,
+  /// Keep the volume and mute state between videos and runs.
+  pub remember_volume: bool,
+  /// ← / → step, seconds.
+  pub seek_step: u32,
+  /// Shift + ← / → step, seconds.
+  pub seek_step_large: u32,
+  /// GPU decoding and rendering; off forces software (troubleshooting).
+  pub hardware_acceleration: bool,
+}
+
+impl Default for Player {
+  fn default() -> Self {
+    Self {
+      autoplay_next: true,
+      autoplay_countdown: 10,
+      remember_volume: true,
+      seek_step: 10,
+      seek_step_large: 60,
+      hardware_acceleration: true,
+    }
+  }
+}
+
+impl Player {
+  /// The player's starting preferences: these settings, and the volume of `settings` when it
+  /// is remembered.
+  pub fn prefs(settings: &Settings) -> ui::player::Prefs {
+    let player = &settings.player;
+    let remember = player.remember_volume;
+    ui::player::Prefs {
+      volume: if remember { settings.volume } else { 100. },
+      muted: remember && settings.muted,
+      subtitle_language: None,
+      seek_step: player.seek_step,
+      seek_step_large: player.seek_step_large,
+      autoplay_next: player.autoplay_next,
+      autoplay_countdown: player.autoplay_countdown,
+    }
+  }
+
+  /// Keeps the player's volume for the next videos, when the setting asks for it.
+  pub fn save_sound(volume: f64, muted: bool, cx: &mut App) {
+    if Settings::get(cx).player.remember_volume {
+      Settings::update(cx, |s| {
+        s.volume = volume;
+        s.muted = muted;
+      });
+    }
+  }
+
+  /// Applies the hardware acceleration setting (and `PEEBY_SOFTWARE_VIDEO=1`) to mpv's options.
+  pub fn apply(&self, options: &mut player::StartOptions) {
+    let software = !self.hardware_acceleration;
+    options.software_decoding = software;
+    options.force_software =
+      software || std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1");
+  }
 }
 
 /// `[jellyfin]`: the Jellyfin space's server, user and preferences. The access token is not here:
@@ -85,48 +154,30 @@ pub struct Jellyfin {
   pub home: JellyfinHome,
 }
 
-/// `[jellyfin.playback]`.
+/// `[jellyfin.playback]`: Jellyfin's own playback preferences (the shared ones are `[player]`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JellyfinPlayback {
-  /// Play the next episode after a countdown when the credits start.
-  pub autoplay_next: bool,
-  /// Countdown length, seconds.
-  pub autoplay_countdown: u32,
   /// Enter fullscreen when playback starts.
   pub start_fullscreen: bool,
-  /// Keep the volume and mute state (the app's `volume` and `muted`) between videos and runs.
-  pub remember_volume: bool,
-  /// ← / → step, seconds.
-  pub seek_step: u32,
-  /// Shift + ← / → step, seconds.
-  pub seek_step_large: u32,
   /// Preferred audio language (ISO 639-2, e.g. `jpn`); `None`: the server's choice.
   pub audio_language: Option<String>,
   /// Preferred subtitle language (ISO 639-2) or `off`; `None`: the server's choice.
   pub subtitle_language: Option<String>,
   /// Size factor of text subtitles (SRT, VTT). ASS subtitles are never restyled.
   pub subtitle_scale: f64,
-  /// Read-ahead buffer of the player, MiB.
+  /// Read-ahead buffer of the player, MiB (files from the server, not YouTube's HLS).
   pub network_buffer_mb: u32,
-  /// GPU decoding and rendering; off forces software (troubleshooting).
-  pub hardware_acceleration: bool,
 }
 
 impl Default for JellyfinPlayback {
   fn default() -> Self {
     Self {
-      autoplay_next: true,
-      autoplay_countdown: 10,
       start_fullscreen: false,
-      remember_volume: true,
-      seek_step: 10,
-      seek_step_large: 60,
       audio_language: None,
       subtitle_language: None,
       subtitle_scale: 1.0,
       network_buffer_mb: 300,
-      hardware_acceleration: true,
     }
   }
 }
@@ -177,6 +228,7 @@ impl Default for Settings {
       reversed_playlists: Vec::new(),
       theater: false,
       sidebar_collapsed: false,
+      player: Player::default(),
       jellyfin: Jellyfin::default(),
     }
   }
@@ -299,7 +351,8 @@ mod tests {
     assert_eq!(settings.jellyfin.device_id, "abc");
     assert!(!settings.jellyfin.home.show_hero);
     assert!(settings.jellyfin.home.show_next_up);
-    assert_eq!(settings.jellyfin.playback.seek_step, 10);
+    assert_eq!(settings.player.seek_step, 10);
+    assert!(settings.player.hardware_acceleration);
     assert_eq!(settings.jellyfin.server_url, None);
     let again: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
     assert_eq!(settings, again);

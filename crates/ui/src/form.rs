@@ -1,9 +1,10 @@
 //! Building blocks of settings pages: titled sections of rounded rows, each with a title and
-//! description on the left and its control on the right, such as a group of choice chips.
+//! description on the left and its control on the right (choice chips, a switch).
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, FontWeight, SharedString, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::switch::Switch;
 use gpui_component::{Sizable, h_flex, v_flex};
 
 use crate::theme;
@@ -33,6 +34,43 @@ pub fn choices(
             .on_click(move |_, window, cx| on_click(window, cx))
         }),
     )
+}
+
+/// Choice chips for `options` (value, label), the one equal to `selected` in the accent; a click
+/// calls `on_select` with its value.
+pub fn chips<T: Clone + PartialEq + 'static>(
+  id: &str,
+  options: Vec<(T, String)>,
+  selected: &T,
+  on_select: impl Fn(T, &mut App) + Clone + 'static,
+) -> impl IntoElement {
+  let options: Vec<(String, bool, OnClick)> = options
+    .into_iter()
+    .map(|(value, label)| {
+      let active = &value == selected;
+      let on_select = on_select.clone();
+      let on_click: OnClick = Box::new(move |_, cx| on_select(value.clone(), cx));
+      (label, active, on_click)
+    })
+    .collect();
+  choices(id, options)
+}
+
+/// An on/off switch.
+pub fn toggle(id: &str, checked: bool, on_change: impl Fn(bool, &mut App) + 'static) -> Switch {
+  Switch::new(SharedString::from(id.to_owned()))
+    .checked(checked)
+    .on_click(move |checked, _, cx| on_change(*checked, cx))
+}
+
+/// `12 Mo`, `1.5 Go`.
+pub fn format_size(bytes: u64) -> String {
+  let mb = bytes as f64 / (1024. * 1024.);
+  if mb >= 1024. {
+    format!("{:.1} Go", mb / 1024.)
+  } else {
+    format!("{mb:.0} Mo")
+  }
 }
 
 /// A settings row: title and description on the left, the control on the right.

@@ -227,10 +227,8 @@ impl Render for ChannelsView {
             Button::new("to-account")
               .primary()
               .label("Importer des cookies")
-              .on_click(move |_, window, cx| {
-                nav
-                  .update(cx, |app, cx| app.open(Route::Account, window, cx))
-                  .ok();
+              .on_click(move |_, _, cx| {
+                nav.update(cx, |app, cx| app.open_settings(cx)).ok();
               }),
           ),
         )

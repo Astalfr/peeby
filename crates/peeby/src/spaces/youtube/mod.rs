@@ -46,8 +46,6 @@ use watch::WatchView;
 pub enum Route {
   Home,
   Subscriptions,
-  /// Session state and cookie import.
-  Account,
   /// The subscribed channels.
   Channels,
   /// A channel's videos.
@@ -80,7 +78,7 @@ impl Route {
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
-      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Search => true,
+      Self::Home | Self::Subscriptions | Self::Playlists | Self::Search => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
     }
@@ -95,6 +93,8 @@ struct Page {
 pub struct YouTubeSpace {
   client: Client,
   stack: Vec<Page>,
+  /// The account part of the settings page, made the first time they open.
+  account: Option<Entity<AccountView>>,
   /// Page to open at the next render (it needs the window), after a session change.
   reset_to: Option<Route>,
 }
@@ -119,6 +119,7 @@ impl YouTubeSpace {
     let mut app = Self {
       client,
       stack: Vec::new(),
+      account: None,
       reset_to: None,
     };
     app.open(Route::Home, window, cx);
@@ -210,10 +211,6 @@ impl YouTubeSpace {
       Route::Channels => cx
         .new(|cx| ChannelsView::new(client, nav, window, cx))
         .into(),
-      Route::Account => {
-        let signed_in = client.signed_in();
-        cx.new(|_| AccountView::new(nav, signed_in)).into()
-      }
       Route::Channel { id, name } => {
         let source = Source::Channel {
           id: id.clone(),
@@ -286,6 +283,11 @@ impl YouTubeSpace {
     }
   }
 
+  /// Asks the shell for the settings page (where the account is).
+  pub fn open_settings(&mut self, cx: &mut Context<Self>) {
+    cx.emit(SpaceEvent::OpenSettings);
+  }
+
   /// Asks the shell to show this space (a notification was clicked from another tab).
   pub fn request_focus(&mut self, cx: &mut Context<Self>) {
     cx.emit(SpaceEvent::Activate);
@@ -298,7 +300,6 @@ impl YouTubeSpace {
       "subscriptions" => Route::Subscriptions,
       "watch-later" => Route::watch_later(),
       "playlists" => Route::Playlists,
-      "account" => Route::Account,
       _ => return None,
     })
   }
@@ -329,7 +330,6 @@ impl Space for YouTubeSpace {
         false,
       ),
       ("playlists", "Playlists", Icon::Playlists, false),
-      ("account", "Compte", Icon::Account, true),
     ]
     .into_iter()
     .map(|(id, label, icon, bottom)| MenuEntry {
@@ -377,6 +377,16 @@ impl Space for YouTubeSpace {
     inbox::unseen(cx)
   }
 
+  fn settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let nav = cx.weak_entity();
+    let signed_in = self.client.signed_in();
+    let account = self
+      .account
+      .get_or_insert_with(|| cx.new(|_| AccountView::new(nav, signed_in)))
+      .clone();
+    Some(settings_page::part(account, window, cx))
+  }
+
   fn notifications(
     &self,
     popover: WeakEntity<PopoverState>,
@@ -391,15 +401,9 @@ impl Space for YouTubeSpace {
 impl Render for YouTubeSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     if let Some(route) = self.reset_to.take() {
-      // The account page stays on screen with its message; Home is rebuilt underneath.
-      let on_account = matches!(self.stack.last().map(|p| &p.route), Some(Route::Account));
-      if !on_account {
-        // Every page holds the old client: start over, even if Home is on top.
-        self.stack.clear();
-        self.open(route, window, cx);
-      } else {
-        self.stack.retain(|page| page.route == Route::Account);
-      }
+      // Every page holds the old client: start over, even if Home is on top.
+      self.stack.clear();
+      self.open(route, window, cx);
     }
     let Some(page) = self.stack.last() else {
       return div().size_full().into_any_element();

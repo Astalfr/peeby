@@ -9,6 +9,8 @@ use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
 use ui::player::{Previews, Quality, Source, Subtitle, Tile};
 
+use crate::settings;
+
 /// Downloads images with an InnerTube client (its HTTP client and User-Agent).
 pub struct ImageFetch(pub Client);
 
@@ -55,26 +57,33 @@ pub fn error_text(error: &innertube::Error) -> String {
 }
 
 /// mpv options for an HLS variant and its audio rendition (YouTube's variants are video only).
-fn hls_options(video: &str, audio: Option<&str>, user_agent: &str) -> StartOptions {
-  StartOptions {
+fn hls_options(
+  video: &str,
+  audio: Option<&str>,
+  user_agent: &str,
+  player: &settings::Player,
+) -> StartOptions {
+  let mut options = StartOptions {
     url: video.to_owned(),
     external_audio: audio.map(str::to_owned).into_iter().collect(),
     http_headers: vec![format!("User-Agent: {user_agent}")],
     // Opt-in only: the log contains stream URLs, which carry the user's IP.
     log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
-  }
+  };
+  player.apply(&mut options);
+  options
 }
 
 /// A resolved stream as the player's source: its quality ladder, captions fetched on demand
-/// and the storyboard for the seek bar.
-pub fn source(stream: Stream) -> Source {
+/// and the storyboard for the seek bar; `player` gives the hardware acceleration setting.
+pub fn source(stream: Stream, player: &settings::Player) -> Source {
   let qualities = stream
     .qualities
     .iter()
     .map(|v| Quality {
       label: v.label().into(),
-      options: hls_options(&v.url, v.audio_url.as_deref(), stream.user_agent),
+      options: hls_options(&v.url, v.audio_url.as_deref(), stream.user_agent, player),
     })
     .collect();
   Source {
@@ -82,6 +91,7 @@ pub fn source(stream: Stream) -> Source {
       &stream.video_url,
       stream.audio_url.as_deref(),
       stream.user_agent,
+      player,
     ),
     qualities,
     quality: stream
