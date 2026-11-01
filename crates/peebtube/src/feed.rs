@@ -3,7 +3,7 @@
 //! The subscriptions page can also show its videos as a list (`FeedLayout`).
 
 use gpui::prelude::*;
-use gpui::{Context, ScrollHandle, SharedString, WeakEntity, Window, div, px};
+use gpui::{Context, ScrollHandle, SharedString, WeakEntity, Window, div};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Selectable, h_flex, v_flex};
@@ -20,9 +20,7 @@ use crate::ui::{
 use crate::{motion, runtime, theme};
 
 /// Card width, logical pixels.
-const CARD_WIDTH: f32 = 320.;
-/// Widest a list of rows gets, so long titles stay readable on a wide window.
-const LIST_MAX_WIDTH: f32 = 1100.;
+const CARD_WIDTH: f32 = 416.;
 
 /// What the grid shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -251,7 +249,7 @@ fn grid(cards: Vec<gpui::AnyElement>, more: Option<gpui::AnyElement>) -> gpui::A
 /// The rows, one under the other, then the end of the list.
 fn rows(rows: Vec<gpui::AnyElement>, more: Option<gpui::AnyElement>) -> gpui::AnyElement {
   v_flex()
-    .max_w(px(LIST_MAX_WIDTH))
+    .w_full()
     .gap_2()
     .children(rows)
     .children(more.map(|b| h_flex().pt_4().justify_center().child(b)))
@@ -352,7 +350,7 @@ impl Render for FeedView {
     };
     let skeleton = if list {
       v_flex()
-        .max_w(px(LIST_MAX_WIDTH))
+        .w_full()
         .gap_2()
         .children((0..8).map(|_| skeleton_row()))
         .into_any_element()
