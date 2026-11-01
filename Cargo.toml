@@ -14,6 +14,7 @@ publish = false
 player = { path = "crates/player" }
 gpui-video = { path = "crates/gpui-video" }
 innertube = { path = "crates/innertube" }
+jellyfin-api = { path = "crates/jellyfin-api" }
 ui = { path = "crates/ui" }
 
 [workspace.lints.rust]

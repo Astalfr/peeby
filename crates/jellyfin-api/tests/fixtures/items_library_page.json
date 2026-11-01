@@ -1,0 +1,391 @@
+{
+  "Items": [
+    {
+      "AirDays": [
+        "Sunday"
+      ],
+      "AirTime": "00:00",
+      "BackdropImageTags": [
+        "baf39ddb6e0c552c32548121bae04e13"
+      ],
+      "ChannelId": null,
+      "CommunityRating": 8.2,
+      "EndDate": "2021-06-20T00:00:00.0000000Z",
+      "GenreItems": [
+        {
+          "Id": "ce06903d834d2c3417e0889dd4049f3b",
+          "Name": "Title 1"
+        },
+        {
+          "Id": "f89b4d4d7733020ed2721d8fec37f26c",
+          "Name": "Title 2"
+        },
+        {
+          "Id": "090eac6e9de4fe1fbc194e5b96691277",
+          "Name": "Title 3"
+        },
+        {
+          "Id": "75e99b5f4751652538507c6cd6c3ec00",
+          "Name": "Title 4"
+        },
+        {
+          "Id": "d3bf560475125eed829c435f3d8329e3",
+          "Name": "Title 5"
+        }
+      ],
+      "Genres": [
+        "Action",
+        "Anime",
+        "Drama",
+        "Mecha",
+        "Sci-Fi"
+      ],
+      "Id": "1e26bfd6490e1152978310a21b0c1035",
+      "ImageBlurHashes": {
+        "Backdrop": {
+          "baf39ddb6e0c552c32548121bae04e13": "H~N1iwyDIps;X9xuozbI%L_NxuM|WDkCt6kCoJt7"
+        },
+        "Logo": {
+          "8fea91d3c466c3375b7534ab89901c6a": "OM8|^lof00Rj_3t7D%%Mj[IUWBxuofRjD%j[-;ayIUj[xu"
+        },
+        "Primary": {
+          "de6d8d46b081ff1e3b8a3049681fca2e": "dsH2m9xZx^tR?wjZozogkXRkM_WB%NkCRjf5tRkCbIj["
+        },
+        "Thumb": {
+          "42201c0376b88ea7c9df16ccda9dc677": "WOHdgP}?^j-5oe?GE9x^IUoLWWRk9zNIofR,bbM|-;RPxuWVaet7"
+        }
+      },
+      "ImageTags": {
+        "Logo": "8fea91d3c466c3375b7534ab89901c6a",
+        "Primary": "de6d8d46b081ff1e3b8a3049681fca2e",
+        "Thumb": "42201c0376b88ea7c9df16ccda9dc677"
+      },
+      "IsFolder": true,
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown",
+      "Name": "Title 6",
+      "OfficialRating": "TV-14",
+      "Overview": "Synopsis placeholder.",
+      "PremiereDate": "2021-04-11T00:00:00.0000000Z",
+      "PrimaryImageAspectRatio": 0.7055214723926381,
+      "ProductionYear": 2021,
+      "RunTimeTicks": 14400000000,
+      "ServerId": "0000000000000000000000000000beef",
+      "Status": "Ended",
+      "Type": "Series",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "1e26bfd6490e1152978310a21b0c1035",
+        "Key": "1e26bfd6-490e-1152-9783-10a21b0c1035",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": true,
+        "PlayedPercentage": 100,
+        "UnplayedItemCount": 0
+      }
+    },
+    {
+      "AirDays": [
+        "Sunday"
+      ],
+      "AirTime": "00:00",
+      "BackdropImageTags": [
+        "27618d62ec91425484931c137fe5e239"
+      ],
+      "ChannelId": null,
+      "CommunityRating": 7.6,
+      "EndDate": "2026-06-28T00:00:00.0000000Z",
+      "GenreItems": [
+        {
+          "Id": "f89b4d4d7733020ed2721d8fec37f26c",
+          "Name": "Title 7"
+        },
+        {
+          "Id": "090eac6e9de4fe1fbc194e5b96691277",
+          "Name": "Title 8"
+        },
+        {
+          "Id": "a30dcc65be22eb3c21c03f7c1c7a57d1",
+          "Name": "Title 9"
+        },
+        {
+          "Id": "1ffc72e19987e5fa4047c6a6870646cf",
+          "Name": "Title 10"
+        }
+      ],
+      "Genres": [
+        "Anime",
+        "Drama",
+        "Fantasy",
+        "Romance"
+      ],
+      "Id": "a74d0779e04d1dfacea2fb370c2d77a9",
+      "ImageBlurHashes": {
+        "Backdrop": {
+          "27618d62ec91425484931c137fe5e239": "WrQl]^%M-@?axI%M~WozS4WBV@t7x[k9esW=R$t7-;oMs;tQWURj"
+        },
+        "Logo": {
+          "cbb5577825ed65060554c216d3f4139d": "ORMH7A?I00WU9ZIoD%RjxuWBf8t7M{t7oxIUxuxuRjt7Rj"
+        },
+        "Primary": {
+          "e06c42297979d5578550509b92f13be6": "dZO.gz_4xa~W0f$*%h%2BWxt%1x]%htmxDt7MdogXTV@"
+        },
+        "Thumb": {
+          "f7e59bcbee05582ed5e46acd13eddc98": "W~Q9K3_NXm$*Rjxtt8%2kCaeaykCSOoJn~Wraeoe%Mt7WAj]bIoK"
+        }
+      },
+      "ImageTags": {
+        "Logo": "cbb5577825ed65060554c216d3f4139d",
+        "Primary": "e06c42297979d5578550509b92f13be6",
+        "Thumb": "f7e59bcbee05582ed5e46acd13eddc98"
+      },
+      "IsFolder": true,
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown",
+      "Name": "Title 11",
+      "OfficialRating": "FR-12",
+      "Overview": "Synopsis placeholder.",
+      "PremiereDate": "2026-03-29T00:00:00.0000000Z",
+      "PrimaryImageAspectRatio": 0.68,
+      "ProductionYear": 2026,
+      "RunTimeTicks": 14400000000,
+      "ServerId": "0000000000000000000000000000beef",
+      "Status": "Ended",
+      "Type": "Series",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "a74d0779e04d1dfacea2fb370c2d77a9",
+        "Key": "a74d0779-e04d-1dfa-cea2-fb370c2d77a9",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": true,
+        "PlayedPercentage": 100,
+        "UnplayedItemCount": 0
+      }
+    },
+    {
+      "AirDays": [
+        "Wednesday"
+      ],
+      "AirTime": "23:30",
+      "BackdropImageTags": [
+        "249aa435c5522655c9afce0adc2ef184"
+      ],
+      "ChannelId": null,
+      "CommunityRating": 7.5,
+      "EndDate": "2024-09-18T00:00:00.0000000Z",
+      "GenreItems": [
+        {
+          "Id": "f89b4d4d7733020ed2721d8fec37f26c",
+          "Name": "Title 12"
+        },
+        {
+          "Id": "08d31605d366d63a7a924f944b4417f1",
+          "Name": "Title 13"
+        },
+        {
+          "Id": "1ffc72e19987e5fa4047c6a6870646cf",
+          "Name": "Title 14"
+        },
+        {
+          "Id": "345780dc39f3b1fa11e4776c97a79ad5",
+          "Name": "Title 15"
+        }
+      ],
+      "Genres": [
+        "Anime",
+        "Comedy",
+        "Romance",
+        "Slice of Life"
+      ],
+      "Id": "4635b1acfb53fe4791e0784fc24c9a07",
+      "ImageBlurHashes": {
+        "Backdrop": {
+          "249aa435c5522655c9afce0adc2ef184": "HiJRz8$eVrx]yC?G-U%$H?~qxaV@S2%MxZt7%MIo"
+        },
+        "Logo": {
+          "602fc9d22050915009888cf439ab3638": "OpN]w@%3-Bxbxtbc$*R5sWxGWBS2R*j[_NadS2WAR+WUR+"
+        },
+        "Primary": {
+          "82c8f2512595659d29b93c1d8644d038": "dKLD+1_4In%go~%Nx^Mx9axtt8o~WA-=xuV@tRM{E2R*"
+        },
+        "Thumb": {
+          "1cf1b909629bad940b81ce96eb7e4704": "WpN,Vq~qoJs:t7%L?b%MofaekDs;S}x]X7Rjs;WC-;x]fij[RjWB"
+        }
+      },
+      "ImageTags": {
+        "Logo": "602fc9d22050915009888cf439ab3638",
+        "Primary": "82c8f2512595659d29b93c1d8644d038",
+        "Thumb": "1cf1b909629bad940b81ce96eb7e4704"
+      },
+      "IsFolder": true,
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown",
+      "Name": "Title 16",
+      "OfficialRating": "TV-14",
+      "Overview": "Synopsis placeholder.",
+      "PremiereDate": "2024-07-03T00:00:00.0000000Z",
+      "PrimaryImageAspectRatio": 0.7076923076923077,
+      "ProductionYear": 2024,
+      "RunTimeTicks": 15000000000,
+      "ServerId": "0000000000000000000000000000beef",
+      "Status": "Ended",
+      "Type": "Series",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "4635b1acfb53fe4791e0784fc24c9a07",
+        "Key": "4635b1ac-fb53-fe47-91e0-784fc24c9a07",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": false,
+        "PlayedPercentage": 41.66666666666667,
+        "UnplayedItemCount": 7
+      }
+    },
+    {
+      "AirDays": [
+        "Thursday"
+      ],
+      "AirTime": "22:00",
+      "BackdropImageTags": [
+        "44e9f286fb12a2f25818c97976eb2129"
+      ],
+      "ChannelId": null,
+      "CommunityRating": 5.7,
+      "EndDate": "2018-03-24T00:00:00.0000000Z",
+      "GenreItems": [
+        {
+          "Id": "f89b4d4d7733020ed2721d8fec37f26c",
+          "Name": "Title 17"
+        },
+        {
+          "Id": "08d31605d366d63a7a924f944b4417f1",
+          "Name": "Title 18"
+        }
+      ],
+      "Genres": [
+        "Anime",
+        "Comedy"
+      ],
+      "Id": "dd81c6541c396bd9e1c020ddb1e37042",
+      "ImageBlurHashes": {
+        "Backdrop": {
+          "44e9f286fb12a2f25818c97976eb2129": "WdHnHerY9FyDVse.~Wr]V@t7NGWBbct8xaRPWVofixt7aeM{tRoy"
+        },
+        "Logo": {
+          "5780c06889cabca9ca7a5abf9a9a2378": "OXHnNta|0KsoIot7SgIAs:xuWVt7ayRj5ks:i_NGxaofxa"
+        },
+        "Primary": {
+          "2591a7ddce61408f34b22356003a5a72": "dPF4igxa0hM|b=od9cNH=vo0I@S5I:WBahf+$|j?NHn+"
+        },
+        "Thumb": {
+          "f82c9bd478cee8b08a9e21a2fc085017": "WIC5#A9~9b%Kkq=x};E39uxCS4xDs8R-X9$%Rkn%s,SOt8-URkWC"
+        }
+      },
+      "ImageTags": {
+        "Logo": "5780c06889cabca9ca7a5abf9a9a2378",
+        "Primary": "2591a7ddce61408f34b22356003a5a72",
+        "Thumb": "f82c9bd478cee8b08a9e21a2fc085017"
+      },
+      "IsFolder": true,
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown",
+      "Name": "Title 19",
+      "OfficialRating": "TV-14",
+      "Overview": "Synopsis placeholder.",
+      "PremiereDate": "2018-03-24T00:00:00.0000000Z",
+      "PrimaryImageAspectRatio": 0.68,
+      "ProductionYear": 2018,
+      "RunTimeTicks": 600000000,
+      "ServerId": "0000000000000000000000000000beef",
+      "Status": "Ended",
+      "Type": "Series",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "dd81c6541c396bd9e1c020ddb1e37042",
+        "Key": "dd81c654-1c39-6bd9-e1c0-20ddb1e37042",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": false,
+        "PlayedPercentage": 0,
+        "UnplayedItemCount": 24
+      }
+    },
+    {
+      "AirDays": [
+        "Friday"
+      ],
+      "AirTime": "22:30",
+      "BackdropImageTags": [
+        "0eb707b51156d33d0f12e076faad74af"
+      ],
+      "ChannelId": null,
+      "CommunityRating": 7.7,
+      "EndDate": "2023-03-25T00:00:00.0000000Z",
+      "GenreItems": [
+        {
+          "Id": "f89b4d4d7733020ed2721d8fec37f26c",
+          "Name": "Title 20"
+        },
+        {
+          "Id": "1ffc72e19987e5fa4047c6a6870646cf",
+          "Name": "Title 21"
+        },
+        {
+          "Id": "345780dc39f3b1fa11e4776c97a79ad5",
+          "Name": "Title 22"
+        }
+      ],
+      "Genres": [
+        "Anime",
+        "Romance",
+        "Slice of Life"
+      ],
+      "Id": "159cd0323b22bf9d886752cae295137a",
+      "ImageBlurHashes": {
+        "Backdrop": {
+          "0eb707b51156d33d0f12e076faad74af": "H_Nm]HOHNgO]ja%2r=$*Nf.AbdRmETRkj^n%soWF"
+        },
+        "Logo": {
+          "ec285e1d5335d0d9cc7f7788d852a86d": "OLSY{ntR_4ofM{tRRO-;ofWBV@jYogogxvayV@j[Rjj]t7"
+        },
+        "Primary": {
+          "a48b038bbf616a25ac91322ea6fdf471": "dNJ]74D%yCNy^j4,ogMxGCKQD%xFk8D%oI-qMxMwwJ%1"
+        },
+        "Thumb": {
+          "9b77c552762d0948fa6517170e6bcdaf": "WsI|t#~V-oxaRPjJ%3t7s:s:o0s:o3s;ofWBafay%3xas:aeWBV["
+        }
+      },
+      "ImageTags": {
+        "Logo": "ec285e1d5335d0d9cc7f7788d852a86d",
+        "Primary": "a48b038bbf616a25ac91322ea6fdf471",
+        "Thumb": "9b77c552762d0948fa6517170e6bcdaf"
+      },
+      "IsFolder": true,
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown",
+      "Name": "Title 23",
+      "OfficialRating": "TV-14",
+      "Overview": "Synopsis placeholder.",
+      "PremiereDate": "2023-01-07T00:00:00.0000000Z",
+      "PrimaryImageAspectRatio": 0.6948640483383686,
+      "ProductionYear": 2023,
+      "RunTimeTicks": 14400000000,
+      "ServerId": "0000000000000000000000000000beef",
+      "Status": "Ended",
+      "Type": "Series",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "159cd0323b22bf9d886752cae295137a",
+        "Key": "159cd032-3b22-bf9d-8867-52cae295137a",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": false,
+        "PlayedPercentage": 78.94736842105263,
+        "UnplayedItemCount": 4
+      }
+    }
+  ],
+  "StartIndex": 0,
+  "TotalRecordCount": 168
+}

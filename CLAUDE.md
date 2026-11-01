@@ -13,6 +13,8 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
 - Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt]`
+- Jellyfin live tests (ignored by default): set `$env:PEEBY_TEST_SERVER`, `PEEBY_TEST_USER`, `PEEBY_TEST_PASSWORD`,
+  then `cargo test -p jellyfin-api --test live -- --ignored --nocapture`
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (PowerShell: `"$env:APPDATA\peeby\cookies.txt"`; `%APPDATA%` only works in cmd)
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)

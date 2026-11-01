@@ -1,0 +1,116 @@
+{
+  "Items": [
+    {
+      "BackdropImageTags": [],
+      "CanDelete": false,
+      "CanDownload": false,
+      "ChannelId": null,
+      "Chapters": [],
+      "ChildCount": 168,
+      "CollectionType": "tvshows",
+      "DateCreated": "0001-01-01T00:00:00.0000000Z",
+      "DateLastMediaAdded": "0001-01-01T00:00:00.0000000Z",
+      "DisplayPreferencesId": "ca0de50d2c11073f53df7c82dc3fe2a4",
+      "EnableMediaSourceDisplay": true,
+      "Etag": "23ce192cae30c7b161f10ccd0c480932",
+      "ExternalUrls": [],
+      "GenreItems": [],
+      "Genres": [],
+      "Id": "ca0de50d2c11073f53df7c82dc3fe2a4",
+      "ImageBlurHashes": {
+        "Primary": {
+          "34de541ebfdfd5fe67fb49d768ede8b1": "eLRLtatP9ZRPIV.bs:-po}sqEHt7SgRQIo-.WV%MogxttRxtRjohn,"
+        }
+      },
+      "ImageTags": {
+        "Primary": "34de541ebfdfd5fe67fb49d768ede8b1"
+      },
+      "IsFolder": true,
+      "LocalTrailerCount": 0,
+      "LocationType": "FileSystem",
+      "LockData": false,
+      "LockedFields": [],
+      "MediaType": "Unknown",
+      "Name": "Title 1",
+      "ParentId": "e9d5075a555c1cbc394eec4cef295274",
+      "Path": "<redacted>",
+      "People": [],
+      "PlayAccess": "Full",
+      "PrimaryImageAspectRatio": 1,
+      "ProviderIds": {},
+      "RemoteTrailers": [],
+      "ServerId": "0000000000000000000000000000beef",
+      "SortName": "Title 2",
+      "SpecialFeatureCount": 0,
+      "Studios": [],
+      "Taglines": "Synopsis placeholder.",
+      "Tags": [],
+      "Type": "CollectionFolder",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "ca0de50d2c11073f53df7c82dc3fe2a4",
+        "Key": "ca0de50d-2c11-073f-53df-7c82dc3fe2a4",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": false
+      }
+    },
+    {
+      "BackdropImageTags": [],
+      "CanDelete": false,
+      "CanDownload": false,
+      "ChannelId": null,
+      "Chapters": [],
+      "ChildCount": 117,
+      "CollectionType": "movies",
+      "DateCreated": "0001-01-01T00:00:00.0000000Z",
+      "DateLastMediaAdded": "0001-01-01T00:00:00.0000000Z",
+      "DisplayPreferencesId": "f137a2dd21bbc1b99aa5c0f6bf02a805",
+      "EnableMediaSourceDisplay": true,
+      "Etag": "fb6c11ea84a53efbd00857582b2ac37c",
+      "ExternalUrls": [],
+      "GenreItems": [],
+      "Genres": [],
+      "Id": "f137a2dd21bbc1b99aa5c0f6bf02a805",
+      "ImageBlurHashes": {
+        "Primary": {
+          "6fb80b8d7be43a6dd39cd5e9af5a803c": "W99QjiW?9Ft6XTWU_3aJRiaet6Rk0KnO?bWZt6NHWUNLo}t7R.WU"
+        }
+      },
+      "ImageTags": {
+        "Primary": "6fb80b8d7be43a6dd39cd5e9af5a803c"
+      },
+      "IsFolder": true,
+      "LocalTrailerCount": 0,
+      "LocationType": "FileSystem",
+      "LockData": false,
+      "LockedFields": [],
+      "MediaType": "Unknown",
+      "Name": "Title 3",
+      "ParentId": "e9d5075a555c1cbc394eec4cef295274",
+      "Path": "<redacted>",
+      "People": [],
+      "PlayAccess": "Full",
+      "PrimaryImageAspectRatio": 1.7777777777777777,
+      "ProviderIds": {},
+      "RemoteTrailers": [],
+      "ServerId": "0000000000000000000000000000beef",
+      "SortName": "Title 4",
+      "SpecialFeatureCount": 0,
+      "Studios": [],
+      "Taglines": "Synopsis placeholder.",
+      "Tags": [],
+      "Type": "CollectionFolder",
+      "UserData": {
+        "IsFavorite": false,
+        "ItemId": "f137a2dd21bbc1b99aa5c0f6bf02a805",
+        "Key": "f137a2dd-21bb-c1b9-9aa5-c0f6bf02a805",
+        "PlayCount": 0,
+        "PlaybackPositionTicks": 0,
+        "Played": false
+      }
+    }
+  ],
+  "StartIndex": 0,
+  "TotalRecordCount": 2
+}

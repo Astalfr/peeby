@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–4 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–5 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -146,10 +146,16 @@ Principles:
   language change, as before step 4 (every page holds the old client)
 
 ### 5. `jellyfin-api`
-- [ ] Copy the crate and its fixture tests from peeby; workspace dependencies `keyring`, `uuid`, `url`,
-      `blurhash` (needed by the Jellyfin code)
+- [x] Copy the crate and its fixture tests from peeby (17 pass; 5 live tests ignored without a server). Its live
+      tests read `PEEBY_TEST_SERVER`, `PEEBY_TEST_USER` and `PEEBY_TEST_PASSWORD` from the environment (no
+      `dotenvy`). `keyring`, `uuid` and `blurhash` come with step 6, where they are used
+- [x] Peeby's docs that apply here: `docs/jellyfin/`, `docs/player/`, the OpenAPI spec in `docs/reference/`;
+      peeby's ADRs archived in `docs/decisions/peeby/`; [ADR 0009](decisions/0009-jellyfin-12-single-account.md)
+      (Jellyfin 12+, one server, one account)
 
 ### 6. Jellyfin space
+- Its player plays in the content panel, under the shared top bar, like YouTube's (agreed 2026-11-01): the
+  tabs and the mini-player stay reachable, F gives fullscreen; `Layout::Window` is not used by the app for now
 - [ ] Every item of the parity checklist below
 
 ### 7. YouTube search

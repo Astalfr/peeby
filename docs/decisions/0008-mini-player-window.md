@@ -37,5 +37,5 @@ an external D3D11 texture drawn by the patched GPUI.
   its own event.
 - The grip resizes from the bottom right only, the window's origin staying in place; a resize from any edge
   would need a GPUI call to set a window's position, which `gpui-pre` 0.3.10 lacks.
-- Jellyfin's full-window player (peeby) hid the whole shell; with the constant top bar, whether it plays in the
-  content panel or over the whole window is to be decided at step 6.
+- Jellyfin's player, which hid the whole shell in peeby, plays in the content panel like YouTube's (agreed with
+  the user on 2026-11-01): the tabs and the mini-player stay reachable, and F still gives fullscreen.
