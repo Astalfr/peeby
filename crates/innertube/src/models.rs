@@ -84,6 +84,44 @@ pub struct WatchPage {
   pub related_continuation: Option<String>,
   /// Token of the first comments page (`next` continuation).
   pub comments_continuation: Option<String>,
+  /// The user's rating of the video (`Indifferent` signed out).
+  pub like_status: LikeStatus,
+  /// What the page's like and dislike buttons send.
+  pub like_params: LikeParams,
+}
+
+/// A user's rating of a video, as `likeStatusEntity` gives it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LikeStatus {
+  /// Neither liked nor disliked.
+  #[default]
+  Indifferent,
+  /// Liked ("J'aime").
+  Like,
+  /// Disliked ("Je n'aime pas").
+  Dislike,
+}
+
+/// The `params` of the watch page's `likeEndpoint`s, one per status they set.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LikeParams {
+  /// `likeParams`, for [`LikeStatus::Like`].
+  pub like: Option<String>,
+  /// `dislikeParams`, for [`LikeStatus::Dislike`].
+  pub dislike: Option<String>,
+  /// `removeLikeParams`, for [`LikeStatus::Indifferent`].
+  pub remove: Option<String>,
+}
+
+impl LikeParams {
+  /// The params of the endpoint setting `status`.
+  pub fn get(&self, status: LikeStatus) -> Option<&str> {
+    match status {
+      LikeStatus::Like => self.like.as_deref(),
+      LikeStatus::Dislike => self.dislike.as_deref(),
+      LikeStatus::Indifferent => self.remove.as_deref(),
+    }
+  }
 }
 
 /// A subtitle track (WebVTT), fetched by mpv when the user picks it.

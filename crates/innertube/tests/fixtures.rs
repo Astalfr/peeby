@@ -5,7 +5,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  Error, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
+  Error, LikeStatus, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
   parse_playlist_page, parse_playlists, parse_watch,
 };
 use serde_json::Value;
@@ -60,6 +60,15 @@ fn watch_page() {
   assert!(page.description.starts_with("The official video"));
   assert!(page.comments_continuation.is_some());
   assert!(page.related_continuation.is_some());
+  // Signed out: no rating, the endpoints still carry their params (inside the sign-in modal).
+  assert_eq!(page.like_status, LikeStatus::Indifferent);
+  for status in [
+    LikeStatus::Like,
+    LikeStatus::Dislike,
+    LikeStatus::Indifferent,
+  ] {
+    assert!(page.like_params.get(status).is_some(), "{status:?}");
+  }
 
   assert_eq!(page.related.len(), 20);
   let related = &page.related[0];

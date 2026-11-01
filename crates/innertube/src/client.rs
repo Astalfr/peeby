@@ -7,7 +7,8 @@ use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
-  Channel, CommentPage, Feed, Playlist, PlaylistChoice, PlaylistSummary, Stream, Votes, WatchPage,
+  Channel, CommentPage, Feed, LikeStatus, Playlist, PlaylistChoice, PlaylistSummary, Stream, Votes,
+  WatchPage,
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist,
@@ -213,6 +214,25 @@ impl Client {
       .web("next", json!({ "continuation": token }), true)
       .await?;
     Ok(parse_comments(&response))
+  }
+
+  /// Sets the user's rating of `video_id`: `like/like`, `like/dislike`, or `like/removelike`
+  /// for [`LikeStatus::Indifferent`]. `params` come from [`WatchPage::like_params`], as the
+  /// page's buttons send them. Needs cookies. No response of these endpoints is saved yet: an
+  /// HTTP success counts as done.
+  pub async fn rate(&self, video_id: &str, status: LikeStatus, params: Option<&str>) -> Result<()> {
+    self.require_session()?;
+    let endpoint = match status {
+      LikeStatus::Like => "like/like",
+      LikeStatus::Dislike => "like/dislike",
+      LikeStatus::Indifferent => "like/removelike",
+    };
+    let mut body = json!({ "target": { "videoId": video_id } });
+    if let Some(params) = params {
+      body["params"] = params.into();
+    }
+    self.web(endpoint, body, true).await?;
+    Ok(())
   }
 
   /// Likes and estimated dislikes from Return YouTube Dislike.

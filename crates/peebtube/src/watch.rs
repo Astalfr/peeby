@@ -1,5 +1,5 @@
-//! Watch page: the player (autoplay), title, channel, like/dislike bar (Return YouTube
-//! Dislike), description, comments and related videos. In fullscreen only the player is shown;
+//! Watch page: the player (autoplay), title, channel, like and dislike buttons (counts from
+//! Return YouTube Dislike), description, comments and related videos. In fullscreen only the player is shown;
 //! in theater mode (`Settings::theater`) the player spans the page above the two columns.
 //!
 //! The stream (VISIONOS HLS, ~0.2 s), the page metadata (`next`) and the votes load in
@@ -19,10 +19,12 @@ use gpui::{
   WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::notification::Notification;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
-use gpui_component::{Selectable, h_flex, v_flex};
-use innertube::{Client, Comment, Votes, WatchPage};
+use gpui_component::tooltip::Tooltip;
+use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
+use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
 use crate::app::{AppView, Route};
 use crate::assets::Icon;
@@ -84,6 +86,10 @@ pub struct WatchView {
   player: Entity<PlayerView>,
   page: Option<WatchPage>,
   votes: Option<Votes>,
+  /// The user's rating as shown: the page's, then each click's until YouTube says otherwise.
+  like_status: LikeStatus,
+  /// A rating is waiting for YouTube's answer: clicks send nothing meanwhile.
+  rating: bool,
   comments: Comments,
   /// By comment id.
   replies: HashMap<String, Replies>,
@@ -158,6 +164,8 @@ impl WatchView {
       player,
       page: None,
       votes,
+      like_status: LikeStatus::Indifferent,
+      rating: false,
       comments: Comments::default(),
       replies: HashMap::new(),
       scroll: ScrollHandle::new(),
@@ -384,6 +392,7 @@ impl WatchView {
               this
                 .player
                 .update(cx, |player, cx| player.set_title(title, cx));
+              this.like_status = page.like_status;
               this.page = Some(page);
               this.load_comments(cx);
             }
@@ -417,6 +426,175 @@ impl WatchView {
         .ok();
     })
     .detach();
+  }
+
+  /// A click on the like or dislike button: sets that rating, or clears it when it is the
+  /// current one. The button changes at once and goes back if YouTube refuses.
+  fn rate(&mut self, clicked: LikeStatus, window: &mut Window, cx: &mut Context<Self>) {
+    if !self.client.signed_in() {
+      let note = Notification::info(
+        "Connectez-vous pour noter les vidéos : importez vos cookies depuis la page Compte.",
+      );
+      return window.push_notification(note, cx);
+    }
+    let Some(page) = &self.page else { return };
+    if self.rating {
+      return;
+    }
+    let previous = self.like_status;
+    let status = if previous == clicked {
+      LikeStatus::Indifferent
+    } else {
+      clicked
+    };
+    let params = page.like_params.get(status).map(str::to_owned);
+    self.like_status = status;
+    self.rating = true;
+    cx.notify();
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    let fetch = runtime::spawn(cx, async move {
+      client.rate(&id, status, params.as_deref()).await
+    });
+    let handle = window.window_handle();
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          this.rating = false;
+          if let Some(Ok(())) = result {
+            return cx.notify();
+          }
+          this.like_status = previous;
+          cx.notify();
+          if let Some(Err(e)) = result {
+            tracing::warn!("rate: {e}");
+            let note = Notification::error(format!(
+              "Impossible d'enregistrer votre avis. {}",
+              error_text(&e)
+            ));
+            handle
+              .update(cx, |_, window, cx| window.push_notification(note, cx))
+              .ok();
+          }
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// The like and dislike buttons side by side on a pill, with the Return YouTube Dislike
+  /// counts once known: the ratio bar under them and the attribution RYD requires, a link to
+  /// its site. The counts follow the user's clicks.
+  fn rating_bar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let initial = self
+      .page
+      .as_ref()
+      .map(|p| p.like_status)
+      .unwrap_or_default();
+    let current = self.like_status;
+    let votes = self.votes.map(|votes| {
+      let shift = |n: u64, status| {
+        (n + u64::from(current == status)).saturating_sub(u64::from(initial == status))
+      };
+      Votes {
+        likes: shift(votes.likes, LikeStatus::Like),
+        dislikes: shift(votes.dislikes, LikeStatus::Dislike),
+      }
+    });
+    let button = |id: &'static str,
+                  icon: Icon,
+                  status: LikeStatus,
+                  count: Option<u64>,
+                  tooltip: &'static str,
+                  cx: &mut Context<Self>| {
+      h_flex()
+        .id(id)
+        .h_full()
+        .px_3()
+        .gap_2()
+        .items_center()
+        .cursor_pointer()
+        .hover(|s| s.bg(theme::surface_hover()))
+        .when(current == status, |el| el.text_color(theme::accent()))
+        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .on_click(cx.listener(move |this, _, window, cx| this.rate(status, window, cx)))
+        .child(gpui_component::Icon::new(icon).size(px(16.)))
+        .children(count.map(compact_number))
+    };
+    let (like_tip, dislike_tip) = match current {
+      LikeStatus::Like => ("Je n'aime plus", "Je n'aime pas"),
+      LikeStatus::Dislike => ("J'aime", "Retirer « Je n'aime pas »"),
+      LikeStatus::Indifferent => ("J'aime", "Je n'aime pas"),
+    };
+    let pill = h_flex()
+      .h(px(36.))
+      .rounded_full()
+      .overflow_hidden()
+      .bg(theme::surface())
+      .text_sm()
+      .font_weight(FontWeight::MEDIUM)
+      .items_center()
+      .child(
+        button(
+          "like",
+          Icon::ThumbsUp,
+          LikeStatus::Like,
+          votes.map(|v| v.likes),
+          like_tip,
+          cx,
+        )
+        // GPUI clips children to the pill's rectangle, not its corners: each half rounds its
+        // outer side so its hover follows the pill.
+        .rounded_l_full(),
+      )
+      .child(div().w(px(1.)).h(px(20.)).bg(theme::border()))
+      .child(
+        button(
+          "dislike",
+          Icon::ThumbsDown,
+          LikeStatus::Dislike,
+          votes.map(|v| v.dislikes),
+          dislike_tip,
+          cx,
+        )
+        .rounded_r_full(),
+      );
+    let ratio = votes.map(|votes| {
+      let total = votes.likes + votes.dislikes;
+      let ratio = if total > 0 {
+        votes.likes as f32 / total as f32
+      } else {
+        1.0
+      };
+      div()
+        .mx_3()
+        .h(px(3.))
+        .rounded_full()
+        .bg(theme::border())
+        .child(
+          div()
+            .h_full()
+            .w(relative(ratio))
+            .rounded_full()
+            .bg(theme::accent()),
+        )
+    });
+    let attribution = votes.map(|_| {
+      div()
+        .id("ryd")
+        .text_xs()
+        .text_color(theme::subtle())
+        .cursor_pointer()
+        .hover(|s| s.text_color(theme::muted()))
+        .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
+        .child("Dislikes : Return YouTube Dislike")
+    });
+    // The ratio bar takes the pill's width: both sit in a column as wide as the pill.
+    v_flex()
+      .items_center()
+      .gap_1p5()
+      .child(v_flex().gap_1p5().child(pill).children(ratio))
+      .children(attribution)
   }
 
   /// Next comments page once the end of the page is within about a screen.
@@ -524,7 +702,7 @@ impl WatchView {
     .detach();
   }
 
-  fn details(&self, window: &mut Window, cx: &mut App) -> impl IntoElement + use<> {
+  fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
       return skeleton_details();
     };
@@ -593,7 +771,7 @@ impl WatchView {
           )
           .child(div().flex_1())
           .child(save::save_button(&self.video_id))
-          .children(self.votes.map(votes_bar)),
+          .child(self.rating_bar(cx)),
       )
       .child(
         v_flex()
@@ -705,67 +883,6 @@ impl WatchView {
       .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
       .children(shown)
   }
-}
-
-/// Likes and estimated dislikes on a pill, the ratio bar under it, with the attribution RYD
-/// requires (the pill links to its site).
-fn votes_bar(votes: Votes) -> impl IntoElement {
-  let total = votes.likes + votes.dislikes;
-  let ratio = if total > 0 {
-    votes.likes as f32 / total as f32
-  } else {
-    1.0
-  };
-  let count = |icon: Icon, n: u64| {
-    h_flex()
-      .gap_2()
-      .items_center()
-      .child(gpui_component::Icon::new(icon).size(px(16.)))
-      .child(compact_number(n))
-  };
-  v_flex()
-    .id("votes")
-    .w(px(200.))
-    .gap_1p5()
-    .cursor_pointer()
-    .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
-    .child(
-      h_flex()
-        .h(px(36.))
-        .px_4()
-        .rounded_full()
-        .bg(theme::surface())
-        .hover(|s| s.bg(theme::surface_hover()))
-        .text_sm()
-        .font_weight(FontWeight::MEDIUM)
-        .items_center()
-        .child(count(Icon::ThumbsUp, votes.likes))
-        .child(div().flex_1())
-        .child(div().w(px(1.)).h(px(20.)).bg(theme::border()))
-        .child(div().flex_1())
-        .child(count(Icon::ThumbsDown, votes.dislikes)),
-    )
-    .child(
-      div()
-        .mx_4()
-        .h(px(3.))
-        .rounded_full()
-        .bg(theme::border())
-        .child(
-          div()
-            .h_full()
-            .w(relative(ratio))
-            .rounded_full()
-            .bg(theme::accent()),
-        ),
-    )
-    .child(
-      div()
-        .px_4()
-        .text_xs()
-        .text_color(theme::subtle())
-        .child("Dislikes : Return YouTube Dislike"),
-    )
 }
 
 /// Placeholder for the title, channel and description while the page loads.

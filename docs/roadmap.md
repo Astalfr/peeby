@@ -16,6 +16,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 - Done (2026-11-01): the feeds (Home, subscriptions in grid and list mode, channel) are a virtual list, so a scroll builds only the rows in view instead of every loaded card; their header stays at the top. List rows take the whole width; grid cards are 416 px.
 - Verified: the app starts and Home loads (22 videos). **Not verified:** scrolling smoothness, the next page loading at the end, resizing and folding the sidebar (cards per row), the grid/list switch, by hand.
 
+## Like and dislike
+
+- Done (2026-11-01): the watch page's like and dislike buttons rate the video (`like/like`, `like/dislike`, `like/removelike` with the page's `params`); a click on the active one clears the rating. They show the user's rating (`likeStatusEntity`, parsed and tested on `next.json`), change at once and go back with a toast if YouTube refuses; signed out, a toast asks for cookies. The two halves sit close together on a pill as wide as its content; the RYD link moved to the attribution line.
+- **Not verified:** not driven in the app, and no rating was sent (writing to the account needs the user's go-ahead), so the `like/*` responses have no fixture yet and the signed-in `likeStatus` is untested.
+
 ## Theater mode and folding sidebar
 
 - Done (2026-11-01): theater mode on the watch page ("Mode cinéma" button and T key; the player across the page above the details and related videos), a burger button at the left of the title bar that folds the sidebar to its icons (labels as tooltips). Both are saved in `settings.toml`.

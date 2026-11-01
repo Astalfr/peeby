@@ -2,7 +2,8 @@
 //! - grids (home, subscriptions, channel tabs): `richGridRenderer > richItemRenderer >
 //!   content > lockupViewModel`, continuation in `continuationItemRenderer`;
 //! - related videos: `lockupViewModel` under `secondaryResults`;
-//! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`;
+//! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`, the rating
+//!   in its `segmentedLikeDislikeButtonViewModel`;
 //! - the playlists library: playlist `lockupViewModel`s with a `collectionThumbnailViewModel`;
 //! - a playlist's videos: video `lockupViewModel`s, or `playlistVideoRenderer`s for "Watch
 //!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
@@ -13,8 +14,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::models::{
-  Caption, Channel, Comment, CommentPage, Feed, Playlist, PlaylistChoice, PlaylistSummary,
-  Thumbnail, VideoItem, WatchPage,
+  Caption, Channel, Comment, CommentPage, Feed, LikeParams, LikeStatus, Playlist, PlaylistChoice,
+  PlaylistSummary, Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -57,6 +58,8 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
   let mut related = Vec::new();
   collect_lockups(secondary_results, &mut related);
 
+  let (like_status, like_params) = parse_like_buttons(&primary["videoActions"]);
+
   WatchPage {
     id: video_id.to_owned(),
     title: text(&primary["title"]),
@@ -77,7 +80,41 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     related,
     related_continuation: find_continuation(secondary_results),
     comments_continuation,
+    like_status,
+    like_params,
   }
+}
+
+/// The user's rating and the params of the like and dislike buttons
+/// (`segmentedLikeDislikeButtonViewModel`). Signed out, the endpoints sit inside a sign-in
+/// modal, so they are searched for rather than read at a fixed path.
+fn parse_like_buttons(actions: &Value) -> (LikeStatus, LikeParams) {
+  let Some(buttons) = find_key(actions, "segmentedLikeDislikeButtonViewModel") else {
+    return Default::default();
+  };
+  let status = match find_key(&buttons, "likeStatusEntity")
+    .as_ref()
+    .and_then(|e| e["likeStatus"].as_str())
+  {
+    Some("LIKE") => LikeStatus::Like,
+    Some("DISLIKE") => LikeStatus::Dislike,
+    _ => LikeStatus::Indifferent,
+  };
+  let mut endpoints = Vec::new();
+  find_all(&buttons, "likeEndpoint", &mut endpoints);
+  let mut params = LikeParams::default();
+  for endpoint in endpoints {
+    let (slot, key) = match endpoint["status"].as_str() {
+      Some("LIKE") => (&mut params.like, "likeParams"),
+      Some("DISLIKE") => (&mut params.dislike, "dislikeParams"),
+      Some("INDIFFERENT") => (&mut params.remove, "removeLikeParams"),
+      _ => continue,
+    };
+    if slot.is_none() {
+      *slot = endpoint[key].as_str().map(str::to_owned);
+    }
+  }
+  (status, params)
 }
 
 /// Subtitle tracks of a player response, as WebVTT URLs. Machine translations (`tlang`) are
