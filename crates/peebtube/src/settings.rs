@@ -1,15 +1,138 @@
-//! Where PeebTube keeps its files, and the session cookies.
+//! Where PeebTube keeps its files: the settings (`%APPDATA%\peebtube\settings.toml`) and the
+//! session cookies.
 //!
 //! The cookies are a whole browser cookie jar (dozens of values, several KB): too large for the
 //! Windows Credential Manager, which peeby uses for its single token. They live in a file under
 //! the user's profile instead (`%APPDATA%\peebtube\cookies.txt`), never in logs.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
+use gpui::{App, Global, Task};
 use innertube::Cookies;
+use serde::{Deserialize, Serialize};
 
-/// Language and region of YouTube texts and recommendations.
-pub const LANGUAGE: (&str, &str) = ("fr", "FR");
+/// Languages offered for YouTube: (language, region, label).
+pub const LANGUAGES: &[(&str, &str, &str)] = &[
+  ("fr", "FR", "Français (France)"),
+  ("fr", "BE", "Français (Belgique)"),
+  ("fr", "CA", "Français (Canada)"),
+  ("fr", "CH", "Français (Suisse)"),
+  ("en", "US", "English (United States)"),
+  ("en", "GB", "English (United Kingdom)"),
+  ("de", "DE", "Deutsch (Deutschland)"),
+  ("es", "ES", "Español (España)"),
+  ("it", "IT", "Italiano (Italia)"),
+  ("pt", "BR", "Português (Brasil)"),
+  ("ja", "JP", "日本語 (日本)"),
+];
+
+/// Default qualities offered, as video heights.
+pub const QUALITIES: &[u32] = &[2160, 1440, 1080, 720, 480, 360];
+
+/// The user's settings, a GPUI global. Unknown or missing keys take their default, so an old
+/// or hand-edited file still loads.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+  /// Language of YouTube's texts (`hl`), e.g. `fr`.
+  pub language: String,
+  /// Region of the recommendations (`gl`), e.g. `FR`.
+  pub region: String,
+  /// Highest quality picked when a video starts, as a height in pixels.
+  pub max_height: u32,
+  /// Player volume, 0–100.
+  pub volume: f64,
+  /// Player muted.
+  pub muted: bool,
+}
+
+impl Default for Settings {
+  fn default() -> Self {
+    Self {
+      language: "fr".into(),
+      region: "FR".into(),
+      max_height: 1080,
+      volume: 100.0,
+      muted: false,
+    }
+  }
+}
+
+impl Global for Settings {}
+
+/// Delay before the settings file is written.
+const SAVE_DELAY: Duration = Duration::from_millis(500);
+
+/// The pending write; replacing it cancels the previous one.
+// The task is only held, never read: dropping it is what cancels the write.
+struct PendingSave(#[allow(dead_code)] Task<()>);
+
+impl Global for PendingSave {}
+
+impl Settings {
+  /// Reads the settings file, or the defaults if there is none. A broken file is logged and
+  /// replaced by the defaults. Blocking (small file): call it before the UI starts.
+  pub fn load() -> Self {
+    let Some(path) = settings_path() else {
+      return Self::default();
+    };
+    match std::fs::read_to_string(&path) {
+      Ok(text) => toml::from_str(&text).unwrap_or_else(|e| {
+        tracing::warn!("{}: {e}", path.display());
+        Self::default()
+      }),
+      Err(_) => Self::default(),
+    }
+  }
+
+  /// The current settings.
+  pub fn get(cx: &App) -> &Self {
+    cx.global::<Self>()
+  }
+
+  /// Changes the settings and writes the file in the background, once changes pause: a
+  /// volume drag makes dozens of changes, and each new one cancels the pending write.
+  pub fn update(cx: &mut App, change: impl FnOnce(&mut Self)) {
+    let mut settings = cx.global::<Self>().clone();
+    change(&mut settings);
+    if &settings == cx.global::<Self>() {
+      return;
+    }
+    cx.set_global(settings.clone());
+    let write = cx.spawn(async move |cx| {
+      cx.background_executor().timer(SAVE_DELAY).await;
+      let saved = cx
+        .background_executor()
+        .spawn(async move { settings.save() })
+        .await;
+      if let Err(e) = saved {
+        tracing::warn!("cannot save the settings: {e}");
+      }
+    });
+    cx.set_global(PendingSave(write));
+  }
+
+  fn save(&self) -> std::io::Result<()> {
+    let path = settings_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
+    let text = toml::to_string(self).map_err(std::io::Error::other)?;
+    write_atomically(&path, &text)
+  }
+}
+
+fn settings_path() -> Option<PathBuf> {
+  dirs::config_dir().map(|d| d.join("peebtube").join("settings.toml"))
+}
+
+/// Writes next to `path` then renames, so a crash never leaves a truncated file.
+fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+  if let Some(dir) = path.parent() {
+    std::fs::create_dir_all(dir)?;
+  }
+  let temporary = path.with_extension("tmp");
+  std::fs::write(&temporary, text)?;
+  std::fs::rename(&temporary, path)
+}
 
 /// `PEEBTUBE_COOKIES`, else `%APPDATA%\peebtube\cookies.txt`.
 pub fn cookies_path() -> Option<PathBuf> {
@@ -32,13 +155,22 @@ pub fn load_cookies() -> Option<Cookies> {
   }
 }
 
-/// Saves imported cookies as the session file (temporary file + rename). Blocking.
+/// Saves imported cookies as the session file. Blocking.
 pub fn save_cookies(cookies: &Cookies) -> std::io::Result<()> {
   let path = cookies_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
-  if let Some(dir) = path.parent() {
-    std::fs::create_dir_all(dir)?;
+  write_atomically(&path, &cookies.to_netscape())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::Settings;
+
+  #[test]
+  fn partial_file_takes_defaults() {
+    let settings: Settings = toml::from_str("max_height = 720\nunknown = 1\n").unwrap();
+    assert_eq!(settings.max_height, 720);
+    assert_eq!(settings.language, "fr");
+    let again: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
+    assert_eq!(settings, again);
   }
-  let temporary = path.with_extension("txt.tmp");
-  std::fs::write(&temporary, cookies.to_netscape())?;
-  std::fs::rename(&temporary, &path)
 }

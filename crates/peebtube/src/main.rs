@@ -12,6 +12,7 @@ mod player_view;
 mod prefetch;
 mod runtime;
 mod settings;
+mod settings_page;
 mod theme;
 mod tools;
 mod ui;
@@ -46,8 +47,9 @@ fn main() {
       "no session cookies: signed out"
     }
   );
-  let (hl, gl) = settings::LANGUAGE;
-  let client = match innertube::Client::new(cookies, settings::cookies_path(), hl, gl) {
+  let prefs = settings::Settings::load();
+  let (hl, gl) = (prefs.language.clone(), prefs.region.clone());
+  let client = match innertube::Client::new(cookies, settings::cookies_path(), &hl, &gl) {
     Ok(client) => client,
     Err(e) => {
       tracing::error!("cannot create the HTTP client: {e}");
@@ -67,7 +69,8 @@ fn main() {
       theme::apply(cx);
       // Images and stream resolution need no session: an anonymous client of their own, so
       // a cookie import only replaces the app's client.
-      match innertube::Client::new(None, None, hl, gl) {
+      cx.set_global(prefs);
+      match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
           images::init(anonymous.clone(), cx);
           prefetch::init(anonymous, cx);

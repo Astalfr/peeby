@@ -22,6 +22,7 @@ use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
 use crate::player_view::PlayerView;
+use crate::settings::Settings;
 use crate::ui::{compact_card, error_text, image_fill, near_scroll_end};
 use crate::{prefetch, runtime, theme, tools};
 
@@ -125,11 +126,9 @@ impl WatchView {
         .update(cx, |player, cx| player.start(stream, clicked, cx));
       return;
     }
+    let max_height = Settings::get(cx).max_height;
     let (client, id) = (self.client.clone(), self.video_id.clone());
-    let fetch = runtime::spawn(
-      cx,
-      async move { client.stream(&id, prefetch::MAX_HEIGHT).await },
-    );
+    let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
     let player = self.player.downgrade();
     let video_id = self.video_id.clone();
     cx.spawn(async move |_, cx| {

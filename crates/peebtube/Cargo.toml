@@ -18,7 +18,9 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 innertube = { workspace = true }
 player = { workspace = true }
+serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

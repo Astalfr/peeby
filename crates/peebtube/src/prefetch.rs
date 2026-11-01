@@ -8,9 +8,8 @@ use gpui::{App, AppContext, Context, Entity, Global};
 use innertube::{Client, Stream};
 
 use crate::runtime;
+use crate::settings::Settings;
 
-/// Highest video quality picked by default.
-pub const MAX_HEIGHT: u32 = 1080;
 /// The mouse must rest this long on a card: sweeping over a grid fetches nothing.
 const HOVER_DELAY: Duration = Duration::from_millis(300);
 /// Under the 6 h validity of the URLs, with margin for a long video.
@@ -88,7 +87,8 @@ impl Streams {
     }
     let client = self.client.clone();
     let video = id.clone();
-    let fetch = runtime::spawn(cx, async move { client.stream(&video, MAX_HEIGHT).await });
+    let max_height = Settings::get(cx).max_height;
+    let fetch = runtime::spawn(cx, async move { client.stream(&video, max_height).await });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this

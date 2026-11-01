@@ -10,6 +10,7 @@ use gpui_component::{Disableable, h_flex, v_flex};
 use innertube::{Client, Cookies};
 
 use crate::app::AppView;
+use crate::settings::Settings;
 use crate::ui::error_text;
 use crate::{runtime, settings, theme};
 
@@ -59,12 +60,17 @@ impl AccountView {
   fn import(&mut self, path: PathBuf, cx: &mut Context<Self>) {
     self.status = Status::Checking;
     cx.notify();
+    let Settings {
+      language: hl,
+      region: gl,
+      ..
+    } = Settings::get(cx).clone();
     let check = runtime::spawn(cx, async move {
       let text = std::fs::read_to_string(&path).map_err(|e| format!("Lecture impossible : {e}"))?;
       let cookies = Cookies::from_netscape(&text).map_err(|e| error_text(&e))?;
-      let (hl, gl) = settings::LANGUAGE;
       // No cookie file yet: a rotation during the check must not touch the current one.
-      let client = Client::new(Some(cookies.clone()), None, hl, gl).map_err(|e| error_text(&e))?;
+      let client =
+        Client::new(Some(cookies.clone()), None, &hl, &gl).map_err(|e| error_text(&e))?;
       let feed = client.home().await.map_err(|e| error_text(&e))?;
       tracing::info!(
         "imported cookies accepted: {} videos on Home",

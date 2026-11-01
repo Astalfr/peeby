@@ -8,7 +8,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **1: foundations** | ✅ | Workspace, CLAUDE.md, docs; `innertube` (Home, watch page, streams, cookies) with fixture tests; app shell, Home grid, watch page with autoplay and related videos | Open a video from a URL and from a related video, ~1 s to playback; signed-in Home shows recommendations |
 | **2: YouTube pages** | ✅ (RSS fallback moved to the backlog) | Subscriptions list and feed (`FEsubscriptions`, RSS fallback), comments (`commentEntityPayload`) and replies, Return YouTube Dislike bar (cache, attribution), channel page, infinite scroll | — |
 | **3: player comfort** | ✅ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
-| **4: session and settings** | 🚧 cookie import, `Set-Cookie` persistence and yt-dlp updates done; settings page left | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
+| **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
 ## Milestone 4 status
@@ -17,7 +17,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   - **Account page** (sidebar "Compte"): session state, export instructions, "Importer cookies.txt…" (file picker; checked with a Home request before it replaces the session file), "Se déconnecter". The app switches session without restarting. Pages that need a session link to it; an expired session says so.
   - **yt-dlp updates**: single-file build (it can update itself, "onedir" cannot), `yt-dlp -U` at most once a day in the background. Verified: "yt-dlp is up to date (stable@2026.10.26)", then the fallback played an age-restricted video in 5.4 s.
 - **Not verified:** the import flow in the UI (file picker, valid file), since no fresh cookies were available; the expired-session state was seen in the logs only.
-- Left: settings page (language and region, default quality), saved in a settings file. It needs a serialization dependency (`serde` + `toml`, as peeby): to be agreed first.
+- **Settings page** (sidebar "Réglages"), saved in `%APPDATA%\peebtube\settings.toml` (`serde` + `toml`, agreed with the user):
+  - language and region of YouTube (11 presets): the clients are rebuilt at once, Home reloads;
+  - default quality (2160p to 360p), used by the watch page and the hover prefetch;
+  - volume and mute, kept across launches.
+  Writes are delayed 0.5 s and replace each other (a volume drag makes dozens of changes). Unknown or missing keys take their defaults.
+  Verified: a file with `max_height = 720` gives a 1280x720 stream at launch. The page itself was not clicked in a test run.
 
 ## Milestone 3 status
 

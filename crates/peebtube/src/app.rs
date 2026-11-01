@@ -15,9 +15,11 @@ use crate::account::AccountView;
 use crate::assets::Icon;
 use crate::feed::{FeedView, Source};
 use crate::images::Images;
+use crate::settings::Settings;
+use crate::settings_page::SettingsView;
 use crate::ui::image_fill;
 use crate::watch::WatchView;
-use crate::{runtime, settings, theme};
+use crate::{prefetch, runtime, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -26,6 +28,7 @@ pub enum Route {
   Subscriptions,
   /// Session state and cookie import.
   Account,
+  Settings,
   /// A channel's videos.
   Channel {
     id: String,
@@ -38,7 +41,10 @@ pub enum Route {
 impl Route {
   /// Top-level pages reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
-    matches!(self, Self::Home | Self::Subscriptions | Self::Account)
+    matches!(
+      self,
+      Self::Home | Self::Subscriptions | Self::Account | Self::Settings
+    )
   }
 }
 
@@ -106,8 +112,10 @@ impl AppView {
 
   /// Switches to a new session (imported cookies) or signs out (`None`), then shows Home.
   pub fn set_session(&mut self, cookies: Option<Cookies>, cx: &mut Context<Self>) {
-    let (hl, gl) = settings::LANGUAGE;
-    let client = match Client::new(cookies, settings::cookies_path(), hl, gl) {
+    let Settings {
+      language, region, ..
+    } = Settings::get(cx).clone();
+    let client = match Client::new(cookies, settings::cookies_path(), &language, &region) {
       Ok(client) => client,
       Err(e) => return tracing::error!("cannot create the HTTP client: {e}"),
     };
@@ -131,6 +139,33 @@ impl AppView {
     // Pages hold the old client: they are rebuilt on the next navigation; Home now.
     self.reset_to = Some(Route::Home);
     cx.notify();
+  }
+
+  /// Rebuilds the clients after a language change: the session from the cookie file, and the
+  /// anonymous one of the stream prefetch (caption names follow the language).
+  pub fn reload_session(&mut self, cx: &mut Context<Self>) {
+    let Settings {
+      language, region, ..
+    } = Settings::get(cx).clone();
+    match Client::new(None, None, &language, &region) {
+      Ok(anonymous) => prefetch::init(anonymous, cx),
+      Err(e) => tracing::error!("cannot create the HTTP client: {e}"),
+    }
+    let load = cx
+      .background_executor()
+      .spawn(async { settings::load_cookies() });
+    cx.spawn(async move |this, cx| {
+      let cookies = load.await;
+      this
+        .update(cx, |this, cx| {
+          this.set_session(cookies, cx);
+          // Stay on the settings page; Home is rebuilt when opened.
+          this.reset_to = None;
+          this.stack.retain(|page| page.route.is_top_level());
+        })
+        .ok();
+    })
+    .detach();
   }
 
   fn load_channels(&self, cx: &mut Context<Self>) {
@@ -176,6 +211,7 @@ impl AppView {
       Route::Subscriptions => cx
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
+      Route::Settings => cx.new(|_| SettingsView::new(nav)).into(),
       Route::Account => {
         let signed_in = client.signed_in();
         cx.new(|_| AccountView::new(nav, signed_in)).into()
@@ -316,6 +352,7 @@ impl AppView {
         cx,
       ))
       .child(nav("Compte", Icon::Account, Route::Account, cx))
+      .child(nav("Réglages", Icon::Settings, Route::Settings, cx))
       .when(!channels.is_empty(), |el| {
         el.child(
           div()

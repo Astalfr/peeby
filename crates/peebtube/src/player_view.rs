@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, App, Bounds, ClickEvent, Context, DispatchPhase, Entity, FocusHandle,
-  FontWeight, Global, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-  Pixels, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint,
+  FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+  ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint,
   linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
@@ -22,6 +22,7 @@ use innertube::hls::Variant;
 use player::{Choice, Event, Player, StartOptions};
 
 use crate::assets::Icon;
+use crate::settings::Settings;
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
@@ -40,15 +41,6 @@ enum Menu {
   Quality,
   Subtitles,
 }
-
-/// Volume and mute, kept for the session so the next video plays at the same level.
-#[derive(Clone, Copy)]
-struct Sound {
-  volume: f64,
-  muted: bool,
-}
-
-impl Global for Sound {}
 
 pub struct PlayerView {
   focus: FocusHandle,
@@ -107,10 +99,7 @@ pub struct PlayerView {
 
 impl PlayerView {
   pub fn new(cx: &mut Context<Self>) -> Self {
-    let sound = cx.try_global::<Sound>().copied().unwrap_or(Sound {
-      volume: 100.0,
-      muted: false,
-    });
+    let sound = Settings::get(cx).clone();
     Self {
       focus: cx.focus_handle(),
       title: SharedString::default(),
@@ -276,7 +265,8 @@ impl PlayerView {
     if stream.captions.is_empty() {
       return self.show_osd("Aucun sous-titre".into(), cx);
     }
-    let (hl, _) = crate::settings::LANGUAGE;
+    let hl = Settings::get(cx).language.clone();
+    let hl = hl.as_str();
     let index = stream
       .captions
       .iter()
@@ -449,10 +439,12 @@ impl PlayerView {
     );
   }
 
+  /// Saved in the settings, so the next video (and the next launch) plays at this level.
   fn remember_sound(&self, cx: &mut App) {
-    cx.set_global(Sound {
-      volume: self.volume,
-      muted: self.muted,
+    let (volume, muted) = (self.volume, self.muted);
+    Settings::update(cx, |s| {
+      s.volume = volume;
+      s.muted = muted;
     });
   }
 

@@ -24,7 +24,7 @@
 | `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos and continuations (`browse`), watch page and comments (`next`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`, `account`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `watch`, `account`, `settings_page`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -63,5 +63,6 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 | Data | Location |
 |---|---|
+| Settings (language, region, default quality, volume) | `%APPDATA%\peebtube\settings.toml`, `settings::Settings` global |
 | Session cookies | `%APPDATA%\peebtube\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
 | Image cache | `%LOCALAPPDATA%\peebtube\cache\images\` |
