@@ -173,6 +173,13 @@ impl Client {
     self.edit_playlist(playlist_id, action).await
   }
 
+  /// Removes one entry from a playlist the user can edit ([`crate::VideoItem::set_video_id`]),
+  /// as the playlist page's own menu does. Needs cookies.
+  pub async fn remove_playlist_entry(&self, playlist_id: &str, set_video_id: &str) -> Result<()> {
+    let action = json!({ "action": "ACTION_REMOVE_VIDEO", "setVideoId": set_video_id });
+    self.edit_playlist(playlist_id, action).await
+  }
+
   /// `browse/edit_playlist` with one action, the body the "Save to playlist" dialog's
   /// endpoints carry (see `tests/fixtures/add_to_playlist.json`). No response of it is saved
   /// yet: an HTTP success counts as done unless the response has a `status` other than

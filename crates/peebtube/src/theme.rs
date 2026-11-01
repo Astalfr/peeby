@@ -193,6 +193,9 @@ pub fn apply(cx: &mut App) {
     t.title_bar = gpui::transparent_black();
     t.title_bar_border = gpui::transparent_black();
 
+    // Toasts at the bottom right, out of the way of the title bar and the page header.
+    t.notification.placement = gpui::Anchor::BottomRight;
+
     t.scrollbar = gpui::transparent_black();
     t.scrollbar_thumb = color_alpha(0xf2f2f3, 0.22);
     t.scrollbar_thumb_hover = color_alpha(0xf2f2f3, 0.4);

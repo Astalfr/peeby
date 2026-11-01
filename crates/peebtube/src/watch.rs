@@ -192,6 +192,7 @@ impl WatchView {
     }
     let queue = entity.read(cx);
     let (title, position, total) = (queue.title.clone(), queue.position(), queue.order().len());
+    let playlist_id = queue.playlist_id.clone();
     let (shuffle, repeat, more) = (queue.shuffle(), queue.repeat(), queue.has_more());
     let current = position - 1;
     let start = current.saturating_sub(QUEUE_BEFORE);
@@ -205,6 +206,12 @@ impl WatchView {
       .into_iter()
       .map(|(place, index, video)| {
         let queue = entity.clone();
+        // The playing video keeps its place: no "x" on it.
+        let remove = video
+          .set_video_id
+          .clone()
+          .filter(|_| place != current)
+          .map(|entry| save::removal(&playlist_id, &title, &entry, cx));
         playlist_row(
           &format!("q-{place}-{}", video.id),
           place + 1,
@@ -212,6 +219,7 @@ impl WatchView {
           QUEUE_THUMB,
           place == current,
           move |_, cx| queue.update(cx, |q, cx| q.jump(index, cx)),
+          remove,
           window,
           cx,
         )

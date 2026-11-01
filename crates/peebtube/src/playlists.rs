@@ -1,6 +1,7 @@
 //! The user's playlists (a grid, from the sidebar) and a playlist's page: its header, "Tout
 //! lire" and "Aléatoire", and its videos, loading the next ones as the end comes into view.
-//! Playing starts a [`Queue`] on a watch page.
+//! Playing starts a [`Queue`] on a watch page. In playlists the user can edit, an "x" on each
+//! video removes it.
 
 use gpui::prelude::*;
 use gpui::{
@@ -17,6 +18,7 @@ use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
 use crate::queue::Queue;
+use crate::save::{self, EntryRemoved};
 use crate::ui::{
   error_text, image_fill, loading_more, near_scroll_end, notice, page_title, playlist_row,
   skeleton_card,
@@ -354,6 +356,20 @@ impl PlaylistView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
+    // An entry removed here or from a queue playing this playlist leaves the list.
+    let edits = save::edits(cx);
+    cx.subscribe(&edits, |this, _, removed: &EntryRemoved, cx| {
+      if removed.playlist_id != this.id {
+        return;
+      }
+      if let State::Loaded(playlist) = &mut this.state {
+        playlist
+          .videos
+          .retain(|v| v.set_video_id.as_deref() != Some(removed.set_video_id.as_str()));
+        cx.notify();
+      }
+    })
+    .detach();
     let mut view = Self {
       client,
       id,
@@ -447,14 +463,16 @@ impl PlaylistView {
     if playlist.videos.is_empty() {
       return;
     }
-    let queue = cx.new(|_| {
+    let queue = cx.new(|cx| {
       Queue::new(
         self.client.clone(),
+        playlist.id.clone(),
         playlist.title.clone(),
         playlist.videos.clone(),
         playlist.continuation.clone(),
         start,
         shuffle,
+        cx,
       )
     });
     self
@@ -589,6 +607,10 @@ impl Render for PlaylistView {
           .enumerate()
           .map(|(i, video)| {
             let view = view.clone();
+            let remove = video
+              .set_video_id
+              .as_deref()
+              .map(|entry| save::removal(&playlist.id, &playlist.title, entry, cx));
             playlist_row(
               &format!("pl-{i}-{}", video.id),
               i + 1,
@@ -600,6 +622,7 @@ impl Render for PlaylistView {
                   .update(cx, |this, cx| this.play(Some(i), false, window, cx))
                   .ok();
               },
+              remove,
               window,
               cx,
             )

@@ -298,7 +298,22 @@ fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
     duration: non_empty(text(&r["lengthText"])),
     thumbnails: thumbnails(&r["thumbnail"]["thumbnails"]),
     avatar: Vec::new(),
+    set_video_id: removable_entry(r),
   })
+}
+
+/// The entry id of a playlist video the user can remove: its menu has an
+/// `ACTION_REMOVE_VIDEO` for it (the user's playlists and "Watch later"; "Liked videos" and
+/// other channels' playlists have none).
+fn removable_entry(renderer: &Value) -> Option<String> {
+  let mut endpoints = Vec::new();
+  find_all(&renderer["menu"], "playlistEditEndpoint", &mut endpoints);
+  endpoints
+    .into_iter()
+    .flat_map(|e| e["actions"].as_array().into_iter().flatten())
+    .find(|a| a["action"] == "ACTION_REMOVE_VIDEO")
+    .and_then(|a| a["setVideoId"].as_str())
+    .map(str::to_owned)
 }
 
 /// The token of a continuation item: `continuationItemRenderer` keeps it in
@@ -463,6 +478,7 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
     duration,
     thumbnails: thumbnails(&image["image"]["sources"]),
     avatar: thumbnails(&avatar["avatar"]["avatarViewModel"]["image"]["sources"]),
+    set_video_id: None,
   })
 }
 

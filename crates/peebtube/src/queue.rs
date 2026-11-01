@@ -6,9 +6,10 @@
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 
-use gpui::{Context, EventEmitter};
+use gpui::{Context, EventEmitter, Subscription};
 use innertube::{Client, VideoItem};
 
+use crate::save::{self, EntryRemoved};
 use crate::{prefetch, runtime};
 
 /// Load the next videos when fewer than this many are left to play.
@@ -21,6 +22,7 @@ pub enum QueueEvent {
 
 pub struct Queue {
   client: Client,
+  pub playlist_id: String,
   pub title: String,
   items: Vec<VideoItem>,
   /// Indexes in `items`, in play order.
@@ -34,6 +36,7 @@ pub struct Queue {
   /// The end was reached while the next videos were loading: play the first of them.
   advance_when_loaded: bool,
   rng: Rng,
+  _edits: Subscription,
 }
 
 impl EventEmitter<QueueEvent> for Queue {}
@@ -41,20 +44,32 @@ impl EventEmitter<QueueEvent> for Queue {}
 impl Queue {
   /// A queue of a playlist's `items`, starting at `items[start]`, or at a random video when
   /// shuffled without `start`. `continuation` loads the playlist's next videos.
+  #[allow(clippy::too_many_arguments)] // The playlist's parts, then where to start.
   pub fn new(
     client: Client,
+    playlist_id: String,
     title: String,
     items: Vec<VideoItem>,
     continuation: Option<String>,
     start: Option<usize>,
     shuffle: bool,
+    cx: &mut Context<Self>,
   ) -> Self {
     let mut rng = Rng::new();
     let start = start
       .filter(|&i| i < items.len())
       .unwrap_or_else(|| if shuffle { rng.below(items.len()) } else { 0 });
+    // An entry removed from this playlist (here or on its page) leaves the queue.
+    let edits = save::edits(cx);
+    let edits = cx.subscribe(&edits, |queue, _, removed: &EntryRemoved, cx| {
+      if removed.playlist_id == queue.playlist_id {
+        queue.drop_entry(&removed.set_video_id);
+        cx.notify();
+      }
+    });
     let mut queue = Self {
       client,
+      playlist_id,
       title,
       order: (0..items.len()).collect(),
       position: start,
@@ -65,6 +80,7 @@ impl Queue {
       loading: false,
       advance_when_loaded: false,
       rng,
+      _edits: edits,
     };
     if shuffle {
       queue.reshuffle();
@@ -159,6 +175,32 @@ impl Queue {
   pub fn jump(&mut self, index: usize, cx: &mut Context<Self>) {
     if let Some(position) = self.order.iter().position(|&i| i == index) {
       self.play_at(position, cx);
+    }
+  }
+
+  /// Drops the entry `set_video_id` (removed from the playlist), unless it is playing.
+  fn drop_entry(&mut self, set_video_id: &str) {
+    let Some(index) = self
+      .items
+      .iter()
+      .position(|v| v.set_video_id.as_deref() == Some(set_video_id))
+    else {
+      return;
+    };
+    if self.current() == Some(index) {
+      return;
+    }
+    self.items.remove(index);
+    if let Some(place) = self.order.iter().position(|&i| i == index) {
+      self.order.remove(place);
+      if place < self.position {
+        self.position -= 1;
+      }
+    }
+    for i in &mut self.order {
+      if *i > index {
+        *i -= 1;
+      }
     }
   }
 

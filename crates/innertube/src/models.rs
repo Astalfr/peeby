@@ -39,6 +39,9 @@ pub struct VideoItem {
   pub thumbnails: Vec<Thumbnail>,
   /// Channel avatar sizes.
   pub avatar: Vec<Thumbnail>,
+  /// In a playlist the user can edit: the id of this entry, for
+  /// [`crate::Client::remove_playlist_entry`] (a video may be in a playlist twice).
+  pub set_video_id: Option<String>,
 }
 
 /// A page of videos and the token of the next page.

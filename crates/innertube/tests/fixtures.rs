@@ -246,6 +246,8 @@ fn watch_later_uses_playlist_video_renderers() {
   assert_eq!(first.duration.as_deref(), Some("23:37"));
   // The " • " separator run is dropped.
   assert_eq!(first.metadata, ["163\u{a0}k\u{a0}vues", "il y a 7 jours"]);
+  // "Watch later" can be edited: each entry has its own id for removal.
+  assert!(playlist.videos.iter().all(|v| v.set_video_id.is_some()));
   assert_eq!(playlist.continuation, None);
 }
 
@@ -265,6 +267,8 @@ fn public_playlist_header_and_next_videos_token() {
   );
   let ids: Vec<&str> = playlist.videos.iter().map(|v| v.id.as_str()).collect();
   assert_eq!(ids, ["fOT0BUpITw8", "NFvDHYMzj9U", "8c7KOGxeY3w"]);
+  // Another channel's playlist: nothing to remove.
+  assert!(playlist.videos.iter().all(|v| v.set_video_id.is_none()));
   // Two continuation items on the page: the one after the videos is the next videos.
   let token = playlist.continuation.unwrap();
   assert!(token.starts_with("4qmFsgKBARIkVkxQTEZncXVM"), "{token}");

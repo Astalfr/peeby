@@ -209,7 +209,7 @@ pub fn video_card(
                 .border_2()
                 .border_color(theme::accent().opacity(t)),
             )
-            .child(save::watch_later_button(&id, &video.id, t)),
+            .child(save::watch_later_button(&id, &video.id, t, cx)),
         )
         .child(
           h_flex()
@@ -350,7 +350,7 @@ pub fn video_row(
             .child(thumb)
             .child(play_overlay(t, 44., theme::RADIUS))
             .children(duration_badge(&video.duration))
-            .child(save::watch_later_button(&id, &video.id, t)),
+            .child(save::watch_later_button(&id, &video.id, t, cx)),
         )
         .child(
           v_flex()
@@ -405,6 +405,16 @@ pub fn skeleton_row() -> impl IntoElement {
     )
 }
 
+/// What a click on a row's button does.
+pub type Handler = dyn Fn(&mut Window, &mut App);
+
+/// An action of a list row, such as removing it from its playlist: what it does, and whether
+/// it is running (its button then shows a spinner).
+pub struct RowAction {
+  pub run: Box<Handler>,
+  pub busy: bool,
+}
+
 /// A video of a playlist (its page, or the queue next to the player): the place in the
 /// playlist, a thumbnail of `thumb_width`, the title, channel and details. `id` must tell apart
 /// two entries of the same video, which playlists allow. `current` marks the video playing.
@@ -416,6 +426,7 @@ pub fn playlist_row(
   thumb_width: f32,
   current: bool,
   on_click: impl Fn(&mut Window, &mut App) + 'static,
+  on_remove: Option<RowAction>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -500,9 +511,51 @@ pub fn playlist_row(
                 .when(!small, |el| el.text_sm())
                 .child(details),
             ),
-        ),
+        )
+        .when_some(on_remove, |row, remove| {
+          row.child(remove_button(id, t, remove))
+        }),
     )
     .into_any_element()
+}
+
+/// The "x" of a playlist row, faded in by `t` (the row's hover); a spinner while it runs. Its
+/// clicks are its own, not the row's.
+fn remove_button(id: &str, t: f32, remove: RowAction) -> impl IntoElement {
+  let RowAction { run, busy } = remove;
+  div()
+    .id(ElementId::Name(format!("{id}-remove").into()))
+    .size(px(28.))
+    .flex_none()
+    .rounded_full()
+    .flex()
+    .items_center()
+    .justify_center()
+    // Kept in view while busy, even once the mouse has left the row.
+    .opacity(if busy { 1. } else { t })
+    .text_color(theme::muted())
+    .when(!busy, |el| {
+      el.hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+        .cursor_pointer()
+    })
+    // The row plays its video on click: keep this click from reaching it.
+    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+    .on_click(move |_, window, cx| {
+      cx.stop_propagation();
+      run(window, cx);
+    })
+    .tooltip(|window, cx| {
+      gpui_component::tooltip::Tooltip::new("Retirer de la playlist").build(window, cx)
+    })
+    .child(if busy {
+      gpui_component::spinner::Spinner::new()
+        .small()
+        .into_any_element()
+    } else {
+      gpui_component::Icon::new(gpui_component::IconName::Close)
+        .size(px(14.))
+        .into_any_element()
+    })
 }
 
 /// Channel, then views · date, in muted text.

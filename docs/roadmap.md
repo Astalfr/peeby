@@ -14,7 +14,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 ## Save to playlist
 
 - Done (2026-11-01): "⋮" menu and "Watch later" shortcut on grid cards and list rows (hover only), "Enregistrer" on the watch page, the list of playlists with checks, toasts. `playlist/get_add_to_playlist` is parsed and tested on a redacted fixture.
-- Verified: the card buttons appear on hover. **Not verified:** the popover and its list in the app (the test run was stopped), and any actual add or remove: the `browse/edit_playlist` request was never sent (writing to the account needs the user's go-ahead), so its response has no fixture yet.
+- Then: toasts at the bottom right; an "x" on the videos of editable playlists (page and queue panel) removes the entry (`ACTION_REMOVE_VIDEO` by `setVideoId`, parsed and tested on the "Watch later" fixture).
+- Then: a spinner replaces the "x" and the "Watch later" button while their request runs; "À regarder plus tard" in the sidebar, above Playlists.
+- Verified: the card buttons appear on hover. **Not verified:** the popover and its list in the app (the test run was stopped), the "x" buttons and the toasts' position on screen, and any actual add or remove: the `browse/edit_playlist` request was never sent (writing to the account needs the user's go-ahead), so its response has no fixture yet.
 
 ## Playlists
 

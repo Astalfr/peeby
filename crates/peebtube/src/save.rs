@@ -5,21 +5,27 @@
 //! The list of playlists is loaded when it is opened (`playlist/get_add_to_playlist`), so it
 //! shows where the video already is; a click adds the video, or removes it from a playlist
 //! that holds it, as YouTube's "Save" dialog does.
+//!
+//! The "x" of a playlist's videos removes one entry ([`remove_entry`]); the pages showing that
+//! playlist hear about it through [`Edits`] and drop the entry.
+
+use std::collections::HashSet;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyWindowHandle, App, Context, ElementId, FontWeight, Global, MouseButton, SharedString,
-  Window, div, px,
+  Anchor, AnyWindowHandle, App, AppContext, Context, ElementId, Entity, EventEmitter, FontWeight,
+  Global, MouseButton, SharedString, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
 use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::skeleton::Skeleton;
+use gpui_component::spinner::Spinner;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Error, PlaylistChoice};
 
 use crate::assets::Icon;
-use crate::ui::error_text;
+use crate::ui::{RowAction, error_text};
 use crate::{runtime, theme};
 
 /// The app's current client, for actions started from any page. `AppView` sets it at startup
@@ -28,43 +34,121 @@ pub struct Session(pub Client);
 
 impl Global for Session {}
 
-const WATCH_LATER: &str = "WL";
-const WATCH_LATER_TITLE: &str = "À regarder plus tard";
+/// "Watch later": its playlist id and its title in the app.
+pub const WATCH_LATER: &str = "WL";
+pub const WATCH_LATER_TITLE: &str = "À regarder plus tard";
 const POPOVER_WIDTH: f32 = 280.;
 
-/// Adds (`add`) or removes `video_id` in a playlist, then shows a toast in `window`. `done`
-/// gets the outcome, e.g. to undo an optimistic change.
+/// A change to a playlist.
+enum Change {
+  /// Add this video.
+  Add(String),
+  /// Remove this video, wherever it is.
+  Remove(String),
+  /// Remove this entry ([`innertube::VideoItem::set_video_id`]).
+  RemoveEntry(String),
+}
+
+/// One entry left a playlist: pages showing it drop the entry.
+pub struct EntryRemoved {
+  pub playlist_id: String,
+  pub set_video_id: String,
+}
+
+/// Where playlist edits are announced, for the pages that show playlists.
+pub struct Edits;
+
+impl EventEmitter<EntryRemoved> for Edits {}
+
+#[derive(Clone)]
+struct EditsHandle(Entity<Edits>);
+
+impl Global for EditsHandle {}
+
+/// The edit announcer, created the first time it is asked for.
+pub fn edits(cx: &mut App) -> Entity<Edits> {
+  if let Some(EditsHandle(edits)) = cx.try_global::<EditsHandle>() {
+    return edits.clone();
+  }
+  let edits = cx.new(|_| Edits);
+  cx.set_global(EditsHandle(edits.clone()));
+  edits
+}
+
+/// Changes waiting for YouTube's answer: their buttons show a spinner, and a second click
+/// sends nothing.
+#[derive(Default)]
+struct Pending(HashSet<String>);
+
+impl Global for Pending {}
+
+fn change_key(playlist_id: &str, change: &Change) -> String {
+  match change {
+    Change::Add(video) => format!("{playlist_id}:add:{video}"),
+    Change::Remove(video) => format!("{playlist_id}:remove:{video}"),
+    Change::RemoveEntry(entry) => format!("{playlist_id}:entry:{entry}"),
+  }
+}
+
+fn is_pending(key: &str, cx: &App) -> bool {
+  cx.try_global::<Pending>()
+    .is_some_and(|p| p.0.contains(key))
+}
+
+/// Applies `change` to a playlist, then shows a toast in `window`. `done` gets the outcome,
+/// e.g. to undo an optimistic change. Nothing is sent while the same change is pending.
 fn edit(
   playlist_id: String,
   playlist_title: String,
-  video_id: String,
-  add: bool,
+  change: Change,
   window: AnyWindowHandle,
   cx: &mut App,
   done: impl FnOnce(bool, &mut App) + 'static,
 ) {
-  let Some(Session(client)) = cx.try_global::<Session>() else {
+  let Some(client) = cx.try_global::<Session>().map(|s| s.0.clone()) else {
     return;
   };
-  let client = client.clone();
+  let key = change_key(&playlist_id, &change);
+  if !cx.default_global::<Pending>().0.insert(key.clone()) {
+    return;
+  }
+  cx.refresh_windows();
+  let adding = matches!(change, Change::Add(_));
+  let removed_entry = match &change {
+    Change::RemoveEntry(id) => Some(id.clone()),
+    _ => None,
+  };
+  let playlist = playlist_id.clone();
   let task = runtime::spawn(cx, async move {
-    if add {
-      client.add_to_playlist(&playlist_id, &video_id).await
-    } else {
-      client.remove_from_playlist(&playlist_id, &video_id).await
+    match change {
+      Change::Add(video) => client.add_to_playlist(&playlist, &video).await,
+      Change::Remove(video) => client.remove_from_playlist(&playlist, &video).await,
+      Change::RemoveEntry(entry) => client.remove_playlist_entry(&playlist, &entry).await,
     }
   });
   cx.spawn(async move |cx| {
     let Some(result) = task.await else { return };
     let note = match &result {
-      Ok(()) if add => Notification::success(format!("Ajoutée à « {playlist_title} »")),
+      Ok(()) if adding => Notification::success(format!("Ajoutée à « {playlist_title} »")),
       Ok(()) => Notification::info(format!("Retirée de « {playlist_title} »")),
       Err(e) => {
         tracing::warn!("edit playlist: {e}");
-        Notification::error(save_error(e))
+        Notification::error(save_error(e, adding))
       }
     };
     cx.update(|cx| {
+      cx.default_global::<Pending>().0.remove(&key);
+      cx.refresh_windows();
+      if result.is_ok()
+        && let Some(set_video_id) = removed_entry
+      {
+        edits(cx).update(cx, |_, cx| {
+          cx.emit(EntryRemoved {
+            playlist_id,
+            set_video_id,
+          })
+        });
+      }
       done(result.is_ok(), cx);
       window
         .update(cx, |_, window, cx| window.push_notification(note, cx))
@@ -74,13 +158,39 @@ fn edit(
   .detach();
 }
 
-fn save_error(error: &Error) -> String {
+fn save_error(error: &Error, adding: bool) -> String {
   match error {
     Error::SignInRequired => {
-      "Connectez-vous pour enregistrer des vidéos : importez vos cookies depuis la page Compte."
+      "Connectez-vous pour modifier vos playlists : importez vos cookies depuis la page Compte."
         .into()
     }
-    e => format!("Impossible d'enregistrer la vidéo. {}", error_text(e)),
+    e if adding => format!("Impossible d'enregistrer la vidéo. {}", error_text(e)),
+    e => format!("Impossible de retirer la vidéo. {}", error_text(e)),
+  }
+}
+
+/// The "x" of a playlist's entry: removes it from the playlist; on success the pages showing
+/// the playlist drop it ([`EntryRemoved`]). Busy while the request runs.
+pub fn removal(playlist_id: &str, playlist_title: &str, set_video_id: &str, cx: &App) -> RowAction {
+  let change = Change::RemoveEntry(set_video_id.into());
+  let busy = is_pending(&change_key(playlist_id, &change), cx);
+  let (playlist_id, playlist_title, entry) = (
+    playlist_id.to_owned(),
+    playlist_title.to_owned(),
+    set_video_id.to_owned(),
+  );
+  RowAction {
+    busy,
+    run: Box::new(move |window, cx| {
+      edit(
+        playlist_id.clone(),
+        playlist_title.clone(),
+        Change::RemoveEntry(entry.clone()),
+        window.window_handle(),
+        cx,
+        |_, _| {},
+      )
+    }),
   }
 }
 
@@ -89,8 +199,7 @@ pub fn watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
   edit(
     WATCH_LATER.into(),
     WATCH_LATER_TITLE.into(),
-    video_id.into(),
-    true,
+    Change::Add(video_id.into()),
     window.window_handle(),
     cx,
     |_, _| {},
@@ -98,8 +207,13 @@ pub fn watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
 }
 
 /// The round "Watch later" button over a thumbnail's top right corner, faded in by `t` (the
-/// card's hover). Its clicks are its own, not the card's.
-pub fn watch_later_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
+/// card's hover), with a spinner while the video is being added. Its clicks are its own, not
+/// the card's.
+pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl IntoElement {
+  let busy = is_pending(
+    &change_key(WATCH_LATER, &Change::Add(video_id.to_owned())),
+    cx,
+  );
   let video_id = video_id.to_owned();
   div()
     .id(ElementId::Name(format!("{id}-watch-later").into()))
@@ -111,11 +225,14 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32) -> impl IntoElement 
     .flex()
     .items_center()
     .justify_center()
-    .opacity(t)
+    // Kept in view while busy, even once the mouse has left the card.
+    .opacity(if busy { 1. } else { t })
     .bg(gpui::black().opacity(0.75))
     .text_color(gpui::white())
-    .hover(|s| s.bg(theme::accent()).text_color(theme::on_accent()))
-    .cursor_pointer()
+    .when(!busy, |el| {
+      el.hover(|s| s.bg(theme::accent()).text_color(theme::on_accent()))
+        .cursor_pointer()
+    })
     // The card opens the video on click: keep this click from reaching it.
     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     .on_click(move |_, window, cx| {
@@ -125,7 +242,16 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32) -> impl IntoElement 
     .tooltip(|window, cx| {
       gpui_component::tooltip::Tooltip::new(WATCH_LATER_TITLE).build(window, cx)
     })
-    .child(gpui_component::Icon::new(Icon::WatchLater).size(px(16.)))
+    .child(if busy {
+      Spinner::new()
+        .small()
+        .color(gpui::white())
+        .into_any_element()
+    } else {
+      gpui_component::Icon::new(Icon::WatchLater)
+        .size(px(16.))
+        .into_any_element()
+    })
 }
 
 /// The "⋮" button of a card, faded in by `t`: a menu with "Watch later" and "Add to a
@@ -249,7 +375,7 @@ impl Picker {
       return;
     };
     if !client.signed_in() {
-      self.choices = Choices::Failed(save_error(&Error::SignInRequired).into());
+      self.choices = Choices::Failed(save_error(&Error::SignInRequired, true).into());
       return cx.notify();
     }
     self.choices = Choices::Loading;
@@ -264,7 +390,7 @@ impl Picker {
             Some(Ok(choices)) => Choices::Loaded(choices),
             Some(Err(e)) => {
               tracing::warn!("playlist choices: {e}");
-              Choices::Failed(save_error(&e).into())
+              Choices::Failed(save_error(&e, true).into())
             }
             None => return,
           };
@@ -287,11 +413,15 @@ impl Picker {
     choice.contains = !choice.contains;
     let add = choice.contains;
     let this = cx.weak_entity();
+    let video = self.video_id.clone();
     edit(
       choice.id.clone(),
       choice.title.clone(),
-      self.video_id.clone(),
-      add,
+      if add {
+        Change::Add(video)
+      } else {
+        Change::Remove(video)
+      },
       window.window_handle(),
       cx,
       move |ok, cx| {

@@ -51,12 +51,21 @@ pub enum Route {
 }
 
 impl Route {
-  /// Top-level pages reset the stack; the others are pushed on it.
+  /// "Watch later", a sidebar page.
+  fn watch_later() -> Self {
+    Self::Playlist {
+      id: save::WATCH_LATER.into(),
+      title: save::WATCH_LATER_TITLE.into(),
+    }
+  }
+
+  /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
-    matches!(
-      self,
-      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Settings
-    )
+    match self {
+      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Settings => true,
+      Self::Playlist { id, .. } => id == save::WATCH_LATER,
+      _ => false,
+    }
   }
 }
 
@@ -374,6 +383,12 @@ impl AppView {
             "Abonnements",
             Icon::Subscriptions,
             Route::Subscriptions,
+            cx,
+          ))
+          .child(nav(
+            save::WATCH_LATER_TITLE,
+            Icon::WatchLater,
+            Route::watch_later(),
             cx,
           ))
           .child(nav("Playlists", Icon::Playlists, Route::Playlists, cx)),
