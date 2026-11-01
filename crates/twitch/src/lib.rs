@@ -16,6 +16,7 @@ mod error;
 pub mod gql;
 pub mod helix;
 mod proxy;
+pub mod seventv;
 pub mod splice;
 pub mod time;
 pub mod usher;

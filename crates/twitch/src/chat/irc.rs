@@ -237,6 +237,8 @@ pub struct RoomState {
   pub subs_only: Option<bool>,
   /// Unique messages only (`r9k`).
   pub unique: Option<bool>,
+  /// The channel's Twitch user id (`room-id`), for its third-party emotes.
+  pub room_id: Option<String>,
 }
 
 impl RoomState {
@@ -248,12 +250,16 @@ impl RoomState {
       slow,
       subs_only,
       unique,
+      room_id,
     } = update;
     self.emote_only = emote_only.or(self.emote_only);
     self.followers_only = followers_only.or(self.followers_only);
     self.slow = slow.or(self.slow);
     self.subs_only = subs_only.or(self.subs_only);
     self.unique = unique.or(self.unique);
+    if room_id.is_some() {
+      self.room_id.clone_from(room_id);
+    }
   }
 }
 
@@ -371,6 +377,7 @@ fn room_state(line: &Line) -> RoomState {
     slow: line.tag("slow").and_then(|v| v.parse().ok()),
     subs_only: flag("subs-only"),
     unique: flag("r9k"),
+    room_id: line.tag("room-id").map(str::to_owned),
   }
 }
 

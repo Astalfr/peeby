@@ -134,6 +134,16 @@ impl Client {
     Ok(gql::parse_storyboard(&response.text().await?, &url))
   }
 
+  /// The 7TV emotes of the channel whose Twitch user id is `user_id`; empty without a 7TV account.
+  pub async fn seventv_channel(&self, user_id: &str) -> Result<Vec<crate::seventv::Emote>> {
+    crate::seventv::channel(&self.http, user_id).await
+  }
+
+  /// 7TV's global emotes.
+  pub async fn seventv_global(&self) -> Result<Vec<crate::seventv::Emote>> {
+    crate::seventv::global(&self.http).await
+  }
+
   /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
   /// [`Error::NotLoggedIn`] when it is refused or there is none.
   pub async fn current_user(&self) -> Result<String> {

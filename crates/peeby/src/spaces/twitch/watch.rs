@@ -118,7 +118,9 @@ impl WatchView {
     match view.kind.clone() {
       Kind::Live(login) => {
         let panel = cx.new(ChatPanel::new);
-        view._tasks.push(chat::start(&login, &panel, cx));
+        view
+          ._tasks
+          .push(chat::start(&login, view.client.clone(), &panel, cx));
         view.chat = Some(panel);
         view.start_live(login, cx)
       }

@@ -39,6 +39,7 @@ fn the_room_state_comes_whole_on_joining() {
   assert_eq!(state.slow, Some(0));
   assert_eq!(state.subs_only, Some(false));
   assert_eq!(state.emote_only, Some(false));
+  assert_eq!(state.room_id.as_deref(), Some("641972806"));
 }
 
 #[test]

@@ -521,11 +521,21 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   links, Twitch emotes inline, the "Followers depuis…" label; in the example, the timings above and the
   pause on scrolling up (the list stays, "Reprendre le défilement · 125 nouveaux" after 6 s, now worded "… nouveaux messages").
   **Not verified**: a reconnection after a real loss or a `RECONNECT`, the resume button's click, a
-  deletion or a ban seen in the app, theater mode with the chat, and a VOD's or clip's theater mode now that it goes
+  deletion or a ban seen in the app, a VOD's or clip's theater mode now that it goes
   through `watch_layout`, the mini-player while the chat runs
-- [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), 7TV/BTTV/FFZ
-      emotes by word (cached per channel), animated emotes (needs `image` animation features and frames in
-      the image store, agreed)
+- [x] 7TV emotes (the user asked for 7TV alone, 2026-11-01): `twitch::seventv` parses the global set and a
+      channel's (`7tv.io/v3/users/twitch/<id>`, 404 without a 7TV account: no emotes), keeping the set
+      entry's name (the channel's alias), the WebP files and their still first frame, the zero-width flag.
+      Tested on 3 saved responses (trimmed, without the emote creators' accounts). The chat source asks for
+      both sets once `ROOMSTATE`'s `room-id` arrives (`RoomState::room_id`), keeps them for the session,
+      and turns the words they name into emotes (the channel's names over the global ones, case kept).
+      Animated emotes are drawn still (`static_name`) and zero-width ones as ordinary emotes until the
+      animated-emotes change. Verified in the app on zackrawrr's chat: 7TV emotes inline, wide ones at
+      their ratio, in theater mode (the chat beside the player). **Not verified**: a channel without 7TV
+      in the app
+- [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), BTTV and FFZ
+      emotes by word, animated emotes and zero-width overlays (needs `image` animation features and frames
+      in the image store, agreed)
 - [ ] VODs: no chat replay at first (GQL comments, later)
 - Exit: met for Twitch's own emotes (third-party ones, badges and animated emotes are the next changes)
 - Dependencies: `tokio-tungstenite` with `native-tls`, `futures-util` (its stream and sink), tokio's

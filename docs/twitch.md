@@ -129,7 +129,11 @@ Two credentials, for different things. Both are secrets, under the same rules as
     **[src]**.
   - Badges come from Helix Global and Channel Chat Badges, with direct image URLs **[src]**.
   - Third-party emotes, matched by word and keyed by the broadcaster's numeric id:
-    - 7TV `https://7tv.io/v3/users/twitch/{id}` and `/v3/emote-sets/global` **[weak src]**;
+    - 7TV `https://7tv.io/v3/users/twitch/{id}` and `/v3/emote-sets/global`, checked on 2026-11-01:
+      anonymous, a set's `emotes[]` entries carry the channel's alias (`name`) over the emote's own
+      (`data.name`), files under `https:` + `data.host.url` (1x is 32 px high; WebP, AVIF, GIF, PNG;
+      `static_name` is the still first frame of an animated one), zero-width as entry flag 1 (emote flag
+      256); a Twitch user without 7TV answers 404 `{"error_code":12000}`;
     - BTTV `https://api.betterttv.net/3/cached/users/twitch/{id}` and `/3/cached/emotes/global` **[mem]**;
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
 - **Order of work**:
@@ -264,7 +268,7 @@ A probe run by the user, anonymously, on a live channel:
 ## Not verified
 
 - The Helix details marked [mem]: the reference page was truncated when fetched.
-- The BTTV and FFZ endpoints; the 7TV host.
+- The BTTV and FFZ endpoints.
 - The 800 points a minute.
 - Whether the playback token needs an integrity token when signed in with the auth-token (anonymous does
   not, see above).
