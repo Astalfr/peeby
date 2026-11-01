@@ -1,5 +1,5 @@
-//! Root view: title bar (back, open a video by URL or id), sidebar (home, subscriptions, the
-//! subscribed channels) and a stack of pages. In fullscreen only the page is shown.
+//! Root view: title bar (back, open a video by URL or id), sidebar (home, subscriptions,
+//! account, settings) and a stack of pages. In fullscreen only the page is shown.
 
 use gpui::prelude::*;
 use gpui::{
@@ -10,15 +10,15 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Sizable, TitleBar, h_flex, v_flex};
-use innertube::{Channel, Client, Cookies};
+use innertube::{Client, Cookies};
 
 use crate::account::AccountView;
 use crate::assets::Icon;
+use crate::channels::ChannelsView;
 use crate::feed::{FeedView, Source};
 use crate::images::Images;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
-use crate::ui::image_fill;
 use crate::watch::WatchView;
 use crate::{prefetch, runtime, settings, theme};
 
@@ -30,6 +30,8 @@ pub enum Route {
   /// Session state and cookie import.
   Account,
   Settings,
+  /// The subscribed channels.
+  Channels,
   /// A channel's videos.
   Channel {
     id: String,
@@ -57,8 +59,6 @@ struct Page {
 pub struct AppView {
   client: Client,
   stack: Vec<Page>,
-  /// Subscribed channels for the sidebar, once loaded (signed in only).
-  channels: Vec<Channel>,
   /// Page to open at the next render (it needs the window), after a session change.
   reset_to: Option<Route>,
   open_input: Entity<InputState>,
@@ -98,7 +98,6 @@ impl AppView {
     let mut app = Self {
       client,
       stack: Vec::new(),
-      channels: Vec::new(),
       reset_to: None,
       open_input,
       _open_subscription: subscription,
@@ -107,7 +106,6 @@ impl AppView {
     for id in initial_videos {
       app.open(Route::Watch(id), window, cx);
     }
-    app.load_channels(cx);
     app
   }
 
@@ -135,8 +133,6 @@ impl AppView {
       }
     }));
     self.client = client;
-    self.channels.clear();
-    self.load_channels(cx);
     // Pages hold the old client: they are rebuilt on the next navigation; Home now.
     self.reset_to = Some(Route::Home);
     cx.notify();
@@ -169,29 +165,6 @@ impl AppView {
     .detach();
   }
 
-  fn load_channels(&self, cx: &mut Context<Self>) {
-    if !self.client.signed_in() {
-      return;
-    }
-    let client = self.client.clone();
-    let fetch = runtime::spawn(cx, async move { client.subscribed_channels().await });
-    cx.spawn(async move |this, cx| {
-      let result = fetch.await;
-      this
-        .update(cx, |this, cx| match result {
-          Some(Ok(channels)) => {
-            tracing::info!("{} subscribed channels", channels.len());
-            this.channels = channels;
-            cx.notify();
-          }
-          Some(Err(e)) => tracing::warn!("subscribed channels: {e}"),
-          None => {}
-        })
-        .ok();
-    })
-    .detach();
-  }
-
   /// Shows `route`: top-level pages reset the stack, the others are pushed.
   pub fn open(&mut self, route: Route, window: &mut Window, cx: &mut Context<Self>) {
     if self.stack.last().is_some_and(|page| page.route == route) {
@@ -213,6 +186,9 @@ impl AppView {
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
       Route::Settings => cx.new(|_| SettingsView::new(nav)).into(),
+      Route::Channels => cx
+        .new(|cx| ChannelsView::new(client, nav, window, cx))
+        .into(),
       Route::Account => {
         let signed_in = client.signed_in();
         cx.new(|_| AccountView::new(nav, signed_in)).into()
@@ -281,7 +257,7 @@ impl AppView {
     )
   }
 
-  /// A sidebar entry: icon (or avatar) and label, muted until hovered or active; the active
+  /// A sidebar entry: icon and label, muted until hovered or active; the active
   /// one has a light background and a red pill on its left edge.
   fn entry(id: SharedString, active: bool) -> gpui::Stateful<gpui::Div> {
     h_flex()
@@ -320,53 +296,16 @@ impl AppView {
       })
   }
 
-  fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  /// The entry of the page at the bottom of the stack is active, so Subscriptions stays lit
+  /// on the channels and channel pages opened from it.
+  fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let root = self.stack.first().map(|page| page.route.clone());
-    let at_root = self.stack.len() == 1;
     let nav = |label: &'static str, icon: Icon, route: Route, cx: &mut Context<Self>| {
-      let active = at_root && root.as_ref() == Some(&route);
+      let active = root.as_ref() == Some(&route);
       Self::entry(SharedString::from(label), active)
         .child(gpui_component::Icon::new(icon).size(px(18.)).flex_none())
         .child(div().truncate().child(label))
         .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
-    };
-    let current_channel = match self.stack.last().map(|page| &page.route) {
-      Some(Route::Channel { id, .. }) => Some(id.clone()),
-      _ => None,
-    };
-    let channels: Vec<_> = self
-      .channels
-      .iter()
-      .map(|channel| {
-        let route = Route::Channel {
-          id: channel.id.clone(),
-          name: channel.name.clone(),
-        };
-        let active = current_channel.as_deref() == Some(channel.id.as_str());
-        Self::entry(
-          SharedString::from(format!("channel-{}", channel.id)),
-          active,
-        )
-        .child(div().size(px(22.)).flex_none().child(image_fill(
-          &channel.avatar,
-          22.,
-          px(11.),
-          window,
-          cx,
-        )))
-        .child(div().min_w_0().truncate().child(channel.name.clone()))
-        .on_click(cx.listener(move |this, _, window, cx| this.open(route.clone(), window, cx)))
-      })
-      .collect();
-    let label = |text: &'static str| {
-      div()
-        .px_3()
-        .pt_5()
-        .pb_1()
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(theme::subtle())
-        .child(text)
     };
     v_flex()
       .w(theme::SIDEBAR_WIDTH)
@@ -387,10 +326,7 @@ impl AppView {
             Icon::Subscriptions,
             Route::Subscriptions,
             cx,
-          ))
-          .when(!channels.is_empty(), |el| {
-            el.child(label("CHAÎNES")).children(channels)
-          }),
+          )),
       )
       .child(
         v_flex()
@@ -470,7 +406,7 @@ impl Render for AppView {
         .flex_1()
         .min_h_0()
         .items_start()
-        .child(self.sidebar(window, cx))
+        .child(self.sidebar(cx))
         .child(
           div()
             .flex_1()

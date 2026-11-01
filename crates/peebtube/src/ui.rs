@@ -152,6 +152,13 @@ fn hover_card(
   (card, is_hovered, t)
 }
 
+/// Line height of a grid card's title, and of its two metadata lines. The title and the
+/// metadata always take two lines each, so cards in a row line up whatever their text.
+const TITLE_LINE: f32 = 20.;
+const META_LINE: f32 = 18.;
+/// Height of a grid card under its thumbnail.
+const CARD_TEXT_HEIGHT: f32 = 12. + 2. * TITLE_LINE + 4. + 2. * META_LINE;
+
 /// Grid card: 16:9 thumbnail, then channel avatar, title, channel and metadata. On hover it
 /// rises a little, a red ring and a play button fade in, and the title turns red.
 pub fn video_card(
@@ -163,6 +170,7 @@ pub fn video_card(
 ) -> AnyElement {
   let (card, hovered, t) = hover_card(&format!("card-{}", video.id), video, nav, window, cx);
   let thumb = image_fill(&video.thumbnails, width, theme::RADIUS_LG, window, cx);
+  let thumb_height = width * 9. / 16.;
   let avatar = (!video.avatar.is_empty()).then(|| {
     div().size(px(AVATAR)).flex_none().child(image_fill(
       &video.avatar,
@@ -172,56 +180,71 @@ pub fn video_card(
       cx,
     ))
   });
+  // The hovered box stays in place and only its content rises: a box that moved itself could
+  // slip out from under the pointer, lose the hover, fall back and loop.
   card
     .w(px(width))
+    .h(px(thumb_height + CARD_TEXT_HEIGHT))
     .flex_none()
-    .relative()
-    .top(px(-4. * t))
     .child(
-      div()
+      v_flex()
+        .size_full()
         .relative()
-        .w_full()
-        .h(px(width * 9. / 16.))
-        .rounded(theme::RADIUS_LG)
-        .when(t > 0.01, |el| el.shadow_lg())
-        .child(thumb)
-        .child(play_overlay(t, 52., theme::RADIUS_LG))
-        .children(duration_badge(&video.duration))
+        .top(px(-4. * t))
         .child(
           div()
-            .absolute()
-            .inset_0()
+            .relative()
+            .w_full()
+            .h(px(thumb_height))
+            .flex_none()
             .rounded(theme::RADIUS_LG)
-            .border_2()
-            .border_color(theme::accent().opacity(t)),
-        ),
-    )
-    .child(
-      h_flex()
-        .mt_3()
-        .gap_3()
-        .items_start()
-        .children(avatar)
-        .child(
-          v_flex()
-            .min_w_0()
-            .gap_1()
+            .when(t > 0.01, |el| el.shadow_lg())
+            .child(thumb)
+            .child(play_overlay(t, 52., theme::RADIUS_LG))
+            .children(duration_badge(&video.duration))
             .child(
               div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .line_clamp(2)
-                .text_color(if hovered {
-                  theme::accent_hover()
-                } else {
-                  theme::foreground()
-                })
-                .child(video.title.clone()),
-            )
-            .child(meta_text(video)),
+                .absolute()
+                .inset_0()
+                .rounded(theme::RADIUS_LG)
+                .border_2()
+                .border_color(theme::accent().opacity(t)),
+            ),
+        )
+        .child(
+          h_flex()
+            .mt_3()
+            .gap_3()
+            .items_start()
+            .children(avatar)
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap_1()
+                .child(
+                  div()
+                    .h(px(2. * TITLE_LINE))
+                    .line_height(px(TITLE_LINE))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .line_clamp(2)
+                    .text_color(if hovered {
+                      theme::accent_hover()
+                    } else {
+                      theme::foreground()
+                    })
+                    .child(video.title.clone()),
+                )
+                .child(meta_text(video, META_LINE).text_sm()),
+            ),
         ),
     )
     .into_any_element()
 }
+
+/// Line heights of a related card's title and metadata.
+const COMPACT_TITLE_LINE: f32 = 18.;
+const COMPACT_META_LINE: f32 = 16.;
 
 /// List row (related videos): small thumbnail on the left, text on the right, on a soft
 /// surface while hovered.
@@ -254,11 +277,14 @@ pub fn compact_card(
         )
         .child(
           v_flex()
+            .flex_1()
             .min_w_0()
             .pt_0p5()
             .gap_1()
             .child(
               div()
+                .h(px(2. * COMPACT_TITLE_LINE))
+                .line_height(px(COMPACT_TITLE_LINE))
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .line_clamp(2)
@@ -269,30 +295,35 @@ pub fn compact_card(
                 })
                 .child(video.title.clone()),
             )
-            .child(meta_text(video).text_xs()),
+            .child(meta_text(video, COMPACT_META_LINE).text_xs()),
         ),
     )
     .into_any_element()
 }
 
-/// Channel, then views · date, in muted small text.
-fn meta_text(video: &VideoItem) -> gpui::Div {
+/// Channel, then views · date, in muted text: two lines of `line` pixels, even when one is
+/// missing.
+fn meta_text(video: &VideoItem, line: f32) -> gpui::Div {
+  let row = |text: String| div().h(px(line)).truncate().child(text);
   v_flex()
-    .text_sm()
+    .h(px(2. * line))
+    .line_height(px(line))
     .text_color(theme::muted())
-    .children(video.channel.clone().map(|c| div().line_clamp(1).child(c)))
-    .child(div().line_clamp(1).child(video.metadata.join(" · ")))
+    .children(video.channel.clone().map(row))
+    .child(row(video.metadata.join(" · ")))
 }
 
 /// Placeholder shaped like a [`video_card`].
 pub fn skeleton_card(width: f32) -> impl IntoElement {
   v_flex()
     .w(px(width))
+    .h(px(width * 9. / 16. + CARD_TEXT_HEIGHT))
     .flex_none()
     .child(
       Skeleton::new()
         .w_full()
         .h(px(width * 9. / 16.))
+        .flex_none()
         .rounded(theme::RADIUS_LG),
     )
     .child(

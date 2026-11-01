@@ -146,7 +146,19 @@ impl FeedView {
       self.logged_in = feed.logged_in;
       self.message = feed.message;
     }
-    self.videos.extend(feed.items);
+    // YouTube repeats some videos (twice on a page, or again in the next one). A card's id is
+    // its video id, and two elements with one id share GPUI's hover state, which then flips on
+    // every frame: keep the first.
+    let (received, before) = (feed.items.len(), self.videos.len());
+    for video in feed.items {
+      if !self.videos.iter().any(|v| v.id == video.id) {
+        self.videos.push(video);
+      }
+    }
+    let repeated = received - (self.videos.len() - before);
+    if repeated > 0 {
+      tracing::debug!("{:?}: {repeated} repeated videos skipped", self.source);
+    }
     self.continuation = feed.continuation;
     self.state = State::Loaded;
   }
@@ -310,7 +322,26 @@ impl Render for FeedView {
               .py_6()
               .gap_6()
               .when(!matches!(self.source, Source::Home), |el| {
-                el.child(page_title(self.title()))
+                el.child(
+                  h_flex()
+                    .gap_4()
+                    .items_center()
+                    .child(page_title(self.title()))
+                    .child(div().flex_1())
+                    .when(matches!(self.source, Source::Subscriptions), |el| {
+                      let nav = self.nav.clone();
+                      el.child(
+                        Button::new("all-channels")
+                          .icon(Icon::Subscriptions)
+                          .label("Toutes les chaînes")
+                          .on_click(move |_, window, cx| {
+                            nav
+                              .update(cx, |app, cx| app.open(Route::Channels, window, cx))
+                              .ok();
+                          }),
+                      )
+                    }),
+                )
               })
               .child(body),
           ),

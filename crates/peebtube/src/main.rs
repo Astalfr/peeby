@@ -6,6 +6,7 @@
 mod account;
 mod app;
 mod assets;
+mod channels;
 mod feed;
 mod images;
 mod motion;
