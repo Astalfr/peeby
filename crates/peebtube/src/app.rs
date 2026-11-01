@@ -1,4 +1,4 @@
-//! Root view: title bar (back), sidebar (home, subscriptions,
+//! Root view: title bar (back, notifications), sidebar (home, subscriptions,
 //! playlists, account, settings) and a stack of pages. In fullscreen only the page is shown.
 
 use gpui::prelude::*;
@@ -21,7 +21,7 @@ use crate::queue::Queue;
 use crate::settings::Settings;
 use crate::settings_page::SettingsView;
 use crate::watch::WatchView;
-use crate::{bell, prefetch, runtime, save, settings, theme};
+use crate::{bell, inbox, prefetch, runtime, save, settings, theme};
 
 /// A page of the app.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,6 +94,9 @@ impl AppView {
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
     bell::reset(cx);
+    let unseen = inbox::inbox(cx);
+    cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
+    inbox::reset(cx);
     let mut app = Self {
       client,
       stack: Vec::new(),
@@ -131,6 +134,8 @@ impl AppView {
     }));
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
+    bell::reset(cx);
+    inbox::reset(cx);
     self.client = client;
     // Pages hold the old client: they are rebuilt on the next navigation; Home now.
     self.reset_to = Some(Route::Home);
@@ -293,7 +298,11 @@ impl AppView {
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .child(div().occlude().child(menu))
         .children(back.map(|b| div().occlude().child(b)))
-        .child(mark()),
+        .child(mark())
+        .child(div().flex_1())
+        .children(
+          inbox::bell_button(cx.weak_entity(), cx).map(|bell| div().occlude().mr_2().child(bell)),
+        ),
     )
   }
 

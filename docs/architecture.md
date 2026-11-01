@@ -21,10 +21,10 @@
 
 | Crate | Role | Notes |
 |---|---|---|
-| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), the notification bell of a subscribed channel (`notification/modify_channel_preference`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
+| `innertube` | InnerTube client: Home, subscriptions, subscribed channels, channel videos, the user's playlists and a playlist's videos, and their continuations (`browse`), watch page and comments (`next`), rating a video (`like/*`), the notification bell of a subscribed channel (`notification/modify_channel_preference`), the notifications inbox (`FEnotifications_inbox`, `notification/get_unseen_count`, `notification/record_interactions`), streams (VISIONOS `player` + HLS master), Return YouTube Dislike votes, cookies and SAPISIDHASH | No GPUI dependency. Fixture tests in `tests/fixtures/`, live check with `examples/smoke.rs` |
 | `player` | libmpv backend: commands, events, frames | Copied from peeby ([ADR 0001](decisions/0001-peeby-foundations.md)), plus `external_audio`, `ytdl`, `log_file` |
 | `gpui-video` | GPUI element showing the player's frames (zero-copy D3D11, software fallback) | Copied from peeby, needs `vendor/gpui-pre-windows` |
-| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
+| `peebtube` | Binary: window, title bar, sidebar, pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `watch`, `account`, `settings_page`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), settings (`settings`), bundled tools and their updates (`tools`), the player view (`player_view`, controls adapted from peeby's player page), icons (`assets`, Lucide) | `anyhow` for errors |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
 
 ## Threads and data flow
@@ -73,7 +73,12 @@ A subscribed channel's subscribe button carries a `subscriptionNotificationToggl
 
 `bell::bell_button` shows it. `Client::set_channel_notifications` posts the chosen option's `params` as they are (they embed the page's context, so each page keeps its own); the level set is kept by channel id in a global, so the watch page and the channels page agree, and it is forgotten on a session change. A change shows at once, blocks a second one for that channel while it runs, and goes back with a toast if YouTube refuses. No response of `modify_channel_preference` is saved yet: an HTTP success counts as done.
 
-The notifications inbox is not shown yet, see the roadmap.
+## Notifications inbox
+
+youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`multiPageMenuNotificationSectionRenderer`, "Important" then "Autres notifications") of `notificationRenderer`s, and a `continuationItemRenderer` whose next page (`browse` continuation) appends untitled items to the last section. The older `notification/get_notification_menu`, which yt-dlp still uses, now answers the empty-inbox promo even when the inbox is full (checked 2026-11-01, whatever the language, headers or context). `Client::notifications` and `notifications_more` parse it (`parse_notifications`); a notification opens its video (`watchEndpoint`, or `reelWatchEndpoint` for a Short).
+
+`inbox::bell_button` sits at the right of the title bar, signed in only. `inbox::reset` (startup and every session change) reads `notification/get_unseen_count` and again every 30 minutes (the `timeoutMs` YouTube gives); a session counter stops the reads of an old session. The red badge shows the count (9+ above nine). The panel lives in the popover's element state, so it loads the first page each time it opens, and the next page when its end comes within about a screen. Opening it sets the badge to 0 here only: nothing is sent, and whether YouTube resets its count is not known. A click marks the notification read here and posts its `recordNotificationInteractionsEndpoint` token to `notification/record_interactions` (no response saved yet; a failure is only logged), then opens the video.
+
 
 ## Session
 

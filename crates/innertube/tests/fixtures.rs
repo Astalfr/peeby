@@ -365,3 +365,49 @@ fn playlist_choices() {
   assert!(!choices[2].contains && !choices[2].private);
   assert!(choices[1..].iter().all(|c| !c.contains));
 }
+
+#[test]
+fn notifications_inbox() {
+  let page = innertube::parse_notifications(&fixture("notifications_inbox.json"));
+  let titles = page
+    .sections
+    .iter()
+    .map(|s| s.title.as_str())
+    .collect::<Vec<_>>();
+  assert_eq!(titles, ["Important", "Autres notifications"]);
+  assert_eq!(page.sections[0].items.len(), 2);
+  assert_eq!(page.sections[1].items.len(), 3);
+  assert!(page.continuation.is_some());
+
+  let first = &page.sections[0].items[0];
+  assert_eq!(first.video_id.as_deref(), Some("0-k6i8tBwAU"));
+  assert!(!first.read && !first.short);
+  // The channel's run ends with spaces: collapsed.
+  assert!(first.message.starts_with("Asmongold TV a mis en ligne "));
+  assert!(first.sent.starts_with("il y a"));
+  assert!(!first.avatar.is_empty() && !first.thumbnails.is_empty());
+  assert!(first.read_token.is_some());
+
+  let others = &page.sections[1].items;
+  assert!(others[0].read);
+  // A Short opens through `reelWatchEndpoint`.
+  assert!(others[1].short && others[1].video_id.is_some());
+}
+
+#[test]
+fn notifications_next_page_is_one_untitled_section() {
+  let page = innertube::parse_notifications(&fixture("notifications_inbox_continuation.json"));
+  assert_eq!(page.sections.len(), 1);
+  assert_eq!(page.sections[0].title, "");
+  assert_eq!(page.sections[0].items.len(), 2);
+  assert!(page.continuation.is_some());
+}
+
+#[test]
+fn unseen_notifications_count() {
+  assert_eq!(
+    innertube::parse_unseen_count(&fixture("notifications_unseen.json")),
+    Some(0)
+  );
+  assert_eq!(innertube::parse_unseen_count(&fixture("next.json")), None);
+}

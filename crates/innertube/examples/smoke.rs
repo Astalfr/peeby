@@ -56,6 +56,31 @@ async fn main() {
         format!("{} channels · {bells} bells", c.len())
       }),
     );
+    let inbox = client.notifications().await;
+    let inbox_next = inbox.as_ref().ok().and_then(|p| p.continuation.clone());
+    check(
+      "notifications",
+      inbox.map(|p| {
+        let count = p.sections.iter().map(|s| s.items.len()).sum::<usize>();
+        format!("{} sections · {count} notifications", p.sections.len())
+      }),
+    );
+    if let Some(token) = inbox_next {
+      check(
+        "notifications_more",
+        client.notifications_more(&token).await.map(|p| {
+          let count = p.sections.iter().map(|s| s.items.len()).sum::<usize>();
+          format!("{count} notifications · more: {}", p.continuation.is_some())
+        }),
+      );
+    }
+    check(
+      "unseen_notifications",
+      client
+        .unseen_notifications()
+        .await
+        .map(|n| format!("{n} unseen")),
+    );
     let playlists = client.playlists().await;
     let first = playlists
       .as_ref()

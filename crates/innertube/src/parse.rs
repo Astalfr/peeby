@@ -9,7 +9,9 @@
 //!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
 //!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists);
 //! - a subscribed channel's bell: `subscriptionNotificationToggleButtonRenderer` in the
-//!   `subscribeButtonRenderer` of the watch page's owner and of `FEchannels` entries.
+//!   `subscribeButtonRenderer` of the watch page's owner and of `FEchannels` entries;
+//! - the notifications inbox (`FEnotifications_inbox`): `notificationRenderer`s in
+//!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`.
 
 use serde_json::Value;
 
@@ -17,7 +19,8 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
-  NotificationLevel, Playlist, PlaylistChoice, PlaylistSummary, Thumbnail, VideoItem, WatchPage,
+  Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
+  PlaylistSummary, Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -195,6 +198,77 @@ pub fn parse_channels(response: &Value) -> Vec<Channel> {
       })
     })
     .collect()
+}
+
+/// Parses a page of the notifications inbox (`FEnotifications_inbox` or its continuation). A
+/// next page has no sections: its notifications make one untitled section.
+pub fn parse_notifications(response: &Value) -> NotificationPage {
+  let mut renderers = Vec::new();
+  find_all(
+    response,
+    "multiPageMenuNotificationSectionRenderer",
+    &mut renderers,
+  );
+  let mut sections = renderers
+    .into_iter()
+    .map(|section| NotificationSection {
+      title: text(&section["notificationSectionTitle"]),
+      items: parse_notification_items(&section["items"]),
+    })
+    .collect::<Vec<_>>();
+  if sections.is_empty()
+    && let Some(action) = find_key(response, "appendContinuationItemsAction")
+  {
+    sections.push(NotificationSection {
+      title: String::new(),
+      items: parse_notification_items(&action["continuationItems"]),
+    });
+  }
+  sections.retain(|s| !s.items.is_empty());
+  NotificationPage {
+    sections,
+    continuation: find_continuation(response),
+  }
+}
+
+fn parse_notification_items(items: &Value) -> Vec<Notification> {
+  items
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|item| parse_notification(&item["notificationRenderer"]))
+    .collect()
+}
+
+fn parse_notification(n: &Value) -> Option<Notification> {
+  let endpoint = &n["navigationEndpoint"];
+  let reel = endpoint["reelWatchEndpoint"]["videoId"].as_str();
+  let video_id = endpoint["watchEndpoint"]["videoId"].as_str().or(reel);
+  Some(Notification {
+    id: n["notificationId"].as_str()?.to_owned(),
+    // The channel's run ends with spaces (`Asmongold TV   a mis en ligne`).
+    message: text(&n["shortMessage"])
+      .split_whitespace()
+      .collect::<Vec<_>>()
+      .join(" "),
+    sent: text(&n["sentTimeText"]),
+    read: n["read"].as_bool().unwrap_or(true),
+    video_id: video_id.map(str::to_owned),
+    short: reel.is_some(),
+    avatar: thumbnails(&n["thumbnail"]["thumbnails"]),
+    thumbnails: thumbnails(&n["videoThumbnail"]["thumbnails"]),
+    read_token: n["recordClickEndpoint"]["recordNotificationInteractionsEndpoint"]
+      ["serializedInteractionsRequest"]
+      .as_str()
+      .map(str::to_owned),
+  })
+}
+
+/// The unseen count of a `notification/get_unseen_count` response.
+pub fn parse_unseen_count(response: &Value) -> Option<u32> {
+  find_key(response, "updateNotificationsUnseenCountAction")?["unseenCount"]
+    .as_u64()
+    .map(|n| u32::try_from(n).unwrap_or(u32::MAX))
 }
 
 /// Parses the user's playlists (`FEplaylist_aggregation`, all of them in one response). Mixes

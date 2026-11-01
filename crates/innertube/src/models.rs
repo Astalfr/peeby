@@ -317,3 +317,46 @@ pub struct PlaylistChoice {
   /// Only the user can see it (`PRIVATE`; `UNLISTED` and `PUBLIC` are not).
   pub private: bool,
 }
+
+/// A notification of the inbox (the title bar's bell on youtube.com).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notification {
+  /// Notification id.
+  pub id: String,
+  /// Text as YouTube writes it, e.g. `Asmongold TV a mis en ligne …` (spaces collapsed).
+  pub message: String,
+  /// Localized age, e.g. `il y a 1 heure`.
+  pub sent: String,
+  /// Whether the user has opened it.
+  pub read: bool,
+  /// The video it is about (a Short included).
+  pub video_id: Option<String>,
+  /// The video is a Short (`reelWatchEndpoint`).
+  pub short: bool,
+  /// The channel's avatar.
+  pub avatar: Vec<Thumbnail>,
+  /// The video's thumbnail.
+  pub thumbnails: Vec<Thumbnail>,
+  /// What [`crate::Client::mark_notification_read`] sends: the notification's
+  /// `recordNotificationInteractionsEndpoint`, as a click on it records it.
+  pub read_token: Option<String>,
+}
+
+/// A titled group of notifications ("Important", "Autres notifications").
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NotificationSection {
+  /// Title, empty for the notifications of a next page.
+  pub title: String,
+  /// Notifications, newest first within YouTube's grouping.
+  pub items: Vec<Notification>,
+}
+
+/// A page of the inbox.
+#[derive(Clone, Debug, Default)]
+pub struct NotificationPage {
+  /// Sections in display order. A next page has one untitled section, which continues the
+  /// last one.
+  pub sections: Vec<NotificationSection>,
+  /// Token of the next page, for [`crate::Client::notifications_more`].
+  pub continuation: Option<String>,
+}

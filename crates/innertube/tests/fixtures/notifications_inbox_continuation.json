@@ -1,0 +1,577 @@
+{
+  "onResponseReceivedEndpoints": [
+    {
+      "appendContinuationItemsAction": {
+        "continuationItems": [
+          {
+            "notificationRenderer": {
+              "contextualMenu": {
+                "menuRenderer": {
+                  "accessibility": {
+                    "accessibilityData": {
+                      "label": "Menu d'actions"
+                    }
+                  },
+                  "items": [
+                    {
+                      "menuServiceItemRenderer": {
+                        "icon": {
+                          "iconType": "VISIBILITY_OFF"
+                        },
+                        "loggingDirectives": {
+                          "trackingParams": "CIEBEN-ACBgAIhMIkNiVmZnnlwMV0J18Bh3bxSLJ",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CIEBEN-ACBgAIhMIkNiVmZnnlwMV0J18Bh3bxSLJygEEj1qcMQ==",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "actions": [
+                              {
+                                "clickTrackingParams": "CIEBEN-ACBgAIhMIkNiVmZnnlwMV0J18Bh3bxSLJygEEj1qcMQ==",
+                                "hideEnclosingAction": {
+                                  "notificationId": "1793293325285125"
+                                }
+                              }
+                            ],
+                            "serializedInteractionsRequest": "Ej0ICXI5CiMIhe6GndrflwMQFBoWWjlCYnc2ME9WeGJhbDdyZDQyOVlOZxIQUTBRbnVBaElieVJVRmRoZhgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Masquer cette notification"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CIEBEN-ACBgAIhMIkNiVmZnnlwMV0J18Bh3bxSLJ"
+                      }
+                    },
+                    {
+                      "menuServiceItemRenderer": {
+                        "loggingDirectives": {
+                          "trackingParams": "CIABEIWIEBgBIhMIkNiVmZnnlwMV0J18Bh3bxSLJ",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CIABEIWIEBgBIhMIkNiVmZnnlwMV0J18Bh3bxSLJygEEj1qcMQ==",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/opt_out",
+                              "sendPost": true
+                            }
+                          },
+                          "notificationOptOutEndpoint": {
+                            "optOutText": {
+                              "runs": [
+                                {
+                                  "text": "Moins de notif. de "
+                                },
+                                {
+                                  "text": "Kiri Ahri"
+                                }
+                              ]
+                            },
+                            "serializedOptOut": "RUFFYUZucGtRVWc0U0Y5NVZGSklORGQzT0ZGTU9UWnRiWGNnRXpvUVVUQlJiblZCYUVsaWVWSlZSbVJvWmtBQlNoTUkyWml4cE5yZmx3TVZ2YmF1QlIyRjhCWVM=",
+                            "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIhe6GndrflwMQFBoWWjlCYnc2ME9WeGJhbDdyZDQyOVlOZxIQUTBRbnVBaElieVJVRmRoZhgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Moins de notif. de "
+                            },
+                            {
+                              "text": "Kiri Ahri"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CIABEIWIEBgBIhMIkNiVmZnnlwMV0J18Bh3bxSLJ"
+                      }
+                    },
+                    {
+                      "menuServiceItemRenderer": {
+                        "icon": {
+                          "iconType": "NOTIFICATIONS_OFF"
+                        },
+                        "loggingDirectives": {
+                          "trackingParams": "CH8QjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsk=",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CH8QjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/opt_out",
+                              "sendPost": true
+                            }
+                          },
+                          "notificationOptOutEndpoint": {
+                            "optOutText": {
+                              "runs": [
+                                {
+                                  "text": "Désactiver toutes les notifications de "
+                                },
+                                {
+                                  "text": "Kiri Ahri"
+                                }
+                              ]
+                            },
+                            "serializedOptOut": "RUFFYUZucGtRVWc0U0Y5NVZGSklORGQzT0ZGTU9UWnRiWGNnRXpvUVVUQlJiblZCYUVsaWVWSlZSbVJvWmtBQVNoTUkyWml4cE5yZmx3TVZ2YmF1QlIyRjhCWVM=",
+                            "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIhe6GndrflwMQFBoWWjlCYnc2ME9WeGJhbDdyZDQyOVlOZxIQUTBRbnVBaElieVJVRmRoZhgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Désactiver toutes les notifications de "
+                            },
+                            {
+                              "text": "Kiri Ahri"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CH8QjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsk="
+                      }
+                    }
+                  ],
+                  "loggingDirectives": {
+                    "trackingParams": "CH4Q3oAIIhMIkNiVmZnnlwMV0J18Bh3bxSLJ",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  },
+                  "trackingParams": "CH4Q3oAIIhMIkNiVmZnnlwMV0J18Bh3bxSLJ"
+                }
+              },
+              "navigationEndpoint": {
+                "clickTrackingParams": "CH0QmlAYASITCJDYlZmZ55cDFdCdfAYd28UiyTIMbmktcHVzaC1sYnNzygEEj1qcMQ==",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "rootVe": 3832,
+                    "url": "/watch?v=NxcpZEMVoDs&pp=wgIGCgQQAhgB",
+                    "webPageType": "WEB_PAGE_TYPE_WATCH"
+                  }
+                },
+                "watchEndpoint": {
+                  "params": "igIiEhBRMFFudUFoSWJ5UlVGZGhmGISmwQQghe6GndrflwMoFA%3D%3D",
+                  "playerParams": "wgIGCgQQAhgB",
+                  "videoId": "NxcpZEMVoDs",
+                  "watchEndpointSupportedOnesieConfig": {
+                    "html5PlaybackOnesieConfig": {
+                      "commonConfig": {
+                        "url": "https://rr3---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=371729644315a03b&ip=203.0.113.7&initcwndbps=3510000&mt=1793550365&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                      }
+                    }
+                  }
+                }
+              },
+              "notificationId": "1793293325285125",
+              "read": true,
+              "recordClickEndpoint": {
+                "clickTrackingParams": "CH0QmlAYASITCJDYlZmZ55cDFdCdfAYd28UiycoBBI9anDE=",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "apiUrl": "/youtubei/v1/notification/record_interactions",
+                    "sendPost": true
+                  }
+                },
+                "recordNotificationInteractionsEndpoint": {
+                  "serializedInteractionsRequest": "Ej0IAnI5CiMIhe6GndrflwMQFBoWWjlCYnc2ME9WeGJhbDdyZDQyOVlOZxIQUTBRbnVBaElieVJVRmRoZhgDKNCTtJifDg=="
+                }
+              },
+              "sentTimeText": {
+                "simpleText": "il y a 2 jours"
+              },
+              "shortMessage": {
+                "runs": [
+                  {
+                    "text": "Kiri Ahri"
+                  },
+                  {
+                    "text": " est en direct : "
+                  },
+                  {
+                    "text": "WuWa 3.5 Story Reaction | Yangyang is so sweet! | Wuthering Waves"
+                  }
+                ]
+              },
+              "thumbnail": {
+                "thumbnails": [
+                  {
+                    "height": 96,
+                    "url": "https://yt3.ggpht.com/Fo8ZNxrY9IZTMeR-jVUJ8Zr70ivlhq6s1w365M8ZVrn160GBFLUKAP9odnPwrgfiCUc-z3yGZLw=s96-c-k-c0x00000000-no-cc-rj-rp",
+                    "width": 96
+                  }
+                ]
+              },
+              "trackingParams": "CH0QmlAYASITCJDYlZmZ55cDFdCdfAYd28UiybIBKAoWWjlCYnc2ME9WeGJhbDdyZDQyOVlOZxAUGgwIjfiN1wYQiNP6hwE=",
+              "videoThumbnail": {
+                "thumbnails": [
+                  {
+                    "height": 360,
+                    "url": "https://i.ytimg.com/vi/NxcpZEMVoDs/hqdefault.jpg",
+                    "width": 480
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "notificationRenderer": {
+              "contextualMenu": {
+                "menuRenderer": {
+                  "accessibility": {
+                    "accessibilityData": {
+                      "label": "Menu d'actions"
+                    }
+                  },
+                  "items": [
+                    {
+                      "menuServiceItemRenderer": {
+                        "icon": {
+                          "iconType": "VISIBILITY_OFF"
+                        },
+                        "loggingDirectives": {
+                          "trackingParams": "CHsQ34AIGAAiEwiQ2JWZmeeXAxXQnXwGHdvFIsk=",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CHsQ34AIGAAiEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "actions": [
+                              {
+                                "clickTrackingParams": "CHsQ34AIGAAiEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                                "hideEnclosingAction": {
+                                  "notificationId": "1793292350000000"
+                                }
+                              }
+                            ],
+                            "serializedInteractionsRequest": "Ej0ICXI5CiMIgJeAzNbflwMQBhoWZ1VOcVRteDV0RnE1SzJYcWMyRHBKdxIQdW8tMmhNVC1zbE9yY2p4SRgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Masquer cette notification"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CHsQ34AIGAAiEwiQ2JWZmeeXAxXQnXwGHdvFIsk="
+                      }
+                    },
+                    {
+                      "menuServiceItemRenderer": {
+                        "loggingDirectives": {
+                          "trackingParams": "CHoQhYgQGAEiEwiQ2JWZmeeXAxXQnXwGHdvFIsk=",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CHoQhYgQGAEiEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/opt_out",
+                              "sendPost": true
+                            }
+                          },
+                          "notificationOptOutEndpoint": {
+                            "optOutText": {
+                              "runs": [
+                                {
+                                  "text": "Moins de notif. de "
+                                },
+                                {
+                                  "text": "Le Livreur du Futur"
+                                }
+                              ]
+                            },
+                            "serializedOptOut": "RUFFYUZuTnBSaTA0VUV0NGFXTlZVbk5VYjNaUVJGcDRkMUVnRXpvUWRXOHRNbWhOVkMxemJFOXlZMnA0U1VBQlNoTUlsOEcxMWRiZmx3TVZVbThTQVIxYVJ5al8=",
+                            "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIgJeAzNbflwMQBhoWZ1VOcVRteDV0RnE1SzJYcWMyRHBKdxIQdW8tMmhNVC1zbE9yY2p4SRgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Moins de notif. de "
+                            },
+                            {
+                              "text": "Le Livreur du Futur"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CHoQhYgQGAEiEwiQ2JWZmeeXAxXQnXwGHdvFIsk="
+                      }
+                    },
+                    {
+                      "menuServiceItemRenderer": {
+                        "icon": {
+                          "iconType": "NOTIFICATIONS_OFF"
+                        },
+                        "loggingDirectives": {
+                          "trackingParams": "CHkQjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsk=",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "serviceEndpoint": {
+                          "clickTrackingParams": "CHkQjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/opt_out",
+                              "sendPost": true
+                            }
+                          },
+                          "notificationOptOutEndpoint": {
+                            "optOutText": {
+                              "runs": [
+                                {
+                                  "text": "Désactiver toutes les notifications de "
+                                },
+                                {
+                                  "text": "Le Livreur du Futur"
+                                }
+                              ]
+                            },
+                            "serializedOptOut": "RUFFYUZuTnBSaTA0VUV0NGFXTlZVbk5VYjNaUVJGcDRkMUVnRXpvUWRXOHRNbWhOVkMxemJFOXlZMnA0U1VBQVNoTUlsOEcxMWRiZmx3TVZVbThTQVIxYVJ5al8=",
+                            "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIgJeAzNbflwMQBhoWZ1VOcVRteDV0RnE1SzJYcWMyRHBKdxIQdW8tMmhNVC1zbE9yY2p4SRgDKNCTtJifDg=="
+                          }
+                        },
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Désactiver toutes les notifications de "
+                            },
+                            {
+                              "text": "Le Livreur du Futur"
+                            }
+                          ]
+                        },
+                        "trackingParams": "CHkQjK8LGAIiEwiQ2JWZmeeXAxXQnXwGHdvFIsk="
+                      }
+                    }
+                  ],
+                  "loggingDirectives": {
+                    "trackingParams": "CHgQ3oAIIhMIkNiVmZnnlwMV0J18Bh3bxSLJ",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  },
+                  "trackingParams": "CHgQ3oAIIhMIkNiVmZnnlwMV0J18Bh3bxSLJ"
+                }
+              },
+              "navigationEndpoint": {
+                "clickTrackingParams": "CHcQmlAYAiITCJDYlZmZ55cDFdCdfAYd28UiyTINbmktcHVzaC11LXN1YpoBAxCrNcoBBI9anDE=",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "rootVe": 37414,
+                    "url": "/shorts/GzOies6oTHY",
+                    "webPageType": "WEB_PAGE_TYPE_SHORTS"
+                  }
+                },
+                "reelWatchEndpoint": {
+                  "loggingContext": {
+                    "qoeLoggingContext": {
+                      "serializedContextData": "CgIIDA%3D%3D"
+                    },
+                    "vssLoggingContext": {
+                      "serializedContextData": "CgIIDA%3D%3D"
+                    }
+                  },
+                  "overlay": {
+                    "reelPlayerOverlayRenderer": {
+                      "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED",
+                      "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                      "trackingParams": "CHwQsLUEIhMIkNiVmZnnlwMV0J18Bh3bxSLJ"
+                    }
+                  },
+                  "params": "CBIwAg%3D%3D",
+                  "playerParams": "8AEBuAQSogYVAah2qTMeajgfv_Xb3TjRWWESuIoqkAcC",
+                  "sequenceParams": "CgtHek9pZXM2b1RIWSoCGBKiASISEHVvLTJoTVQtc2xPcmNqeEkYhKbBBCCAl4DM1t-XAygG",
+                  "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                  "thumbnail": {
+                    "isOriginalAspectRatio": true,
+                    "thumbnails": [
+                      {
+                        "url": "https://i.ytimg.com/vi/GzOies6oTHY/frame0.jpg"
+                      }
+                    ]
+                  },
+                  "ustreamerConfig": "CAw=",
+                  "videoId": "GzOies6oTHY"
+                }
+              },
+              "notificationId": "1793292350000000",
+              "read": true,
+              "recordClickEndpoint": {
+                "clickTrackingParams": "CHcQmlAYAiITCJDYlZmZ55cDFdCdfAYd28UiycoBBI9anDE=",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "apiUrl": "/youtubei/v1/notification/record_interactions",
+                    "sendPost": true
+                  }
+                },
+                "recordNotificationInteractionsEndpoint": {
+                  "serializedInteractionsRequest": "Ej0IAnI5CiMIgJeAzNbflwMQBhoWZ1VOcVRteDV0RnE1SzJYcWMyRHBKdxIQdW8tMmhNVC1zbE9yY2p4SRgDKNCTtJifDg=="
+                }
+              },
+              "sentTimeText": {
+                "simpleText": "il y a 2 jours"
+              },
+              "shortMessage": {
+                "runs": [
+                  {
+                    "text": "Le Livreur du Futur"
+                  },
+                  {
+                    "text": " a mis en ligne "
+                  },
+                  {
+                    "text": "Il est bloqué dans l'ascenseur 😓 #ubereatsdriver #livraison #livreur"
+                  }
+                ]
+              },
+              "thumbnail": {
+                "thumbnails": [
+                  {
+                    "height": 96,
+                    "url": "https://yt3.ggpht.com/tN-XuBEUym2XwTffgFP2xdTmS1Vi3mv_y0NdRZSuIBA9NnNjSvpQQManeyNYUWHTOkU0-7PrI20=s96-c-k-c0x00000000-no-cc-rj-rp",
+                    "width": 96
+                  }
+                ]
+              },
+              "trackingParams": "CHcQmlAYAiITCJDYlZmZ55cDFdCdfAYd28UiybIBIgoWZ1VOcVRteDV0RnE1SzJYcWMyRHBKdxAGGgYIvvCN1wY=",
+              "videoThumbnail": {
+                "thumbnails": [
+                  {
+                    "height": 360,
+                    "url": "https://i.ytimg.com/vi/GzOies6oTHY/hqdefault.jpg?sqp=-oaymwEmCOADEOgC8quKqQMa8AEB-AG2CIACgA-KAgwIABABGGUgYShIMA8=&rs=AOn4CLC6StJz2eoXABaup8xrH-vImYKngg",
+                    "width": 480
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "continuationItemRenderer": {
+              "continuationEndpoint": {
+                "clickTrackingParams": "CAAQhGciEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "apiUrl": "/youtubei/v1/browse",
+                    "sendPost": true
+                  }
+                },
+                "continuationCommand": {
+                  "request": "CONTINUATION_REQUEST_TYPE_BROWSE",
+                  "token": "4qmFsgJZEhVGRW5vdGlmaWNhdGlvbnNfaW5ib3gaQGVpNXhkSFozT0dkdlkwTm9Xa1JVVlU1RlpXdHNWR0ZFU2t0Wk1GSklXakF4U21FeFJtcEtWRTVGUlVGRmIwRkI%3D"
+                }
+              },
+              "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN"
+            }
+          }
+        ],
+        "target": "CONTINUATION_TARGET_NOTIFICATION_MENU"
+      },
+      "clickTrackingParams": "CAAQhGciEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx"
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "browse_id",
+            "value": "FEnotifications_inbox"
+          },
+          {
+            "key": "browse_id_prefix",
+            "value": ""
+          },
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      },
+      {
+        "params": [
+          {
+            "key": "browse_id",
+            "value": "FEnotifications_inbox"
+          },
+          {
+            "key": "browse_id_prefix",
+            "value": ""
+          }
+        ],
+        "service": "GOOGLE_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "c",
+            "value": "WEB"
+          },
+          {
+            "key": "cver",
+            "value": "2.20261029.11.00"
+          },
+          {
+            "key": "yt_li",
+            "value": "1"
+          },
+          {
+            "key": "GetNotificationsInbox_rid",
+            "value": "0xd7400ee0db82fd68"
+          }
+        ],
+        "service": "CSI"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GUIDED_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "client.version",
+            "value": "2.20261029"
+          },
+          {
+            "key": "client.name",
+            "value": "WEB"
+          }
+        ],
+        "service": "ECATCHER"
+      }
+    ]
+  },
+  "trackingParams": "CAAQhGciEwiQ2JWZmeeXAxXQnXwGHdvFIsnKAQSPWpwx"
+}

@@ -1,0 +1,1322 @@
+{
+  "onResponseReceivedEndpoints": [
+    {
+      "clickTrackingParams": "CAAQhGciEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+      "openPopupAction": {
+        "popup": {
+          "multiPageMenuRenderer": {
+            "header": {
+              "simpleMenuHeaderRenderer": {
+                "buttons": [
+                  {
+                    "buttonRenderer": {
+                      "accessibilityData": {
+                        "accessibilityData": {
+                          "label": "Paramètres"
+                        }
+                      },
+                      "icon": {
+                        "iconType": "SETTINGS"
+                      },
+                      "isDisabled": false,
+                      "navigationEndpoint": {
+                        "browseEndpoint": {
+                          "browseId": "SPaccount_notifications"
+                        },
+                        "clickTrackingParams": "CIMBEPBbGAIiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "apiUrl": "/youtubei/v1/browse",
+                            "rootVe": 23462,
+                            "url": "/account_notifications",
+                            "webPageType": "WEB_PAGE_TYPE_SETTINGS"
+                          }
+                        }
+                      },
+                      "size": "SIZE_DEFAULT",
+                      "style": "STYLE_DEFAULT",
+                      "tooltip": "Paramètres",
+                      "trackingParams": "CIMBEPBbGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                    }
+                  }
+                ],
+                "title": {
+                  "runs": [
+                    {
+                      "text": "Notifications"
+                    }
+                  ]
+                }
+              }
+            },
+            "sections": [
+              {
+                "multiPageMenuNotificationSectionRenderer": {
+                  "items": [
+                    {
+                      "notificationRenderer": {
+                        "contextualMenu": {
+                          "menuRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Menu d'actions"
+                              }
+                            },
+                            "items": [
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "VISIBILITY_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CIIBEN-ACBgAIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CIIBEN-ACBgAIhMIndjxmJnnlwMVky0GAB2g7Sk7ygEEj1qcMQ==",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/record_interactions",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "recordNotificationInteractionsEndpoint": {
+                                      "actions": [
+                                        {
+                                          "clickTrackingParams": "CIIBEN-ACBgAIhMIndjxmJnnlwMVky0GAB2g7Sk7ygEEj1qcMQ==",
+                                          "hideEnclosingAction": {
+                                            "notificationId": "1793545228000000"
+                                          }
+                                        }
+                                      ],
+                                      "serializedInteractionsRequest": "Ej0ICXI5CiMIgLbQ0YTnlwMQBhoWcHdmUHR5NWUzSExwQ1hMUFJlV01qURIQNzQzbS03RFdlNnNxR2VrLRgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Masquer cette notification"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CIIBEN-ACBgAIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "CIEBEIWIEBgBIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CIEBEIWIEBgBIhMIndjxmJnnlwMVky0GAB2g7Sk7ygEEj1qcMQ==",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Moins de notif. de "
+                                          },
+                                          {
+                                            "text": "Asmongold TV  "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZsRmxVbUZVZFd0T1dXWjBNVjgyUVZwUVFVTnViMmNnRXpvUU56UXpiUzAzUkZkbE5uTnhSMlZyTFVBQlNoTUk1Sl9SeklYbmx3TVZUTzl5Q1IyOHpEV2Y=",
+                                      "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIgLbQ0YTnlwMQBhoWcHdmUHR5NWUzSExwQ1hMUFJlV01qURIQNzQzbS03RFdlNnNxR2VrLRgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Moins de notif. de "
+                                      },
+                                      {
+                                        "text": "Asmongold TV  "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CIEBEIWIEBgBIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "NOTIFICATIONS_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CIABEIyvCxgCIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CIABEIyvCxgCIhMIndjxmJnnlwMVky0GAB2g7Sk7ygEEj1qcMQ==",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Désactiver toutes les notifications de "
+                                          },
+                                          {
+                                            "text": "Asmongold TV  "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZsRmxVbUZVZFd0T1dXWjBNVjgyUVZwUVFVTnViMmNnRXpvUU56UXpiUzAzUkZkbE5uTnhSMlZyTFVBQVNoTUk1Sl9SeklYbmx3TVZUTzl5Q1IyOHpEV2Y=",
+                                      "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIgLbQ0YTnlwMQBhoWcHdmUHR5NWUzSExwQ1hMUFJlV01qURIQNzQzbS03RFdlNnNxR2VrLRgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Désactiver toutes les notifications de "
+                                      },
+                                      {
+                                        "text": "Asmongold TV  "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CIABEIyvCxgCIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                                }
+                              }
+                            ],
+                            "loggingDirectives": {
+                              "trackingParams": "CH8Q3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            },
+                            "trackingParams": "CH8Q3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                          }
+                        },
+                        "navigationEndpoint": {
+                          "clickTrackingParams": "CH4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pOzINbmktcHVzaC11LXN1YsoBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 3832,
+                              "url": "/watch?v=0-k6i8tBwAU&pp=wgIGCgQQAhgB0gcJCRUBmk6bhtou",
+                              "webPageType": "WEB_PAGE_TYPE_WATCH"
+                            }
+                          },
+                          "watchEndpoint": {
+                            "params": "igIiEhA3NDNtLTdEV2U2c3FHZWstGISmwQQggLbQ0YTnlwMoBg%3D%3D",
+                            "playerParams": "wgIGCgQQAhgB0gcJCRUBmk6bhtou",
+                            "videoId": "0-k6i8tBwAU",
+                            "watchEndpointSupportedOnesieConfig": {
+                              "html5PlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr4---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=d3e93a8bcb41c005&ip=203.0.113.7&initcwndbps=3502500&mt=1793550311&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "notificationId": "1793545228000000",
+                        "read": false,
+                        "recordClickEndpoint": {
+                          "clickTrackingParams": "CH4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pO8oBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "serializedInteractionsRequest": "Ej0IAnI5CiMIgLbQ0YTnlwMQBhoWcHdmUHR5NWUzSExwQ1hMUFJlV01qURIQNzQzbS03RFdlNnNxR2VrLRgDKNCTtJifDg=="
+                          }
+                        },
+                        "sentTimeText": {
+                          "simpleText": "il y a 1 heure"
+                        },
+                        "shortMessage": {
+                          "runs": [
+                            {
+                              "text": "Asmongold TV  "
+                            },
+                            {
+                              "text": " a mis en ligne "
+                            },
+                            {
+                              "text": "This guy is genuinely too good at this.."
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 96,
+                              "url": "https://yt3.ggpht.com/Hd1RtxUDPPfB9rl9cM0rLZq20iQus3jB1RD1LJugCPlPZ_Tcw_nm5-6SXOixZ-cSqk58c0UD=s96-c-k-c0x00000000-no-cc-rj-rp",
+                              "width": 96
+                            }
+                          ]
+                        },
+                        "trackingParams": "CH4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pO7IBIgoWcHdmUHR5NWUzSExwQ1hMUFJlV01qURAGGgYIjKid1wY=",
+                        "videoThumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 360,
+                              "url": "https://i.ytimg.com/vi_webp/0-k6i8tBwAU/hqdefault.webp",
+                              "width": 480
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "notificationRenderer": {
+                        "contextualMenu": {
+                          "menuRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Menu d'actions"
+                              }
+                            },
+                            "items": [
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "VISIBILITY_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CH0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CH0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/record_interactions",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "recordNotificationInteractionsEndpoint": {
+                                      "actions": [
+                                        {
+                                          "clickTrackingParams": "CH0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                          "hideEnclosingAction": {
+                                            "notificationId": "1793513797000000"
+                                          }
+                                        }
+                                      ],
+                                      "serializedInteractionsRequest": "Ej0ICXI5CiMIwLaUxo_mlwMQBhoWRXVuOEdlN3RyVWtDQTVLaXh2UHg5QRIQMlVVcG55a3pHSWM3MTJicxgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Masquer cette notification"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CH0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "CHwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CHwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Moins de notif. de "
+                                          },
+                                          {
+                                            "text": "Karl Jobst"
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZqTnNkSEIwVjJFd2VHWnlSSGRsWjJoWE9UUkJZMmNnRXpvUU1sVlZjRzU1YTNwSFNXTTNNVEppYzBBQlNoTUl3cWJFellfbWx3TVZVSkJFQngwcU1nV2U=",
+                                      "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIwLaUxo_mlwMQBhoWRXVuOEdlN3RyVWtDQTVLaXh2UHg5QRIQMlVVcG55a3pHSWM3MTJicxgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Moins de notif. de "
+                                      },
+                                      {
+                                        "text": "Karl Jobst"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CHwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "NOTIFICATIONS_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CHsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CHsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Désactiver toutes les notifications de "
+                                          },
+                                          {
+                                            "text": "Karl Jobst"
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZqTnNkSEIwVjJFd2VHWnlSSGRsWjJoWE9UUkJZMmNnRXpvUU1sVlZjRzU1YTNwSFNXTTNNVEppYzBBQVNoTUl3cWJFellfbWx3TVZVSkJFQngwcU1nV2U=",
+                                      "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIwLaUxo_mlwMQBhoWRXVuOEdlN3RyVWtDQTVLaXh2UHg5QRIQMlVVcG55a3pHSWM3MTJicxgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Désactiver toutes les notifications de "
+                                      },
+                                      {
+                                        "text": "Karl Jobst"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CHsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              }
+                            ],
+                            "loggingDirectives": {
+                              "trackingParams": "CHoQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            },
+                            "trackingParams": "CHoQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                          }
+                        },
+                        "navigationEndpoint": {
+                          "clickTrackingParams": "CHkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pOzINbmktcHVzaC11LXN1YsoBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 3832,
+                              "url": "/watch?v=4_l0mzTlSQ0&pp=wgIGCgQQAhgB",
+                              "webPageType": "WEB_PAGE_TYPE_WATCH"
+                            }
+                          },
+                          "watchEndpoint": {
+                            "params": "igIiEhAyVVVwbnlrekdJYzcxMmJzGISmwQQgwLaUxo_mlwMoBg%3D%3D",
+                            "playerParams": "wgIGCgQQAhgB",
+                            "videoId": "4_l0mzTlSQ0",
+                            "watchEndpointSupportedOnesieConfig": {
+                              "html5PlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr4---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=e3f9749b34e5490d&ip=203.0.113.7&initcwndbps=3502500&mt=1793550311&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "notificationId": "1793513797000000",
+                        "read": false,
+                        "recordClickEndpoint": {
+                          "clickTrackingParams": "CHkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pO8oBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "serializedInteractionsRequest": "Ej0IAnI5CiMIwLaUxo_mlwMQBhoWRXVuOEdlN3RyVWtDQTVLaXh2UHg5QRIQMlVVcG55a3pHSWM3MTJicxgDKNCTtJifDg=="
+                          }
+                        },
+                        "sentTimeText": {
+                          "simpleText": "il y a 10 heures"
+                        },
+                        "shortMessage": {
+                          "runs": [
+                            {
+                              "text": "Karl Jobst"
+                            },
+                            {
+                              "text": " a mis en ligne "
+                            },
+                            {
+                              "text": "Logan Paul's Company Was Just Found Guilty Of Fraud"
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 96,
+                              "url": "https://yt3.ggpht.com/LB5yT8sVpz_JhWJGLevtvwxP11V5MRHinVklxwM5MbOfn3qxBnamS6dYGYWG_sP2jtL3ewlO=s96-c-k-c0x00000000-no-cc-rj-rp",
+                              "width": 96
+                            }
+                          ]
+                        },
+                        "trackingParams": "CHkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pO7IBIgoWRXVuOEdlN3RyVWtDQTVLaXh2UHg5QRAGGgYIxbKb1wY=",
+                        "videoThumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 360,
+                              "url": "https://i.ytimg.com/vi_webp/4_l0mzTlSQ0/hqdefault.webp",
+                              "width": 480
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "notificationSectionTitle": {
+                    "simpleText": "Important"
+                  },
+                  "trackingParams": "CHMQ8NwIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                }
+              },
+              {
+                "multiPageMenuNotificationSectionRenderer": {
+                  "items": [
+                    {
+                      "notificationRenderer": {
+                        "contextualMenu": {
+                          "menuRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Menu d'actions"
+                              }
+                            },
+                            "items": [
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "VISIBILITY_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CHIQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CHIQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/record_interactions",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "recordNotificationInteractionsEndpoint": {
+                                      "actions": [
+                                        {
+                                          "clickTrackingParams": "CHIQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                          "hideEnclosingAction": {
+                                            "notificationId": "1793509216000000"
+                                          }
+                                        }
+                                      ],
+                                      "serializedInteractionsRequest": "Ej0ICXI5CiMIgLDivf7llwMQBhoWR3dNc2NCM2V2RHVldlFCb21DM1F5ZxIQT1dkUF9TTGVrbUNoZWtOcBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Masquer cette notification"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CHIQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "CHEQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CHEQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Moins de notif. de "
+                                          },
+                                          {
+                                            "text": "Asmongold TV  "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZsRmxVbUZVZFd0T1dXWjBNVjgyUVZwUVFVTnViMmNnRXpvUVQxZGtVRjlUVEdWcmJVTm9aV3RPY0VBQlNoTUlxY0dNNFA3bGx3TVZRbXBlQXgyWkpSTVg=",
+                                      "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIgLDivf7llwMQBhoWR3dNc2NCM2V2RHVldlFCb21DM1F5ZxIQT1dkUF9TTGVrbUNoZWtOcBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Moins de notif. de "
+                                      },
+                                      {
+                                        "text": "Asmongold TV  "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CHEQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "NOTIFICATIONS_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CHAQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CHAQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Désactiver toutes les notifications de "
+                                          },
+                                          {
+                                            "text": "Asmongold TV  "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZsRmxVbUZVZFd0T1dXWjBNVjgyUVZwUVFVTnViMmNnRXpvUVQxZGtVRjlUVEdWcmJVTm9aV3RPY0VBQVNoTUlxY0dNNFA3bGx3TVZRbXBlQXgyWkpSTVg=",
+                                      "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIgLDivf7llwMQBhoWR3dNc2NCM2V2RHVldlFCb21DM1F5ZxIQT1dkUF9TTGVrbUNoZWtOcBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Désactiver toutes les notifications de "
+                                      },
+                                      {
+                                        "text": "Asmongold TV  "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CHAQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              }
+                            ],
+                            "loggingDirectives": {
+                              "trackingParams": "CG8Q3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            },
+                            "trackingParams": "CG8Q3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                          }
+                        },
+                        "navigationEndpoint": {
+                          "clickTrackingParams": "CG4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pOzINbmktcHVzaC11LXN1YsoBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 3832,
+                              "url": "/watch?v=HH6B2p4Om5Y&pp=wgIGCgQQAhgB",
+                              "webPageType": "WEB_PAGE_TYPE_WATCH"
+                            }
+                          },
+                          "watchEndpoint": {
+                            "params": "igIiEhBPV2RQX1NMZWttQ2hla05wGISmwQQggLDivf7llwMoBg%3D%3D",
+                            "playerParams": "wgIGCgQQAhgB",
+                            "videoId": "HH6B2p4Om5Y",
+                            "watchEndpointSupportedOnesieConfig": {
+                              "html5PlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr5---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=1c7e81da9e0e9b96&ip=203.0.113.7&initcwndbps=3502500&mt=1793550311&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "notificationId": "1793509216000000",
+                        "read": true,
+                        "recordClickEndpoint": {
+                          "clickTrackingParams": "CG4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pO8oBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "serializedInteractionsRequest": "Ej0IAnI5CiMIgLDivf7llwMQBhoWR3dNc2NCM2V2RHVldlFCb21DM1F5ZxIQT1dkUF9TTGVrbUNoZWtOcBgDKNCTtJifDg=="
+                          }
+                        },
+                        "sentTimeText": {
+                          "simpleText": "il y a 11 heures"
+                        },
+                        "shortMessage": {
+                          "runs": [
+                            {
+                              "text": "Asmongold TV  "
+                            },
+                            {
+                              "text": " a mis en ligne "
+                            },
+                            {
+                              "text": "They’re burning everything down.."
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 96,
+                              "url": "https://yt3.ggpht.com/Hd1RtxUDPPfB9rl9cM0rLZq20iQus3jB1RD1LJugCPlPZ_Tcw_nm5-6SXOixZ-cSqk58c0UD=s96-c-k-c0x00000000-no-cc-rj-rp",
+                              "width": 96
+                            }
+                          ]
+                        },
+                        "trackingParams": "CG4QmlAYACITCJ3Y8ZiZ55cDFZMtBgAdoO0pO7IBIgoWR3dNc2NCM2V2RHVldlFCb21DM1F5ZxAGGgYI4I6b1wY=",
+                        "videoThumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 360,
+                              "url": "https://i.ytimg.com/vi_webp/HH6B2p4Om5Y/hqdefault.webp",
+                              "width": 480
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "notificationRenderer": {
+                        "contextualMenu": {
+                          "menuRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Menu d'actions"
+                              }
+                            },
+                            "items": [
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "VISIBILITY_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CDoQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CDoQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/record_interactions",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "recordNotificationInteractionsEndpoint": {
+                                      "actions": [
+                                        {
+                                          "clickTrackingParams": "CDoQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                          "hideEnclosingAction": {
+                                            "notificationId": "1793436991000000"
+                                          }
+                                        }
+                                      ],
+                                      "serializedInteractionsRequest": "Ej0ICXI5CiMIwJuatvHjlwMQBhoWdkZ2TkwxNnZwaUtNcjI2M011WGFHQRIQU1FDTmpxUUthZzM5RTc4dhgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Masquer cette notification"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CDoQ34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "CDkQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CDkQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Moins de notif. de "
+                                          },
+                                          {
+                                            "text": "Wire & Plug "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZuQnVXR052TVRaRmQyZERTekl6Wm5sd1N6TklSMmNnRXpvUVUxRkRUbXB4VVV0aFp6TTVSVGM0ZGtBQlNoTUlrNmVzeWZIamx3TVZyNjVFQngyeXh3ZUs=",
+                                      "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIwJuatvHjlwMQBhoWdkZ2TkwxNnZwaUtNcjI2M011WGFHQRIQU1FDTmpxUUthZzM5RTc4dhgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Moins de notif. de "
+                                      },
+                                      {
+                                        "text": "Wire & Plug "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CDkQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "NOTIFICATIONS_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CDgQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CDgQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Désactiver toutes les notifications de "
+                                          },
+                                          {
+                                            "text": "Wire & Plug "
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZuQnVXR052TVRaRmQyZERTekl6Wm5sd1N6TklSMmNnRXpvUVUxRkRUbXB4VVV0aFp6TTVSVGM0ZGtBQVNoTUlrNmVzeWZIamx3TVZyNjVFQngyeXh3ZUs=",
+                                      "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIwJuatvHjlwMQBhoWdkZ2TkwxNnZwaUtNcjI2M011WGFHQRIQU1FDTmpxUUthZzM5RTc4dhgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Désactiver toutes les notifications de "
+                                      },
+                                      {
+                                        "text": "Wire & Plug "
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CDgQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              }
+                            ],
+                            "loggingDirectives": {
+                              "trackingParams": "CDcQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            },
+                            "trackingParams": "CDcQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                          }
+                        },
+                        "navigationEndpoint": {
+                          "clickTrackingParams": "CDYQmlAYCyITCJ3Y8ZiZ55cDFZMtBgAdoO0pOzINbmktcHVzaC11LXN1YpoBAxCrNcoBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 37414,
+                              "url": "/shorts/CsFXnVk58ng",
+                              "webPageType": "WEB_PAGE_TYPE_SHORTS"
+                            }
+                          },
+                          "reelWatchEndpoint": {
+                            "loggingContext": {
+                              "qoeLoggingContext": {
+                                "serializedContextData": "CgIIDA%3D%3D"
+                              },
+                              "vssLoggingContext": {
+                                "serializedContextData": "CgIIDA%3D%3D"
+                              }
+                            },
+                            "overlay": {
+                              "reelPlayerOverlayRenderer": {
+                                "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED",
+                                "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                                "trackingParams": "CDsQsLUEIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                              }
+                            },
+                            "params": "CBIwAg%3D%3D",
+                            "playerParams": "8AEBuAQSogYVAah2qTODFrrNXGJYsAM3H_RSs70XkAcC",
+                            "sequenceParams": "CgtDc0ZYblZrNThuZyoCGBKiASISEFNRQ05qcVFLYWczOUU3OHYYhKbBBCDAm5q28eOXAygG",
+                            "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                            "thumbnail": {
+                              "isOriginalAspectRatio": true,
+                              "thumbnails": [
+                                {
+                                  "url": "https://i.ytimg.com/vi/CsFXnVk58ng/frame0.jpg"
+                                }
+                              ]
+                            },
+                            "ustreamerConfig": "CAw=",
+                            "videoId": "CsFXnVk58ng"
+                          }
+                        },
+                        "notificationId": "1793436991000000",
+                        "read": false,
+                        "recordClickEndpoint": {
+                          "clickTrackingParams": "CDYQmlAYCyITCJ3Y8ZiZ55cDFZMtBgAdoO0pO8oBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "serializedInteractionsRequest": "Ej0IAnI5CiMIwJuatvHjlwMQBhoWdkZ2TkwxNnZwaUtNcjI2M011WGFHQRIQU1FDTmpxUUthZzM5RTc4dhgDKNCTtJifDg=="
+                          }
+                        },
+                        "sentTimeText": {
+                          "simpleText": "il y a 1 jour"
+                        },
+                        "shortMessage": {
+                          "runs": [
+                            {
+                              "text": "Wire & Plug "
+                            },
+                            {
+                              "text": " a mis en ligne "
+                            },
+                            {
+                              "text": "What Happened to His PSP?! 😳🎮"
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 96,
+                              "url": "https://yt3.ggpht.com/x6YxheSOx5dC_mV122BkO70kZ8tm07h-eNDa3l1-t7CbPpxNg1V0JEiIRqBQxAYPCzD66yzfHQ=s96-c-k-c0x00000000-no-cc-rj-rp",
+                              "width": 96
+                            }
+                          ]
+                        },
+                        "trackingParams": "CDYQmlAYCyITCJ3Y8ZiZ55cDFZMtBgAdoO0pO7IBIgoWdkZ2TkwxNnZwaUtNcjI2M011WGFHQRAGGgYIv9qW1wY=",
+                        "videoThumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 360,
+                              "url": "https://i.ytimg.com/vi/CsFXnVk58ng/hqdefault.jpg?sqp=-oaymwEmCOADEOgC8quKqQMa8AEB-AG2CIACgA-KAgwIABABGGUgXShKMA8=&rs=AOn4CLDyZ9NW3b4W24X7cuWd1YiUCUl63Q",
+                              "width": 480
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "notificationRenderer": {
+                        "contextualMenu": {
+                          "menuRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Menu d'actions"
+                              }
+                            },
+                            "items": [
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "VISIBILITY_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CG0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CG0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/record_interactions",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "recordNotificationInteractionsEndpoint": {
+                                      "actions": [
+                                        {
+                                          "clickTrackingParams": "CG0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                          "hideEnclosingAction": {
+                                            "notificationId": "1793505502000000"
+                                          }
+                                        }
+                                      ],
+                                      "serializedInteractionsRequest": "Ej0ICXI5CiMIgOfl0vDllwMQBhoWempzckhrWk13MmE0Y0FraThfQ2Q1QRIQTnNRRnQ0VS0xYlNueFQ0RBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Masquer cette notification"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CG0Q34AIGAAiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "CGwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CGwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Moins de notif. de "
+                                          },
+                                          {
+                                            "text": "Stuff Made Here"
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZtb3hWbkZ5U0doRWRHVTFORzlNWjFCSE5IaHdkVkVnRXpvUVRuTlJSblEwVlMweFlsTnVlRlEwUkVBQlNoTUkxdXk0M1BEbGx3TVZUNnpDQVIxdFlnTjc=",
+                                      "serializedRecordInteractionsRequest": "Ej0IF3I5CiMIgOfl0vDllwMQBhoWempzckhrWk13MmE0Y0FraThfQ2Q1QRIQTnNRRnQ0VS0xYlNueFQ0RBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Moins de notif. de "
+                                      },
+                                      {
+                                        "text": "Stuff Made Here"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CGwQhYgQGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              },
+                              {
+                                "menuServiceItemRenderer": {
+                                  "icon": {
+                                    "iconType": "NOTIFICATIONS_OFF"
+                                  },
+                                  "loggingDirectives": {
+                                    "trackingParams": "CGsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs=",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  },
+                                  "serviceEndpoint": {
+                                    "clickTrackingParams": "CGsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                                    "commandMetadata": {
+                                      "webCommandMetadata": {
+                                        "apiUrl": "/youtubei/v1/notification/opt_out",
+                                        "sendPost": true
+                                      }
+                                    },
+                                    "notificationOptOutEndpoint": {
+                                      "optOutText": {
+                                        "runs": [
+                                          {
+                                            "text": "Désactiver toutes les notifications de "
+                                          },
+                                          {
+                                            "text": "Stuff Made Here"
+                                          }
+                                        ]
+                                      },
+                                      "serializedOptOut": "RUFFYUZtb3hWbkZ5U0doRWRHVTFORzlNWjFCSE5IaHdkVkVnRXpvUVRuTlJSblEwVlMweFlsTnVlRlEwUkVBQVNoTUkxdXk0M1BEbGx3TVZUNnpDQVIxdFlnTjc=",
+                                      "serializedRecordInteractionsRequest": "Ej0IA3I5CiMIgOfl0vDllwMQBhoWempzckhrWk13MmE0Y0FraThfQ2Q1QRIQTnNRRnQ0VS0xYlNueFQ0RBgDKNCTtJifDg=="
+                                    }
+                                  },
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Désactiver toutes les notifications de "
+                                      },
+                                      {
+                                        "text": "Stuff Made Here"
+                                      }
+                                    ]
+                                  },
+                                  "trackingParams": "CGsQjK8LGAIiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                                }
+                              }
+                            ],
+                            "loggingDirectives": {
+                              "trackingParams": "CGoQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            },
+                            "trackingParams": "CGoQ3oAIIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+                          }
+                        },
+                        "navigationEndpoint": {
+                          "clickTrackingParams": "CGkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pOzINbmktcHVzaC11LXN1YsoBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "rootVe": 3832,
+                              "url": "/watch?v=BuRyQYf03xA&pp=wgIGCgQQAhgB",
+                              "webPageType": "WEB_PAGE_TYPE_WATCH"
+                            }
+                          },
+                          "watchEndpoint": {
+                            "params": "igIiEhBOc1FGdDRVLTFiU254VDREGISmwQQggOfl0vDllwMoBg%3D%3D",
+                            "playerParams": "wgIGCgQQAhgB",
+                            "videoId": "BuRyQYf03xA",
+                            "watchEndpointSupportedOnesieConfig": {
+                              "html5PlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr2---sn-REDACTED.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&siu=1&msp=1&odepv=1&id=06e4724187f4df10&ip=203.0.113.7&initcwndbps=3594750&mt=1793550311&oweuc=&pxtags=Cg4KAnR4Egg1MTkyOTU2OA&rxtags=Cg4KAnR4Egg1MTkyOTU2Ng%2CCg4KAnR4Egg1MTkyOTU2Nw%2CCg4KAnR4Egg1MTkyOTU2OA"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "notificationId": "1793505502000000",
+                        "read": false,
+                        "recordClickEndpoint": {
+                          "clickTrackingParams": "CGkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pO8oBBI9anDE=",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/notification/record_interactions",
+                              "sendPost": true
+                            }
+                          },
+                          "recordNotificationInteractionsEndpoint": {
+                            "serializedInteractionsRequest": "Ej0IAnI5CiMIgOfl0vDllwMQBhoWempzckhrWk13MmE0Y0FraThfQ2Q1QRIQTnNRRnQ0VS0xYlNueFQ0RBgDKNCTtJifDg=="
+                          }
+                        },
+                        "sentTimeText": {
+                          "simpleText": "il y a 12 heures"
+                        },
+                        "shortMessage": {
+                          "runs": [
+                            {
+                              "text": "Stuff Made Here"
+                            },
+                            {
+                              "text": " a mis en ligne "
+                            },
+                            {
+                              "text": "My dog won't stay out of mud so I made this..."
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 96,
+                              "url": "https://yt3.ggpht.com/ytc/AIdro_mzfzJ9E1WEzyt1YlPXemHOwGBBnVCKzXva_mzmS5qqMg=s96-c-k-c0x00000000-no-cc-rj-rp",
+                              "width": 96
+                            }
+                          ]
+                        },
+                        "trackingParams": "CGkQmlAYASITCJ3Y8ZiZ55cDFZMtBgAdoO0pO7IBIgoWempzckhrWk13MmE0Y0FraThfQ2Q1QRAGGgYI3vGa1wY=",
+                        "videoThumbnail": {
+                          "thumbnails": [
+                            {
+                              "height": 360,
+                              "url": "https://i.ytimg.com/vi_webp/BuRyQYf03xA/hqdefault.webp",
+                              "width": 480
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "continuationItemRenderer": {
+                        "continuationEndpoint": {
+                          "clickTrackingParams": "CAIQzYwKGAEiEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx",
+                          "commandMetadata": {
+                            "webCommandMetadata": {
+                              "apiUrl": "/youtubei/v1/browse",
+                              "sendPost": true
+                            }
+                          },
+                          "continuationCommand": {
+                            "request": "CONTINUATION_REQUEST_TYPE_BROWSE",
+                            "token": "4qmFsgJZEhVGRW5vdGlmaWNhdGlvbnNfaW5ib3gaQGVpNXhkSFozT0dkdlkwTm9Xa1JVVlZKVVRrVjBVV0pxVFRGWk1GSklXakF4U21FeFJtcEtWRTVGUlVGRmIwRkI%3D"
+                          }
+                        },
+                        "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN"
+                      }
+                    }
+                  ],
+                  "notificationSectionTitle": {
+                    "simpleText": "Autres notifications"
+                  },
+                  "trackingParams": "CAIQzYwKGAEiEwid2PGYmeeXAxWTLQYAHaDtKTs="
+                }
+              }
+            ],
+            "style": "MULTI_PAGE_MENU_STYLE_TYPE_NOTIFICATIONS",
+            "trackingParams": "CAEQ8qkNIhMIndjxmJnnlwMVky0GAB2g7Sk7"
+          }
+        },
+        "popupType": "DROPDOWN"
+      }
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "browse_id",
+            "value": "FEnotifications_inbox"
+          },
+          {
+            "key": "browse_id_prefix",
+            "value": ""
+          },
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      },
+      {
+        "params": [
+          {
+            "key": "browse_id",
+            "value": "FEnotifications_inbox"
+          },
+          {
+            "key": "browse_id_prefix",
+            "value": ""
+          }
+        ],
+        "service": "GOOGLE_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "c",
+            "value": "WEB"
+          },
+          {
+            "key": "cver",
+            "value": "2.20261029.11.00"
+          },
+          {
+            "key": "yt_li",
+            "value": "1"
+          },
+          {
+            "key": "GetNotificationsInbox_rid",
+            "value": "0xe493608cacee2a13"
+          }
+        ],
+        "service": "CSI"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GUIDED_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "client.version",
+            "value": "2.20261029"
+          },
+          {
+            "key": "client.name",
+            "value": "WEB"
+          }
+        ],
+        "service": "ECATCHER"
+      }
+    ]
+  },
+  "trackingParams": "CAAQhGciEwid2PGYmeeXAxWTLQYAHaDtKTvKAQSPWpwx"
+}

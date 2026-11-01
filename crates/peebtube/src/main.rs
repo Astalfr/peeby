@@ -10,6 +10,7 @@ mod bell;
 mod channels;
 mod feed;
 mod images;
+mod inbox;
 mod motion;
 mod player_view;
 mod playlists;

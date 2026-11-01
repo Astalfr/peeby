@@ -7,12 +7,13 @@ use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
-  Channel, CommentPage, Feed, LikeStatus, Playlist, PlaylistChoice, PlaylistSummary, Stream, Votes,
-  WatchPage,
+  Channel, CommentPage, Feed, LikeStatus, NotificationPage, Playlist, PlaylistChoice,
+  PlaylistSummary, Stream, Votes, WatchPage,
 };
 use crate::parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_watch, tracking_param,
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_unseen_count, parse_watch,
+  tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -243,6 +244,58 @@ impl Client {
     let body = json!({ "params": params });
     self
       .web("notification/modify_channel_preference", body, true)
+      .await?;
+    Ok(())
+  }
+
+  /// The first page of the notifications inbox, as youtube.com's bell shows it. Needs cookies.
+  /// youtube.com reads it with `browse` (`FEnotifications_inbox`): the older
+  /// `notification/get_notification_menu` now answers an empty inbox (checked 2026-11-01).
+  pub async fn notifications(&self) -> Result<NotificationPage> {
+    self.require_session()?;
+    let response = self
+      .web(
+        "browse",
+        json!({ "browseId": "FEnotifications_inbox" }),
+        true,
+      )
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_notifications(&response))
+  }
+
+  /// The next notifications, from [`NotificationPage::continuation`]. Needs cookies.
+  pub async fn notifications_more(&self, token: &str) -> Result<NotificationPage> {
+    self.require_session()?;
+    let response = self
+      .web("browse", json!({ "continuation": token }), true)
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_notifications(&response))
+  }
+
+  /// How many notifications arrived since the user last opened the inbox (youtube.com's
+  /// badge). Needs cookies.
+  pub async fn unseen_notifications(&self) -> Result<u32> {
+    self.require_session()?;
+    let response = self
+      .web("notification/get_unseen_count", json!({}), true)
+      .await?;
+    self.check_session(&response)?;
+    parse_unseen_count(&response).ok_or(Error::Parse {
+      endpoint: "notification/get_unseen_count",
+      detail: "unseenCount missing".into(),
+    })
+  }
+
+  /// Records a click on a notification, which marks it read. `token` is
+  /// [`crate::Notification::read_token`]. Needs cookies. No response of this endpoint is saved
+  /// yet: an HTTP success counts as done.
+  pub async fn mark_notification_read(&self, token: &str) -> Result<()> {
+    self.require_session()?;
+    let body = json!({ "serializedRecordNotificationInteractionsRequest": token });
+    self
+      .web("notification/record_interactions", body, true)
       .await?;
     Ok(())
   }

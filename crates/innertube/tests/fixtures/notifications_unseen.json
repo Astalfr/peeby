@@ -1,0 +1,68 @@
+{
+  "actions": [
+    {
+      "clickTrackingParams": "IhMInYqTmZnnlwMVIQZgAh18gzG8ygEEj1qcMQ==",
+      "updateNotificationsUnseenCountAction": {
+        "handlerData": "NOTIFICATION_ACTION_UPDATE_UNSEEN_COUNT",
+        "timeoutMs": 1800000,
+        "unseenCount": 0
+      }
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "c",
+            "value": "WEB"
+          },
+          {
+            "key": "cver",
+            "value": "2.20261029.11.00"
+          },
+          {
+            "key": "yt_li",
+            "value": "1"
+          },
+          {
+            "key": "GetUnseenNotificationCount_rid",
+            "value": "0x8635bded95192e19"
+          }
+        ],
+        "service": "CSI"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      },
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GUIDED_HELP"
+      },
+      {
+        "params": [
+          {
+            "key": "client.version",
+            "value": "2.20261029"
+          },
+          {
+            "key": "client.name",
+            "value": "WEB"
+          }
+        ],
+        "service": "ECATCHER"
+      }
+    ]
+  }
+}
