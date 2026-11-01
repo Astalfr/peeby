@@ -7,7 +7,7 @@ use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{Channel, CommentPage, Feed, Stream, Votes, WatchPage};
-use crate::parse::{parse_channels, parse_comments, parse_feed, parse_watch};
+use crate::parse::{parse_captions, parse_channels, parse_comments, parse_feed, parse_watch};
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
 /// the page's ytcfg. YouTube ships a new one every week; old ones keep working for months.
@@ -412,16 +412,24 @@ impl Client {
       });
     }
     let master = response.text().await?;
-    let variant = hls::best_variant(&master, max_height).ok_or(Error::Parse {
-      endpoint: "hls master",
-      detail: "no variant".into(),
-    })?;
+    let qualities = hls::ladder(&master);
+    let variant = qualities
+      .iter()
+      .find(|v| v.height <= max_height)
+      .or(qualities.last())
+      .cloned()
+      .ok_or(Error::Parse {
+        endpoint: "hls master",
+        detail: "no variant".into(),
+      })?;
     Ok(Stream {
       video_url: variant.url,
       audio_url: variant.audio_url,
       resolution: variant.resolution,
       codecs: variant.codecs,
       user_agent: VISIONOS_USER_AGENT,
+      captions: parse_captions(&player),
+      qualities,
     })
   }
 }

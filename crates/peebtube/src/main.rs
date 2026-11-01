@@ -8,6 +8,7 @@ mod assets;
 mod feed;
 mod images;
 mod player_view;
+mod prefetch;
 mod runtime;
 mod settings;
 mod theme;
@@ -64,6 +65,7 @@ fn main() {
       gpui_component::init(cx);
       theme::apply(cx);
       images::init(client.clone(), cx);
+      prefetch::init(client.clone(), cx);
 
       // Current WEB client version and a visitorData, in the background.
       let warmup = client.clone();

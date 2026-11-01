@@ -176,3 +176,28 @@ fn comment_replies() {
       .all(|c| c.replies_continuation.is_none())
   );
 }
+
+#[test]
+fn quality_ladder() {
+  let path = format!(
+    "{}/tests/fixtures/hls_master.m3u8",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let master = std::fs::read_to_string(path).unwrap();
+  let ladder = hls::ladder(&master);
+  let heights: Vec<u32> = ladder.iter().map(|v| v.height).collect();
+  assert_eq!(heights, [2160, 1440, 1080, 720, 480, 360, 240, 144]);
+  assert_eq!(ladder[2].label(), "1080p60");
+  assert!(ladder[2].codecs.starts_with("vp09"));
+  assert!(ladder.iter().all(|v| v.audio_url.is_some()));
+}
+
+#[test]
+fn captions() {
+  let captions = innertube::parse_captions(&fixture("player_captions.json"));
+  assert_eq!(captions.len(), 6);
+  assert_eq!(captions[1].language, "en");
+  assert_eq!(captions[1].name, "Anglais");
+  assert!(captions[2].auto_generated);
+  assert!(captions.iter().all(|c| c.url.ends_with("&fmt=vtt")));
+}

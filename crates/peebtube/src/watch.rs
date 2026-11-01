@@ -23,10 +23,8 @@ use crate::assets::Icon;
 use crate::images::Images;
 use crate::player_view::PlayerView;
 use crate::ui::{compact_card, error_text, image_fill, near_scroll_end};
-use crate::{runtime, theme, tools};
+use crate::{prefetch, runtime, theme, tools};
 
-/// Highest video quality requested.
-const MAX_HEIGHT: u32 = 1080;
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
 
@@ -116,8 +114,22 @@ impl WatchView {
 
   fn load_stream(&self, cx: &mut Context<Self>) {
     let clicked = Instant::now();
+    if let Some(stream) = prefetch::take(&self.video_id, cx) {
+      tracing::info!(
+        "stream from hover prefetch: {} {}",
+        stream.resolution,
+        stream.codecs
+      );
+      self
+        .player
+        .update(cx, |player, cx| player.start(stream, clicked, cx));
+      return;
+    }
     let (client, id) = (self.client.clone(), self.video_id.clone());
-    let fetch = runtime::spawn(cx, async move { client.stream(&id, MAX_HEIGHT).await });
+    let fetch = runtime::spawn(
+      cx,
+      async move { client.stream(&id, prefetch::MAX_HEIGHT).await },
+    );
     let player = self.player.downgrade();
     let video_id = self.video_id.clone();
     cx.spawn(async move |_, cx| {

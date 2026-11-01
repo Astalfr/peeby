@@ -43,7 +43,9 @@
 
 The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and the RYD votes load in parallel; the first comments page follows the metadata. RYD votes are cached for the session (100 requests/min, 10,000/day). mpv starts as soon as the stream is known: video media playlist as the file, audio rendition as `audio-files`, the VISIONOS User-Agent as an HTTP header. Measured: playback about 1.5 s after the page opens, player setup included.
 
-`PlayerView` owns the player, the `VideoView` and the controls. In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
+`PlayerView` owns the player, the `VideoView` and the controls, plus the stream's quality ladder and subtitle tracks. A quality change starts a new mpv on the other variant at the current position (the old one is paused, then dropped when the new picture arrives). Subtitle tracks are given to mpv with `sub-add` the first time they are picked; mpv numbers them 1, 2… in that order.
+
+`prefetch` resolves the stream of a card the mouse rests on (300 ms), and the watch page takes it from there. In fullscreen, `AppView` and `WatchView` render the player alone. A watch page covered by another page pauses its player (`set_covered`).
 
 ## Navigation
 

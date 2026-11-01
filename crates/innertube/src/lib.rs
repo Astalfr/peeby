@@ -26,6 +26,6 @@ pub use auth::Cookies;
 pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
 pub use error::Error;
 pub use models::{
-  Channel, Comment, CommentPage, Feed, Stream, Thumbnail, VideoItem, Votes, WatchPage,
+  Caption, Channel, Comment, CommentPage, Feed, Stream, Thumbnail, VideoItem, Votes, WatchPage,
 };
-pub use parse::{parse_channels, parse_comments, parse_feed, parse_watch};
+pub use parse::{parse_captions, parse_channels, parse_comments, parse_feed, parse_watch};

@@ -45,6 +45,8 @@ icons! {
   ThumbsUp => "thumbs-up",
   ThumbsDown => "thumbs-down",
   Comments => "message-square",
+  Subtitles => "captions",
+  Settings => "settings",
 }
 
 macro_rules! files {

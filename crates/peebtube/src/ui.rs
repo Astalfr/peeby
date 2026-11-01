@@ -71,9 +71,12 @@ fn open_on_click(
 ) -> gpui::Stateful<gpui::Div> {
   let nav = nav.clone();
   let route = Route::Watch(video.id.clone());
+  let video_id = video.id.clone();
   div()
     .id(id.into())
     .cursor_pointer()
+    // Resting on a card resolves its stream, so a click plays at once.
+    .on_hover(move |hovered, _, cx| crate::prefetch::hover(&video_id, *hovered, cx))
     .on_click(move |_, window, cx| {
       nav
         .update(cx, |app, cx| app.open(route.clone(), window, cx))

@@ -79,6 +79,7 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
 - mpv list options go through `change-list … append` (`http-header-fields`, `audio-files`, `ytdl-raw-options`,
   `script-opts`): a comma in a value would split it otherwise.
 - YouTube HLS variants are video only: pass the `AUDIO` group's rendition as `audio-files`, with the VISIONOS User-Agent.
+- Caption tracks: `baseUrl&fmt=vtt` works; machine translations (`&tlang=`) answer HTTP 429 for VISIONOS sessions.
 - Per-frame video images: each `RenderImage` is a new atlas entry, so release the previous one with `Window::drop_image`.
 - vendor/gpui-pre-windows is a patched copy (external D3D11 textures, see vendor/README.md). Never edit it without
   regenerating vendor/gpui-pre-windows.patch, and re-apply the patch whenever GPUI is bumped.

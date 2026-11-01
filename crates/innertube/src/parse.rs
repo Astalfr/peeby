@@ -8,7 +8,9 @@ use serde_json::Value;
 
 use std::collections::HashMap;
 
-use crate::models::{Channel, Comment, CommentPage, Feed, Thumbnail, VideoItem, WatchPage};
+use crate::models::{
+  Caption, Channel, Comment, CommentPage, Feed, Thumbnail, VideoItem, WatchPage,
+};
 
 /// Parses a browse response or a browse continuation into a feed.
 pub fn parse_feed(response: &Value) -> Feed {
@@ -71,6 +73,24 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     related_continuation: find_continuation(secondary_results),
     comments_continuation,
   }
+}
+
+/// Subtitle tracks of a player response, as WebVTT URLs. Machine translations (`tlang`) are
+/// not offered: YouTube answers them with HTTP 429 for this client (checked 2026-11-01).
+pub fn parse_captions(player: &Value) -> Vec<Caption> {
+  player["captions"]["playerCaptionsTracklistRenderer"]["captionTracks"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|t| {
+      Some(Caption {
+        language: t["languageCode"].as_str()?.to_owned(),
+        name: text(&t["name"]),
+        auto_generated: t["kind"] == "asr",
+        url: format!("{}&fmt=vtt", t["baseUrl"].as_str()?),
+      })
+    })
+    .collect()
 }
 
 /// Parses the subscribed channels list (`FEchannels`: all channels in one response).

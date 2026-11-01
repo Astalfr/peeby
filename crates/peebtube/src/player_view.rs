@@ -18,7 +18,8 @@ use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::{ActiveTheme, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
 use innertube::Stream;
-use player::{Event, Player, StartOptions};
+use innertube::hls::Variant;
+use player::{Choice, Event, Player, StartOptions};
 
 use crate::assets::Icon;
 
@@ -32,6 +33,13 @@ const SEEK_SMALL: f64 = 5.0;
 const SEEK_LARGE: f64 = 10.0;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
+
+/// The open menu of the control bar.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Menu {
+  Quality,
+  Subtitles,
+}
 
 /// Volume and mute, kept for the session so the next video plays at the same level.
 #[derive(Clone, Copy)]
@@ -84,6 +92,16 @@ pub struct PlayerView {
   seek_bounds: Rc<Cell<Bounds<Pixels>>>,
   /// Mouse position over the seek bar, as a fraction of the duration.
   seek_hover: Option<f64>,
+  /// The stream being played (VISIONOS): its qualities and subtitle tracks.
+  stream: Option<Stream>,
+  /// Index of the playing quality in `stream.qualities`.
+  quality: Option<usize>,
+  /// Selected subtitle track, index in `stream.captions`.
+  caption: Option<usize>,
+  /// Caption URLs already given to mpv, in mpv's track order (external subtitles get the ids
+  /// 1, 2… since the HLS streams carry none).
+  captions_added: Vec<String>,
+  menu: Option<Menu>,
   _events: Option<Task<()>>,
 }
 
@@ -123,6 +141,11 @@ impl PlayerView {
       hide_task: None,
       seek_bounds: Rc::default(),
       seek_hover: None,
+      stream: None,
+      quality: None,
+      caption: None,
+      captions_added: Vec::new(),
+      menu: None,
       _events: None,
     }
   }
@@ -158,15 +181,117 @@ impl PlayerView {
 
   /// Starts mpv on `stream`; `clicked` is when the user opened the video, for the timing log.
   pub fn start(&mut self, stream: Stream, clicked: Instant, cx: &mut Context<Self>) {
-    let options = StartOptions {
-      url: stream.video_url,
-      external_audio: stream.audio_url.into_iter().collect(),
-      http_headers: vec![format!("User-Agent: {}", stream.user_agent)],
-      // Opt-in only: the log contains stream URLs, which carry the user's IP.
-      log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
-      ..Default::default()
-    };
+    self.quality = stream
+      .qualities
+      .iter()
+      .position(|q| q.url == stream.video_url);
+    tracing::info!(
+      "{} qualities ({}), {} subtitle tracks",
+      stream.qualities.len(),
+      stream
+        .qualities
+        .iter()
+        .map(Variant::label)
+        .collect::<Vec<_>>()
+        .join(" "),
+      stream.captions.len()
+    );
+    let options = stream_options(
+      &stream.video_url,
+      stream.audio_url.as_deref(),
+      stream.user_agent,
+      0.0,
+    );
+    self.stream = Some(stream);
     self.start_with(options, clicked, cx);
+  }
+
+  /// Plays another quality from the current position: mpv restarts on the new variant
+  /// (about 0.7 s), and the subtitle track is added again.
+  fn select_quality(&mut self, index: usize, cx: &mut Context<Self>) {
+    self.menu = None;
+    if self.quality == Some(index) {
+      return cx.notify();
+    }
+    let Some(stream) = &self.stream else { return };
+    let Some(variant) = stream.qualities.get(index).cloned() else {
+      return;
+    };
+    let options = stream_options(
+      &variant.url,
+      variant.audio_url.as_deref(),
+      stream.user_agent,
+      self.position,
+    );
+    tracing::info!("quality {}", variant.label());
+    self.quality = Some(index);
+    self.show_osd(format!("Qualité {}", variant.label()).into(), cx);
+    // The old player lives on in the old VideoView until the new one replaces it: pause it so
+    // the sounds do not overlap. Its last frame stays on screen meanwhile.
+    if let Some(old) = self.player.take() {
+      old.set_paused(true);
+    }
+    self.captions_added.clear();
+    self.start_with(options, Instant::now(), cx);
+  }
+
+  /// Shows subtitle track `index` of the stream, or none. Tracks are fetched by mpv the first
+  /// time they are picked.
+  fn select_caption(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
+    self.menu = None;
+    self.caption = index;
+    let label = match index.and_then(|i| self.stream.as_ref()?.captions.get(i)) {
+      Some(caption) => caption_label(caption),
+      None => "Désactivés".to_owned(),
+    };
+    self.apply_caption();
+    self.show_osd(format!("Sous-titres : {label}").into(), cx);
+  }
+
+  fn apply_caption(&mut self) {
+    let Some(player) = self.player.clone() else {
+      return;
+    };
+    let caption = self
+      .caption
+      .and_then(|i| self.stream.as_ref()?.captions.get(i).cloned());
+    match caption {
+      None => player.set_subtitle(Choice::Off),
+      Some(caption) => match self.captions_added.iter().position(|u| *u == caption.url) {
+        Some(added) => player.set_subtitle(Choice::Track(added as i64 + 1)),
+        None => {
+          player.add_subtitle(&caption.url, &caption_label(&caption), &caption.language);
+          self.captions_added.push(caption.url);
+        }
+      },
+    }
+  }
+
+  /// C: off → the first track in the app's language (else the first one) → off.
+  fn toggle_captions(&mut self, cx: &mut Context<Self>) {
+    if self.caption.is_some() {
+      return self.select_caption(None, cx);
+    }
+    let Some(stream) = &self.stream else { return };
+    if stream.captions.is_empty() {
+      return self.show_osd("Aucun sous-titre".into(), cx);
+    }
+    let (hl, _) = crate::settings::LANGUAGE;
+    let index = stream
+      .captions
+      .iter()
+      .position(|c| c.language == hl || c.language.starts_with(&format!("{hl}-")))
+      .unwrap_or(0);
+    self.select_caption(Some(index), cx);
+  }
+
+  fn toggle_menu(&mut self, menu: Menu, cx: &mut Context<Self>) {
+    self.menu = if self.menu == Some(menu) {
+      None
+    } else {
+      Some(menu)
+    };
+    self.show_controls(cx);
   }
 
   /// Starts mpv with prepared options (e.g. the yt-dlp fallback).
@@ -233,6 +358,8 @@ impl PlayerView {
     }
     self.player = Some(player);
     self.status = None;
+    // After a quality change: the subtitle track goes to the new mpv.
+    self.apply_caption();
     self.show_controls(cx);
   }
 
@@ -352,6 +479,7 @@ impl PlayerView {
         .update(cx, |this, cx| {
           let busy = this.paused
             || this.failed
+            || this.menu.is_some()
             || this.over_controls
             || this.volume_hover.1
             || this.volume_dragging;
@@ -385,6 +513,8 @@ impl PlayerView {
       "up" => self.set_volume(self.volume + VOLUME_STEP, cx),
       "down" => self.set_volume(self.volume - VOLUME_STEP, cx),
       "m" => self.toggle_mute(cx),
+      "c" => self.toggle_captions(cx),
+      "escape" if self.menu.is_some() => self.menu = None,
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
       _ => return,
@@ -396,6 +526,9 @@ impl PlayerView {
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
   fn on_video_click(&mut self, event: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
     window.focus(&self.focus, cx);
+    if self.menu.take().is_some() {
+      return cx.notify();
+    }
     self.with_player(Player::toggle_pause);
     if event.click_count() == 2 {
       window.toggle_fullscreen();
@@ -669,6 +802,8 @@ impl PlayerView {
   ) -> Vec<gpui::AnyElement> {
     let fullscreen = window.is_fullscreen();
     let white = |opacity: f32| gpui::white().opacity(opacity);
+    let has_captions = self.stream.as_ref().is_some_and(|s| !s.captions.is_empty());
+    let has_qualities = self.stream.as_ref().is_some_and(|s| s.qualities.len() > 1);
     let mut layers = Vec::new();
 
     if fullscreen && !self.title.is_empty() {
@@ -732,6 +867,24 @@ impl PlayerView {
         format_time(self.duration)
       )))
       .child(div().flex_1())
+      .when(has_captions, |row| {
+        row.child(
+          self
+            .control_button("subs-menu", cx)
+            .icon(Icon::Subtitles)
+            .tooltip("Sous-titres (C)")
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Subtitles, cx))),
+        )
+      })
+      .when(has_qualities, |row| {
+        row.child(
+          self
+            .control_button("quality-menu", cx)
+            .icon(Icon::Settings)
+            .tooltip("Qualité")
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Quality, cx))),
+        )
+      })
       .child(
         self
           .control_button("fullscreen", cx)
@@ -834,6 +987,104 @@ fn listen_to_volume_drag(view: &WeakEntity<PlayerView>, window: &mut Window) {
       up_view.update(cx, |this, cx| this.end_volume_drag(cx)).ok();
     }
   });
+}
+
+impl PlayerView {
+  /// Quality or subtitle list above the control bar (peeby's track menu).
+  fn render_menu(&self, menu: Menu, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let theme = cx.theme();
+    let (popover, border) = (theme.popover, theme.border);
+    let mut list = v_flex().gap_1();
+    let entry = |id: SharedString, label: String, selected: bool| {
+      Button::new(id)
+        .label(label)
+        .when(selected, |b| b.primary())
+        .when(!selected, |b| b.ghost())
+    };
+    let no_variants: Vec<Variant> = Vec::new();
+    let no_captions: Vec<innertube::Caption> = Vec::new();
+    let stream = self.stream.as_ref();
+    match menu {
+      Menu::Quality => {
+        for (i, variant) in stream
+          .map_or(&no_variants, |s| &s.qualities)
+          .iter()
+          .enumerate()
+        {
+          list = list.child(
+            entry(
+              format!("quality-{i}").into(),
+              variant.label(),
+              self.quality == Some(i),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.select_quality(i, cx))),
+          );
+        }
+      }
+      Menu::Subtitles => {
+        list = list.child(
+          entry(
+            "sub-off".into(),
+            "Désactivés".into(),
+            self.caption.is_none(),
+          )
+          .on_click(cx.listener(|this, _, _, cx| this.select_caption(None, cx))),
+        );
+        for (i, caption) in stream
+          .map_or(&no_captions, |s| &s.captions)
+          .iter()
+          .enumerate()
+        {
+          list = list.child(
+            entry(
+              format!("sub-{i}").into(),
+              caption_label(caption),
+              self.caption == Some(i),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.select_caption(Some(i), cx))),
+          );
+        }
+      }
+    }
+    div()
+      .id("menu")
+      .occlude()
+      .absolute()
+      .right_4()
+      .bottom(px(84.))
+      .max_h(px(320.))
+      .min_w(px(220.))
+      .overflow_y_scroll()
+      .p_2()
+      .rounded_lg()
+      .bg(popover)
+      .border_1()
+      .border_color(border)
+      .child(list)
+  }
+}
+
+/// Player options for an HLS variant and its audio rendition.
+fn stream_options(
+  video: &str,
+  audio: Option<&str>,
+  user_agent: &str,
+  start_seconds: f64,
+) -> StartOptions {
+  StartOptions {
+    url: video.to_owned(),
+    external_audio: audio.map(str::to_owned).into_iter().collect(),
+    http_headers: vec![format!("User-Agent: {user_agent}")],
+    start_seconds,
+    // Opt-in only: the log contains stream URLs, which carry the user's IP.
+    log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
+    ..Default::default()
+  }
+}
+
+/// `Anglais`, `Anglais (générés automatiquement)`: YouTube's names, in the app's language.
+fn caption_label(caption: &innertube::Caption) -> String {
+  caption.name.clone()
 }
 
 /// A player button in a wrapper that reports its hover: the button's own `on_hover` is taken
@@ -989,6 +1240,9 @@ impl Render for PlayerView {
     }
     if show_ui && !self.failed {
       root = root.children(self.render_controls(window, cx));
+      if let Some(menu) = self.menu {
+        root = root.child(self.render_menu(menu, cx));
+      }
     }
     root
   }

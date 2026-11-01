@@ -408,6 +408,11 @@ impl Player {
     self.set("sid", &choice.as_option());
   }
 
+  /// Adds an external subtitle file or URL and selects it (`sub-add <url> select <title> <lang>`).
+  pub fn add_subtitle(&self, url: &str, title: &str, lang: &str) {
+    self.run(&["sub-add", url, "select", title, lang]);
+  }
+
   /// Jumps `delta` chapters forward (negative: back).
   pub fn add_chapter(&self, delta: i64) {
     self.run(&["add", "chapter", &delta.to_string()]);

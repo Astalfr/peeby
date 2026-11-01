@@ -7,9 +7,18 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **Study and spikes** | ✅ | Feasibility study, Home via InnerTube, playback spike (yt-dlp, then VISIONOS HLS), bundled tools | [etude-faisabilite.md](etude-faisabilite.md), ADRs 0001–0005 |
 | **1: foundations** | ✅ | Workspace, CLAUDE.md, docs; `innertube` (Home, watch page, streams, cookies) with fixture tests; app shell, Home grid, watch page with autoplay and related videos | Open a video from a URL and from a related video, ~1 s to playback; signed-in Home shows recommendations |
 | **2: YouTube pages** | ✅ (RSS fallback moved to the backlog) | Subscriptions list and feed (`FEsubscriptions`, RSS fallback), comments (`commentEntityPayload`) and replies, Return YouTube Dislike bar (cache, attribution), channel page, infinite scroll | — |
-| **3: player comfort** | 🚧 yt-dlp fallback done | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
+| **3: player comfort** | ✅ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
 | **4: session and settings** | 🚧 `Set-Cookie` persistence done | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
+
+## Milestone 3 status
+
+- Done (2026-11-01):
+  - **Quality menu**: the whole HLS ladder (2160p to 144p, VP9 preferred). Changing quality restarts mpv on the new variant at the current position: verified with the `player` crate directly, 1080p to 720p, playback again after about 1.0–1.1 s, subtitle track kept.
+  - **Subtitles on demand**: the VISIONOS player response lists the caption tracks (`captions.playerCaptionsTracklistRenderer`); mpv fetches one as WebVTT (`&fmt=vtt`) with `sub-add` when it is picked (menu or C). Verified: loaded and selected in about 0.1 s. Machine translations (`&tlang=`) answer HTTP 429 for this client, so they are not offered.
+  - **Prefetch on hover**: resting 300 ms on a video card resolves its stream; the watch page then starts mpv without waiting for the resolver (saves the 0.2–0.4 s). Cache of 64 streams, 4 h.
+  - yt-dlp fallback (see milestone 2).
+- **Not verified:** the menus and the hover prefetch in the UI (not clicked in a test run). The app logs the ladder and tracks it receives: 8 qualities and 6 tracks on a test video.
 
 ## Milestone 2 status
 
