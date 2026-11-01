@@ -5,8 +5,9 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  Error, LikeStatus, NotificationLevel, hls, hls_manifest_url, parse_feed, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_watch,
+  Error, LikeStatus, NotificationLevel, SearchResult, hls, hls_manifest_url, parse_feed,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_watch,
 };
 use serde_json::Value;
 
@@ -437,4 +438,61 @@ fn player_storyboard() {
   let last = board.frame(10_000.0, 635.0).unwrap();
   assert!(last.url.contains("/M5.jpg?"));
   assert_eq!((last.column, last.row), (2, 0));
+}
+
+#[test]
+fn search_results() {
+  let page = parse_search(&fixture("search.json"));
+  // Videos and the channel, in order; the Shorts shelf, the playlist and the courses are left out.
+  assert_eq!(page.results.len(), 5);
+  assert!(page.continuation.is_some());
+  let SearchResult::Video(first) = &page.results[0] else {
+    panic!("a video first");
+  };
+  assert_eq!(first.id, "rQ_J9WH6CGk");
+  assert_eq!(first.channel.as_deref(), Some("BekBrace"));
+  assert_eq!(
+    first.channel_id.as_deref(),
+    Some("UC7EVSn5inapL20oPSwAwEUg")
+  );
+  assert_eq!(first.duration.as_deref(), Some("3:05:04"));
+  assert_eq!(first.metadata, ["663\u{a0}k\u{a0}vues", "il y a 2 ans"]);
+  assert!(first.thumbnails.iter().any(|t| t.width >= 720));
+  assert!(!first.avatar.is_empty());
+  let SearchResult::Channel(channel) = &page.results[4] else {
+    panic!("the channel last");
+  };
+  assert_eq!(channel.id, "UCaYhcUwRBNscFNUKTjgPFiA");
+  assert_eq!(channel.name, "Rust Programming Language");
+  assert_eq!(channel.handle.as_deref(), Some("@RustVideos"));
+  assert_eq!(
+    channel.subscribers.as_deref(),
+    Some("70,4\u{a0}k\u{a0}abonnés")
+  );
+  // Protocol-relative avatars get their scheme.
+  assert!(channel.avatar.iter().all(|a| a.url.starts_with("https://")));
+}
+
+#[test]
+fn search_next_page() {
+  let page = parse_search(&fixture("search_continuation.json"));
+  let ids: Vec<&str> = page
+    .results
+    .iter()
+    .map(|r| match r {
+      SearchResult::Video(v) => v.id.as_str(),
+      SearchResult::Channel(c) => c.id.as_str(),
+    })
+    .collect();
+  assert_eq!(
+    ids,
+    [
+      "0XFq9K7N9o4",
+      "d9ahpl1gHVA",
+      "k9zj8i8FBzE",
+      "UCaYhcUwRBNscFNUKTjgPFiA",
+      "QNPwKMOQIKM"
+    ]
+  );
+  assert!(page.continuation.is_some());
 }

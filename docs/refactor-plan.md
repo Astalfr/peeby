@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–6 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–7 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -173,7 +173,15 @@ Principles:
   banner's rotation and the rows' arrows on hover, the mini-player with a Jellyfin video
 
 ### 7. YouTube search
-- [ ] Save a redacted `search` response, write and test its parser, results page
+- [x] Save a redacted `search` response, write and test its parser, results page: `search.json` and
+      `search_continuation.json` (anonymous, fr/FR, trimmed, no visitor data), `Client::search` and
+      `search_more`, `parse_search` (videos and channels in order; Shorts shelves, playlists and courses left
+      out), the page opened by the top bar's search button: a query run on Enter, list rows, a channel row
+      opening the channel, next pages while scrolling. Also in `smoke`
+- Verified: the parser tests, `smoke` live (15 videos and 1 channel, then 14 and 1), and in the app signed out
+  (`PEEBY_COOKIES` pointing to no file, so the test searches stayed out of the user's history): results,
+  the next page while scrolling, the channel row opening the channel and back to the results. **Not
+  verified:** a signed-in search (it goes to the account's search history)
 
 ### 8. Unified settings
 - [ ] Settings page behind the gear: general, player, YouTube (language, region, quality, cookies),

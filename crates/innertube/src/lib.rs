@@ -4,6 +4,7 @@
 //! - [`Client::home`]: the "Home" recommendations (`FEwhat_to_watch`), personalized only when
 //!   signed in with browser [`Cookies`] (anonymous Home is empty since 2024);
 //! - [`Client::subscriptions`], [`Client::subscribed_channels`], [`Client::channel_videos`];
+//! - [`Client::search`], [`Client::search_more`]: videos and channels matching a query;
 //! - [`Client::watch`]: watch page metadata, related videos and the comments token (`next`);
 //! - [`Client::comments`]: comment pages and replies (`next` continuations);
 //! - [`Client::rate`]: likes, dislikes or clears the user's rating of a video (`like/…`);
@@ -37,10 +38,11 @@ pub use error::Error;
 pub use models::{
   Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
   Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Storyboard, StoryboardFrame, Stream, Thumbnail, VideoItem, Votes, WatchPage,
+  PlaylistSummary, SearchPage, SearchResult, Storyboard, StoryboardFrame, Stream, Thumbnail,
+  VideoItem, Votes, WatchPage,
 };
 pub use parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_storyboard,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_storyboard,
   parse_unseen_count, parse_watch,
 };

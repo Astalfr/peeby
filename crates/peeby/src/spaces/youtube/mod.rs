@@ -12,6 +12,7 @@ pub mod playlists;
 pub mod prefetch;
 pub mod queue;
 pub mod save;
+pub mod search;
 pub mod settings_page;
 pub mod tools;
 pub mod watch;
@@ -37,6 +38,7 @@ use channels::ChannelsView;
 use feed::{FeedView, Source};
 use playlists::{PlaylistView, PlaylistsView};
 use queue::Queue;
+use search::SearchView;
 use watch::WatchView;
 
 /// A page of the app.
@@ -60,6 +62,8 @@ pub enum Route {
     id: String,
     title: String,
   },
+  /// Search, from the top bar.
+  Search,
   /// Watch page of a video id.
   Watch(String),
 }
@@ -76,7 +80,7 @@ impl Route {
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
-      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account => true,
+      Self::Home | Self::Subscriptions | Self::Playlists | Self::Account | Self::Search => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
     }
@@ -221,6 +225,7 @@ impl YouTubeSpace {
       Route::Playlist { id, title } => cx
         .new(|cx| PlaylistView::new(client, id.clone(), title.clone(), nav, cx))
         .into(),
+      Route::Search => cx.new(|cx| SearchView::new(client, nav, window, cx)).into(),
       Route::Watch(id) => cx
         .new(|cx| WatchView::new(client, id.clone(), None, nav, window, cx))
         .into(),
@@ -347,6 +352,14 @@ impl Space for YouTubeSpace {
 
   fn back(&mut self, cx: &mut Context<Self>) {
     YouTubeSpace::back(self, cx);
+  }
+
+  fn searchable(&self) -> bool {
+    true
+  }
+
+  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    self.open(Route::Search, window, cx);
   }
 
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {

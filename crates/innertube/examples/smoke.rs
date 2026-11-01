@@ -134,6 +134,22 @@ async fn main() {
         .map(|f| format!("{} videos", f.items.len())),
     );
   }
+  let search = client.search("rust programming").await;
+  let search_next = search.as_ref().ok().and_then(|p| p.continuation.clone());
+  let count = |results: &[innertube::SearchResult]| {
+    let channels = results
+      .iter()
+      .filter(|r| matches!(r, innertube::SearchResult::Channel(_)))
+      .count();
+    format!("{} videos · {channels} channels", results.len() - channels)
+  };
+  check("search", search.map(|p| count(&p.results)));
+  if let Some(token) = search_next {
+    check(
+      "search_more",
+      client.search_more(&token).await.map(|p| count(&p.results)),
+    );
+  }
   let watch = client.watch(VIDEO).await;
   let comments_token = watch
     .as_ref()

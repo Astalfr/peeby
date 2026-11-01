@@ -8,11 +8,11 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
   Channel, CommentPage, Feed, LikeStatus, NotificationPage, Playlist, PlaylistChoice,
-  PlaylistSummary, Stream, Votes, WatchPage,
+  PlaylistSummary, SearchPage, Stream, Votes, WatchPage,
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_storyboard,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_storyboard,
   parse_unseen_count, parse_watch, tracking_param,
 };
 
@@ -323,6 +323,22 @@ impl Client {
         detail: "likes or dislikes missing".into(),
       }),
     }
+  }
+
+  /// Videos and channels matching `query`.
+  pub async fn search(&self, query: &str) -> Result<SearchPage> {
+    let response = self.web("search", json!({ "query": query }), true).await?;
+    self.check_session(&response)?;
+    Ok(parse_search(&response))
+  }
+
+  /// The next page of a search, from [`SearchPage::continuation`].
+  pub async fn search_more(&self, token: &str) -> Result<SearchPage> {
+    let response = self
+      .web("search", json!({ "continuation": token }), true)
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_search(&response))
   }
 
   /// Next page of a feed.

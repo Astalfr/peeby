@@ -11,7 +11,10 @@
 //! - a subscribed channel's bell: `subscriptionNotificationToggleButtonRenderer` in the
 //!   `subscribeButtonRenderer` of the watch page's owner and of `FEchannels` entries;
 //! - the notifications inbox (`FEnotifications_inbox`): `notificationRenderer`s in
-//!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`.
+//!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`;
+//! - search results (`search`): `videoRenderer`s and `channelRenderer`s in an
+//!   `itemSectionRenderer`, beside Shorts shelves (`gridShelfViewModel`) and playlist or course
+//!   lockups; a next page in `appendContinuationItemsAction`.
 
 use serde_json::Value;
 
@@ -20,7 +23,7 @@ use std::collections::HashMap;
 use crate::models::{
   Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
   Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Storyboard, Thumbnail, VideoItem, WatchPage,
+  PlaylistSummary, SearchPage, SearchResult, Storyboard, Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -216,21 +219,76 @@ pub fn parse_storyboard(player: &Value) -> Option<Storyboard> {
 pub fn parse_channels(response: &Value) -> Vec<Channel> {
   let mut renderers = Vec::new();
   find_all(response, "channelRenderer", &mut renderers);
-  renderers
-    .into_iter()
-    .filter_map(|c| {
-      Some(Channel {
-        id: c["channelId"].as_str()?.to_owned(),
-        name: text(&c["title"]).trim().to_owned(),
-        // In this list YouTube puts the handle in `subscriberCountText` and the subscriber
-        // count in `videoCountText`.
-        handle: non_empty(text(&c["subscriberCountText"])).filter(|h| h.starts_with('@')),
-        subscribers: non_empty(text(&c["videoCountText"])),
-        avatar: thumbnails(&c["thumbnail"]["thumbnails"]),
-        notifications: parse_notification_bell(&c["subscribeButton"]),
-      })
-    })
-    .collect()
+  renderers.into_iter().filter_map(parse_channel).collect()
+}
+
+/// One `channelRenderer` (the channels list, search results).
+fn parse_channel(c: &Value) -> Option<Channel> {
+  Some(Channel {
+    id: c["channelId"].as_str()?.to_owned(),
+    name: text(&c["title"]).trim().to_owned(),
+    // YouTube puts the handle in `subscriberCountText` and the subscriber count in
+    // `videoCountText`.
+    handle: non_empty(text(&c["subscriberCountText"])).filter(|h| h.starts_with('@')),
+    subscribers: non_empty(text(&c["videoCountText"])),
+    avatar: thumbnails(&c["thumbnail"]["thumbnails"]),
+    notifications: parse_notification_bell(&c["subscribeButton"]),
+  })
+}
+
+/// Parses a page of search results (`search`, or its continuation).
+pub fn parse_search(response: &Value) -> SearchPage {
+  let mut results = Vec::new();
+  collect_search_results(response, &mut results);
+  SearchPage {
+    results,
+    continuation: find_continuation(response),
+  }
+}
+
+/// Collects the videos and channels under `value` in document order, skipping malformed ones.
+fn collect_search_results(value: &Value, out: &mut Vec<SearchResult>) {
+  match value {
+    Value::Object(map) => {
+      if let Some(video) = map.get("videoRenderer") {
+        out.extend(parse_video_renderer(video).map(SearchResult::Video));
+      } else if let Some(channel) = map.get("channelRenderer") {
+        out.extend(parse_channel(channel).map(SearchResult::Channel));
+      } else {
+        map.values().for_each(|v| collect_search_results(v, out));
+      }
+    }
+    Value::Array(values) => values.iter().for_each(|v| collect_search_results(v, out)),
+    _ => {}
+  }
+}
+
+/// One `videoRenderer` (search results): channel, views · date, duration.
+fn parse_video_renderer(video: &Value) -> Option<VideoItem> {
+  let id = video["videoId"].as_str()?.to_owned();
+  let title = non_empty(text(&video["title"]))?;
+  let owner = &video["ownerText"]["runs"][0];
+  let views = non_empty(text(&video["shortViewCountText"]))
+    .or_else(|| non_empty(text(&video["viewCountText"])));
+  Some(VideoItem {
+    id,
+    title,
+    channel: owner["text"].as_str().map(str::to_owned),
+    channel_id: owner["navigationEndpoint"]["browseEndpoint"]["browseId"]
+      .as_str()
+      .map(str::to_owned),
+    metadata: views
+      .into_iter()
+      .chain(non_empty(text(&video["publishedTimeText"])))
+      .collect(),
+    duration: non_empty(text(&video["lengthText"])),
+    thumbnails: thumbnails(&video["thumbnail"]["thumbnails"]),
+    avatar: thumbnails(
+      &video["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]["thumbnail"]
+        ["thumbnails"],
+    ),
+    set_video_id: None,
+  })
 }
 
 /// Parses a page of the notifications inbox (`FEnotifications_inbox` or its continuation). A

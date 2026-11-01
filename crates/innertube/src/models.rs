@@ -233,7 +233,25 @@ impl std::fmt::Debug for Stream {
   }
 }
 
-/// A channel the user is subscribed to.
+/// One search result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SearchResult {
+  /// A video.
+  Video(VideoItem),
+  /// A channel.
+  Channel(Channel),
+}
+
+/// A page of search results and the token of the next page.
+#[derive(Clone, Debug, Default)]
+pub struct SearchPage {
+  /// Videos and channels in display order; Shorts shelves, playlists and courses are left out.
+  pub results: Vec<SearchResult>,
+  /// Token for [`crate::Client::search_more`], when there is more.
+  pub continuation: Option<String>,
+}
+
+/// A channel the user is subscribed to, or found by a search.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Channel {
   /// Channel id (`UC…`).

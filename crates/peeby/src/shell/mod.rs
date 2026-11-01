@@ -295,7 +295,7 @@ impl Shell {
             .mr_2()
             .gap_1()
             .child(
-              // Each space searches its own catalog; YouTube's comes with step 7 of the plan.
+              // Each space searches its own catalog.
               Button::new("search")
                 .ghost()
                 .icon(Icon::Search)
