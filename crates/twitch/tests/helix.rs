@@ -111,3 +111,31 @@ fn templates() {
     "https://x/a-320x180.jpg"
   );
 }
+
+#[test]
+fn videos() {
+  let page = helix::parse_videos(&json("helix_videos.json"));
+  assert_eq!(page.items.len(), 3);
+  assert!(page.items.iter().all(|v| v.user_login == "ow_esports"));
+  assert!(page.items.iter().all(|v| v.duration > 0));
+  // The first one is the broadcast still going: its thumbnail is not ready.
+  assert!(page.items[0].thumbnail_url.contains("404_processing"));
+  assert!(page.items[1].created_at.is_some());
+}
+
+#[test]
+fn clips() {
+  let page = helix::parse_clips(&json("helix_clips.json"));
+  assert_eq!(page.items.len(), 3);
+  assert!(page.items.iter().all(|c| c.duration > 0.0));
+  assert!(page.items[0].thumbnail_url.starts_with("https://"));
+  assert!(page.items[0].view_count >= page.items[1].view_count);
+}
+
+#[test]
+fn durations() {
+  assert_eq!(helix::parse_duration("3h8m33s"), 3 * 3600 + 8 * 60 + 33);
+  assert_eq!(helix::parse_duration("45m2s"), 45 * 60 + 2);
+  assert_eq!(helix::parse_duration("59s"), 59);
+  assert_eq!(helix::parse_duration("bad"), 0);
+}

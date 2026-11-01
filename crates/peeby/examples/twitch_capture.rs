@@ -89,6 +89,28 @@ async fn capture(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
   save("helix_search_categories.json", &categories)?;
+
+  // A public channel's VODs and clips (a channel known to keep its VODs public).
+  let channel = helix.get("users", &[("login", "ow_esports")]).await?;
+  let channel_id = channel["data"][0]["id"]
+    .as_str()
+    .unwrap_or_default()
+    .to_owned();
+  let videos = helix
+    .get(
+      "videos",
+      &[
+        ("user_id", &channel_id),
+        ("type", "archive"),
+        ("first", "3"),
+      ],
+    )
+    .await?;
+  save("helix_videos.json", &videos)?;
+  let clips = helix
+    .get("clips", &[("broadcaster_id", &channel_id), ("first", "3")])
+    .await?;
+  save("helix_clips.json", &clips)?;
   Ok(())
 }
 

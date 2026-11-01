@@ -1,0 +1,250 @@
+//! A channel's page: its header (Helix `users`), its live when on air (GQL `Channel`), then its
+//! past broadcasts (`videos?type=archive`) or its most viewed clips (`clips`), in two tabs.
+
+use gpui::prelude::*;
+use gpui::{Context, FontWeight, SharedString, Task, WeakEntity, Window, div, px};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::{h_flex, v_flex};
+use twitch::gql::Channel;
+use twitch::helix::{Clip, Helix, User, Video};
+use ui::images::Images;
+use ui::picture;
+use ui::theme;
+
+use super::browse::load;
+use super::{Route, TwitchSpace, cards};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tab {
+  Videos,
+  Clips,
+}
+
+struct Loaded {
+  user: User,
+  channel: Option<Channel>,
+  videos: Vec<Video>,
+  clips: Vec<Clip>,
+}
+
+pub struct ChannelView {
+  nav: WeakEntity<TwitchSpace>,
+  login: String,
+  tab: Tab,
+  loaded: Option<Result<Loaded, String>>,
+  _load: Task<()>,
+}
+
+impl ChannelView {
+  pub fn new(
+    nav: WeakEntity<TwitchSpace>,
+    helix: Helix,
+    client: twitch::Client,
+    login: String,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
+    }
+    let task = load(
+      cx,
+      {
+        let login = login.clone();
+        async move {
+          let user = helix.user(&login).await?;
+          // The header's live and the lists are optional: their errors leave them out.
+          let channel = client.channel(&login).await.ok();
+          let videos = helix
+            .videos(&user.id, Some("archive"), None)
+            .await
+            .map(|p| p.items)
+            .unwrap_or_default();
+          let clips = helix
+            .clips(&user.id, None)
+            .await
+            .map(|p| p.items)
+            .unwrap_or_default();
+          Ok(Loaded {
+            user,
+            channel,
+            videos,
+            clips,
+          })
+        }
+      },
+      |this: &mut Self, result, cx| {
+        this.loaded = Some(result);
+        cx.notify();
+      },
+      nav.clone(),
+    );
+    Self {
+      nav,
+      login,
+      tab: Tab::Videos,
+      loaded: None,
+      _load: task,
+    }
+  }
+
+  fn tab_button(&self, tab: Tab, label: &'static str, cx: &mut Context<Self>) -> Button {
+    let id = SharedString::from(format!("twitch-channel-tab-{label}"));
+    let button = Button::new(id)
+      .label(label)
+      .on_click(cx.listener(move |this, _, _, cx| {
+        this.tab = tab;
+        cx.notify();
+      }));
+    if self.tab == tab {
+      button.primary()
+    } else {
+      button.ghost()
+    }
+  }
+}
+
+impl Render for ChannelView {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let loaded = match &self.loaded {
+      Some(Ok(loaded)) => loaded,
+      Some(Err(error)) => {
+        return super::browse::page(
+          "twitch-channel",
+          &self.login,
+          None,
+          cards::note(error.clone()).into_any_element(),
+        )
+        .into_any_element();
+      }
+      None => {
+        return super::browse::page(
+          "twitch-channel",
+          &self.login,
+          None,
+          cards::note("Chargement…").into_any_element(),
+        )
+        .into_any_element();
+      }
+    };
+    let width = cards::stream_width(window, cx);
+    let user = &loaded.user;
+    let avatar = (!user.profile_image_url.is_empty())
+      .then(|| picture::avatar(&cards::template(&user.profile_image_url), 80., window, cx));
+    let live = loaded.channel.as_ref().and_then(|c| {
+      let live = c.live.as_ref()?;
+      let login = c.login.clone();
+      let nav = self.nav.clone();
+      let detail = [
+        live.category.clone().unwrap_or_default(),
+        format!("{} spectateurs", cards::grouped(live.viewers)),
+      ]
+      .into_iter()
+      .filter(|s| !s.is_empty())
+      .collect::<Vec<_>>()
+      .join(" · ");
+      Some(
+        h_flex()
+          .gap_4()
+          .items_center()
+          .p_4()
+          .rounded(theme::RADIUS_LG)
+          .bg(theme::surface())
+          .border_1()
+          .border_color(theme::border())
+          .child(
+            v_flex()
+              .flex_1()
+              .min_w_0()
+              .gap_1()
+              .child(
+                div()
+                  .text_xs()
+                  .font_weight(FontWeight::BOLD)
+                  .text_color(theme::accent_hover())
+                  .child("EN DIRECT"),
+              )
+              .child(
+                div()
+                  .font_weight(FontWeight::MEDIUM)
+                  .truncate()
+                  .child(c.title.clone()),
+              )
+              .child(cards::note(detail)),
+          )
+          .child(
+            Button::new("twitch-channel-watch")
+              .primary()
+              .label("Regarder")
+              .on_click(move |_, _, cx| {
+                nav
+                  .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
+                  .ok();
+              }),
+          ),
+      )
+    });
+    let list = match self.tab {
+      Tab::Videos if loaded.videos.is_empty() => {
+        cards::note("Aucune rediffusion publique.").into_any_element()
+      }
+      Tab::Videos => cards::wrap(
+        loaded
+          .videos
+          .iter()
+          .map(|v| cards::video_card(v, width, &self.nav, window, cx))
+          .collect(),
+      )
+      .into_any_element(),
+      Tab::Clips if loaded.clips.is_empty() => cards::note("Aucun clip.").into_any_element(),
+      Tab::Clips => cards::wrap(
+        loaded
+          .clips
+          .iter()
+          .map(|c| cards::clip_card(c, width, &self.nav, window, cx))
+          .collect(),
+      )
+      .into_any_element(),
+    };
+    v_flex()
+      .id("twitch-channel")
+      .size_full()
+      .overflow_y_scroll()
+      .p_8()
+      .gap_6()
+      .child(
+        h_flex()
+          .gap_5()
+          .items_center()
+          .children(avatar.map(|a| div().size(px(80.)).flex_none().child(a)))
+          .child(
+            v_flex()
+              .min_w_0()
+              .gap_1()
+              .child(
+                div()
+                  .text_2xl()
+                  .font_weight(FontWeight::BOLD)
+                  .child(user.display_name.clone()),
+              )
+              .when(!user.description.is_empty(), |el| {
+                el.child(
+                  div()
+                    .text_sm()
+                    .text_color(theme::muted())
+                    .line_clamp(2)
+                    .child(user.description.clone()),
+                )
+              }),
+          ),
+      )
+      .children(live)
+      .child(
+        h_flex()
+          .gap_2()
+          .child(self.tab_button(Tab::Videos, "Vidéos", cx))
+          .child(self.tab_button(Tab::Clips, "Clips", cx)),
+      )
+      .child(list)
+      .into_any_element()
+  }
+}

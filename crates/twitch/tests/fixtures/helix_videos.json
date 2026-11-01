@@ -1,0 +1,118 @@
+{
+  "data": [
+    {
+      "id": "2916849417",
+      "stream_id": "319169653221",
+      "user_id": "137512364",
+      "user_login": "ow_esports",
+      "user_name": "ow_esports",
+      "title": "[DROPS] OWCS 2026 | Stage 3 Playoffs Day 3",
+      "description": "",
+      "created_at": "2026-11-01T17:32:19Z",
+      "published_at": "2026-11-01T17:32:19Z",
+      "url": "https://www.twitch.tv/videos/2916849417",
+      "thumbnail_url": "https://vod-secure.twitch.tv/_404/404_processing_%{width}x%{height}.png",
+      "viewable": "public",
+      "view_count": 288,
+      "language": "en",
+      "type": "archive",
+      "duration": "3h49m22s",
+      "muted_segments": null
+    },
+    {
+      "id": "2915878235",
+      "stream_id": "319217211750",
+      "user_id": "137512364",
+      "user_login": "ow_esports",
+      "user_name": "ow_esports",
+      "title": "[DROPS] OWCS 2026 | Stage 3 Playoffs Day 2",
+      "description": "",
+      "created_at": "2026-10-31T16:36:29Z",
+      "published_at": "2026-10-31T16:36:29Z",
+      "url": "https://www.twitch.tv/videos/2915878235",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/cf_vods/d3fi1amfgojobc/a74b4092085d5bd22810_ow_esports_319217211750_1793464582//thumb/thumb0-%{width}x%{height}.jpg",
+      "viewable": "public",
+      "view_count": 327715,
+      "language": "en",
+      "type": "archive",
+      "duration": "8h9m9s",
+      "muted_segments": [
+        {
+          "duration": 180,
+          "offset": 0
+        },
+        {
+          "duration": 180,
+          "offset": 721
+        },
+        {
+          "duration": 180,
+          "offset": 5047
+        },
+        {
+          "duration": 180,
+          "offset": 6128
+        },
+        {
+          "duration": 180,
+          "offset": 8833
+        },
+        {
+          "duration": 180,
+          "offset": 9013
+        },
+        {
+          "duration": 180,
+          "offset": 9193
+        },
+        {
+          "duration": 180,
+          "offset": 9556
+        },
+        {
+          "duration": 180,
+          "offset": 15874
+        },
+        {
+          "duration": 180,
+          "offset": 23461
+        }
+      ]
+    },
+    {
+      "id": "2914925695",
+      "stream_id": "319144051045",
+      "user_id": "137512364",
+      "user_login": "ow_esports",
+      "user_name": "ow_esports",
+      "title": "[DROPS] OWCS 2026 | Stage 3 Playoffs Day 1",
+      "description": "",
+      "created_at": "2026-10-30T16:36:43Z",
+      "published_at": "2026-10-30T16:36:43Z",
+      "url": "https://www.twitch.tv/videos/2914925695",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/cf_vods/d3fi1amfgojobc/b6f74612266c80acc5a8_ow_esports_319144051045_1793378196//thumb/thumb0-%{width}x%{height}.jpg",
+      "viewable": "public",
+      "view_count": 252223,
+      "language": "en",
+      "type": "archive",
+      "duration": "5h47m40s",
+      "muted_segments": [
+        {
+          "duration": 182,
+          "offset": 0
+        },
+        {
+          "duration": 180,
+          "offset": 362
+        },
+        {
+          "duration": 180,
+          "offset": 16418
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "cursor": "eyJiIjpudWxsLCJhIjp7Ik9mZnNldCI6M319"
+  }
+}

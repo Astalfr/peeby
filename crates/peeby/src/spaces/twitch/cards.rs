@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use gpui::prelude::*;
 use gpui::{AnyElement, App, FontWeight, SharedString, WeakEntity, Window, div, px};
 use gpui_component::{h_flex, v_flex};
-use twitch::helix::{self, Category, Helix, Stream};
+use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
 use ui::card::{Hover, MediaCard};
 use ui::picture::{self, Picture};
 use ui::theme;
@@ -155,7 +155,7 @@ pub struct Chip<'a> {
 }
 
 /// A channel as an avatar and its name (offline followed channels, search results); a click opens
-/// its live.
+/// its page.
 pub fn channel_chip(
   chip: Chip<'_>,
   nav: &WeakEntity<TwitchSpace>,
@@ -200,7 +200,9 @@ pub fn channel_chip(
     .hover(|el| el.bg(theme::surface_hover()))
     .on_click(move |_, _, cx| {
       nav
-        .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
+        .update(cx, |space, cx| {
+          space.open(Route::Channel(login.clone()), cx)
+        })
         .ok();
     })
     .child(div().flex_none().child(face))
@@ -260,4 +262,126 @@ pub fn note(text: impl Into<SharedString>) -> impl IntoElement {
     .text_sm()
     .text_color(theme::muted())
     .child(text.into())
+}
+
+/// `80 308` (French grouping, a narrow no-break space).
+pub fn grouped(n: u64) -> String {
+  let digits = n.to_string();
+  let mut out = String::new();
+  for (i, d) in digits.chars().enumerate() {
+    if i > 0 && (digits.len() - i).is_multiple_of(3) {
+      out.push('\u{202f}');
+    }
+    out.push(d);
+  }
+  out
+}
+
+/// `12 345 vues`.
+pub fn views(n: u64) -> String {
+  if n > 1 {
+    format!("{} vues", grouped(n))
+  } else {
+    format!("{n} vue")
+  }
+}
+
+/// `1 nov. 2026` from milliseconds since the epoch; empty when unknown.
+pub fn date(millis: Option<i64>) -> String {
+  const MONTHS: [&str; 12] = [
+    "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
+    "déc.",
+  ];
+  let Some(millis) = millis else {
+    return String::new();
+  };
+  // Civil date from days since the epoch (Howard Hinnant's algorithm).
+  let days = millis.div_euclid(86_400_000) + 719_468;
+  let era = days.div_euclid(146_097);
+  let doe = days - era * 146_097;
+  let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+  let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  let mp = (5 * doy + 2) / 153;
+  let day = doy - (153 * mp + 2) / 5 + 1;
+  let month = if mp < 10 { mp + 3 } else { mp - 9 };
+  let year = yoe + era * 400 + i64::from(month <= 2);
+  format!("{day} {} {year}", MONTHS[(month - 1) as usize])
+}
+
+/// A VOD's grid card, `width` wide; a click plays it.
+pub fn video_card(
+  video: &Video,
+  width: f32,
+  nav: &WeakEntity<TwitchSpace>,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let id = format!("twitch-video-{}", video.id);
+  let hover = Hover::new(&id, window, cx);
+  let route = Route::Vod(video.id.clone());
+  let nav = nav.clone();
+  MediaCard::new(
+    id,
+    hover,
+    video.title.clone(),
+    template(&video.thumbnail_url),
+  )
+  .lines([format!(
+    "{} · {}",
+    views(video.view_count),
+    date(video.created_at)
+  )])
+  .badge(Some(ui::player::format_time(video.duration as f64)))
+  .on_click(move |_, cx| {
+    nav
+      .update(cx, |space, cx| space.open(route.clone(), cx))
+      .ok();
+  })
+  .grid(width, window, cx)
+}
+
+/// A clip's grid card, `width` wide; a click plays it.
+pub fn clip_card(
+  clip: &Clip,
+  width: f32,
+  nav: &WeakEntity<TwitchSpace>,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let id = format!("twitch-clip-{}", clip.id);
+  let hover = Hover::new(&id, window, cx);
+  let route = Route::Clip(clip.id.clone());
+  let nav = nav.clone();
+  let thumbnail = clip.thumbnail_url.clone();
+  MediaCard::new(
+    id,
+    hover,
+    clip.title.clone(),
+    Picture::sized(move |_, _| thumbnail.clone()),
+  )
+  .lines([
+    format!("Clip de {}", clip.creator_name),
+    format!("{} · {}", views(clip.view_count), date(clip.created_at)),
+  ])
+  .badge(Some(ui::player::format_time(clip.duration)))
+  .on_click(move |_, cx| {
+    nav
+      .update(cx, |space, cx| space.open(route.clone(), cx))
+      .ok();
+  })
+  .grid(width, window, cx)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{compact, date, grouped};
+
+  #[test]
+  fn formats() {
+    assert_eq!(grouped(80_308), "80\u{202f}308");
+    assert_eq!(compact(41_770), "41,8 k");
+    assert_eq!(date(Some(1_793_563_851_000)), "1 nov. 2026");
+    assert_eq!(date(Some(0)), "1 janv. 1970");
+    assert_eq!(date(None), "");
+  }
 }

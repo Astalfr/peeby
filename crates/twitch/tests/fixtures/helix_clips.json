@@ -1,0 +1,64 @@
+{
+  "data": [
+    {
+      "id": "OpenRenownedNewtPMSTwin",
+      "url": "https://www.twitch.tv/ow_esports/clip/OpenRenownedNewtPMSTwin",
+      "embed_url": "https://clips.twitch.tv/embed?clip=OpenRenownedNewtPMSTwin",
+      "broadcaster_id": "137512364",
+      "broadcaster_name": "ow_esports",
+      "creator_id": "96433270",
+      "creator_name": "chegg_ow",
+      "video_id": "",
+      "game_id": "0",
+      "language": "en",
+      "title": "ZEDD SKIN?",
+      "view_count": 345899,
+      "created_at": "2019-09-29T18:40:03Z",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/a828f1d6-5d56-4cc1-9750-6178414bf74e/landscape/thumb/thumb-0000000000-480x272.jpg",
+      "duration": 30,
+      "vod_offset": null,
+      "is_featured": false
+    },
+    {
+      "id": "SpotlessUglyCakeDatBoi",
+      "url": "https://www.twitch.tv/ow_esports/clip/SpotlessUglyCakeDatBoi",
+      "embed_url": "https://clips.twitch.tv/embed?clip=SpotlessUglyCakeDatBoi",
+      "broadcaster_id": "137512364",
+      "broadcaster_name": "ow_esports",
+      "creator_id": "53643413",
+      "creator_name": "Thralee",
+      "video_id": "283539999",
+      "game_id": "0",
+      "language": "en",
+      "title": "5000 IQ",
+      "view_count": 336439,
+      "created_at": "2018-07-12T03:36:49Z",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/17c21342-724b-4501-9d02-5f1333cae331/landscape/thumb/thumb-0000000000-480x272.jpg",
+      "duration": 59.9,
+      "vod_offset": 15629,
+      "is_featured": false
+    },
+    {
+      "id": "ObservantHeartlessPastaHeyGuys",
+      "url": "https://www.twitch.tv/ow_esports/clip/ObservantHeartlessPastaHeyGuys",
+      "embed_url": "https://clips.twitch.tv/embed?clip=ObservantHeartlessPastaHeyGuys",
+      "broadcaster_id": "137512364",
+      "broadcaster_name": "ow_esports",
+      "creator_id": "210436285",
+      "creator_name": "arealhumanb3an",
+      "video_id": "",
+      "game_id": "0",
+      "language": "en",
+      "title": "High Noon Kid reacts to DJ Khaled dancing",
+      "view_count": 333346,
+      "created_at": "2018-07-28T19:37:56Z",
+      "thumbnail_url": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/e2456ce4-bc72-4fac-97d4-56d6789824bc/landscape/thumb/thumb-0000000000-480x272.jpg",
+      "duration": 30,
+      "vod_offset": null,
+      "is_featured": false
+    }
+  ],
+  "pagination": {
+    "cursor": "eyJiIjpudWxsLCJhIjp7IkN1cnNvciI6Ik13PT0ifX0"
+  }
+}

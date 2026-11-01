@@ -435,15 +435,44 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   429, `SessionExpired` from a page
 - Exit: met. Followed channels and a category browse and open, signed in
 ### 8. VODs and clips
-- [ ] VODs: usher VOD master through the same proxy (no ads to filter, but the token stays out of mpv's
-      URLs), seekable, resume is not tracked (Twitch has no resume API through Helix **[?]**)
-- [ ] Seek-bar previews: the storyboard query → a `Previews` impl (sprite sheets, as YouTube's)
-- [ ] Subscriber-only VODs: the `SubscriberOnly` message, and a hint to add the auth-token when none is set
-- [ ] Clips: direct MP4 from the clip token, `Source` without qualities when there is a single one
-- [ ] Muted segments (`muted_segments`) shown on the seek bar if the shared seek bar can mark ranges
-      (it marks chapters; otherwise skip)
-- Exit: a VOD plays and seeks with previews, a clip plays
+- Fixtures first:
+  - GQL, anonymous (scratchpad probe): a clip's playback (`gql_clip_playback.json`, token redacted), a
+    VOD's `seekPreviewsURL` and the storyboard JSON it points to;
+  - Helix, from `twitch_capture`: a public channel's archives and clips (`helix_videos.json`,
+    `helix_clips.json`).
 
+  The storyboard of a VOD still being broadcast answers 403: it has none until the broadcast ends
+- [x] VODs: `Client::play(Target::Vod)` through the same proxy (no ads to filter, the token stays out
+      of mpv's URLs), seekable, with the qualities of the master. Resume is not tracked
+- [x] Seek-bar previews:
+  - `Client::storyboard` → `gql::StoryboardLevel`s (largest frames first; `frame_at` gives the sheet,
+    column and row);
+  - `play::Storyboard` is the shared `Previews`;
+  - tested on the saved storyboard (first, middle and last frames).
+- [x] Subscriber-only VODs: the `SubscriberOnly` message, and a hint to add the auth-token when none is
+      saved
+- [x] Clips: `Client::clip` (raw GQL query, `gql::parse_clip_playback`) gives the MP4s signed with the
+      token, one quality each (1080p60 to 360p). They play as direct files
+- [x] Channel page (from step 7), `channel.rs`:
+  - the header from Helix `users` (avatar, name, description);
+  - the live from GQL `Channel` ("EN DIRECT", title, category, viewers, "Regarder");
+  - "Vidéos" (40 archives) and "Clips" (40 most viewed) tabs, as grid cards widened to the row (VODs:
+    duration, views, date; clips: author, views, date).
+
+  Channels in the offline list and the search open it; the channel's name under a live, a VOD or a
+  clip opens it too
+- [x] `helix::Video`, `Clip`, `parse_duration` (`3h8m33s`), `user` (by login), `videos`, `video`,
+      `clips`, `clip`; 3 new tests. `peeby` takes `twitch.tv/videos/<id>`, `clips.twitch.tv/<slug>` and
+      `twitch.tv/<login>/clip/<slug>` too (`Route::from_url`, tested)
+- Not done: muted segments on the seek bar (the shared seek bar marks chapters, not ranges)
+- Verified in the app (screenshots, posted clicks and moves):
+  - a public VOD plays in 0.99 s (7 qualities, seek bar, 8:09:09), with a storyboard frame shown when
+    hovering the seek bar;
+  - a clip plays in 1.34 s (4 MP4 qualities);
+  - the channel page opens from the clip's channel name, with the live banner and the VODs.
+- Not verified: the Clips tab by click, a subscriber-only VOD's message in the app, a VOD with the
+  user's auth-token, `404_processing` thumbnails (they show empty)
+- Exit: met. A VOD plays and seeks with previews, a clip plays
 ### 9. Chat (read-only), generic in `ui`
 - Built as [Live and chat are generic](#live-and-chat-are-generic) says:
   - the model (`ChatMessage`, `Fragment`, `ChatEvent`) and the `ChatPanel` go in `ui::chat`, with no

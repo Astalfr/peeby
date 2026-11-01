@@ -1,0 +1,13 @@
+{
+  "data": {
+    "video": {
+      "id": "2915878235",
+      "lengthSeconds": 29349,
+      "seekPreviewsURL": "https://d3fi1amfgojobc.cloudfront.net/a74b4092085d5bd22810_ow_esports_319217211750_1793464582/storyboards/2915878235-info.json"
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 24,
+    "operationName": "SeekPreviews"
+  }
+}

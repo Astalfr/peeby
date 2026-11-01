@@ -252,3 +252,171 @@ pub fn client_id_from_page(page: &str) -> Option<&str> {
   let id = &id[..id.find('"')?];
   (id.len() == 30 && id.bytes().all(|b| b.is_ascii_alphanumeric())).then_some(id)
 }
+
+/// A clip's playable files, best first. Their URLs carry the playback token: never log them.
+#[derive(Clone)]
+pub struct ClipPlayback {
+  /// Each quality.
+  pub qualities: Vec<ClipQuality>,
+}
+
+/// One quality of a clip: a direct MP4.
+#[derive(Clone)]
+pub struct ClipQuality {
+  /// Height, e.g. 1080.
+  pub height: u32,
+  /// Frame rate, rounded.
+  pub frame_rate: u32,
+  /// `sourceURL` signed with the token (`?sig=…&token=…`).
+  pub url: String,
+}
+
+impl std::fmt::Debug for ClipPlayback {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let labels: Vec<String> = self
+      .qualities
+      .iter()
+      .map(|q| format!("{}p{}", q.height, q.frame_rate))
+      .collect();
+    f.debug_struct("ClipPlayback")
+      .field("qualities", &labels)
+      .finish()
+  }
+}
+
+const CLIP_QUERY: &str = "query ClipPlayback($slug: ID!) { clip(slug: $slug) { id slug title \
+  durationSeconds playbackAccessToken(params: {platform: \"web\", playerBackend: \"mediaplayer\", \
+  playerType: \"site\"}) { signature value } videoQualities { frameRate quality sourceURL } } }";
+
+/// The request for a clip's files.
+pub fn clip_request(slug: &str) -> Value {
+  json!({ "operationName": "ClipPlayback", "query": CLIP_QUERY, "variables": { "slug": slug } })
+}
+
+/// Reads a clip's files; `clip: null` is [`Error::NotFound`].
+pub fn parse_clip_playback(answer: &Value) -> Result<ClipPlayback> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let clip = &answer["data"]["clip"];
+  if clip.is_null() {
+    return Err(Error::NotFound);
+  }
+  let token = &clip["playbackAccessToken"];
+  let (Some(value), Some(signature)) = (token["value"].as_str(), token["signature"].as_str())
+  else {
+    return Err(Error::Parse {
+      endpoint: "gql",
+      detail: "clip without a playback token".into(),
+    });
+  };
+  let mut qualities: Vec<ClipQuality> = clip["videoQualities"]
+    .as_array()
+    .map(|list| {
+      list
+        .iter()
+        .filter_map(|q| {
+          let source = q["sourceURL"].as_str()?;
+          let url =
+            reqwest::Url::parse_with_params(source, &[("sig", signature), ("token", value)])
+              .ok()?
+              .to_string();
+          Some(ClipQuality {
+            height: q["quality"].as_str()?.parse().ok()?,
+            frame_rate: q["frameRate"].as_f64().map_or(30, |f| f.round() as u32),
+            url,
+          })
+        })
+        .collect()
+    })
+    .unwrap_or_default();
+  qualities.sort_by_key(|q| std::cmp::Reverse((q.height, q.frame_rate)));
+  if qualities.is_empty() {
+    return Err(Error::Parse {
+      endpoint: "gql",
+      detail: "clip without a playable quality".into(),
+    });
+  }
+  Ok(ClipPlayback { qualities })
+}
+
+/// The request for a VOD's seek previews (`seekPreviewsURL`).
+pub fn seek_previews_request(id: &str) -> Value {
+  json!({
+    "operationName": "SeekPreviews",
+    "query": "query SeekPreviews($id: ID!) { video(id: $id) { id lengthSeconds seekPreviewsURL } }",
+    "variables": { "id": id },
+  })
+}
+
+/// The storyboard's URL, when the VOD has one.
+pub fn parse_seek_previews(answer: &Value) -> Option<String> {
+  answer["data"]["video"]["seekPreviewsURL"]
+    .as_str()
+    .filter(|u| !u.is_empty())
+    .map(str::to_owned)
+}
+
+/// One level of a VOD's storyboard: frames every `interval` seconds on sheets of `cols`×`rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StoryboardLevel {
+  /// Frames in all.
+  pub count: u32,
+  /// Size of one frame.
+  pub width: u32,
+  /// See [`StoryboardLevel::width`].
+  pub height: u32,
+  /// Frames per row and rows per sheet.
+  pub cols: u32,
+  /// See [`StoryboardLevel::cols`].
+  pub rows: u32,
+  /// Seconds between frames.
+  pub interval: f64,
+  /// The sheets, absolute URLs.
+  pub images: Vec<String>,
+}
+
+impl StoryboardLevel {
+  /// The sheet, column and row of the frame at `seconds`.
+  pub fn frame_at(&self, seconds: f64) -> Option<(&str, u32, u32)> {
+    let per_sheet = self.cols.checked_mul(self.rows).filter(|&n| n > 0)?;
+    let index =
+      ((seconds.max(0.0) / self.interval.max(1.0)) as u32).min(self.count.saturating_sub(1));
+    let sheet = self.images.get((index / per_sheet) as usize)?;
+    let within = index % per_sheet;
+    Some((sheet, within % self.cols, within / self.cols))
+  }
+}
+
+/// Reads the storyboard JSON at `url`: its sheets are named relative to it. The level with the
+/// largest frames comes first.
+pub fn parse_storyboard(text: &str, url: &str) -> Vec<StoryboardLevel> {
+  let base = url.rsplit_once('/').map_or(url, |(base, _)| base);
+  let levels: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+  let mut levels: Vec<StoryboardLevel> = levels
+    .as_array()
+    .map(|list| {
+      list
+        .iter()
+        .filter_map(|l| {
+          let images: Vec<String> = l["images"]
+            .as_array()?
+            .iter()
+            .filter_map(|i| i.as_str().map(|name| format!("{base}/{name}")))
+            .collect();
+          (!images.is_empty()).then(|| StoryboardLevel {
+            count: l["count"].as_u64().unwrap_or(0) as u32,
+            width: l["width"].as_u64().unwrap_or(0) as u32,
+            height: l["height"].as_u64().unwrap_or(0) as u32,
+            cols: l["cols"].as_u64().unwrap_or(0) as u32,
+            rows: l["rows"].as_u64().unwrap_or(0) as u32,
+            interval: l["interval"].as_f64().unwrap_or(0.0),
+            images,
+          })
+        })
+        .collect()
+    })
+    .unwrap_or_default();
+  levels.sort_by_key(|l| std::cmp::Reverse(l.width));
+  levels
+}

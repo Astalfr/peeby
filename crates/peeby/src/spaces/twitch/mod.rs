@@ -7,6 +7,7 @@
 
 pub mod browse;
 pub mod cards;
+pub mod channel;
 pub mod following;
 pub mod login;
 pub mod play;
@@ -35,12 +36,13 @@ use crate::settings::Settings;
 use crate::shell::space::{Avatar, MenuEntry, Space, SpaceEvent, SpaceInfo};
 use browse::{BrowseView, CategoryView};
 use cards::Avatars;
+use channel::ChannelView;
 use following::FollowingView;
 use login::{LoginView, SignedIn};
 use search::SearchView;
 use session::Secrets;
 use settings_page::SettingsView;
-use watch::WatchView;
+use watch::{Kind, WatchView};
 
 /// Twitch requires validating the token every hour.
 const VALIDATE_EVERY: Duration = Duration::from_secs(3600);
@@ -65,11 +67,41 @@ pub enum Route {
   },
   /// The search page.
   Search,
+  /// A channel's page (its VODs and clips), by login.
+  Channel(String),
   /// A channel's live, by login.
   Watch(String),
+  /// A VOD, by id.
+  Vod(String),
+  /// A clip, by slug.
+  Clip(String),
 }
 
 impl Route {
+  /// The page of a Twitch link: `twitch.tv/videos/<id>`, `clips.twitch.tv/<slug>`,
+  /// `twitch.tv/<login>/clip/<slug>`, else `twitch.tv/<login>`'s live.
+  pub fn from_url(url: &str) -> Option<Self> {
+    let (_, rest) = url.split_once("twitch.tv/")?;
+    let mut parts = rest
+      .split(['?', '#'])
+      .next()?
+      .split('/')
+      .filter(|p| !p.is_empty());
+    let first = parts.next()?;
+    let second = parts.next();
+    let third = parts.next();
+    if url.contains("clips.twitch.tv/") {
+      return Some(Self::Clip(first.to_owned()));
+    }
+    match (first, second, third) {
+      ("videos", Some(id), _) if id.bytes().all(|b| b.is_ascii_digit()) => {
+        Some(Self::Vod(id.to_owned()))
+      }
+      (_, Some("clip"), Some(slug)) => Some(Self::Clip(slug.to_owned())),
+      _ => following::channel_login(first).map(Self::Watch),
+    }
+  }
+
   /// Sidebar pages and the search reset the stack; categories and lives are pushed.
   fn is_top_level(&self) -> bool {
     matches!(self, Self::Following | Self::Browse | Self::Search)
@@ -109,8 +141,8 @@ pub struct TwitchSpace {
   /// GQL and usher, for playback and the channels' headers.
   client: Option<twitch::Client>,
   stack: Vec<Page>,
-  /// A channel asked for on the command line, opened once signed in.
-  pending_channel: Option<String>,
+  /// A page asked for on the command line (a live, a VOD, a clip), opened once signed in.
+  pending: Option<Route>,
   /// The sign-in card while signed out, made at the next render.
   login: Option<Entity<LoginView>>,
   /// Why the card shows (the session expired, Twitch unreachable).
@@ -131,20 +163,15 @@ impl TwitchSpace {
   }
 
   /// The space with the secrets read before the UI started: a saved refresh token is exchanged
-  /// in the background. `channel` (from the command line) opens once signed in, and shows the tab.
-  pub fn new(
-    auth: Auth,
-    secrets: Secrets,
-    channel: Option<String>,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  /// in the background. `pending` (from the command line) opens once signed in, and shows the tab.
+  pub fn new(auth: Auth, secrets: Secrets, pending: Option<Route>, cx: &mut Context<Self>) -> Self {
     let mut space = Self {
       auth,
       state: State::SignedOut,
       auth_token: None,
       client: None,
       stack: Vec::new(),
-      pending_channel: channel,
+      pending,
       login: None,
       login_message: None,
       settings: None,
@@ -171,7 +198,7 @@ impl TwitchSpace {
     if let Some(refresh) = secrets.refresh {
       space.restore(refresh, cx);
     }
-    if space.pending_channel.is_some() {
+    if space.pending.is_some() {
       // After the shell has subscribed to the space's events.
       cx.spawn(async move |this, cx| {
         this.update(cx, |_, cx| cx.emit(SpaceEvent::Activate)).ok();
@@ -305,8 +332,8 @@ impl TwitchSpace {
     self._login_subscription = None;
     self.stack.clear();
     self.open(Route::Following, cx);
-    if let Some(channel) = self.pending_channel.take() {
-      self.open(Route::Watch(channel), cx);
+    if let Some(route) = self.pending.take() {
+      self.open(route, cx);
     }
     cx.notify();
   }
@@ -362,12 +389,26 @@ impl TwitchSpace {
           .into()
       }
       Route::Search => return,
-      Route::Watch(login) => {
+      Route::Channel(login) => {
         let Some(client) = self.client.clone() else {
           return;
         };
         let login = login.clone();
-        cx.new(|cx| WatchView::new(login, client, nav, cx)).into()
+        cx.new(|cx| ChannelView::new(nav, helix, client, login, cx))
+          .into()
+      }
+      Route::Watch(_) | Route::Vod(_) | Route::Clip(_) => {
+        let Some(client) = self.client.clone() else {
+          return;
+        };
+        let kind = match &route {
+          Route::Vod(id) => Kind::Vod(id.clone()),
+          Route::Clip(slug) => Kind::Clip(slug.clone()),
+          Route::Watch(login) => Kind::Live(login.clone()),
+          _ => return,
+        };
+        cx.new(|cx| WatchView::new(kind, client, helix, nav, cx))
+          .into()
       }
     };
     self.push(route, view, cx);
@@ -642,5 +683,31 @@ impl Render for TwitchSpace {
         None => div().size_full().into_any_element(),
       },
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::Route;
+
+  #[test]
+  fn links() {
+    assert_eq!(
+      Route::from_url("https://www.twitch.tv/squeezie"),
+      Some(Route::Watch("squeezie".into()))
+    );
+    assert_eq!(
+      Route::from_url("https://www.twitch.tv/videos/2915878235?t=1h"),
+      Some(Route::Vod("2915878235".into()))
+    );
+    assert_eq!(
+      Route::from_url("https://clips.twitch.tv/OpenRenownedNewtPMSTwin"),
+      Some(Route::Clip("OpenRenownedNewtPMSTwin".into()))
+    );
+    assert_eq!(
+      Route::from_url("twitch.tv/ow_esports/clip/OpenRenownedNewtPMSTwin"),
+      Some(Route::Clip("OpenRenownedNewtPMSTwin".into()))
+    );
+    assert_eq!(Route::from_url("https://youtube.com/watch?v=x"), None);
   }
 }

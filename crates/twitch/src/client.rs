@@ -115,6 +115,25 @@ impl Client {
     gql::parse_channel(&answer)
   }
 
+  /// A clip's files (direct MP4s, signed).
+  pub async fn clip(&self, slug: &str) -> Result<gql::ClipPlayback> {
+    let answer = self.gql(&gql::clip_request(slug)).await?;
+    gql::parse_clip_playback(&answer)
+  }
+
+  /// A VOD's storyboard levels (largest frames first); empty when it has none.
+  pub async fn storyboard(&self, id: &str) -> Result<Vec<gql::StoryboardLevel>> {
+    let answer = self.gql(&gql::seek_previews_request(id)).await?;
+    let Some(url) = gql::parse_seek_previews(&answer) else {
+      return Ok(Vec::new());
+    };
+    let response = self.http.get(&url).send().await?;
+    if !response.status().is_success() {
+      return Ok(Vec::new());
+    }
+    Ok(gql::parse_storyboard(&response.text().await?, &url))
+  }
+
   /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
   /// [`Error::NotLoggedIn`] when it is refused or there is none.
   pub async fn current_user(&self) -> Result<String> {

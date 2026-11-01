@@ -232,3 +232,38 @@ fn offline_channel() {
   assert!(channel.live.is_none());
   assert!(!channel.title.is_empty());
 }
+
+#[test]
+fn clip_playback() {
+  let clip = gql::parse_clip_playback(&json("gql_clip_playback.json")).unwrap();
+  let heights: Vec<u32> = clip.qualities.iter().map(|q| q.height).collect();
+  assert_eq!(heights, [1080, 720, 480, 360]);
+  assert_eq!(clip.qualities[0].frame_rate, 60);
+  let url = &clip.qualities[0].url;
+  assert!(url.contains("/landscape/h264/1080/index.mp4?sig=REDACTED&token="));
+  // Debug shows the qualities, never the signed URLs.
+  assert!(!format!("{clip:?}").contains("sig="));
+}
+
+#[test]
+fn vod_storyboard() {
+  let url = gql::parse_seek_previews(&json("gql_vod_seek_previews.json")).unwrap();
+  assert!(url.ends_with("/storyboards/2915878235-info.json"));
+  let levels = gql::parse_storyboard(&text("vod_storyboard.json"), &url);
+  assert_eq!(levels.len(), 2);
+  let high = &levels[0];
+  assert_eq!(
+    (high.width, high.height, high.cols, high.rows),
+    (220, 124, 5, 10)
+  );
+  assert_eq!(high.images.len(), 4);
+  assert!(high.images[0].ends_with("/storyboards/2915878235-high-0.jpg"));
+  // Frame 0, then frame 51 (second sheet, row 0, column 1), then the last one.
+  assert_eq!(high.frame_at(0.0).map(|f| (f.1, f.2)), Some((0, 0)));
+  let (sheet, col, row) = high.frame_at(51.0 * 147.0).unwrap();
+  assert!(sheet.ends_with("-high-1.jpg"));
+  assert_eq!((col, row), (1, 0));
+  let (sheet, col, row) = high.frame_at(1e9).unwrap();
+  assert!(sheet.ends_with("-high-3.jpg"));
+  assert_eq!((col, row), (4, 9));
+}

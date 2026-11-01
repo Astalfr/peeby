@@ -1,0 +1,40 @@
+{
+  "data": {
+    "clip": {
+      "id": "2245762195",
+      "slug": "FaithfulAverageQueleaHoneyBadger-ffYdlWXc-UnD8zUo",
+      "title": "ssgdps",
+      "durationSeconds": 13,
+      "playbackAccessToken": {
+        "signature": "REDACTED",
+        "value": "{\"authorization\":\"REDACTED\",\"clip_uri\":\"REDACTED\",\"clip_slug\":\"REDACTED\",\"device_id\":\"REDACTED\",\"expires\":\"REDACTED\",\"user_id\":\"REDACTED\",\"version\":\"REDACTED\"}"
+      },
+      "videoQualities": [
+        {
+          "frameRate": 59.94805908203125,
+          "quality": "1080",
+          "sourceURL": "https://d1ndex63qxojbr.cloudfront.net/nauth/8dafad48-e664-4b72-aba9-ec338afe14b4/landscape/h264/1080/index.mp4"
+        },
+        {
+          "frameRate": 60.017333984375,
+          "quality": "720",
+          "sourceURL": "https://d1ndex63qxojbr.cloudfront.net/nauth/8dafad48-e664-4b72-aba9-ec338afe14b4/landscape/h264/720/index.mp4"
+        },
+        {
+          "frameRate": 30.04477882385254,
+          "quality": "480",
+          "sourceURL": "https://d1ndex63qxojbr.cloudfront.net/nauth/8dafad48-e664-4b72-aba9-ec338afe14b4/landscape/h264/480/index.mp4"
+        },
+        {
+          "frameRate": 30.04477882385254,
+          "quality": "360",
+          "sourceURL": "https://d1ndex63qxojbr.cloudfront.net/nauth/8dafad48-e664-4b72-aba9-ec338afe14b4/landscape/h264/360/index.mp4"
+        }
+      ]
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 93,
+    "operationName": "ClipPlayback"
+  }
+}

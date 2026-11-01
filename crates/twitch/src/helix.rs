@@ -79,6 +79,68 @@ pub struct Followed {
   pub broadcaster_name: String,
 }
 
+/// A VOD (a past broadcast, a highlight, an upload).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Video {
+  /// Id.
+  pub id: String,
+  /// The broadcaster's id, login and shown name.
+  pub user_id: String,
+  /// See [`Video::user_id`].
+  pub user_login: String,
+  /// See [`Video::user_id`].
+  pub user_name: String,
+  /// Title.
+  pub title: String,
+  /// Publication, milliseconds since the epoch.
+  pub created_at: Option<i64>,
+  /// Views.
+  pub view_count: u64,
+  /// Length, seconds (`3h8m33s` in the answer).
+  pub duration: u64,
+  /// Thumbnail template (`%{width}x%{height}`); empty or `404_processing` while being processed.
+  pub thumbnail_url: String,
+}
+
+/// A clip.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Clip {
+  /// Id, also its slug for GQL.
+  pub id: String,
+  /// The broadcaster's id and shown name.
+  pub broadcaster_id: String,
+  /// See [`Clip::broadcaster_id`].
+  pub broadcaster_name: String,
+  /// Who made it.
+  pub creator_name: String,
+  /// Title.
+  pub title: String,
+  /// Views.
+  pub view_count: u64,
+  /// Creation, milliseconds since the epoch.
+  pub created_at: Option<i64>,
+  /// Direct thumbnail URL.
+  pub thumbnail_url: String,
+  /// Length, seconds.
+  pub duration: f64,
+}
+
+/// `3h8m33s`, `45m2s`, `59s` in seconds; anything else counts as 0.
+pub fn parse_duration(text: &str) -> u64 {
+  let mut total = 0;
+  let mut number = 0;
+  for c in text.chars() {
+    match c {
+      '0'..='9' => number = number * 10 + u64::from(c as u8 - b'0'),
+      'h' => (total, number) = (total + number * 3600, 0),
+      'm' => (total, number) = (total + number * 60, 0),
+      's' => (total, number) = (total + number, 0),
+      _ => return 0,
+    }
+  }
+  total
+}
+
 /// A category (a game, "Just Chatting"…).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Category {
@@ -202,6 +264,42 @@ pub fn parse_categories(answer: &Value) -> Page<Category> {
   })
 }
 
+/// `/videos`.
+pub fn parse_videos(answer: &Value) -> Page<Video> {
+  page(answer, |v| {
+    let id = v["id"].as_str().filter(|id| !id.is_empty())?;
+    Some(Video {
+      id: id.to_owned(),
+      user_id: text(&v["user_id"]),
+      user_login: text(&v["user_login"]),
+      user_name: text(&v["user_name"]),
+      title: text(&v["title"]),
+      created_at: v["created_at"].as_str().and_then(crate::time::epoch_millis),
+      view_count: v["view_count"].as_u64().unwrap_or(0),
+      duration: parse_duration(v["duration"].as_str().unwrap_or_default()),
+      thumbnail_url: text(&v["thumbnail_url"]),
+    })
+  })
+}
+
+/// `/clips`.
+pub fn parse_clips(answer: &Value) -> Page<Clip> {
+  page(answer, |c| {
+    let id = c["id"].as_str().filter(|id| !id.is_empty())?;
+    Some(Clip {
+      id: id.to_owned(),
+      broadcaster_id: text(&c["broadcaster_id"]),
+      broadcaster_name: text(&c["broadcaster_name"]),
+      creator_name: text(&c["creator_name"]),
+      title: text(&c["title"]),
+      view_count: c["view_count"].as_u64().unwrap_or(0),
+      created_at: c["created_at"].as_str().and_then(crate::time::epoch_millis),
+      thumbnail_url: text(&c["thumbnail_url"]),
+      duration: c["duration"].as_f64().unwrap_or(0.0),
+    })
+  })
+}
+
 /// `/search/channels`.
 pub fn parse_search_channels(answer: &Value) -> Page<ChannelResult> {
   page(answer, |c| {
@@ -298,6 +396,52 @@ impl Helix {
     }
     let query: Vec<(&str, &str)> = ids.iter().take(100).map(|id| ("id", id.as_str())).collect();
     Ok(parse_users(&self.get("users", &query).await?))
+  }
+
+  /// A user by login.
+  pub async fn user(&self, login: &str) -> Result<User> {
+    parse_users(&self.get("users", &[("login", login)]).await?)
+      .into_iter()
+      .next()
+      .ok_or(Error::NotFound)
+  }
+
+  /// A channel's past broadcasts (`type=archive`), newest first; `None`: every type.
+  pub async fn videos(
+    &self,
+    user_id: &str,
+    kind: Option<&str>,
+    after: Option<&str>,
+  ) -> Result<Page<Video>> {
+    let mut query = vec![("user_id", user_id), ("first", "40")];
+    query.extend(kind.map(|k| ("type", k)));
+    query.extend(after.map(|a| ("after", a)));
+    Ok(parse_videos(&self.get("videos", &query).await?))
+  }
+
+  /// A VOD by id.
+  pub async fn video(&self, id: &str) -> Result<Video> {
+    parse_videos(&self.get("videos", &[("id", id)]).await?)
+      .items
+      .into_iter()
+      .next()
+      .ok_or(Error::NotFound)
+  }
+
+  /// A channel's most viewed clips.
+  pub async fn clips(&self, broadcaster_id: &str, after: Option<&str>) -> Result<Page<Clip>> {
+    let mut query = vec![("broadcaster_id", broadcaster_id), ("first", "40")];
+    query.extend(after.map(|a| ("after", a)));
+    Ok(parse_clips(&self.get("clips", &query).await?))
+  }
+
+  /// A clip by id.
+  pub async fn clip(&self, id: &str) -> Result<Clip> {
+    parse_clips(&self.get("clips", &[("id", id)]).await?)
+      .items
+      .into_iter()
+      .next()
+      .ok_or(Error::NotFound)
   }
 
   /// The followed channels on air, most viewers first.
