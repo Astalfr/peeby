@@ -51,6 +51,10 @@ The stream (`Client::stream`, ~0.2 s), the page metadata (`Client::watch`) and t
 
 `AppView` owns the title bar (menu button folding the sidebar, back button), the sidebar (Home, Subscriptions, Watch later, Playlists, then Account and Settings) and a stack of pages. Sidebar pages reset the stack (Watch later is the `Playlist` route of `WL`, made top-level); the channels, channel, playlist and watch pages are pushed. `peebtube <url-or-id>` opens a video at startup.
 
+## Feeds
+
+`FeedView` shows its videos through GPUI's virtual `list`: one item per row of cards (cards per row from the window width less the sidebar and the margins) or per list row, then an end item. Only the items in view, and those in the 800 px overdraw whose height is not known yet, are built on a frame. A plain scrolling div built every card on each wheel event, since GPUI re-renders the scrolled view. The end item coming into the list's reach loads the next page; new videos splice the last row and the new ones in. A change of layout or of cards per row rebuilds the items, keeping the first video in view.
+
 ## Playlists
 
 `Client::playlists` reads the library (`FEplaylist_aggregation`, all playlists in one response, "Watch later" and "Liked videos" included), `Client::playlist` a playlist's page (`VL<id>`, header and the first 100 videos) and `Client::playlist_more` the next 100. "Watch later" lists `playlistVideoRenderer`s, the others video lockups; the next page's token is the `continuationItemViewModel` of the list holding the videos (the page has another one beside it).
