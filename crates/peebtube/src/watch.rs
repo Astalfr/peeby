@@ -956,11 +956,17 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
     }];
     image_fill(&sizes, 36., px(18.), window, cx)
   });
-  let meta = if comment.likes.is_empty() {
-    String::new()
-  } else {
-    format!("{} j'aime", comment.likes)
-  };
+  // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
+  // only, comments are not rated from the app.
+  let likes = h_flex()
+    .gap_1p5()
+    .items_center()
+    .text_xs()
+    .text_color(theme::muted())
+    .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(14.)))
+    .when(!comment.likes.is_empty(), |el| {
+      el.child(comment.likes.clone())
+    });
   h_flex()
     .gap_3()
     .items_start()
@@ -988,9 +994,7 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
             ),
         )
         .child(div().child(comment.text.clone()))
-        .when(!meta.is_empty(), |el| {
-          el.child(div().text_sm().text_color(theme::muted()).child(meta))
-        }),
+        .child(likes),
     )
 }
 
