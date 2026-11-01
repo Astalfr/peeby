@@ -18,6 +18,51 @@ the boxes as steps land, and list under each step what was verified and what was
 - **Nothing without signing in**: signed out, the space shows only its sign-in card.
 - **Low latency and HEVC/AV1 are in scope** (step 10).
 - Writes to the account (following, sending chat messages) stay out of scope.
+- **Live and chat are generic** (2026-11-01): they must also serve YouTube lives later, and possibly other
+  platforms. See the next section.
+
+## Live and chat are generic
+
+The user's requirement (2026-11-01): the live mode and the chat must also serve **YouTube lives** later,
+and possibly other platforms. As with the player, `ui` holds the shared models and components, which know
+no service. Each space only converts its own data:
+
+- **Live playback**: done this way at step 4.
+  - `ui::player::Source::live`, `LiveInfo { viewers, started_at }` and `set_notice` hold nothing
+    Twitch-specific.
+  - A YouTube live is the same `Source` with `live: true`. Its stream is VISIONOS HLS with a sliding
+    window, so it needs no proxy and has no ads to remove.
+  - What stays in the Twitch space: the proxy, the ad state behind the notice's text.
+- **Chat model** in `ui::chat`, with no service type:
+
+  | Type | Content |
+  |---|---|
+  | `ChatMessage` | `id`, `author { name, color, badges: Vec<Picture> }`, `fragments: Vec<Fragment>`, `time`, `kind` (normal, highlighted, system notice such as a sub or a raid), `deleted` |
+  | `Fragment` | `Text`, `Emote { name, picture }` (static or animated), `Mention`, `Link` |
+  | `ChatEvent` | `Message`, `Delete(id)`, `ClearUser(name)`, `Clear`, `State` (slow mode, sub-only…) |
+
+  - Twitch maps IRC (`PRIVMSG`, `CLEARMSG`, `CLEARCHAT`, `USERNOTICE`, `ROOMSTATE`) and its
+    third-party emotes onto it.
+  - YouTube will map InnerTube's live chat: `live_chat/get_live_chat` continuations, with
+    `liveChatTextMessageRenderer` runs made of text and emoji, and paid messages and memberships as
+    highlighted messages. Its fixture comes before its parser, as always. **[?]** until then.
+- **Chat component** `ui::chat::ChatPanel`:
+  - an entity fed with `ChatEvent`s by its page, which owns the connection;
+  - a variable-height virtual list, at most 500 messages;
+  - wrapping text with inline emote images;
+  - auto-scroll paused when the user scrolls up;
+  - deleted messages greyed;
+  - author colors made readable on the theme.
+
+  It knows neither IRC nor InnerTube. Sending messages (later, a write to the account) would be a
+  callback the page gives it.
+- **Connection**: a per-service source in each space (`spaces/twitch/chat.rs` over `twitch::chat`, later
+  `spaces/youtube/chat.rs` over `innertube`), which turns its protocol into `ChatEvent`s on a channel.
+  The panel never sees a socket or a continuation.
+- **Watch layout with a chat column**: the player and the chat beside it, with theater mode putting the
+  chat under or beside the player. It is a `ui` layout helper both spaces' watch pages use, not a Twitch
+  page detail.
+- **Animated emotes** (frames in the image store) are a `ui::images` feature, for any space.
 
 ## Facts checked for this plan
 
@@ -66,13 +111,15 @@ crates/twitch/                  NEW, no GPUI; thiserror; lenient parsing from se
   src/chat/emotes.rs            Twitch emote ranges, 7TV/BTTV/FFZ sets (later)
   tests/fixtures/               redacted responses, saved playlists, IRC lines
   examples/smoke.rs             live check of every endpoint, counts only
-crates/ui/src/player/           live mode and a generic notice (step 4)
+crates/ui/src/player/           live mode and a generic notice (step 4), for any space
+crates/ui/src/chat/             NEW, generic: ChatMessage / Fragment / ChatEvent, ChatPanel, watch layout
+                                with a chat column (step 9), for Twitch now and YouTube lives later
 crates/peeby/src/spaces/twitch/
   mod.rs                        TwitchSpace: Space impl, page stack, sidebar
   session.rs                    keyring entries, restore before the UI, save in the background
   play.rs                       resolve a live/VOD/clip into a ui::player::Source (starts the proxy)
-  watch.rs                      watch page: player + chat column, title, channel, viewers, uptime
-  chat.rs                       chat panel (virtual list, emotes)
+  watch.rs                      watch page on ui's layout with a chat column: title, channel, viewers, uptime
+  chat.rs                       chat source: twitch::chat lines → ui::chat::ChatEvent (no UI of its own)
   following.rs, browse.rs, category.rs, channel.rs, search.rs, cards.rs (Twitch → MediaCard)
   settings_page.rs              sign-in (device code), auth-token field with its tutorial, quality, chat
 spikes/twitch-play/             timings: GQL token, usher, proxy, first frame
@@ -316,7 +363,13 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       (it marks chapters; otherwise skip)
 - Exit: a VOD plays and seeks with previews, a clip plays
 
-### 9. Chat (read-only)
+### 9. Chat (read-only), generic in `ui`
+- Built as [Live and chat are generic](#live-and-chat-are-generic) says:
+  - the model (`ChatMessage`, `Fragment`, `ChatEvent`) and the `ChatPanel` go in `ui::chat`, with no
+    Twitch type;
+  - the Twitch space converts IRC into them;
+  - the panel's own tests and an example (`cargo run -p ui --example chat`, generated messages) do not
+    involve Twitch, so that a YouTube live chat can plug in later without changing `ui`.
 - Fixtures first: a file of raw IRC lines from a busy channel, with emotes, an emoji before an emote (to
   settle whether `emotes` ranges count code points), a `CLEARMSG`, a `CLEARCHAT`, a sub `USERNOTICE`
 - [ ] UI spike, small, before the panel: a message with inline emote images that wraps in GPUI
@@ -327,9 +380,14 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       slices
 - [ ] `chat::connection`: `wss://irc-ws.chat.twitch.tv:443`, `CAP REQ`, `PASS`/`NICK justinfan<n>`,
       `JOIN #login`, PONG, reconnect with backoff (1, 2, 4… 30 s), stops when the page drops
-- [ ] Chat panel in the watch page's right column: name in its color (lightened on the dark theme when
-      too dark), message with Twitch emotes (static), at most 500 messages, auto-scroll paused when the
-      user scrolls up ("Reprendre le défilement"), deleted messages greyed
+- [ ] `ui::chat::ChatPanel` in the watch page's chat column (the shared layout helper):
+  - the name in its color, lightened on the dark theme when too dark;
+  - the message's fragments with emote pictures (static first);
+  - at most 500 messages;
+  - auto-scroll paused when the user scrolls up ("Reprendre le défilement");
+  - deleted messages greyed.
+
+  `spaces/twitch/chat.rs` turns `twitch::chat` lines into `ChatEvent`s
 - [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), 7TV/BTTV/FFZ
       emotes by word (cached per channel), animated emotes (needs `image` animation features and frames in
       the image store, agreed)

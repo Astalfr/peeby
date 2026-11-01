@@ -70,6 +70,15 @@ and prepare for it without building it (refactor plan, step 9). The research, wi
 4. **Low latency and HEVC/AV1 are in scope** (2026-11-01): prefetch segments kept by the proxy, and the
    best codec the GPU decodes, h264 as fallback. Plan: [twitch-plan.md](../twitch-plan.md).
 
+5. **Live and chat are generic** (2026-11-01). They are built to serve YouTube lives later, and possibly
+   other platforms:
+   - the live mode of the shared player (`Source::live`, `LiveInfo`, `set_notice`);
+   - a chat model and panel in `ui::chat` that know no service;
+   - a watch layout with a chat column, in `ui`.
+
+   Each space converts its own protocol (Twitch IRC now, InnerTube's live chat later). Details:
+   [twitch-plan.md](../twitch-plan.md#live-and-chat-are-generic).
+
 ## Consequences
 
 - The playback path depends on undocumented endpoints (GQL, usher) that change several times a year:

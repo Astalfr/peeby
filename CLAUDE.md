@@ -9,6 +9,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 ## Commands
 - Build: `cargo build` · run: `cargo run -p peeby` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top);
   `PEEBY_DISPLAY=secondary` (or `=2`) opens the window on another screen: use it for test runs
+- Test runs never open a console window on the user's screen: debug builds, examples and spikes are console
+  apps, so start them with `Start-Process -NoNewWindow` (redirect their output to files), or `cargo run` in
+  the current shell; helper scripts follow the same rule
 - Lint (must pass): `cargo clippy --workspace --all-targets -- -D warnings`
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
