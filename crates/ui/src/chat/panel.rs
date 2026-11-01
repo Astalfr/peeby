@@ -3,24 +3,29 @@
 //! until "Reprendre le défilement", so that what is read does not move.
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, ElementId, FollowMode, FontWeight, ImageSource, ListAlignment, ListState,
-  ObjectFit, SharedString, Window, div, img, list, px,
+  Anchor, AnyElement, Context, ElementId, FollowMode, FontWeight, ImageSource, ListAlignment,
+  ListState, ObjectFit, SharedString, Window, div, img, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::hover_card::HoverCard;
 use gpui_component::{Sizable, h_flex, v_flex};
 
 use super::{
   Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind, name_color,
 };
+use crate::assets::Icon;
 use crate::images::Images;
 use crate::picture::Picture;
 use crate::theme;
 
 /// Messages kept; older ones are dropped (and held ones beyond it, while scrolled up).
 pub const MAX_MESSAGES: usize = 500;
+/// Hover time before the room's modes show.
+const MODES_DELAY: Duration = Duration::from_millis(200);
 /// Size of a badge, logical pixels.
 const BADGE_SIZE: f32 = 18.;
 /// Width an emote is drawn at, [`EMOTE_HEIGHT`] high.
@@ -331,6 +336,9 @@ impl Render for ChatPanel {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let following = self.list.is_following_tail();
     let held = self.held.len();
+    // The room's modes behind an "i" on the right, shown on hover: several do not fit beside the
+    // title.
+    let modes = self.modes.clone();
     let header = h_flex()
       .flex_none()
       .gap_2()
@@ -341,20 +349,36 @@ impl Render for ChatPanel {
       .border_color(theme::border())
       .child(
         div()
+          .flex_1()
           .text_sm()
           .font_weight(FontWeight::SEMIBOLD)
           .child("Chat du live"),
       )
-      .child(div().flex_1())
-      .children(self.modes.iter().map(|mode| {
-        div()
-          .px_1p5()
-          .rounded(px(4.))
-          .bg(theme::surface_hover())
-          .text_xs()
-          .text_color(theme::muted())
-          .child(mode.clone())
-      }));
+      .when(!modes.is_empty(), |el| {
+        el.child(
+          HoverCard::new("chat-modes")
+            .anchor(Anchor::TopRight)
+            .open_delay(MODES_DELAY)
+            .trigger(
+              div()
+                .text_color(theme::muted())
+                .hover(|s| s.text_color(theme::foreground()))
+                .child(gpui_component::Icon::new(Icon::Info).size(px(16.))),
+            )
+            .content(move |_, _, _| {
+              v_flex()
+                .gap_1()
+                .child(
+                  div()
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme::muted())
+                    .child("Modes du chat"),
+                )
+                .children(modes.iter().map(|mode| div().text_sm().child(mode.clone())))
+            }),
+        )
+      });
     let resume = (!following).then(|| {
       let label = match held {
         0 => "Reprendre le défilement".to_owned(),

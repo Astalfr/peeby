@@ -507,7 +507,8 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   - scrolled up, new messages are held (500 at most) and "Reprendre le défilement · N nouveaux" resumes;
     reaching the bottom again resumes by itself at the next batch;
   - deleted messages greyed (`Delete`, `ClearUser`), `Clear` empties it;
-  - the room's modes as labels in its header, the connection's state under it;
+  - the room's modes in a hover card on an "i" icon at the right of its header, the connection's state
+    under it;
   - notices (subs, raids…) in a box with an accent edge, highlighted messages tinted, `/me` in the
     author's color.
 
