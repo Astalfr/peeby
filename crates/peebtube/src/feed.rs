@@ -230,7 +230,16 @@ impl FeedView {
 fn grid(cards: Vec<gpui::AnyElement>, more: Option<gpui::AnyElement>) -> gpui::AnyElement {
   v_flex()
     .gap_8()
-    .child(h_flex().flex_wrap().gap_x_4().gap_y_8().children(cards))
+    // `h_flex` centers its children vertically: cards whose title takes one line would sit
+    // lower than their neighbors.
+    .child(
+      h_flex()
+        .flex_wrap()
+        .items_start()
+        .gap_x_4()
+        .gap_y_8()
+        .children(cards),
+    )
     .children(more.map(|b| h_flex().justify_center().child(b)))
     .into_any_element()
 }

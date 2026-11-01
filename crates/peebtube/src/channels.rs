@@ -256,6 +256,7 @@ impl Render for ChannelsView {
             .collect();
           h_flex()
             .flex_wrap()
+            .items_start()
             .gap_2()
             .children(tiles)
             .into_any_element()

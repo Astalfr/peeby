@@ -30,7 +30,7 @@ One accent: red marks what can be acted on or what is selected. Everything else 
 
 ## Pages
 
-- **Feeds** (Home, subscriptions, channel): a wrapping grid of 320 px cards. A card shows the 16:9 thumbnail (duration badge bottom right), the channel avatar, the title and the channel and views · date. The title always takes two 20 px lines and the metadata two 18 px lines, so every card has the same height and rows line up whatever the text. The subscriptions page has a "Toutes les chaînes" button.
+- **Feeds** (Home, subscriptions, channel): a wrapping grid of 320 px cards. A card shows the 16:9 thumbnail (duration badge bottom right), the channel avatar, a title of at most two lines, the channel and views · date. Cards keep their natural height and a row aligns them at the top (`h_flex` centers its children by default, which lowered cards with a one-line title). The subscriptions page has a "Toutes les chaînes" button.
 - **Channels** (from "Toutes les chaînes"): the subscribed channels as a grid of 168 px tiles (96 px round avatar, name, subscribers), a red ring and a soft surface on hover, a filter field in the header.
 - **Watch page**: the 16:9 player, the title, the channel (red on hover), the votes pill (likes | dislikes, red ratio bar, RYD attribution; it links to returnyoutubedislike.com), the description card, then the comments. The related videos are a 400 px column of compact cards that get a soft surface on hover.
 - **Settings**: sections of rounded rows on `surface`, title and description on the left, small choice chips on the right (the selected one red).
