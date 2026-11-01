@@ -505,6 +505,7 @@ impl WatchView {
                   icon: Icon,
                   status: LikeStatus,
                   count: Option<u64>,
+                  label: &'static str,
                   tooltip: &'static str,
                   cx: &mut Context<Self>| {
       h_flex()
@@ -519,7 +520,10 @@ impl WatchView {
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
         .on_click(cx.listener(move |this, _, window, cx| this.rate(status, window, cx)))
         .child(gpui_component::Icon::new(icon).size(px(16.)))
-        .children(count.map(compact_number))
+        .child(match count {
+          Some(count) => format!("{} {label}", compact_number(count)),
+          None => label.to_owned(),
+        })
     };
     let (like_tip, dislike_tip) = match current {
       LikeStatus::Like => ("Je n'aime plus", "Je n'aime pas"),
@@ -540,6 +544,7 @@ impl WatchView {
           Icon::ThumbsUp,
           LikeStatus::Like,
           votes.map(|v| v.likes),
+          "Likes",
           like_tip,
           cx,
         )
@@ -554,6 +559,7 @@ impl WatchView {
           Icon::ThumbsDown,
           LikeStatus::Dislike,
           votes.map(|v| v.dislikes),
+          "Dislikes",
           dislike_tip,
           cx,
         )
@@ -742,10 +748,11 @@ impl WatchView {
       .child(
         h_flex()
           .gap_3()
-          .items_center()
+          .items_start()
           .child(
             h_flex()
               .id("channel")
+              .h(px(40.))
               .group("channel")
               .gap_3()
               .items_center()
@@ -776,12 +783,32 @@ impl WatchView {
               .zip(page.notifications.as_ref())
               .map(|(channel_id, notifications)| {
                 let key = format!("watch-{}", self.video_id);
-                bell::bell_button(&key, channel_id, notifications, false, cx)
+                h_flex().h(px(40.)).items_center().child(bell::bell_button(
+                  &key,
+                  channel_id,
+                  notifications,
+                  false,
+                  cx,
+                ))
               }),
           )
           .child(div().flex_1())
-          .child(save::save_button(&self.video_id))
-          .child(self.rating_bar(cx)),
+          // The votes column also holds the ratio bar and the attribution: centered on it, the
+          // channel would sit far below the title. Everything aligns on the 40 px avatar band
+          // instead, the 36 px pill 2 px down.
+          .child(
+            h_flex()
+              .mt(px(2.))
+              .gap_3()
+              .items_start()
+              .child(self.rating_bar(cx))
+              .child(
+                h_flex()
+                  .h(px(36.))
+                  .items_center()
+                  .child(save::watch_menu_button(&self.video_id)),
+              ),
+          ),
       )
       .child(
         v_flex()

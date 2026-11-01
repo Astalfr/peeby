@@ -1,5 +1,5 @@
-//! Saving a video to a playlist: the "⋮" menu of the cards, the "Enregistrer" button of the
-//! watch page, the "Watch later" shortcut over thumbnails. Every change ends with a toast,
+//! Saving a video to a playlist: the "⋮" menus of the cards and of the watch page, the "Watch
+//! later" shortcut over thumbnails. Every change ends with a toast,
 //! success or failure.
 //!
 //! The list of playlists is loaded when it is opened (`playlist/get_add_to_playlist`), so it
@@ -384,31 +384,41 @@ pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
             .icon(Icon::More)
             .tooltip("Plus d'actions"),
         )
-        .content(move |_, window, cx| picker_content(&key, &video_id, false, window, cx)),
+        .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Card, window, cx)),
     )
 }
 
-/// The "Enregistrer" button of the watch page: the list of playlists right away.
-pub fn save_button(video_id: &str) -> impl IntoElement {
-  let key = format!("save-{video_id}");
+/// The "⋮" button of the watch page: a menu with "Save to a playlist", which turns into the
+/// list of playlists.
+pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
+  let key = format!("watch-menu-{video_id}");
   let video_id = video_id.to_owned();
   Popover::new(ElementId::Name(key.clone().into()))
     .anchor(Anchor::TopRight)
     .trigger(
-      Button::new("save")
-        .icon(Icon::Save)
-        .label("Enregistrer")
-        .tooltip("Ajouter à une playlist"),
+      Button::new("watch-menu")
+        .ghost()
+        .icon(Icon::More)
+        .tooltip("Plus d'actions"),
     )
-    .content(move |_, window, cx| picker_content(&key, &video_id, true, window, cx))
+    .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Watch, window, cx))
 }
 
-/// What a popover shows: the menu, or the playlists once asked for (`list`). The picker lives
-/// in the popover's element state, so it starts over (and reloads) each time it opens.
+/// Which "⋮" menu a popover shows.
+#[derive(Clone, Copy, PartialEq)]
+enum Menu {
+  /// A card's: "Watch later" and "Add to a playlist".
+  Card,
+  /// The watch page's: "Save to a playlist".
+  Watch,
+}
+
+/// What a popover shows: the menu, or the playlists once asked for. The picker lives in the
+/// popover's element state, so it starts over (and reloads) each time it opens.
 fn picker_content(
   key: &str,
   video_id: &str,
-  list: bool,
+  menu: Menu,
   window: &mut Window,
   cx: &mut Context<PopoverState>,
 ) -> gpui::AnyElement {
@@ -416,15 +426,9 @@ fn picker_content(
   let picker = window.use_keyed_state(
     ElementId::Name(format!("{key}-picker").into()),
     cx,
-    move |_, cx| {
-      let mut picker = Picker {
-        video_id: video,
-        choices: Choices::Idle,
-      };
-      if list {
-        picker.load(cx);
-      }
-      picker
+    move |_, _| Picker {
+      video_id: video,
+      choices: Choices::Idle,
     },
   );
   if !matches!(picker.read(cx).choices, Choices::Idle) {
@@ -446,26 +450,32 @@ fn picker_content(
       .child(gpui_component::Icon::new(icon).size(px(16.)))
       .child(label)
   };
+  let save_label = match menu {
+    Menu::Card => "Ajouter à une playlist",
+    Menu::Watch => "Enregistrer dans une playlist",
+  };
   v_flex()
     .w(px(220.))
     .gap_0p5()
+    .when(menu == Menu::Card, |el| {
+      el.child(
+        if in_watch_later(&video_id, cx) {
+          item(
+            "menu-watch-later",
+            Icon::Check,
+            "Retirer de « À regarder plus tard »",
+          )
+        } else {
+          item("menu-watch-later", Icon::WatchLater, WATCH_LATER_TITLE)
+        }
+        .on_click(cx.listener(move |state, _, window, cx| {
+          toggle_watch_later(&video_id, window, cx);
+          state.dismiss(window, cx);
+        })),
+      )
+    })
     .child(
-      if in_watch_later(&video_id, cx) {
-        item(
-          "menu-watch-later",
-          Icon::Check,
-          "Retirer de « À regarder plus tard »",
-        )
-      } else {
-        item("menu-watch-later", Icon::WatchLater, WATCH_LATER_TITLE)
-      }
-      .on_click(cx.listener(move |state, _, window, cx| {
-        toggle_watch_later(&video_id, window, cx);
-        state.dismiss(window, cx);
-      })),
-    )
-    .child(
-      item("menu-save", Icon::Save, "Ajouter à une playlist").on_click(move |_, _, cx| {
+      item("menu-save", Icon::Save, save_label).on_click(move |_, _, cx| {
         picker.update(cx, |picker, cx| picker.load(cx));
       }),
     )
