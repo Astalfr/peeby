@@ -1,6 +1,6 @@
 [package]
 name = "peeby"
-description = "Native media client for Windows (YouTube, Jellyfin) built with GPUI."
+description = "Native media client for Windows (YouTube, Jellyfin, Twitch) built with GPUI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,6 +21,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+twitch = { workspace = true }
 ui = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 

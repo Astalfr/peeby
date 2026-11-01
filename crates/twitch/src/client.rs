@@ -109,6 +109,13 @@ impl Client {
     })
   }
 
+  /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
+  /// [`Error::NotLoggedIn`] when it is refused or there is none.
+  pub async fn current_user(&self) -> Result<String> {
+    let answer = self.gql(&gql::current_user_request()).await?;
+    gql::parse_current_user(&answer)
+  }
+
   /// The playback token of `target`, as `player_type` (normally [`gql::PLAYER_TYPE`]).
   pub async fn playback_token(&self, target: &Target, player_type: &str) -> Result<PlaybackToken> {
     let answer = self.gql(&gql::token_request(target, player_type)).await?;

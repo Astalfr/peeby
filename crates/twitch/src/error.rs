@@ -38,6 +38,19 @@ pub enum Error {
   /// A VOD for the channel's subscribers (`vod_manifest_restricted`, `unauthorized_entitlements`).
   #[error("this video is for the channel's subscribers")]
   SubscriberOnly,
+  /// The Helix session is over: the refresh token was refused (revoked, unused for 30 days, or
+  /// already spent). The user signs in again.
+  #[error("the Twitch session expired")]
+  SessionExpired,
+  /// The device code expired before the user approved it.
+  #[error("the sign-in code expired")]
+  DeviceExpired,
+  /// The user refused the sign-in on twitch.tv.
+  #[error("the sign-in was refused")]
+  DeviceDenied,
+  /// Another answer of `id.twitch.tv`.
+  #[error("Twitch sign-in: {0}")]
+  Auth(String),
   /// The local playlist proxy could not start.
   #[error("local playlist proxy: {0}")]
   Proxy(String),

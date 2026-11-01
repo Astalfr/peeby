@@ -195,8 +195,8 @@ the rest of the app):
 >
 > 1. Dans votre navigateur, ouvrez twitch.tv et connectez-vous.
 > 2. Appuyez sur F12 pour ouvrir les outils de développement.
-> 3. Chrome ou Edge : onglet « Application », puis « Cookies » › `https://www.twitch.tv`.
->    Firefox : onglet « Stockage », puis « Cookies » › `https://www.twitch.tv`.
+> 3. Chrome ou Edge : onglet « Application », puis « Cookies ». Firefox : onglet « Stockage », puis
+>    « Cookies ». Choisissez le site twitch.tv.
 > 4. Dans la liste, trouvez la ligne `auth-token` et copiez sa valeur (30 lettres et chiffres).
 > 5. Collez-la ici.
 >

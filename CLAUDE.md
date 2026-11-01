@@ -80,6 +80,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   user before a playback test.
 
 ## Twitch (docs/twitch-plan.md, ADR 0010)
+- Signing in is Helix's Device Code Grant with Peeby's public Client-ID (`twitch::auth::CLIENT_ID`). Refresh
+  tokens are single use: only `auth::Session` refreshes, and it stores the new one (Credential Manager,
+  `twitch|refresh`) before using it. The web `auth-token` is `twitch|auth-token`. Approving a code needs
+  the user: ask before a sign-in test.
 - mpv never gets a usher or CDN playlist URL: live and VOD playlists go through `twitch::Proxy`
   (`Client::play`), which removes ads and fills breaks from the backup `playerType`. Main token
   `embed`, never `site` (pre-roll).

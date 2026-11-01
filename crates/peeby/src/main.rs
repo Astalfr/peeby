@@ -1,4 +1,4 @@
-//! Peeby: native media client for Windows (YouTube, Jellyfin) built with GPUI.
+//! Peeby: native media client for Windows (YouTube, Jellyfin, Twitch) built with GPUI.
 
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -18,6 +18,7 @@ use gpui_platform::application;
 use shell::Shell;
 use shell::space::SpaceHandle;
 use spaces::jellyfin::{JellyfinSpace, session};
+use spaces::twitch::TwitchSpace;
 use spaces::youtube::{YouTubeSpace, convert, prefetch, tools};
 use ui::{assets, images, runtime, theme};
 
@@ -25,7 +26,7 @@ fn main() {
   tracing_subscriber::fmt()
     .with_env_filter(
       tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "peeby=info,innertube=info".into()),
+        .unwrap_or_else(|_| "peeby=info,innertube=info,twitch=info".into()),
     )
     .init();
 
@@ -58,6 +59,15 @@ fn main() {
     device_id: device_id.clone(),
     ..prefs.jellyfin.clone()
   });
+  // Twitch's secrets (Credential Manager, blocking), and its sign-in client.
+  let twitch_secrets = spaces::twitch::session::restore();
+  let twitch_auth = match twitch::auth::Auth::new(prefs.twitch.client_id.clone()) {
+    Ok(auth) => Some(auth),
+    Err(e) => {
+      tracing::error!("cannot create the Twitch HTTP client: {e}");
+      None
+    }
+  };
   let client = match innertube::Client::new(cookies, settings::cookies_path(), &hl, &gl) {
     Ok(client) => client,
     Err(e) => {
@@ -117,7 +127,11 @@ fn main() {
       let opened = cx.open_window(options, |window, cx| {
         let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, window, cx));
         let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, window, cx));
-        let spaces: Vec<SpaceHandle> = vec![Rc::new(youtube), Rc::new(jellyfin)];
+        let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube), Rc::new(jellyfin)];
+        if let Some(auth) = twitch_auth {
+          let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, cx));
+          spaces.push(Rc::new(twitch));
+        }
         let shell = cx.new(|cx| Shell::new(spaces, window, cx));
         cx.new(|cx| Root::new(shell, window, cx))
       });

@@ -9,6 +9,7 @@
 //! CDN URLs carry the user's IP: they never appear in logs or error messages.
 
 pub mod ads;
+pub mod auth;
 mod client;
 mod error;
 pub mod gql;

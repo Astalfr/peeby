@@ -68,6 +68,23 @@ pub struct Settings {
   pub sidebar_collapsed: bool,
   /// The Jellyfin space.
   pub jellyfin: Jellyfin,
+  /// The Twitch space.
+  pub twitch: Twitch,
+}
+
+/// `[twitch]`: the Twitch space. Its tokens are not here: the Helix refresh token and the web
+/// `auth-token` live in the Windows Credential Manager (`spaces::twitch::session`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Twitch {
+  /// Login of the signed-in user (shown before the first validation answers); `None` signed out.
+  pub login: Option<String>,
+  /// Overrides Peeby's Client-ID on dev.twitch.tv (Helix and sign-in).
+  pub client_id: Option<String>,
+  /// Overrides the web Client-ID used for GQL, if Twitch changes it and the page refresh fails.
+  pub web_client_id: Option<String>,
+  /// Highest quality picked when a stream starts, as a height in pixels.
+  pub max_height: Option<u32>,
 }
 
 /// `[player]`: how the player behaves, in every space.
@@ -230,6 +247,7 @@ impl Default for Settings {
       sidebar_collapsed: false,
       player: Player::default(),
       jellyfin: Jellyfin::default(),
+      twitch: Twitch::default(),
     }
   }
 }

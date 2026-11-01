@@ -201,8 +201,8 @@ impl SettingsView {
         row(
           "Fichiers",
           "Réglages et cookies YouTube dans %APPDATA%\\peeby, caches (images, polices, \
-           yt-dlp) dans %LOCALAPPDATA%\\peeby. Le jeton Jellyfin est dans le Gestionnaire \
-           d'identification de Windows.",
+           yt-dlp) dans %LOCALAPPDATA%\\peeby. Les jetons Jellyfin et Twitch sont dans le \
+           Gestionnaire d'identification de Windows.",
           div(),
         )
         .into_any_element(),

@@ -52,6 +52,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Err(e) => println!("offline channel: {e}"),
   }
 
+  // A device code is asked for and never approved: it expires by itself.
+  let auth = twitch::auth::Auth::new(None)?;
+  match auth.start_device().await {
+    Ok(device) => {
+      println!("device code: ok, expires in {} s", device.expires_in);
+      match auth.poll(&device).await {
+        Ok(twitch::auth::Poll::Pending) => println!("device poll: pending, as expected"),
+        other => println!("device poll: {other:?}"),
+      }
+    }
+    Err(e) => println!("device code: {e}"),
+  }
+  match auth.validate("0123456789abcdefghij0123456789").await {
+    Err(Error::SessionExpired) => println!("validate: invalid token refused, as expected"),
+    other => println!("validate: {other:?}"),
+  }
+
   let missing = Target::Live("peeby_no_such_channel_0000".into());
   match client.playback_token(&missing, gql::PLAYER_TYPE).await {
     Err(Error::NotFound) => println!("unknown channel: NotFound, as expected"),

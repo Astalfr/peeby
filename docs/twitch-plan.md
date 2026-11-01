@@ -300,25 +300,56 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   pressed
 - Exit: met for the example; YouTube plays
 ### 5. The space and the sign-in (Helix device flow, auth-token)
-- [ ] `spaces/twitch/`: `TwitchSpace` with its accent (Twitch violet) and badge `TW`, one line in
-      `main.rs`'s list of spaces; signed out, its only page is the sign-in card
-- [ ] `twitch::auth`: `start_device(scopes)` → `{user_code, verification_uri, interval, expires_in}`,
-      `poll` (handles `authorization_pending`, `slow_down`, expiry), `refresh`, `validate`
-- [ ] **Single-flight refresh**: one `Mutex` around refresh in `Client`. A request that gets a 401
-      waits on it, then retries once with the new token. The new refresh token is written to the
-      Credential Manager **before** the access token is used; a failed write is logged and the session
-      kept in memory
-- [ ] Validation at startup and every hour (a background timer); an invalid token without a working
-      refresh signs the space out ("Session Twitch expirée")
-- [ ] The sign-in card (the space's page) and the settings part: "Se connecter à Twitch" shows the code in
-      large type, opens `verification_uri` in the browser, polls, then shows the user (avatar, name);
-      "Se déconnecter" revokes (`POST /oauth2/revoke`) and deletes the entry
-- [ ] The auth-token field with the tutorial text of twitch.md, masked input, checked before saving
-      (30 alphanumerics, then a GQL call answering as signed in), "Supprimer le jeton"
-- [ ] Scopes: `user:read:follows` (and `user:read:chat` only if EventSub chat comes later)
-- Exit: sign in, restart, still signed in (refresh across a restart); auth-token saved and checked
-- **Not verifiable without the user**: the device flow needs them to type the code
+- [x] `spaces/twitch/`: `TwitchSpace` with its accent (Twitch violet `#9146FF`) and badge `TW`, added in
+      `main.rs` after YouTube and Jellyfin. Signed out, its only page is the sign-in card. While a saved
+      session is restored, it shows "Connexion à Twitch…"
+- [x] `twitch::auth`:
+  - `Auth::start_device`, `poll` (`Pending`, `SlowDown`, `DeviceExpired`, `DeviceDenied`), `refresh`,
+    `validate`, `revoke`;
+  - pure parsers tested on 4 new fixtures: a device code (redacted, never approved), the pending
+    poll, a refused refresh, a refused validation. The success shapes are tested on Twitch's
+    documented ones, since none can be captured without the user;
+  - `CLIENT_ID` is Peeby's, overridable in `[twitch] client_id`. The form is encoded by hand: reqwest's
+    `form` feature is off.
+- [x] **Single-flight refresh** in `auth::Session`:
+  - `refresh_after(stale)` holds an async mutex, and returns the current token when another caller
+    already refreshed;
+  - the new refresh token goes to the `Store` callback (the Credential Manager, on a blocking thread)
+    **before** it is used. A failed write is logged and the session kept in memory;
+  - `Session::begin` stores the first one, `Session::restore` exchanges the saved one at startup.
 
+  Helix's own 401 retry joins this at step 7, with the Helix client
+- [x] Validation at startup (restore and sign-in) and every hour (a GPUI timer). `SessionExpired` signs
+      out with "Votre session Twitch a expiré". A network error keeps the saved refresh token (it was
+      not spent) and shows the card with the error
+- [x] The sign-in card:
+  - "Se connecter avec Twitch" shows the code in large type and opens `verification_uri`, which has
+    the code filled in;
+  - it polls at Twitch's interval, plus 5 s on `slow_down`; "Rouvrir la page" and "Annuler" stay
+    available;
+  - once approved, the session is stored and validated.
+
+  The sidebar then shows "Suivies" (a placeholder page until step 7), the user (initial; the avatar
+  needs Helix `users`, step 7) opening the settings, and "Se déconnecter", which revokes, deletes the
+  entry and clears `[twitch] login`
+- [x] Settings part:
+  - the account ("Connecté en tant que …", "Se déconnecter"; signed out, a pointer to the tab);
+  - the auth-token with the tutorial of twitch.md and a masked input. It is checked before saving:
+    30 alphanumerics, then GQL `currentUser` answering a login (`gql::parse_current_user`, tested on
+    an anonymous answer). It is saved in the Credential Manager. "Supprimer le jeton" is offered once
+    a token is saved;
+  - the storage row of the shell's page now says the Twitch tokens are in the Credential Manager too.
+- [x] Scopes: `user:read:follows`
+- Secrets: `peeby` / `twitch|refresh` and `peeby` / `twitch|auth-token` in the Credential Manager, read
+  before the UI starts (`session::restore`)
+- Verified:
+  - `cargo run -p twitch --example smoke` live: a device code issued and polled as pending, an invalid
+    token refused by `validate`;
+  - in the app, from screenshots with posted clicks: the Twitch tab with its violet and the sign-in
+    card, and the settings part (account and the tutorial, wrapped after a fix).
+- **Not verified, needs the user**: approving a code, the session surviving a restart, the hourly
+  validation, sign-out's revoke, a real auth-token being accepted
+- Exit: pending the user's sign-in test
 ### 6. Live playback in the space
 - [ ] `play.rs`: resolve a live into a `Source` (proxy master as `options.url`, `Referer` and
       `Origin: https://player.twitch.tv` in `http_headers`, one `Quality` per variant, `live: true`), the

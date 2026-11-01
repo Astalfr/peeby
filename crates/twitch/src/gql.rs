@@ -155,6 +155,27 @@ fn gql_error(answer: &Value) -> Option<Error> {
   })
 }
 
+/// The request asking who the auth-token belongs to.
+pub fn current_user_request() -> Value {
+  json!({ "query": "query { currentUser { id login } }" })
+}
+
+/// The login of `currentUser`; `null` (no or a dead auth-token) is [`Error::NotLoggedIn`].
+pub fn parse_current_user(answer: &Value) -> Result<String> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  answer["data"]["currentUser"]["login"]
+    .as_str()
+    .map(str::to_owned)
+    .ok_or(Error::NotLoggedIn)
+}
+
+/// Whether `token` looks like a web `auth-token`: 30 letters and digits (seen lowercase).
+pub fn is_auth_token_shape(token: &str) -> bool {
+  token.len() == 30 && token.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
 /// The web Client-ID in twitch.tv's page (`clientId="…"` in its inline script).
 pub fn client_id_from_page(page: &str) -> Option<&str> {
   let start = page.find("clientId=\"")? + "clientId=\"".len();
