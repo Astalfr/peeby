@@ -12,8 +12,8 @@ use crate::models::{
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_unseen_count, parse_watch,
-  tracking_param,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_storyboard,
+  parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -609,6 +609,7 @@ impl Client {
       codecs: variant.codecs,
       user_agent: VISIONOS_USER_AGENT,
       captions: parse_captions(&player),
+      storyboard: parse_storyboard(&player),
       qualities,
     })
   }

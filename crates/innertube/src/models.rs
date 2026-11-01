@@ -126,6 +126,62 @@ impl LikeParams {
   }
 }
 
+/// Preview thumbnails over the seek bar: frames of the video laid out in a grid on sprite
+/// sheets (`storyboards.playerStoryboardSpecRenderer` of the player response, its largest
+/// level).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Storyboard {
+  /// Sheet URL with `$M` in place of the sheet index.
+  pub url: String,
+  /// Width of one frame in pixels.
+  pub width: u32,
+  /// Height of one frame in pixels.
+  pub height: u32,
+  /// Frames in the whole storyboard.
+  pub count: u32,
+  /// Frames per row of a sheet.
+  pub columns: u32,
+  /// Rows per sheet.
+  pub rows: u32,
+  /// Time between two frames, 0 when the frames are spread over the whole video.
+  pub interval_ms: u32,
+}
+
+/// One frame of a storyboard: its sheet and where it sits on it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoryboardFrame {
+  /// Sheet URL (i.ytimg.com).
+  pub url: String,
+  /// Column of the frame on the sheet, from 0.
+  pub column: u32,
+  /// Row of the frame on the sheet, from 0.
+  pub row: u32,
+}
+
+impl Storyboard {
+  /// The frame shown at `seconds` into a video of `duration` seconds.
+  pub fn frame(&self, seconds: f64, duration: f64) -> Option<StoryboardFrame> {
+    let per_sheet = self.columns * self.rows;
+    if self.count == 0 || per_sheet == 0 {
+      return None;
+    }
+    let interval = if self.interval_ms > 0 {
+      f64::from(self.interval_ms) / 1000.
+    } else if duration > 0. {
+      duration / f64::from(self.count)
+    } else {
+      return None;
+    };
+    let index = ((seconds.max(0.) / interval) as u32).min(self.count - 1);
+    let (sheet, cell) = (index / per_sheet, index % per_sheet);
+    Some(StoryboardFrame {
+      url: self.url.replace("$M", &sheet.to_string()),
+      column: cell % self.columns,
+      row: cell / self.columns,
+    })
+  }
+}
+
 /// A subtitle track (WebVTT), fetched by mpv when the user picks it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Caption {
@@ -162,6 +218,8 @@ pub struct Stream {
   pub qualities: Vec<crate::hls::Variant>,
   /// Subtitle tracks.
   pub captions: Vec<Caption>,
+  /// Preview thumbnails for the seek bar, when YouTube has them (not for lives).
+  pub storyboard: Option<Storyboard>,
 }
 
 impl std::fmt::Debug for Stream {

@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use crate::models::{
   Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
   Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Thumbnail, VideoItem, WatchPage,
+  PlaylistSummary, Storyboard, Thumbnail, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -177,6 +177,39 @@ pub fn parse_captions(player: &Value) -> Vec<Caption> {
       })
     })
     .collect()
+}
+
+/// The largest level of a player response's storyboard. The spec is `base|level|level…`,
+/// each level `width#height#count#columns#rows#interval_ms#name#sigh`; the sheet URL is the
+/// base with `$L` the level's index and `$N` its name (`M$M` for numbered sheets), plus
+/// `&sigh=` (format as yt-dlp's `_extract_storyboard` reads it).
+pub fn parse_storyboard(player: &Value) -> Option<Storyboard> {
+  let spec = player["storyboards"]["playerStoryboardSpecRenderer"]["spec"].as_str()?;
+  let mut parts = spec.split('|');
+  let base = parts.next()?;
+  parts
+    .enumerate()
+    .filter_map(|(level, args)| {
+      let args: Vec<&str> = args.split('#').collect();
+      let [width, height, count, columns, rows, interval, name, sigh] = args[..] else {
+        return None;
+      };
+      let number = |s: &str| s.parse::<u32>().ok();
+      let board = Storyboard {
+        url: format!(
+          "{}&sigh={sigh}",
+          base.replace("$L", &level.to_string()).replace("$N", name)
+        ),
+        width: number(width)?,
+        height: number(height)?,
+        count: number(count)?,
+        columns: number(columns)?,
+        rows: number(rows)?,
+        interval_ms: number(interval)?,
+      };
+      (board.width > 0 && board.count > 0 && board.columns > 0 && board.rows > 0).then_some(board)
+    })
+    .max_by_key(|b| b.width)
 }
 
 /// Parses the subscribed channels list (`FEchannels`: all channels in one response).

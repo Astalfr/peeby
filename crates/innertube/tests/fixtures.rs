@@ -411,3 +411,30 @@ fn unseen_notifications_count() {
   );
   assert_eq!(innertube::parse_unseen_count(&fixture("next.json")), None);
 }
+
+#[test]
+fn player_storyboard() {
+  let board = innertube::parse_storyboard(&fixture("player_visionos.json")).unwrap();
+  assert_eq!((board.width, board.height), (160, 90));
+  assert_eq!((board.count, board.columns, board.rows), (128, 5, 5));
+  assert_eq!(board.interval_ms, 5000);
+  assert!(
+    board
+      .url
+      .starts_with("https://i.ytimg.com/sb/aqz-KE-bpKQ/storyboard3_L2/M$M.jpg?")
+  );
+  assert!(
+    board
+      .url
+      .ends_with("&sigh=rs$AOn4CLC7aItN_RejAPMNuUuVk2lyfgHzJQ")
+  );
+
+  // 5 s per frame, 25 frames per sheet: 2 min 12 s is frame 26, the second of sheet 1.
+  let frame = board.frame(132.0, 635.0).unwrap();
+  assert!(frame.url.contains("/M1.jpg?"));
+  assert_eq!((frame.column, frame.row), (1, 0));
+  // Past the last frame: the last one (127 = sheet 5, cell 2).
+  let last = board.frame(10_000.0, 635.0).unwrap();
+  assert!(last.url.contains("/M5.jpg?"));
+  assert_eq!((last.column, last.row), (2, 0));
+}

@@ -37,9 +37,10 @@ pub use error::Error;
 pub use models::{
   Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
   Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Stream, Thumbnail, VideoItem, Votes, WatchPage,
+  PlaylistSummary, Storyboard, StoryboardFrame, Stream, Thumbnail, VideoItem, Votes, WatchPage,
 };
 pub use parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_unseen_count, parse_watch,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_storyboard,
+  parse_unseen_count, parse_watch,
 };

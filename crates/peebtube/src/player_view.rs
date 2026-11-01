@@ -9,10 +9,11 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, App, Bounds, ClickEvent, Context, Corners, DispatchPhase, Entity,
-  EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-  MouseUpEvent, Pixels, Point, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div,
-  ease_out_quint, linear_color_stop, linear_gradient, px, relative,
+  Animation, AnimationExt, AnyElement, App, Bounds, ClickEvent, Context, Corners, DispatchPhase,
+  Entity, EventEmitter, FocusHandle, FontWeight, ImageSource, KeyDownEvent, MouseButton,
+  MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
+  SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint, img, linear_color_stop,
+  linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
@@ -22,6 +23,7 @@ use innertube::hls::Variant;
 use player::{Choice, Event, Player, StartOptions};
 
 use crate::assets::Icon;
+use crate::images::Images;
 use crate::settings::Settings;
 use crate::theme;
 
@@ -30,6 +32,8 @@ const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
+/// Width of the storyboard frame shown over the seek bar.
+const PREVIEW_WIDTH: f32 = 176.;
 /// Arrow keys seek 5 s, J and L 10 s, as on YouTube.
 const SEEK_SMALL: f64 = 5.0;
 const SEEK_LARGE: f64 = 10.0;
@@ -119,6 +123,15 @@ impl EventEmitter<PlayerEvent> for PlayerView {}
 impl PlayerView {
   pub fn new(cx: &mut Context<Self>) -> Self {
     let sound = Settings::get(cx).clone();
+    // A storyboard sheet arriving redraws the seek bar's preview.
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |this: &mut Self, _, cx| {
+        if this.seek_hover.is_some() {
+          cx.notify();
+        }
+      })
+      .detach();
+    }
     Self {
       focus: cx.focus_handle(),
       title: SharedString::default(),
@@ -611,6 +624,46 @@ impl PlayerView {
 
   // --- Rendering ----------------------------------------------------------------------------
 
+  /// The storyboard frame at `seconds`, cropped out of its sheet, as YouTube shows it over the
+  /// seek bar. A dark box while the sheet loads; `None` when the video has no storyboard.
+  fn render_storyboard_frame(&self, seconds: f64, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let board = self.stream.as_ref()?.storyboard.as_ref()?;
+    let frame = board.frame(seconds, self.duration)?;
+    let scale = PREVIEW_WIDTH / board.width as f32;
+    let height = board.height as f32 * scale;
+    let sheet = cx
+      .try_global::<Images>()
+      .cloned()
+      .and_then(|images| images.0.update(cx, |store, cx| store.get(&frame.url, cx)));
+    // Sized from the sheet itself: the last one is cut after its last frame.
+    let image = sheet.map(|sheet| {
+      let size = sheet.size(0);
+      img(ImageSource::Render(sheet))
+        .absolute()
+        .left(px(-(frame.column as f32) * PREVIEW_WIDTH))
+        .top(px(-(frame.row as f32) * height))
+        .w(px(size.width.0 as f32 * scale))
+        .h(px(size.height.0 as f32 * scale))
+        .object_fit(ObjectFit::Fill)
+    });
+    Some(
+      div()
+        .p(px(2.))
+        .rounded_md()
+        .bg(gpui::white())
+        .child(
+          div()
+            .relative()
+            .w(px(PREVIEW_WIDTH))
+            .h(px(height))
+            .overflow_hidden()
+            .bg(gpui::black())
+            .children(image),
+        )
+        .into_any_element(),
+    )
+  }
+
   fn render_seek_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let primary = cx.theme().primary;
     let progress = if self.duration > 0.0 {
@@ -636,15 +689,21 @@ impl PlayerView {
     let preview = self.seek_hover.map(|fraction| {
       let seconds = fraction * self.duration;
       let bar_width = f32::from(self.seek_bounds.get().size.width);
-      let width = 72.;
+      let thumbnail = self.render_storyboard_frame(seconds, cx);
+      let width = if thumbnail.is_some() {
+        PREVIEW_WIDTH + 4.
+      } else {
+        72.
+      };
       let left = (bar_width * fraction as f32 - width / 2.).clamp(0., (bar_width - width).max(0.));
-      div()
+      v_flex()
         .absolute()
         .bottom(px(22.))
         .left(px(left))
         .w(px(width))
-        .flex()
-        .justify_center()
+        .items_center()
+        .gap_1()
+        .children(thumbnail)
         .child(
           div()
             .px_2()
