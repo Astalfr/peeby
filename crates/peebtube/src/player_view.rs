@@ -9,10 +9,10 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, App, Bounds, ClickEvent, Context, DispatchPhase, Entity, EventEmitter,
-  FocusHandle, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-  Pixels, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint,
-  linear_color_stop, linear_gradient, px, relative,
+  Animation, AnimationExt, App, Bounds, ClickEvent, Context, Corners, DispatchPhase, Entity,
+  EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
+  MouseUpEvent, Pixels, ScrollEvent, SharedString, Task, WeakEntity, Window, canvas, div,
+  ease_out_quint, linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
@@ -23,6 +23,7 @@ use player::{Choice, Event, Player, StartOptions};
 
 use crate::assets::Icon;
 use crate::settings::Settings;
+use crate::theme;
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
@@ -976,6 +977,9 @@ impl PlayerView {
         .px_4()
         .pt_8()
         .pb_2()
+        // Its gradient reaches the player's bottom corners: rounded like them.
+        .rounded_bl(corner_radii(window, cx).bottom_left)
+        .rounded_br(corner_radii(window, cx).bottom_right)
         .bg(linear_gradient(
           180.,
           linear_color_stop(gpui::black().opacity(0.0), 0.0),
@@ -1192,6 +1196,23 @@ impl RenderOnce for ControlButton {
   }
 }
 
+/// Radii of the player's corners: rounded in the page like the other cards, square in
+/// fullscreen. In theater mode the player fills the content panel's rounded top-left corner,
+/// so it takes that corner's inner radius. A parent's `overflow_hidden` clips to a
+/// rectangle, so every layer reaching a corner rounds itself.
+fn corner_radii(window: &Window, cx: &App) -> Corners<Pixels> {
+  if window.is_fullscreen() {
+    Corners::default()
+  } else if Settings::get(cx).theater {
+    Corners {
+      top_left: theme::PANEL_INNER_RADIUS,
+      ..Corners::default()
+    }
+  } else {
+    Corners::all(theme::RADIUS_LG)
+  }
+}
+
 /// `1:02:03` or `12:34`.
 fn format_time(seconds: f64) -> String {
   let total = seconds.max(0.0) as u64;
@@ -1206,11 +1227,19 @@ fn format_time(seconds: f64) -> String {
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let show_ui = (self.controls_visible || self.failed) && self.player.is_some();
+    let radii = corner_radii(window, cx);
+    if let Some(video) = &self.video {
+      video.update(cx, |video, _| video.set_corner_radii(radii));
+    }
 
     let mut root = div()
       .id("player")
       .size_full()
       .relative()
+      .rounded_tl(radii.top_left)
+      .rounded_tr(radii.top_right)
+      .rounded_br(radii.bottom_right)
+      .rounded_bl(radii.bottom_left)
       .bg(gpui::black())
       .track_focus(&self.focus)
       .on_key_down(cx.listener(Self::on_key))

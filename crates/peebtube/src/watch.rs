@@ -1010,6 +1010,8 @@ impl Render for WatchView {
         .w_full()
         .flex_none()
         .h((width * (9. / 16.)).min(room.max(px(THEATER_MIN))))
+        // The content panel's rounded corner clips it there, a rectangle would cross it.
+        .rounded_tl(theme::PANEL_INNER_RADIUS)
         .bg(gpui::black())
         .child(self.player.clone())
     } else {

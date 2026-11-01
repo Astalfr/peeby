@@ -18,6 +18,9 @@ pub const SLOW: Duration = Duration::from_millis(300);
 pub const RADIUS: Pixels = px(8.);
 /// Corner radius of large surfaces (content panel, dialogs, hero).
 pub const RADIUS_LG: Pixels = px(12.);
+/// Radius inside the content panel's top-left corner (`RADIUS_LG` less its 1 px edge), for
+/// what fills that corner.
+pub const PANEL_INNER_RADIUS: Pixels = px(11.);
 
 /// Width of the sidebar.
 pub const SIDEBAR_WIDTH: Pixels = px(232.);

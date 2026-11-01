@@ -25,6 +25,9 @@ PeebTube additions to `player`:
 - `StartOptions::ytdl` (mpv's `ytdl_hook`, for the yt-dlp fallback);
 - `StartOptions::log_file`.
 
+PeebTube additions to `gpui-video`:
+- `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners).
+
 The app's `player_view.rs` adapts peeby's `player_page.rs` (seek bar, volume slider, control buttons, auto-hide, OSD, shortcuts) without its Jellyfin parts.
 
 ## Consequences

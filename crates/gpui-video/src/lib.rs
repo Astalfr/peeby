@@ -29,6 +29,8 @@ pub struct VideoView {
   cpu_frame: Option<Arc<RenderImage>>,
   /// Images to release from the atlas at the next render (needs the window).
   stale: Vec<Arc<RenderImage>>,
+  /// Radii of the picture's corners: a parent's `overflow_hidden` clips to a rectangle.
+  corner_radii: Corners<Pixels>,
   _frames: Task<()>,
 }
 
@@ -64,8 +66,14 @@ impl VideoView {
       current_slot: None,
       cpu_frame: None,
       stale: Vec::new(),
+      corner_radii: Corners::default(),
       _frames: task,
     }
+  }
+
+  /// Rounds the picture's corners (and the black behind it).
+  pub fn set_corner_radii(&mut self, radii: Corners<Pixels>) {
+    self.corner_radii = radii;
   }
 
   /// Replaces the resize handler (e.g. once the player exists).
@@ -155,21 +163,29 @@ impl Render for VideoView {
     }
     let on_resize = self.on_resize.clone();
     let frame = self.frame();
-    div().size_full().bg(gpui::black()).child(
-      canvas(
-        move |bounds: Bounds<Pixels>, window, _| {
-          let scale = window.scale_factor();
-          let w = (f32::from(bounds.size.width) * scale).round() as u32;
-          let h = (f32::from(bounds.size.height) * scale).round() as u32;
-          on_resize(w, h);
-        },
-        move |bounds, (), window, _| {
-          if let Some(frame) = frame {
-            let _ = window.paint_image(bounds, bounds, Corners::default(), frame, 0, false);
-          }
-        },
+    let radii = self.corner_radii;
+    div()
+      .size_full()
+      .rounded_tl(radii.top_left)
+      .rounded_tr(radii.top_right)
+      .rounded_br(radii.bottom_right)
+      .rounded_bl(radii.bottom_left)
+      .bg(gpui::black())
+      .child(
+        canvas(
+          move |bounds: Bounds<Pixels>, window, _| {
+            let scale = window.scale_factor();
+            let w = (f32::from(bounds.size.width) * scale).round() as u32;
+            let h = (f32::from(bounds.size.height) * scale).round() as u32;
+            on_resize(w, h);
+          },
+          move |bounds, (), window, _| {
+            if let Some(frame) = frame {
+              let _ = window.paint_image(bounds, bounds, radii, frame, 0, false);
+            }
+          },
+        )
+        .size_full(),
       )
-      .size_full(),
-    )
   }
 }
