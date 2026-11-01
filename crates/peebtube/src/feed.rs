@@ -24,8 +24,9 @@ use crate::ui::{
 };
 use crate::{motion, runtime, theme};
 
-/// Card width, logical pixels.
-const CARD_WIDTH: f32 = 416.;
+/// Narrowest card, logical pixels: a row holds as many cards as fit at this width, then they
+/// widen to fill it.
+const MIN_CARD_WIDTH: f32 = 416.;
 /// Space between two cards of a row (`gap_x_4`).
 const CARD_GAP: f32 = 16.;
 /// Side margins of the page (`px_8`).
@@ -89,6 +90,8 @@ pub struct FeedView {
   shape: Option<Shape>,
   /// Opacity of the videos as they fade in over the skeleton, set on each render.
   fade: f32,
+  /// Width of a grid card, set on each render from the window.
+  card_width: f32,
   logged_in: bool,
   message: Option<String>,
 }
@@ -116,6 +119,7 @@ impl FeedView {
       list: ListState::new(0, ListAlignment::Top, OVERDRAW),
       shape: None,
       fade: 0.,
+      card_width: MIN_CARD_WIDTH,
       logged_in: false,
       message: None,
     };
@@ -264,7 +268,7 @@ impl FeedView {
       h_flex().pb_8().items_start().gap_x_4().children(
         videos
           .iter()
-          .map(|v| video_card(v, CARD_WIDTH, &self.nav, window, cx)),
+          .map(|v| video_card(v, self.card_width, &self.nav, window, cx)),
       )
     };
     // Room above the first row: a hovered card rises over its box, and the list clips it.
@@ -384,14 +388,19 @@ fn layout_switch(list: bool, cx: &mut Context<FeedView>) -> impl IntoElement {
     .child(choice("layout-list", Icon::List, "Liste", FeedLayout::List))
 }
 
-/// Cards per row of the grid, from the window: the content panel is the window less the sidebar
-/// and the page margins.
-fn columns(window: &Window, cx: &gpui::App) -> usize {
+/// Cards per row of the grid and their width, from the window: the content panel is the window
+/// less the sidebar and the page margins, and the cards share it.
+fn grid(window: &Window, cx: &gpui::App) -> (usize, f32) {
   let sidebar = theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
   let width = f32::from(window.viewport_size().width - sidebar) - 2. * PAGE_MARGIN;
-  ((width + CARD_GAP) / (CARD_WIDTH + CARD_GAP))
+  let columns = ((width + CARD_GAP) / (MIN_CARD_WIDTH + CARD_GAP))
     .floor()
-    .max(1.) as usize
+    .max(1.);
+  // Whole pixels: a fractional width would leave a hairline gap at the row's end.
+  let card = ((width - CARD_GAP * (columns - 1.)) / columns)
+    .floor()
+    .max(MIN_CARD_WIDTH);
+  (columns as usize, card)
 }
 
 impl Render for FeedView {
@@ -412,6 +421,8 @@ impl Render for FeedView {
       window,
       cx,
     );
+    let (columns, card_width) = grid(window, cx);
+    self.card_width = card_width;
     let skeleton = if list_mode {
       v_flex()
         .w_full()
@@ -423,13 +434,13 @@ impl Render for FeedView {
         .flex_wrap()
         .gap_x_4()
         .gap_y_8()
-        .children((0..12).map(|_| skeleton_card(CARD_WIDTH)))
+        .children((0..12).map(|_| skeleton_card(card_width)))
         .into_any_element()
     };
     let body = if matches!(self.state, State::Loaded) && !self.videos.is_empty() {
       self.set_shape(Shape {
         list: list_mode,
-        columns: if list_mode { 1 } else { columns(window, cx) },
+        columns: if list_mode { 1 } else { columns },
       });
       div()
         .size_full()

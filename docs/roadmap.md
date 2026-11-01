@@ -22,7 +22,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Smooth feeds
 
-- Done (2026-11-01): the feeds (Home, subscriptions in grid and list mode, channel) are a virtual list, so a scroll builds only the rows in view instead of every loaded card; their header stays at the top. List rows take the whole width; grid cards are 416 px.
+- Done (2026-11-01): the feeds (Home, subscriptions in grid and list mode, channel) are a virtual list, so a scroll builds only the rows in view instead of every loaded card; their header stays at the top. List rows take the whole width; grid cards are at least 416 px and widen to fill the row.
 - Verified: the app starts and Home loads (22 videos). **Not verified:** scrolling smoothness, the next page loading at the end, resizing and folding the sidebar (cards per row), the grid/list switch, by hand.
 
 ## Like and dislike
