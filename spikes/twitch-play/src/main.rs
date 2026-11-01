@@ -58,16 +58,21 @@ fn main() {
   let fixtures = (std::env::var("PEEBY_FIXTURES").as_deref() == Ok("1"))
     .then(|| Path::new(ROOT).join("crates/twitch/tests/fixtures"));
   let started = Instant::now();
-  let stream = resolver
-    .resolve(&target, fixtures.as_deref())
-    .unwrap_or_else(|e| fail(e));
-  eprintln!(
-    "variant {} ({}), {} variants, {} landscape",
-    stream.name, stream.codecs, stream.variants.0, stream.variants.1
-  );
+  let url = if std::env::var("PEEBY_PROXY").as_deref() == Ok("1") {
+    through_proxy(&target).unwrap_or_else(|e| fail(e))
+  } else {
+    let stream = resolver
+      .resolve(&target, fixtures.as_deref())
+      .unwrap_or_else(|e| fail(e));
+    eprintln!(
+      "variant {} ({}), {} variants, {} landscape",
+      stream.name, stream.codecs, stream.variants.0, stream.variants.1
+    );
+    stream.url
+  };
 
   let options = StartOptions {
-    url: stream.url,
+    url,
     http_headers: vec![
       format!("Referer: {}", twitch::REFERER),
       format!("Origin: {}", twitch::REFERER),
@@ -132,6 +137,83 @@ fn main() {
     cx.on_window_closed(|cx, _| cx.quit()).detach();
     cx.activate(true);
   });
+}
+
+/// `PEEBY_PROXY=1`: the `twitch` crate's `Client::play` (main and backup tokens and masters
+/// together, then the local proxy). The proxy runs on a thread of its own until the spike quits,
+/// and reports ad breaks. Returns the best landscape variant's local URL.
+fn through_proxy(target: &Target) -> Result<String, String> {
+  let target = match target {
+    Target::Live(login) => ::twitch::Target::Live(login.clone()),
+    Target::Vod(id) => ::twitch::Target::Vod(id.clone()),
+  };
+  // `PEEBY_PLAYER_TYPE=site` gets the pre-roll, which the backup then covers.
+  let main_type =
+    std::env::var("PEEBY_PLAYER_TYPE").unwrap_or_else(|_| ::twitch::gql::PLAYER_TYPE.into());
+  let (tx, rx) = std::sync::mpsc::channel();
+  let started = Instant::now();
+  std::thread::spawn(move || {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+    {
+      Ok(runtime) => runtime,
+      Err(e) => {
+        let _ = tx.send(Err(e.to_string()));
+        return;
+      }
+    };
+    runtime.block_on(async move {
+      let client = match ::twitch::Client::new(None, None) {
+        Ok(client) => client,
+        Err(e) => {
+          let _ = tx.send(Err(e.to_string()));
+          return;
+        }
+      };
+      let proxy = match client
+        .play_with(
+          &target,
+          &[::twitch::usher::Codec::H264],
+          &main_type,
+          ::twitch::gql::BACKUP_PLAYER_TYPE,
+        )
+        .await
+      {
+        Ok(proxy) => proxy,
+        Err(e) => {
+          let _ = tx.send(Err(e.to_string()));
+          return;
+        }
+      };
+      let best = proxy
+        .variants()
+        .iter()
+        .find(|v| !v.portrait && !v.audio_only())
+        .map(|v| (v.url.clone(), format!("{v:?}")));
+      let _ = tx.send(best.ok_or_else(|| "no landscape variant".to_owned()));
+      let mut last = proxy.ad_state();
+      loop {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let state = proxy.ad_state();
+        if state.active != last.active || state.covered != last.covered {
+          eprintln!(
+            "ad: active {}, covered {}, {:.1}/{:?} s",
+            state.active, state.covered, state.elapsed, state.duration
+          );
+        }
+        last = state;
+      }
+    });
+  });
+  let (url, name) = rx
+    .recv()
+    .map_err(|_| "the proxy thread stopped".to_owned())??;
+  eprintln!(
+    "proxy ready after {:.2} s: {name}",
+    started.elapsed().as_secs_f64()
+  );
+  Ok(url)
 }
 
 #[derive(Default)]

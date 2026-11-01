@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
+use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
 
 const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
@@ -163,6 +164,74 @@ impl Client {
       text,
       variants,
     })
+  }
+}
+
+impl Client {
+  /// Everything to play `target` through the local proxy. For a live, the main token
+  /// ([`gql::PLAYER_TYPE`]) and a backup one ([`gql::BACKUP_PLAYER_TYPE`], to fill ad breaks) are
+  /// asked for together, then both masters; a failing backup only costs the ad cover. Call it on a
+  /// tokio runtime.
+  pub async fn play(&self, target: &Target, codecs: &[Codec]) -> Result<Proxy> {
+    self
+      .play_with(target, codecs, gql::PLAYER_TYPE, gql::BACKUP_PLAYER_TYPE)
+      .await
+  }
+
+  /// [`Client::play`] with other `playerType`s: `site` as the main one gets the pre-roll, which
+  /// shows the backup filling it (spike, tests by hand).
+  pub async fn play_with(
+    &self,
+    target: &Target,
+    codecs: &[Codec],
+    main_type: &str,
+    backup_type: &str,
+  ) -> Result<Proxy> {
+    let live = matches!(target, Target::Live(_));
+    let backup = async {
+      if !live {
+        return None;
+      }
+      let token = self
+        .playback_token(target, backup_type)
+        .await
+        .inspect_err(|e| tracing::warn!("Twitch backup token: {e}"))
+        .ok()?;
+      self
+        .master(target, &token, codecs)
+        .await
+        .inspect_err(|e| tracing::warn!("Twitch backup master: {e}"))
+        .ok()
+    };
+    let main = async {
+      let token = self.playback_token(target, main_type).await?;
+      if token.subscriber_only() {
+        return Err(Error::SubscriberOnly);
+      }
+      self.master(target, &token, codecs).await
+    };
+    let (main, backup) = tokio::join!(main, backup);
+    Proxy::start(self.clone(), target, main?, backup).await
+  }
+
+  /// A media playlist (live or VOD), with the player's `Referer` and `Origin`.
+  pub(crate) async fn media_playlist(&self, url: &str) -> Result<String> {
+    let response = self
+      .http
+      .get(url)
+      .header("Referer", PLAYER_ORIGIN)
+      .header("Origin", PLAYER_ORIGIN)
+      .send()
+      .await?;
+    let status = response.status().as_u16();
+    if status != 200 {
+      return Err(Error::Status {
+        status,
+        endpoint: "playlist",
+        code: None,
+      });
+    }
+    Ok(response.text().await?)
   }
 }
 

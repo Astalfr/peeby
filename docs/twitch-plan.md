@@ -179,38 +179,51 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 - Exit: `cargo test -p twitch` green on real responses
 
 ### 3. Ad filter and local proxy
-- [ ] `ads::filter(playlist: &str, state: &mut AdState) -> Filtered { playlist, ad: bool }`, pure:
-      drops segments inside an `EXT-X-DATERANGE` of `CLASS="twitch-stitched-ad"` or with an `ID` starting
-      with `stitched-ad-`, segments whose `#EXTINF` title contains `Amazon`, and `#EXT-X-TWITCH-PREFETCH`
-      lines after a discontinuity. It keeps `EXT-X-MEDIA-SEQUENCE` consistent (mpv/FFmpeg must not see the
-      sequence go back) and adds `EXT-X-DISCONTINUITY` where content resumes
-- [ ] **Backup stream during ads** (anonymous playback starts with a 30 s pre-roll, twitch.md
-      "Checked live"): when the main media playlist is in an ad, the proxy serves the segments of a backup
-      playlist instead. The backup comes from a second playback token with another `playerType`, one that
-      gets no ads, possibly at a lower quality, as TwitchAdSolutions and ttv-lol do. The backup token is
-      requested together with the main one, so the start stays within 1–2 s. Content resumes on the main
-      playlist after the ad, with an `EXT-X-DISCONTINUITY`. Media sequence numbers are the proxy's own,
-      always increasing. The notice of step 4 ("Publicité retirée") shows only when no backup answers.
+- [x] `ads::parse(text, base) -> MediaPlaylist`, pure. It marks a segment as an ad when its `#EXTINF`
+      title contains `Amazon` or its `PROGRAM-DATE-TIME` falls in a `twitch-stitched-ad` /
+      `stitched-ad-…` range. On the 25 saved reloads, both rules mark the same segments. Content segments
+      get Twitch's live sequence (`EXT-X-TWITCH-LIVE-SEQUENCE`, from the header, or from the tag after a
+      pre-roll). `in_ad()`, `ad_elapsed()` and `ad_duration` describe the break. Relative URIs are made
+      absolute (`ads::absolutize` for VODs)
+- [x] **Backup during ads**: `splice::Splicer` keeps the content segments by live sequence. While the
+      main playlist is in an ad, it adds the backup's newer segments. Its output for mpv:
+  - `MEDIA-SEQUENCE` is the live sequence, so it never goes back;
+  - a discontinuity on a change of source, a gap or a new init segment, with `EXT-X-MAP` repeated;
+  - `EXT-X-DISCONTINUITY-SEQUENCE` counts those that left the 15-segment window;
+  - the ad's `DATERANGE`s are dropped.
+
+  `AdState { active, elapsed, duration, covered }` tells the space whether a notice is needed: only when
+  not `covered`. Prefetch lines are dropped for now (low latency, step 10)
 - Measured 2026-11-01 (twitch.md, "Checked live"): `site` gets a 30 s pre-roll, while `embed`, `popout`,
-  `frontpage` and `channel_home_live` got none at 1080p60. So:
-  - the main token uses `embed`, as Streamlink does;
-  - `site` is never asked for;
-  - the backup is `popout`, then `frontpage`;
-  - the splice lines the two playlists up on `EXT-X-TWITCH-LIVE-SEQUENCE`, which both carry.
+  `frontpage` and `channel_home_live` got none at 1080p60. So the main token uses `embed`, as Streamlink
+  does (`gql::PLAYER_TYPE`), and the backup uses `popout` (`gql::BACKUP_PLAYER_TYPE`). Whether `embed`
+  also escapes mid-rolls was not observed; the filter and the backup stay for that case
+- [x] 8 tests on the saved playlists as a reload sequence:
+  - each rule, and every reload;
+  - the backup covering the pre-roll at once;
+  - the main playlist taking over after a gap;
+  - no backup: the ad only skipped, output empty until the live;
+  - a plain live passing through.
+- [x] `Proxy::start`, then `Client::play(target, codecs)`: the main and backup tokens and masters are
+      asked for together (`tokio::join!`); a failing backup is only logged. The proxy:
+  - listens on `127.0.0.1:0`, with a random 128-bit key in the path; HTTP/1.1 GET only, anything else
+    404 or 405, an upstream failure 502;
+  - serves `/<key>/<variant>.m3u8`: each reload fetches the upstream media playlist, and the backup
+    only during an ad, then answers the `Splicer`'s playlist (live) or the absolutized one (VOD);
+  - leaves out the master: mpv gets a variant's URL directly (`Proxy::variants`), so FFmpeg does not
+    open every variant at start;
+  - keeps the upstream URLs in its memory, its logs say no URL, and it stops when the `Proxy` drops.
 
-  Whether `embed` also escapes mid-rolls was not observed; the filter and the backup stay for that case.
-- [ ] Tests on every saved ad playlist, in order, as a reload sequence; a test per rule
-- [ ] `proxy::Proxy::start()` on the network runtime (`tokio::net::TcpListener` on `127.0.0.1:0`, a random
-      path token per playback, HTTP/1.1 GET only, anything else 404). It serves:
-  - the master, its variant URLs rewritten to the proxy;
-  - each media playlist, fetched upstream on every request, filtered, segment URLs absolute to the CDN.
-  Upstream URLs stay in the proxy's memory. It stops when its `ProxyHandle` drops (the player closed)
-- [ ] `ProxyHandle::ad_events()`: a channel of `AdState` changes (started with its expected length when
-      the DATERANGE gives `DURATION`, ended), for the notice of step 4
-- [ ] The spike plays through the real proxy: start time measured again, an ad break watched
-- Exit: a live plays through the proxy, an ad break skipped, start within 1–2 s
-- Dependency: the tokio `net` feature (agreed)
-
+  A subscriber-only token (`chansub`) fails as `SubscriberOnly` before usher is asked
+- [x] `Proxy::ad_state()` instead of a channel: the space reads it on a timer (step 6), with no channel
+      crossing the tokio and GPUI executors
+- [x] The spike plays through the real proxy (`PEEBY_PROXY=1`):
+  - a live in 1.35 s, against 1.21–1.29 s without the proxy;
+  - with `PEEBY_PLAYER_TYPE=site` (forced pre-roll), 1.51 s, the 30 s pre-roll covered by the backup;
+    the main playlist took over at its end, with no buffering event over 50 s.
+- Not verified: a mid-roll, a backup that fails during an ad (the notice path), the picture at the switch
+  by eye (the spike logs no stall; a screenshot was not taken)
+- Exit: met. A live plays through the proxy, an ad break was skipped, and the start stays within 1–2 s
 ### 4. `ui::player`: live mode and notice
 - [ ] `Source::live: bool`. When live:
   - no seek bar, no remaining time, a "EN DIRECT" badge in the controls instead;

@@ -8,11 +8,15 @@
 //! tested against real, redacted responses in `tests/fixtures/`. Tokens, signatures and usher or
 //! CDN URLs carry the user's IP: they never appear in logs or error messages.
 
+pub mod ads;
 mod client;
 mod error;
 pub mod gql;
+mod proxy;
+pub mod splice;
 pub mod usher;
 
 pub use client::{Client, Master};
 pub use error::{Error, Result};
 pub use gql::{PlaybackToken, Target};
+pub use proxy::Proxy;

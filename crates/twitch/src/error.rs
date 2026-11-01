@@ -38,6 +38,9 @@ pub enum Error {
   /// A VOD for the channel's subscribers (`vod_manifest_restricted`, `unauthorized_entitlements`).
   #[error("this video is for the channel's subscribers")]
   SubscriberOnly,
+  /// The local playlist proxy could not start.
+  #[error("local playlist proxy: {0}")]
+  Proxy(String),
   /// Any other GQL error, with its message.
   #[error("GQL error: {0}")]
   Gql(String),

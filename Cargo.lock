@@ -6010,6 +6010,8 @@ dependencies = [
  "player",
  "reqwest",
  "serde_json",
+ "tokio",
+ "twitch",
 ]
 
 [[package]]

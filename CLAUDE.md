@@ -76,6 +76,16 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   writes to the user's account (reports: last played date, play count, resume position, watched flag): ask the
   user before a playback test.
 
+## Twitch (docs/twitch-plan.md, ADR 0010)
+- mpv never gets a usher or CDN playlist URL: live and VOD playlists go through `twitch::Proxy`
+  (`Client::play`), which removes ads and fills breaks from the backup `playerType`. Main token
+  `embed`, never `site` (pre-roll).
+- Playback tokens (`value` holds the user's IP), signatures, and usher's error bodies (they repeat the
+  signed URL) never reach a log or an error message: keep only `error_code`.
+- Fixtures: redact Twitch's session keys by name (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
+  `C`/`E`…, and the ads' `*-SESSION-ID`, `RADS-TOKEN`, `*-URL`), never with a blanket IP regex (it breaks
+  HEVC codec strings).
+
 ## Player
 - `ui::player` (crates/ui/src/player/) is the shared player, built from peeby's `player_page.rs`: take controls and
   behavior from there first, keeping service data out of it (spaces give it a `Source`; peeby is at

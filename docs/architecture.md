@@ -25,13 +25,27 @@
 | `jellyfin-api` | Jellyfin client copied from peeby: server check, password and Quick Connect sign-in, views, items, resume, next up, latest, seasons and episodes, images, playback info (Direct Play only), stream and subtitle URLs, reports, media segments, adjacent episodes, trickplay | No GPUI dependency. Fixture tests in `tests/fixtures/`, live tests (`tests/live.rs`, ignored) against a real server ([ADR 0009](decisions/0009-jellyfin-12-single-account.md), [jellyfin/api.md](jellyfin/api.md)) |
 | `ui` | Shared UI, no service types: theme with a switchable accent (`theme::set_accent`), motion, icons and logo (`assets`), the tokio bridge (`runtime`), the image store (`images`), pictures (`picture`: fixed sizes or a URL for any size with a BlurHash placeholder, `image_fill`, `logo`), the player (`player`: `PlayerView` playing a `player::Source`, `PlayerEvent`s out, see below), media cards in grid, poster, compact, row and numbered layouts with progress, watched and count badges and their skeletons (`card::MediaCard`), scrolling rows with arrows and the layout of a virtual grid (`rows`), notices and the loader (`widgets`), settings rows (`form`), text helpers (`text`: mojibake repair, HTML to plain text) | Spaces convert their data into these models ([refactor-plan.md](refactor-plan.md)) |
 | `peeby` | Binary (was `peebtube`, ADR 0007): the shell (`shell`), settings, and the spaces. `spaces::jellyfin`: session (`session`: client identity, token in the Credential Manager, the image route), `login`, `home`, `library`, `search`, `detail`, `play` (Direct Play, reports, track mapping with `tracks`, segments, trickplay, adjacent episodes), `settings_page`, `items` (images, cards and texts of items). `spaces::youtube`: adapters `cards` (videos as `MediaCard`s) and `convert` (pictures, error texts, the player's `Source`), pages (`feed` for Home/subscriptions/channel, `channels`, `playlists`, `search`, `watch`), its part of the settings page (`settings_page`, with the account and cookie import of `account`), the play queue of a playlist (`queue`), saving a video to a playlist (`save`), the notification bell of a channel (`bell`), the notifications inbox (`inbox`), the stream prefetch (`prefetch`), bundled tools and their updates (`tools`). `settings`: the settings file and the YouTube cookies | `anyhow` for errors |
+| `twitch` | Twitch client (ADR 0010, [twitch-plan.md](twitch-plan.md)), being built; no space uses it yet. GQL playback tokens with the raw query and the web Client-ID read from twitch.tv's page (`gql`), usher v2/v1 masters and their variants (`usher`), media playlists with their ads marked and their live sequence (`ads`), the splice of an ad-free backup playlist into an ad break (`splice`), and the local playlist proxy mpv plays from (`Proxy`, via `Client::play`) | No GPUI dependency. Fixture tests in `tests/fixtures/` (redacted), live check with `examples/smoke.rs` |
 | `spikes/yt-play` | Playback spike: VISIONOS or yt-dlp, timings | Kept for measurements |
+| `spikes/twitch-play` | Twitch playback spike: GQL token, usher, with or without the proxy (`PEEBY_PROXY=1`), timings | Kept for measurements |
 
 ## Threads and data flow
 
 - **UI thread (GPUI).** Rendering and input only.
 - **Network.** `reqwest` needs tokio, GPUI has its own executor. `ui::runtime` owns a 2-thread tokio runtime as a GPUI global; `runtime::spawn(cx, future)` returns a future that GPUI tasks await.
 - **Player.** `ui::player::PlayerView` plays a `Source` and talks to its page through `PlayerEvent`s (`Started`, `Paused`, `Seeked`, `TracksChanged`, `Ended`, `Next`, `Previous`, `Close`, `Sound`, `Theater`); `Layout::Embedded` for YouTube's watch page, `Layout::Page` for Jellyfin's player, which is a page of its own in the content panel (back, title, Escape closes it), `Layout::Window` for a full-window player (the example). Skippable segments come from the page (`set_segments`) or from the chapter titles; the "up next" card from `set_up_next`. A right click opens a menu with the shortcut help and a statistics panel (`stats.rs`), which reads a fixed list of mpv properties once a second while open, never `path` or `stream-open-filename` (stream URLs carry the user's IP). `Player::start` runs on GPUI's background executor (libmpv and D3D11 setup block briefly). mpv events and frames come back through channels (peeby's design).
+
+## Twitch playback
+
+The Twitch space is not built yet. Its playback path:
+1. `twitch::Client::play` asks GQL for two playback tokens together: `embed` for the main stream, which
+   did not get the pre-roll, and `popout` as a backup without ads. It then gets both usher masters.
+2. It starts a `Proxy` on `127.0.0.1`, on the network runtime.
+3. mpv plays a variant's local URL, `/<random key>/<n>.m3u8`. On each reload the proxy fetches the
+   variant's media playlist from Twitch and drops the ad segments. During an ad break it also fetches
+   the backup playlist, and fills the break with its segments, lined up on Twitch's live sequence.
+4. Segments come from the CDN directly. Signed URLs and tokens stay in the proxy's memory.
+5. Dropping the `Proxy` stops it.
 
 ## Startup
 

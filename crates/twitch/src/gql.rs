@@ -13,6 +13,10 @@ pub const WEB_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 /// `playerType` of the main token: `site` gets a pre-roll, `embed` did not (measured 2026-11-01).
 pub const PLAYER_TYPE: &str = "embed";
 
+/// `playerType` of the backup token, whose playlist fills an ad break of the main one: no ads and
+/// 1080p60 on 2026-11-01, as `frontpage` (`autoplay` stops at 360p).
+pub const BACKUP_PLAYER_TYPE: &str = "popout";
+
 /// yt-dlp's text of the query (`yt_dlp/extractor/twitch.py`), both kinds in one.
 const TOKEN_QUERY: &str = "query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, \
   $vodID: ID!, $isVod: Boolean!, $playerType: String!, $platform: String!) { \
