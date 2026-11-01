@@ -100,7 +100,9 @@ Two credentials, for different things. Both are secrets, under the same rules as
     "sign out everywhere".
 - **What needs which**:
   - Helix (A): followed live channels and followed channels (user token); streams by category, top
-    categories, search, a channel's VODs and clips, users, emotes, badges (an app token is enough).
+    categories, search, a channel's VODs and clips, users, emotes, badges (an app token would be enough,
+    but a public client cannot get one: no client credentials flow without a secret **[src]**, so Peeby
+    uses the user token for all of them, see [twitch-plan.md](twitch-plan.md#facts-checked-for-this-plan)).
   - GQL with B: the recommended streams (no Helix endpoint; the query names are **[?]**), and playback
     without ads (Turbo or subscriber), subscriber-only VODs, sometimes the best qualities.
   - A token issued for Peeby's own Client-ID very likely does not unlock what B does **[likely]**.
@@ -205,12 +207,64 @@ the rest of the app):
 Peeby checks a pasted token (30 alphanumerics, then a GQL call that answers as signed in) before saving it,
 as it checks imported YouTube cookies.
 
+## Checked live on 2026-11-01
+
+A probe run by the user, anonymously, on a live channel:
+
+- The raw `PlaybackAccessToken` query (yt-dlp's text, no persisted hash) answers a token with both the web
+  Client-ID and yt-dlp's `ue6666…`, with `playerType` `site` and `embed`. No integrity token was asked.
+- usher v2 (`/api/v2/channel/hls/`) and v1 (`/api/channel/hls/`) both answer 200, in about 150 ms. The v2
+  master is larger (17 KB against 10 KB, with `supported_codecs=av1,h265,h264` and `multigroup_video=true`).
+- **The v2 master has its own format**:
+  - one `#EXT-X-SESSION-DATA:DATA-ID="…",VALUE="…"` line per key, where v1 has a single
+    `#EXT-X-TWITCH-INFO` line with the same keys (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
+    `C` and `E`, which are base64 segment URLs…);
+  - no `EXT-X-MEDIA` groups: each `EXT-X-STREAM-INF` carries `STABLE-VARIANT-ID` (`1080p60`,
+    `1080p60-portrait`, `audio_only`), `IVS-NAME`, `IVS-GROUPS` (`landscape`, `portrait`) and
+    `IVS-VARIANT-SOURCE`.
+  - A channel with `CHANNEL-METADATA="multitrack_video,multigroup_video"` sends both a landscape and a
+    portrait ladder. Here the landscape one was H.264 and the 1080p60 portrait one HEVC. Peeby keeps
+    `landscape`.
+- **Audio is muxed** (`CODECS="avc1.4D401F,mp4a.40.2"`), and an `audio_only` variant exists. Media
+  playlists are fragmented MP4 (`EXT-X-MAP`), 2 s segments, `TARGETDURATION:5`.
+- **Anonymous playback starts with a pre-roll**: the first media playlist was all ad, 30 s, every segment
+  marked three ways, as Streamlink expects:
+  - `EXT-X-DATERANGE` with `CLASS="twitch-stitched-ad"`, `ID="stitched-ad-…"`, `DURATION=30.235` and
+    `X-TV-TWITCH-AD-ROLL-TYPE="PREROLL"`;
+  - a `CLASS="twitch-stream-source"` range with `X-TV-TWITCH-STREAM-SOURCE="Amazon|…"`;
+  - `#EXTINF:2.000,Amazon|…` on each segment.
+
+  Dropping the segments alone would leave the screen empty for 30 s at the start. See the plan, step 3:
+  the proxy plays a backup stream while an ad runs.
+- **Pre-roll by `playerType`** (second run, anonymous, same channel, two runs in a row):
+  - only `site` got the pre-roll;
+  - `embed`, `popout`, `frontpage` and `channel_home_live` got none and kept 1080p60;
+  - `autoplay` and `picture-by-picture` got none but stopped at 360p30, `thunderdome` at 480p30.
+
+  Streamlink's default is `embed`. Mid-rolls were not observed (none ran during the capture), so whether
+  `embed` escapes them too is unknown.
+- **How a pre-roll is served** (`live_preroll_00`…`24`):
+  - The ad playlist starts at `EXT-X-MEDIA-SEQUENCE:0` and grows in real time: one 2 s segment every 2 s,
+    16 segments for the 30.235 s ad, the last one 0.235 s. It cannot be skipped by reading ahead.
+  - The live then follows in the same playlist after an `EXT-X-DISCONTINUITY`, a new `EXT-X-MAP` and
+    `#EXT-X-TWITCH-LIVE-SEQUENCE:4567`. Its segments are titled `live`, and a
+    `twitch-stream-source` range has `X-TV-TWITCH-STREAM-SOURCE="live"`.
+  - Ad quartile ranges (`twitch-ad-quartile`, 0 to 4) mark the ad's progress.
+  - The ad-free `embed` playlist is an ordinary sliding window: `EXT-X-MEDIA-SEQUENCE:4536` equal to
+    `EXT-X-TWITCH-LIVE-SEQUENCE:4536`.
+  - The live sequence number is what lines up the main and the backup playlists.
+- **Prefetch**: two `#EXT-X-TWITCH-PREFETCH:` lines end each live playlist (low latency, step 10).
+- **Redaction** (fixtures and anything printed): redact the keys by name in both formats, plus the ad
+  ranges' `AD-SESSION-ID`, `RADS-TOKEN`, `CLICK-BEACON-ID`, `X-TV-TWITCH-SESSIONID` and `*-URL` values.
+  A blanket IPv4 pattern corrupts HEVC codec strings (`hev1.1.6.L123.B0`-like): never use one.
+
 ## Not verified
 
 - The Helix details marked [mem]: the reference page was truncated when fetched.
 - The BTTV and FFZ endpoints; the 7TV host.
 - The 800 points a minute.
-- Usher v1, and yt-dlp's other Client-ID.
+- Whether the playback token needs an integrity token when signed in with the auth-token (anonymous does
+  not, see above).
 - Ad-free tokens from a Helix token (very likely not).
 - Muxed audio.
 - The IRC emote indexes.

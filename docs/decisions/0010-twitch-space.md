@@ -63,6 +63,13 @@ and prepare for it without building it (refactor plan, step 9). The research, wi
    ads with Turbo or a subscription, subscriber-only VODs); without it, playback still works, with ads
    removed by the layer above.
 
+3. **Sign-in required** (2026-11-01). A public client cannot get a Helix app token (no client credentials
+   flow without a secret), so the catalog needs the user's token anyway. Signed out, the space shows only
+   its sign-in card. Peeby's Client-ID on dev.twitch.tv is `zsxaog2l339o1lbld85h17ksscnjwr` (public, not
+   a secret). Tokens are validated at startup and every hour, as Twitch requires.
+4. **Low latency and HEVC/AV1 are in scope** (2026-11-01): prefetch segments kept by the proxy, and the
+   best codec the GPU decodes, h264 as fallback. Plan: [twitch-plan.md](../twitch-plan.md).
+
 ## Consequences
 
 - The playback path depends on undocumented endpoints (GQL, usher) that change several times a year:

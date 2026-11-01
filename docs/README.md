@@ -36,6 +36,6 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 - [decisions/](decisions/): architecture decision records; the former peeby's are archived in [decisions/peeby/](decisions/peeby/)
 - [player/](player/): mpv options, video surface, playback UX, ASS subtitles (from peeby)
 - [twitch.md](twitch.md): how a Twitch space would work (playback, credentials, chat, Helix) and what the
-  architecture already covers
+  architecture already covers; [twitch-plan.md](twitch-plan.md): the technical plan to build it, step by step
 - [jellyfin/](jellyfin/): the Jellyfin API as used, Direct Play (from peeby); [reference/](reference/): Jellyfin's OpenAPI spec
 - [../vendor/README.md](../vendor/README.md): the GPUI patch

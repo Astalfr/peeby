@@ -1,0 +1,317 @@
+# Twitch space: technical plan
+
+Status: agreed 2026-11-01 (the user's answers in [Decisions of the user](#decisions-of-the-user)), not
+started. It turns [twitch.md](twitch.md) (the research) and [ADR 0010](decisions/0010-twitch-space.md) (the
+decisions) into steps. Each step ends with `cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace` and a run of the app, and YouTube and Jellyfin keep working after every step. Tick
+the boxes as steps land, and list under each step what was verified and what was not.
+
+## Decisions of the user
+
+2026-11-01:
+
+- **Client-ID** of Peeby's application on dev.twitch.tv (public client): `zsxaog2l339o1lbld85h17ksscnjwr`.
+  A Client-ID is not a secret: it is a constant in the `twitch` crate, overridable in `settings.toml`.
+- **Dependencies agreed**: `tokio-tungstenite` with `native-tls` (chat), tokio's `net` feature for the proxy
+  (hand-written HTTP/1.1 GET handler, no HTTP server crate), `image`'s animation features (GIF, animated
+  WebP) for animated emotes.
+- **Nothing without signing in**: signed out, the space shows only its sign-in card.
+- **Low latency and HEVC/AV1 are in scope** (step 10).
+- Writes to the account (following, sending chat messages) stay out of scope.
+
+## Facts checked for this plan
+
+Re-read on 2026-11-01, in addition to twitch.md:
+
+- **A public client cannot get an app token.** Twitch's OAuth page: public clients "cannot use any of the
+  other flows like client credentials", which is the only way to an app token. They "can refresh an access
+  token without passing a client secret". Refresh tokens from the device flow "are for one time use only".
+  So **every Helix call needs the user's token**: signed out, Peeby has no Helix catalog. This corrects
+  twitch.md, which said an app token was enough for several endpoints. The user chose to require the
+  sign-in for the whole space.
+- **Validation is required.** "Your app must validate the OAuth token when it starts and on an hourly basis
+  thereafter" (`GET https://id.twitch.tv/oauth2/validate`).
+- **The ad layer is a local HTTP proxy, not a libmpv stream callback** **[mem]**. mpv opens HLS through
+  FFmpeg's demuxer. FFmpeg fetches the nested media playlists and segments with its own I/O (mpv's
+  `demux_lavf` hands nested opens to FFmpeg's default `io_open`), not through mpv streams. A protocol added
+  with `mpv_stream_cb_add_ro` would only serve the master, never the media playlist FFmpeg reloads every few
+  seconds. The proxy also leaves the copied `player` crate alone (no ADR 0001 note). The spike (step 1)
+  confirms this; it does not choose between the two.
+
+## Signed out
+
+The space shows its sign-in card and nothing else (the user's choice): no catalog, no playback, no chat.
+`peeby twitch.tv/<login>` opens the Twitch tab on that card and plays the channel once signed in. The GQL
+playback calls still use the web Client-ID (and the auth-token when given), never the Helix token: the two
+are separate credentials (twitch.md, "Credentials"). The spike (step 1) runs anonymously; it is a tool, not
+the app.
+
+## Target layout
+
+```
+crates/twitch/                  NEW, no GPUI; thiserror; lenient parsing from serde_json::Value
+  src/lib.rs                    Client (reqwest), re-exports
+  src/error.rs                  Error: Http, Status, RateLimited{reset}, NotLoggedIn, Offline,
+                                IntegrityRequired, SubscriberOnly, Parse
+  src/gql.rs                    POST gql.twitch.tv/gql: playback tokens (live, VOD), clip token, storyboard
+  src/gql_config.rs             GqlConfig {client_id, hashes}: defaults, settings override, refresh
+  src/usher.rs                  usher URLs (v1 or v2, decided by the spike), master parsing → Variant
+  src/ads.rs                    pure filter: media playlist in → playlist without ads + AdState out
+  src/proxy.rs                  127.0.0.1 server serving rewritten master and media playlists
+  src/auth.rs                   device flow, refresh (single-flight), validate
+  src/helix.rs                  Helix calls, pagination, rate-limit headers
+  src/models.rs                 Stream, Channel, User, Category, Video, Clip, Page<T>
+  src/chat/irc.rs               pure IRC parser (tags, PRIVMSG, CLEARCHAT, CLEARMSG, USERNOTICE, ROOMSTATE)
+  src/chat/connection.rs        WebSocket connection, PING/PONG, reconnect with backoff
+  src/chat/emotes.rs            Twitch emote ranges, 7TV/BTTV/FFZ sets (later)
+  tests/fixtures/               redacted responses, saved playlists, IRC lines
+  examples/smoke.rs             live check of every endpoint, counts only
+crates/ui/src/player/           live mode and a generic notice (step 4)
+crates/peeby/src/spaces/twitch/
+  mod.rs                        TwitchSpace: Space impl, page stack, sidebar
+  session.rs                    keyring entries, restore before the UI, save in the background
+  play.rs                       resolve a live/VOD/clip into a ui::player::Source (starts the proxy)
+  watch.rs                      watch page: player + chat column, title, channel, viewers, uptime
+  chat.rs                       chat panel (virtual list, emotes)
+  following.rs, browse.rs, category.rs, channel.rs, search.rs, cards.rs (Twitch → MediaCard)
+  settings_page.rs              sign-in (device code), auth-token field with its tutorial, quality, chat
+spikes/twitch-play/             timings: GQL token, usher, proxy, first frame
+```
+
+The shell and `ui` learn nothing about Twitch. The only shared changes are those of step 4, plus
+animated images at step 9 if agreed.
+
+## Secrets and redaction
+
+Same rules as ADR 0004 and 0009, plus what Twitch adds:
+
+| Secret | Where it lives | Never |
+|---|---|---|
+| Helix access token (≈4 h) | memory only | logs, URLs, errors |
+| Helix refresh token (single use, 30 days) | Credential Manager `peeby` / `twitch|refresh` | same |
+| Web `auth-token` (full account access) | Credential Manager `peeby` / `twitch|auth-token` | same |
+| Playback token `value` (JSON with the user's IP and user id) and `signature` | memory, inside the proxy | logs above debug, errors |
+| usher and CDN URLs (token, sig in the query) | inside the proxy | logs above debug, errors |
+
+- mpv only ever sees `http://127.0.0.1:<port>/<random>/…` for playlists, and absolute CDN URLs for segments.
+- **Fixture redactions**:
+  - the playback token's `value` becomes `{"redacted":true}`, `signature` becomes `REDACTED`;
+  - the query strings of usher and CDN URLs become `REDACTED`, IPs `203.0.113.7`;
+  - the `user_id`, login and display name of the signed-in user become `peeby_test`;
+  - `Authorization` and `Client-Integrity` headers are never saved.
+- Credential Manager reads block: the refresh token and the auth-token are read before the UI starts (as
+  Jellyfin's). Writes go to the background executor.
+
+## Steps
+
+### 1. Playback spike (`spikes/twitch-play`)
+- [ ] `cargo run -p spike-twitch-play --release -- <login|vod-url>`, timing each stage as `spike-yt-play`:
+      GQL `PlaybackAccessToken` → usher master → mpv first frame
+- [ ] Try usher v2 then v1; the raw query (yt-dlp's) and the persisted one (Streamlink's hash); the web
+      Client-ID and yt-dlp's. Keep the combination that answers, note the others in twitch.md
+- [ ] The same through a throwaway proxy that forwards the master and the media playlist unchanged:
+      measure what the hop costs (target: the start stays within 1–2 s)
+- [ ] Save fixtures, redacted: the GQL answers (live and VOD), a master playlist, **media playlists
+      captured during an ad break** (at least the start, the middle and the end of one, so with
+      `EXT-X-DATERANGE` and discontinuities), a subscriber-only VOD's 403 body if one is at hand
+- [ ] Check what twitch.md marks [?]: muxed audio in the variants, the `audio_only` variant, whether
+      `supported_codecs=h264` alone gives 1080p60
+- Exit: a live and a VOD play from the spike, with measured times, and the fixtures are committed
+- Done so far (2026-11-01), with PowerShell probes run anonymously (scratchpad scripts, not in the repo):
+  - the raw query answers with both Client-IDs, and usher v2 and v1 both answer;
+  - live fixtures saved and redaction checked in `crates/twitch/tests/fixtures/`: both masters, 25
+    reloads across a pre-roll, and an `embed` backup playlist;
+  - muxed audio confirmed.
+- Still to do: the Rust spike with mpv and timings, the VOD, the GQL answers as fixtures (token `value`
+  and `signature` redacted), and the subscriber-only 403
+
+### 2. `twitch` crate: GQL, usher, errors
+- [ ] `Client` over `reqwest` (same features as `innertube`), `GqlConfig` (`client_id`, `hashes`) with
+      defaults in code and a `[twitch.gql]` override in `settings.toml`
+- [ ] Refresh: at startup, in the background, read the web Client-ID from twitch.tv's HTML
+      (`clientId="…"` in the page script **[?]**, checked in the spike); raw queries wherever Twitch takes
+      them, so there are few hashes to keep. A failed refresh keeps the defaults and logs a warning
+- [ ] `playback_token(Live{login} | Vod{id})`, `clip(slug)`, `vod_storyboard(id)`, with the auth-token when
+      there is one (`Authorization: OAuth …`)
+- [ ] Errors mapped from the answers: integrity required (`Error::IntegrityRequired`), offline channel
+      (`Offline`), subscriber-only VOD (`SubscriberOnly`, from the usher 403 `vod_manifest_restricted` /
+      `unauthorized_entitlements`), an auth-token GQL rejects (`NotLoggedIn`)
+- [ ] `usher::master_url`, `usher::variants(master)`. For v2, read `STABLE-VARIANT-ID`, `IVS-NAME`,
+      `IVS-GROUPS` (keep `landscape`), `IVS-VARIANT-SOURCE` and `CODECS`. For v1 (the fallback), read
+      the `EXT-X-MEDIA` `NAME`, with the `chunked` group as "Source". In both, keep `audio_only` apart.
+      Audio is muxed: no `external_audio`
+- [ ] Tests on the step 1 fixtures; `examples/smoke.rs` prints counts only
+- Exit: `cargo test -p twitch` green on real responses
+
+### 3. Ad filter and local proxy
+- [ ] `ads::filter(playlist: &str, state: &mut AdState) -> Filtered { playlist, ad: bool }`, pure:
+      drops segments inside an `EXT-X-DATERANGE` of `CLASS="twitch-stitched-ad"` or with an `ID` starting
+      with `stitched-ad-`, segments whose `#EXTINF` title contains `Amazon`, and `#EXT-X-TWITCH-PREFETCH`
+      lines after a discontinuity. It keeps `EXT-X-MEDIA-SEQUENCE` consistent (mpv/FFmpeg must not see the
+      sequence go back) and adds `EXT-X-DISCONTINUITY` where content resumes
+- [ ] **Backup stream during ads** (anonymous playback starts with a 30 s pre-roll, twitch.md
+      "Checked live"): when the main media playlist is in an ad, the proxy serves the segments of a backup
+      playlist instead. The backup comes from a second playback token with another `playerType`, one that
+      gets no ads, possibly at a lower quality, as TwitchAdSolutions and ttv-lol do. The backup token is
+      requested together with the main one, so the start stays within 1–2 s. Content resumes on the main
+      playlist after the ad, with an `EXT-X-DISCONTINUITY`. Media sequence numbers are the proxy's own,
+      always increasing. The notice of step 4 ("Publicité retirée") shows only when no backup answers.
+- Measured 2026-11-01 (twitch.md, "Checked live"): `site` gets a 30 s pre-roll, while `embed`, `popout`,
+  `frontpage` and `channel_home_live` got none at 1080p60. So:
+  - the main token uses `embed`, as Streamlink does;
+  - `site` is never asked for;
+  - the backup is `popout`, then `frontpage`;
+  - the splice lines the two playlists up on `EXT-X-TWITCH-LIVE-SEQUENCE`, which both carry.
+
+  Whether `embed` also escapes mid-rolls was not observed; the filter and the backup stay for that case.
+- [ ] Tests on every saved ad playlist, in order, as a reload sequence; a test per rule
+- [ ] `proxy::Proxy::start()` on the network runtime (`tokio::net::TcpListener` on `127.0.0.1:0`, a random
+      path token per playback, HTTP/1.1 GET only, anything else 404). It serves:
+  - the master, its variant URLs rewritten to the proxy;
+  - each media playlist, fetched upstream on every request, filtered, segment URLs absolute to the CDN.
+  Upstream URLs stay in the proxy's memory. It stops when its `ProxyHandle` drops (the player closed)
+- [ ] `ProxyHandle::ad_events()`: a channel of `AdState` changes (started with its expected length when
+      the DATERANGE gives `DURATION`, ended), for the notice of step 4
+- [ ] The spike plays through the real proxy: start time measured again, an ad break watched
+- Exit: a live plays through the proxy, an ad break skipped, start within 1–2 s
+- Dependency: the tokio `net` feature (agreed)
+
+### 4. `ui::player`: live mode and notice
+- [ ] `Source::live: bool`. When live:
+  - no seek bar, no remaining time, a "EN DIRECT" badge in the controls instead;
+  - no seeking: arrows, J/L, 0–9, Home, Page Up/Down and chapters do nothing (and their help lines hide);
+  - no "up next" and no `finished()` from the position;
+  - a quality change restarts at the live edge, not at the current position (`start_seconds` unset);
+  - `PlayerEvent::Ended` means the stream stopped (channel offline): the space shows "Le live est
+    terminé" over the last frame.
+- [ ] `PlayerView::set_live_info(Option<LiveInfo>)`: viewers and start time, shown next to the badge
+      (uptime ticks every second; the space refreshes viewers every minute)
+- [ ] `PlayerView::set_notice(Option<Notice>)`, generic (`ui` knows no service): a text, optionally a
+      countdown, shown over the picture. The Twitch space sets "Publicité retirée, reprise dans 25 s" while
+      the proxy holds back an ad and mpv waits. The buffering overlay hides while a notice shows
+- [ ] Mini-player: a live keeps playing there; its controls hide the seek bar too
+- [ ] `cargo run -p ui --example player -- --live`: the example in live mode with a notice
+- [ ] docs/player/ updated (live mode, notice)
+- Exit: the example shows the live controls and the notice; YouTube and Jellyfin unchanged
+
+### 5. The space and the sign-in (Helix device flow, auth-token)
+- [ ] `spaces/twitch/`: `TwitchSpace` with its accent (Twitch violet) and badge `TW`, one line in
+      `main.rs`'s list of spaces; signed out, its only page is the sign-in card
+- [ ] `twitch::auth`: `start_device(scopes)` → `{user_code, verification_uri, interval, expires_in}`,
+      `poll` (handles `authorization_pending`, `slow_down`, expiry), `refresh`, `validate`
+- [ ] **Single-flight refresh**: one `Mutex` around refresh in `Client`. A request that gets a 401
+      waits on it, then retries once with the new token. The new refresh token is written to the
+      Credential Manager **before** the access token is used; a failed write is logged and the session
+      kept in memory
+- [ ] Validation at startup and every hour (a background timer); an invalid token without a working
+      refresh signs the space out ("Session Twitch expirée")
+- [ ] The sign-in card (the space's page) and the settings part: "Se connecter à Twitch" shows the code in
+      large type, opens `verification_uri` in the browser, polls, then shows the user (avatar, name);
+      "Se déconnecter" revokes (`POST /oauth2/revoke`) and deletes the entry
+- [ ] The auth-token field with the tutorial text of twitch.md, masked input, checked before saving
+      (30 alphanumerics, then a GQL call answering as signed in), "Supprimer le jeton"
+- [ ] Scopes: `user:read:follows` (and `user:read:chat` only if EventSub chat comes later)
+- Exit: sign in, restart, still signed in (refresh across a restart); auth-token saved and checked
+- **Not verifiable without the user**: the device flow needs them to type the code
+
+### 6. Live playback in the space
+- [ ] `play.rs`: resolve a live into a `Source` (proxy master as `options.url`, `Referer` and
+      `Origin: https://player.twitch.tv` in `http_headers`, one `Quality` per variant, `live: true`), the
+      default quality from `[twitch]` settings
+- [ ] Watch page (embedded layout as YouTube's): player, title, channel and avatar, category, viewers,
+      uptime; a right column reserved for the chat (empty until step 9); theater mode as on YouTube
+- [ ] `peeby twitch.tv/<login>` and `twitch.tv/videos/<id>` on the command line open the space on that
+      channel or VOD (after the sign-in card when signed out)
+- [ ] French messages for each error of step 2 (integrity: "Twitch demande une vérification que Peeby ne
+      peut pas faire sans navigateur. Réessayez plus tard." — wording to review)
+- [ ] The settings part gains the default quality
+- Exit: `peeby twitch.tv/<login>` plays a live in the Twitch tab without ads, in the mini-player too
+
+### 7. Helix catalog and pages
+- Fixtures first, from signed-in responses, trimmed and redacted: `streams_followed.json`,
+  `channels_followed.json`, `streams.json` (by category), `games_top.json`, `games.json`,
+  `search_categories.json`, `search_channels.json`, `videos.json`, `clips.json`, `users.json`
+- [ ] `helix.rs`: one `get<T>(path, query)`, pages (`first=100`, `after`), `Ratelimit-*` headers read;
+      a 429 waits until `Ratelimit-Reset` once, then fails with `RateLimited`
+- [ ] Image templates filled by the space: `{width}x{height}` and `%{width}x%{height}`, a cache-buster on
+      live previews (rounded to 5 minutes, so the image store still caches), `404_processing` as "VOD en
+      cours de traitement"
+- [ ] Pages:
+  - **Suivies** (sidebar's first entry): live followed channels as stream cards (preview, title,
+    channel, category, viewers badge), then the offline followed channels as avatars;
+  - **Parcourir**: top categories as tall box-art posters, next pages on scroll; a category's page:
+    its live streams;
+  - **Chaîne**: header (avatar, name, description), the live if on, VODs and clips tabs;
+  - **Recherche** from the top bar: categories and channels (live first).
+- [ ] Sidebar: Suivies, Parcourir, then the live followed channels (avatar, name, category as `detail`),
+      refreshed every 2 minutes in the background; the user at the bottom (opens the settings)
+- [ ] `examples/smoke.rs` covers every endpoint
+- Exit: the followed channels and a category browse, open and play, signed in
+
+### 8. VODs and clips
+- [ ] VODs: usher VOD master through the same proxy (no ads to filter, but the token stays out of mpv's
+      URLs), seekable, resume is not tracked (Twitch has no resume API through Helix **[?]**)
+- [ ] Seek-bar previews: the storyboard query → a `Previews` impl (sprite sheets, as YouTube's)
+- [ ] Subscriber-only VODs: the `SubscriberOnly` message, and a hint to add the auth-token when none is set
+- [ ] Clips: direct MP4 from the clip token, `Source` without qualities when there is a single one
+- [ ] Muted segments (`muted_segments`) shown on the seek bar if the shared seek bar can mark ranges
+      (it marks chapters; otherwise skip)
+- Exit: a VOD plays and seeks with previews, a clip plays
+
+### 9. Chat (read-only)
+- Fixtures first: a file of raw IRC lines from a busy channel, with emotes, an emoji before an emote (to
+  settle whether `emotes` ranges count code points), a `CLEARMSG`, a `CLEARCHAT`, a sub `USERNOTICE`
+- [ ] UI spike, small, before the panel: a message with inline emote images that wraps in GPUI
+      (`h_flex().flex_wrap()` of word runs and images, or `StyledText` with inline boxes **[?]**), and a
+      variable-height virtual list (`gpui::list` with `ListState`) appending 20 messages a second without
+      re-laying out the whole list. Measure at 500 messages kept
+- [ ] `chat::irc`: pure parser, tested on the fixture; emote ranges mapped on `char` indexes, never byte
+      slices
+- [ ] `chat::connection`: `wss://irc-ws.chat.twitch.tv:443`, `CAP REQ`, `PASS`/`NICK justinfan<n>`,
+      `JOIN #login`, PONG, reconnect with backoff (1, 2, 4… 30 s), stops when the page drops
+- [ ] Chat panel in the watch page's right column: name in its color (lightened on the dark theme when
+      too dark), message with Twitch emotes (static), at most 500 messages, auto-scroll paused when the
+      user scrolls up ("Reprendre le défilement"), deleted messages greyed
+- [ ] Then, each as its own change: badges (Helix global and channel badges, needs sign-in), 7TV/BTTV/FFZ
+      emotes by word (cached per channel), animated emotes (needs `image` animation features and frames in
+      the image store, agreed)
+- [ ] VODs: no chat replay at first (GQL comments, later)
+- Exit: a busy channel's chat scrolls smoothly next to the player, with emotes
+- Dependency: `tokio-tungstenite` with `native-tls` (agreed)
+
+### 10. Polish and docs
+- [ ] Bell: "en direct" notifications for followed channels that went live since the last check (a
+      section of the aggregated panel, `Space::notifications`)
+- [ ] **Low latency** (agreed): the proxy turns `#EXT-X-TWITCH-PREFETCH:<url>` lines into ordinary
+      segments (Streamlink's approach), except after an ad discontinuity; mpv gets a small read-ahead
+      for live sources (`cache-secs`, `demuxer-readahead-secs` around 2–4 s, to tune) through the space's
+      `StartOptions`, so a new option in `player` only if no existing one fits (ADR 0001 note then). A
+      "Faible latence" switch in the settings part, on by default. Measure the delay to the broadcast
+      (the chat is the reference) with and without
+- [ ] **HEVC and AV1** (agreed): check D3D11 hardware decoding of both on this PC first (mpv
+      `hwdec-current` on a sample). Then `supported_codecs=av1,h265,h264`, and `usher::variants` keeps one
+      variant per name and codec. The space picks the best codec the GPU decodes (a per-codec result kept
+      in the settings after the first check). When mpv falls back to software decoding on a variant, the
+      space moves to the h264 variant of the same quality. The quality menu shows the codec only when two
+      codecs share a name
+- [ ] docs: architecture.md (the `twitch` crate, the proxy in the playback path), design.md (Twitch pages,
+      chat), twitch.md (the [?] settled by the steps), ADR 0010 consequences, README, CLAUDE.md (commands,
+      Twitch rules: the proxy, the secrets), roadmap
+- Exit: the roadmap's criterion: live and VOD playback without ads, followed channels, chat
+
+## Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Twitch changes how it marks ads | Ads come back, or content is cut | Filter rules tested on saved playlists; a new capture becomes a fixture |
+| Integrity token required on every playback token | No playback | Clear error; WebView2 behind a switch (ADR 0010), revisit |
+| GQL Client-ID or hashes go stale | No playback | Raw queries, startup refresh, `settings.toml` override |
+| The proxy hop slows the start | Over the 1–2 s budget | Measured at steps 1 and 3; the master can be fetched while the token resolves on hover (prefetch, as YouTube) |
+| Refresh token burned by a race | Signed out | Single-flight refresh, keyring written first |
+| Chat throughput on busy channels | UI stutter | Virtual list, cap of 500, batch appends per frame |
+
+## Still to ask
+
+- Any write to the account (following a channel, sending a chat message): not planned, each would need its
+  own go-ahead and test.
+- A playback test of a subscriber-only VOD or with the auth-token: it plays as the user's account.
