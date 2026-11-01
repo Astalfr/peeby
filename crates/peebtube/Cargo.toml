@@ -1,0 +1,26 @@
+[package]
+name = "peebtube"
+description = "Native YouTube client for Windows built with GPUI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = "1"
+async-channel = "2"
+dirs = "6"
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui-component = "=0.8.1"
+gpui-video = { workspace = true }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+innertube = { workspace = true }
+player = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true

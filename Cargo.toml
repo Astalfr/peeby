@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "spikes/*"]
-exclude = ["vendor/*", "poc-home"]
+exclude = ["vendor/*"]
 
 [workspace.package]
 version = "0.0.1"
@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 player = { path = "crates/player" }
 gpui-video = { path = "crates/gpui-video" }
+innertube = { path = "crates/innertube" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

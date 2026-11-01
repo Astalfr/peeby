@@ -187,7 +187,8 @@ impl Spike {
     if let Some(e) = &s.error {
       return format!("error: {e} (see target/yt-play-mpv.log)");
     }
-    let secs = |d: Option<Duration>| d.map_or("…".into(), |d| format!("{:.2} s", d.as_secs_f64()));
+    let secs =
+      |d: Option<Duration>| d.map_or("…".into(), |d| format!("{:.2} s", d.as_secs_f64()));
     format!(
       "{:?} · loaded {} · playing {} · {:.0}/{:.0} s{}{} · {}",
       self.player.backend(),
@@ -226,7 +227,6 @@ impl Render for Spike {
       )
   }
 }
-
 
 /// Folder with the bundled yt-dlp and JS runtimes (layout of `scripts/fetch-tools.ps1`).
 struct Tools {
@@ -322,7 +322,10 @@ fn visionos_options(url: &str) -> (StartOptions, Instant) {
   };
   let warmup = Instant::now();
   let resolver = visionos::Resolver::new().unwrap_or_else(|e| fail(e));
-  eprintln!("visitorData (app startup): {:.2} s", warmup.elapsed().as_secs_f64());
+  eprintln!(
+    "visitorData (app startup): {:.2} s",
+    warmup.elapsed().as_secs_f64()
+  );
   let started = Instant::now();
   let stream = resolver
     .resolve(video_id, 1080)
@@ -332,7 +335,11 @@ fn visionos_options(url: &str) -> (StartOptions, Instant) {
     started.elapsed().as_secs_f64(),
     stream.resolution,
     stream.codecs,
-    if stream.audio_url.is_some() { "yes" } else { "no" }
+    if stream.audio_url.is_some() {
+      "yes"
+    } else {
+      "no"
+    }
   );
   let options = StartOptions {
     url: stream.url,

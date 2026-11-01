@@ -1,0 +1,21 @@
+[package]
+name = "innertube"
+description = "Hand-written client for YouTube's private InnerTube API: feeds, watch page, stream resolution."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "http2", "charset"] }
+serde_json = "1"
+sha1 = "0.10"
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[lints]
+workspace = true

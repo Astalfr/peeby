@@ -1,0 +1,28 @@
+# PeebTube documentation
+
+PeebTube is a native YouTube client for Windows, written in Rust with [GPUI](https://www.gpui.rs/). It reuses the playback stack of peeby, a Jellyfin client by the same author.
+
+## Goals
+
+1. **The YouTube pages that matter**: Home (recommendations), subscriptions and their latest videos, watch page with comments and a like/dislike bar ([Return YouTube Dislike](https://returnyoutubedislike.com)).
+2. **Fast playback**: about 1 s from click to first frame, 1080p, hardware decoding.
+3. **Nothing installed on the host**: libmpv, yt-dlp and Deno ship with the app.
+
+## Scope decisions
+
+| Topic | Decision | ADR |
+|---|---|---|
+| Playback, platform, license, GPUI version, libmpv FFI, video surface | Inherited from peeby | [0001](decisions/0001-peeby-foundations.md) |
+| YouTube API | Own InnerTube client, lenient parsing, fixture tests | [0002](decisions/0002-own-innertube-client.md) |
+| Streams | VISIONOS client, HLS (no JS challenge, no `available_at` wait) | [0003](decisions/0003-visionos-hls-streams.md) |
+| Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
+| Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
+| UI language | French UI strings; code, comments and docs in English | — |
+
+## Index
+
+- [roadmap.md](roadmap.md): milestones and status
+- [architecture.md](architecture.md): crates, threads, data flow
+- [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
+- [decisions/](decisions/): architecture decision records
+- Peeby docs that apply as they are: `D:\DEV\peeby\docs\player\` (mpv options, video surface) and `D:\DEV\peeby\vendor\README.md` (GPUI patch)

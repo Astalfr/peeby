@@ -1,6 +1,9 @@
 /target/
-/poc-home/target/
 /third_party/mpv/
 /third_party/yt-dlp/
+/dist/
+CLAUDE.local.md
+.claude/settings.local.json
+.env
 *.local.toml
 cookies*.txt
