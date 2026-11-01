@@ -1,0 +1,174 @@
+use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::Value;
+
+use crate::error::{Error, Result};
+use crate::gql::{self, PlaybackToken, Target};
+use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
+
+const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
+/// A master playlist as usher served it.
+pub struct Master {
+  /// Path version that answered.
+  pub version: Version,
+  /// Its text (signed variant URLs inside: never log it).
+  pub text: String,
+  /// Its variants, best first.
+  pub variants: Vec<Variant>,
+}
+
+/// Twitch client. Cheap to clone; clones share the Client-ID.
+#[derive(Clone)]
+pub struct Client {
+  http: reqwest::Client,
+  /// The web Client-ID for GQL, refreshed by [`Client::refresh_client_id`].
+  client_id: Arc<RwLock<String>>,
+  /// The web `auth-token`, sent to GQL as `Authorization: OAuth …` (a full-access secret).
+  auth_token: Option<Arc<str>>,
+}
+
+impl std::fmt::Debug for Client {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("Client")
+      .field("auth_token", &self.auth_token.as_ref().map(|_| "set"))
+      .finish_non_exhaustive()
+  }
+}
+
+impl Client {
+  /// A client with the web Client-ID `client_id` (the settings' override, else
+  /// [`gql::WEB_CLIENT_ID`]) and the user's `auth_token`, if any.
+  pub fn new(client_id: Option<String>, auth_token: Option<String>) -> Result<Self> {
+    let http = reqwest::Client::builder()
+      .user_agent(WEB_USER_AGENT)
+      .build()?;
+    Ok(Self {
+      http,
+      client_id: Arc::new(RwLock::new(
+        client_id.unwrap_or_else(|| gql::WEB_CLIENT_ID.to_owned()),
+      )),
+      auth_token: auth_token.map(Arc::from),
+    })
+  }
+
+  fn client_id(&self) -> String {
+    // A poisoned lock only means a writer panicked mid-assignment of a `String`: the value is
+    // still a whole string, so it is used as is.
+    match self.client_id.read() {
+      Ok(id) => id.clone(),
+      Err(poisoned) => poisoned.into_inner().clone(),
+    }
+  }
+
+  /// Reads the web Client-ID from twitch.tv's page, in case Twitch changed it. Call it once at
+  /// startup, in the background; on failure the current one stays.
+  pub async fn refresh_client_id(&self) -> Result<()> {
+    let page = self
+      .http
+      .get("https://www.twitch.tv/")
+      .send()
+      .await?
+      .error_for_status()?
+      .text()
+      .await?;
+    let id = gql::client_id_from_page(&page).ok_or_else(|| Error::Parse {
+      endpoint: "twitch.tv",
+      detail: "no clientId in the page".into(),
+    })?;
+    if id != self.client_id() {
+      tracing::info!("Twitch web Client-ID changed to {id}");
+      match self.client_id.write() {
+        Ok(mut current) => *current = id.to_owned(),
+        Err(poisoned) => *poisoned.into_inner() = id.to_owned(),
+      }
+    }
+    Ok(())
+  }
+
+  async fn gql(&self, body: &Value) -> Result<Value> {
+    let mut request = self
+      .http
+      .post("https://gql.twitch.tv/gql")
+      .header("Client-ID", self.client_id())
+      .json(body);
+    if let Some(token) = &self.auth_token {
+      request = request.header("Authorization", format!("OAuth {token}"));
+    }
+    let response = request.send().await?;
+    let status = response.status().as_u16();
+    let text = response.text().await?;
+    if status != 200 {
+      return Err(gql::parse_status(status, &text));
+    }
+    serde_json::from_str(&text).map_err(|e| Error::Parse {
+      endpoint: "gql",
+      detail: e.to_string(),
+    })
+  }
+
+  /// The playback token of `target`, as `player_type` (normally [`gql::PLAYER_TYPE`]).
+  pub async fn playback_token(&self, target: &Target, player_type: &str) -> Result<PlaybackToken> {
+    let answer = self.gql(&gql::token_request(target, player_type)).await?;
+    gql::parse_token(&answer, target)
+  }
+
+  /// The master playlist of `target` with `token`, offering `codecs`. usher v2 first, then v1
+  /// when v2 fails for another reason than one of the mapped errors (offline, subscribers…).
+  pub async fn master(
+    &self,
+    target: &Target,
+    token: &PlaybackToken,
+    codecs: &[Codec],
+  ) -> Result<Master> {
+    match self.master_at(target, token, codecs, Version::V2).await {
+      Err(Error::Status { .. } | Error::Http(_)) => {
+        tracing::warn!("usher v2 failed, trying v1");
+        self.master_at(target, token, codecs, Version::V1).await
+      }
+      result => result,
+    }
+  }
+
+  async fn master_at(
+    &self,
+    target: &Target,
+    token: &PlaybackToken,
+    codecs: &[Codec],
+    version: Version,
+  ) -> Result<Master> {
+    let url = usher::master_url(target, token, codecs, version, nonce())?;
+    let response = self
+      .http
+      .get(url)
+      .header("Referer", PLAYER_ORIGIN)
+      .header("Origin", PLAYER_ORIGIN)
+      .send()
+      .await?;
+    let status = response.status().as_u16();
+    let text = response.text().await?;
+    if status != 200 {
+      return Err(usher::parse_error(status, &text, target));
+    }
+    let variants = usher::variants(&text);
+    if variants.is_empty() {
+      return Err(Error::Parse {
+        endpoint: "usher",
+        detail: "no variant in the master".into(),
+      });
+    }
+    Ok(Master {
+      version,
+      text,
+      variants,
+    })
+  }
+}
+
+/// usher's `p`: any number, different per request.
+fn nonce() -> u32 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map_or(0, |d| d.subsec_nanos() % 10_000_000)
+}

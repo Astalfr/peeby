@@ -15,6 +15,7 @@ player = { path = "crates/player" }
 gpui-video = { path = "crates/gpui-video" }
 innertube = { path = "crates/innertube" }
 jellyfin-api = { path = "crates/jellyfin-api" }
+twitch = { path = "crates/twitch" }
 ui = { path = "crates/ui" }
 
 [workspace.lints.rust]

@@ -1,7 +1,7 @@
 {
   "data": {
     "videoPlaybackAccessToken": {
-      "value": "{\"authorization\":\"REDACTED\",\"chansub\":\"REDACTED\",\"device_id\":\"REDACTED\",\"expires\":\"REDACTED\",\"https_required\":\"REDACTED\",\"privileged\":\"REDACTED\",\"user_id\":\"REDACTED\",\"version\":\"REDACTED\",\"vod_id\":\"REDACTED\",\"maximum_resolution\":\"REDACTED\",\"maximum_video_bitrate_kbps\":\"REDACTED\",\"maximum_resolution_reasons\":\"REDACTED\",\"maximum_video_bitrate_kbps_reasons\":\"REDACTED\",\"channel_name\":\"REDACTED\",\"is_dvr\":\"REDACTED\"}",
+      "value": "{\"authorization\":{\"forbidden\":false,\"reason\":\"\"},\"chansub\":{\"restricted_bitrates\":[\"1080p60\",\"1080p60-portrait\",\"160p30\",\"160p30-portrait\",\"360p30\",\"360p30-portrait\",\"480p30\",\"480p30-portrait\",\"720p60\",\"720p60-portrait\",\"audio_only\",\"chunked\"]},\"device_id\":null,\"expires\":1793636160,\"https_required\":true,\"privileged\":false,\"user_id\":null,\"version\":3,\"vod_id\":2916854926,\"maximum_resolution\":\"FULL_HD\",\"maximum_video_bitrate_kbps\":12500,\"maximum_resolution_reasons\":{\"QUAD_HD\":[\"AUTHZ_NOT_LOGGED_IN\"],\"ULTRA_HD\":[\"AUTHZ_NOT_LOGGED_IN\"]},\"maximum_video_bitrate_kbps_reasons\":[\"AUTHZ_DISALLOWED_BITRATE\"],\"channel_name\":\"squeezie\",\"is_dvr\":true}",
       "signature": "REDACTED"
     }
   },

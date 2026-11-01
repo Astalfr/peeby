@@ -149,21 +149,33 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 - Not done: a subscriber VOD with the auth-token; a mid-roll
 
 ### 2. `twitch` crate: GQL, usher, errors
-- [ ] `Client` over `reqwest` (same features as `innertube`), `GqlConfig` (`client_id`, `hashes`) with
-      defaults in code and a `[twitch.gql]` override in `settings.toml`
-- [ ] Refresh: at startup, in the background, read the web Client-ID from twitch.tv's HTML
-      (`clientId="…"` in the page script **[?]**, checked in the spike); raw queries wherever Twitch takes
-      them, so there are few hashes to keep. A failed refresh keeps the defaults and logs a warning
-- [ ] `playback_token(Live{login} | Vod{id})`, `clip(slug)`, `vod_storyboard(id)`, with the auth-token when
-      there is one (`Authorization: OAuth …`)
-- [ ] Errors mapped from the answers: integrity required (`Error::IntegrityRequired`), offline channel
-      (`Offline`), subscriber-only VOD (`SubscriberOnly`, from the usher 403 `vod_manifest_restricted` /
-      `unauthorized_entitlements`), an auth-token GQL rejects (`NotLoggedIn`)
-- [ ] `usher::master_url`, `usher::variants(master)`. For v2, read `STABLE-VARIANT-ID`, `IVS-NAME`,
-      `IVS-GROUPS` (keep `landscape`), `IVS-VARIANT-SOURCE` and `CODECS`. For v1 (the fallback), read
-      the `EXT-X-MEDIA` `NAME`, with the `chunked` group as "Source". In both, keep `audio_only` apart.
-      Audio is muxed: no `external_audio`
-- [ ] Tests on the step 1 fixtures; `examples/smoke.rs` prints counts only
+- [x] `Client` over `reqwest` (same features as `innertube`); the web Client-ID is a constant
+      (`gql::WEB_CLIENT_ID`) that `Client::new` can override. The `[twitch]` settings override comes with
+      the space (step 5). There are no hashes: the raw query needs none
+- [x] Refresh: `Client::refresh_client_id` reads `clientId="…"` from twitch.tv's page (checked:
+      `twitch_page_client_id.html`, a 640-character extract). A failed refresh keeps the current one
+- [x] `playback_token(Target::Live | Target::Vod, player_type)`, with the auth-token when there is one
+      (`Authorization: OAuth …`). `PlaybackToken::restricted` and `subscriber_only()` read
+      `chansub.restricted_bitrates`. `Debug` hides the value and signature
+- Moved to step 8, where their fixtures will be captured: `clip(slug)`, `vod_storyboard(id)`
+- [x] Errors mapped from the answers, each tested on a fixture:
+  - `NotLoggedIn` (GQL 401, `gql_invalid_auth_token.json`);
+  - `NotFound` (a `null` token, `gql_playback_token_not_found.json`);
+  - `Offline` (usher 404 `Can not find channel`, `usher_live_offline.json`);
+  - `SubscriberOnly` (usher 403 `vod_manifest_restricted`).
+
+  `IntegrityRequired` matches `integrity` in the GQL message: tested on Streamlink's shape only, since
+  no real answer has asked for one. Other usher errors keep only their `error_code`: the body repeats
+  the signed URL
+- [x] `usher::master_url`, `usher::variants(master)`:
+  - v2: `STABLE-VARIANT-ID` as id, `IVS-NAME` as name, `IVS-GROUPS` (`portrait` when not landscape);
+  - v1: the `VIDEO` group, named by its `EXT-X-MEDIA`;
+  - `Codec::of(CODECS)`, and `audio_only()` (no resolution).
+
+  `IVS-VARIANT-SOURCE` is `source` on every variant, so it says nothing and is not read. `Client::master`
+  tries v2, then v1 on an unmapped error
+- [x] 13 tests on the fixtures; `examples/smoke.rs` checks live the Client-ID refresh, a live's token
+      and master, an offline channel and an unknown one (counts only)
 - Exit: `cargo test -p twitch` green on real responses
 
 ### 3. Ad filter and local proxy

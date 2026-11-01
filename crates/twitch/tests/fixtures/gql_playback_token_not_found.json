@@ -1,0 +1,9 @@
+{
+  "data": {
+    "streamPlaybackAccessToken": null
+  },
+  "extensions": {
+    "durationMilliseconds": 27,
+    "operationName": "PlaybackAccessToken_Template"
+  }
+}
