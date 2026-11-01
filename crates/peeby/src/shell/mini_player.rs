@@ -266,7 +266,7 @@ impl Render for MiniPlayer {
               .occlude()
               .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(player) = this.player(cx) {
-                  player.read(cx).toggle_pause();
+                  player.update(cx, |player, cx| player.toggle_pause(cx));
                 }
               })),
             ),

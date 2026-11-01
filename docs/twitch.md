@@ -179,6 +179,7 @@ Checked against the code on 2026-11-01:
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |
 | A watch page with the player and a chat beside it | `ui::chat::watch_layout` (step 9) with `ui::chat::ChatPanel` | Covered |
 | Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `Source::live` (step 4) | Covered |
+| Resuming a paused live goes back to its live edge, without delay | `PlayerView::toggle_pause`: after more than 1 s of pause, mpv restarts on the current quality ("Retour au direct") | Covered |
 | Ads removed | `twitch::Proxy`, the local playlist proxy (step 3) | Covered |
 | Low latency | The proxy adds Twitch's prefetch segments (step 10) | Covered |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |

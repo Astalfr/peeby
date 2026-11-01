@@ -41,6 +41,9 @@ use crate::theme;
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
+/// A live paused longer than this resumes at its live edge rather than where it stopped (shorter:
+/// a double click's two toggles).
+const LIVE_RESUME_AFTER: Duration = Duration::from_secs(1);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
@@ -198,6 +201,8 @@ pub struct PlayerView {
   position: f64,
   duration: f64,
   paused: bool,
+  /// When playback was paused, for a live's resume ([`LIVE_RESUME_AFTER`]).
+  paused_since: Option<Instant>,
   started: bool,
   /// The last play/pause change, shown as a short pulse in the middle of the picture; the
   /// counter gives each pulse its own animation id, so a new change restarts it.
@@ -293,6 +298,7 @@ impl PlayerView {
       position: 0.0,
       duration: 0.0,
       paused: false,
+      paused_since: None,
       started: false,
       pause_pulse: None,
       buffering: false,
@@ -424,9 +430,40 @@ impl PlayerView {
     self.select_quality(index, cx);
   }
 
-  /// Plays or pauses.
-  pub fn toggle_pause(&self) {
-    self.with_player(Player::toggle_pause);
+  /// Plays or pauses. A live paused for a while resumes at its live edge, as Twitch's player:
+  /// mpv restarts on the current quality (about 0.7 s, the last frame staying on screen).
+  pub fn toggle_pause(&mut self, cx: &mut Context<Self>) {
+    let stale = self.paused
+      && self
+        .paused_since
+        .is_some_and(|t| t.elapsed() > LIVE_RESUME_AFTER);
+    if self.is_live() && stale && self.player.is_some() {
+      self.resume_live(cx);
+    } else {
+      self.with_player(Player::toggle_pause);
+    }
+  }
+
+  /// Restarts a paused live at its live edge.
+  fn resume_live(&mut self, cx: &mut Context<Self>) {
+    let Some(source) = &self.source else {
+      return;
+    };
+    let options = match self.quality.and_then(|i| source.qualities.get(i)) {
+      Some(quality) => quality.options.clone(),
+      None => source.options.clone(),
+    };
+    tracing::info!("live resumed after a pause: back to its live edge");
+    self.paused_since = None;
+    self.show_osd("Retour au direct".into(), cx);
+    // Already paused: its last frame stays on screen until the new player's first one.
+    self.player = None;
+    self.captions_added.clear();
+    let options = StartOptions {
+      start_seconds: 0.0,
+      ..options
+    };
+    self.start_with(options, Instant::now(), cx);
   }
 
   /// Pauses.
@@ -696,6 +733,7 @@ impl PlayerView {
         }
         if paused != self.paused {
           cx.emit(PlayerEvent::Paused(paused));
+          self.paused_since = paused.then(Instant::now);
         }
         self.paused = paused;
         self.show_controls(cx);
@@ -879,7 +917,7 @@ impl PlayerView {
       return;
     }
     match key {
-      "space" | "k" => self.with_player(Player::toggle_pause),
+      "space" | "k" => self.toggle_pause(cx),
       "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
       "right" | "l" => self.seek_by(self.seek_step(shift), cx),
       "pageup" => self.add_chapter(-1, cx),
@@ -943,7 +981,7 @@ impl PlayerView {
     if closed {
       return cx.notify();
     }
-    self.with_player(Player::toggle_pause);
+    self.toggle_pause(cx);
     if event.click_count() == 2 {
       window.toggle_fullscreen();
     }
@@ -1361,7 +1399,7 @@ impl PlayerView {
             "Pause (K)"
           })
           .on_click(cx.listener(|this, _, _, cx| {
-            this.with_player(Player::toggle_pause);
+            this.toggle_pause(cx);
             this.show_controls(cx);
           })),
       )
