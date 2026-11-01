@@ -1,6 +1,6 @@
 # 0005: yt-dlp and Deno bundled, as a fallback
 
-- Status: accepted (the fallback is not wired into the app yet)
+- Status: accepted
 - Date: 2026-11-01
 
 ## Context
@@ -15,6 +15,8 @@ VISIONOS ([0003](0003-visionos-hls-streams.md)) can fail: client blocked, age or
 - The release bundle ships the same layout in `tools/` next to the executable.
 - yt-dlp runs isolated from the host: `--ignore-config`, `--cache-dir` in the app's folder, `--js-runtimes deno:<path>`.
 - The fallback forces HLS to avoid the `available_at` wait: `bv*[protocol=m3u8_native][height<=?1080]+ba[protocol=m3u8_native]/…` (about 3–4 s to start). It also sets `sub-langs=none`, because mpv opens external subtitles before playing.
+
+In the app (`tools.rs`, `watch.rs`): when `Client::stream` fails with anything but a network error, mpv's `ytdl_hook` runs the bundled yt-dlp with those options and a copy of the session cookies. Measured on an age-restricted video: playback after 8.1 s, 1080p, hardware decoding. yt-dlp found no HLS for it, so mpv waited for `available_at` (4 s).
 
 ## Consequences
 

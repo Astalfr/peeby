@@ -160,3 +160,19 @@ fn comments_page() {
   assert!(!first.likes.is_empty());
   assert!(first.replies_continuation.is_some());
 }
+
+#[test]
+fn comment_replies() {
+  // Replies pages list `commentViewModel`s directly, then "Afficher plus de réponses".
+  let page = innertube::parse_comments(&fixture("comment_replies.json"));
+  assert_eq!(page.comments.len(), 10);
+  assert!(page.continuation.is_some());
+  assert_eq!(page.count, None);
+  assert_eq!(page.comments[0].author, "@daikerio6830");
+  assert!(
+    page
+      .comments
+      .iter()
+      .all(|c| c.replies_continuation.is_none())
+  );
+}

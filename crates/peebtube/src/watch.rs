@@ -10,19 +10,20 @@ use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  App, Context, Entity, FontWeight, Global, SharedString, WeakEntity, Window, div, px, relative,
+  App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, WeakEntity, Window, div,
+  px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Disableable, h_flex, v_flex};
+use gpui_component::{h_flex, v_flex};
 use innertube::{Client, Comment, Votes, WatchPage};
 
 use crate::app::{AppView, Route};
 use crate::assets::Icon;
 use crate::images::Images;
 use crate::player_view::PlayerView;
-use crate::ui::{compact_card, error_text, image_fill};
-use crate::{runtime, theme};
+use crate::ui::{compact_card, error_text, image_fill, near_scroll_end};
+use crate::{runtime, theme, tools};
 
 /// Highest video quality requested.
 const MAX_HEIGHT: u32 = 1080;
@@ -44,6 +45,17 @@ struct Comments {
   loading: bool,
   /// Whether the first page was asked for.
   requested: bool,
+  /// The last request failed: no automatic retry, the button retries.
+  failed: bool,
+}
+
+/// Replies of one comment, loaded when first opened.
+#[derive(Default)]
+struct Replies {
+  items: Vec<Comment>,
+  continuation: Option<String>,
+  loading: bool,
+  open: bool,
 }
 
 pub struct WatchView {
@@ -54,6 +66,9 @@ pub struct WatchView {
   page: Option<WatchPage>,
   votes: Option<Votes>,
   comments: Comments,
+  /// By comment id.
+  replies: HashMap<String, Replies>,
+  scroll: ScrollHandle,
 }
 
 impl WatchView {
@@ -81,6 +96,8 @@ impl WatchView {
       page: None,
       votes,
       comments: Comments::default(),
+      replies: HashMap::new(),
+      scroll: ScrollHandle::new(),
     };
     view.load_stream(cx);
     view.load_page(cx);
@@ -102,24 +119,41 @@ impl WatchView {
     let (client, id) = (self.client.clone(), self.video_id.clone());
     let fetch = runtime::spawn(cx, async move { client.stream(&id, MAX_HEIGHT).await });
     let player = self.player.downgrade();
+    let video_id = self.video_id.clone();
     cx.spawn(async move |_, cx| {
-      let result = fetch.await;
+      let error = match fetch.await {
+        Some(Ok(stream)) => {
+          tracing::info!(
+            "stream after {:.2} s: {} {}",
+            clicked.elapsed().as_secs_f64(),
+            stream.resolution,
+            stream.codecs
+          );
+          player
+            .update(cx, |player, cx| player.start(stream, clicked, cx))
+            .ok();
+          return;
+        }
+        Some(Err(e)) => e,
+        None => return,
+      };
+      // Network down: yt-dlp would fail too. Anything else (age or membership restriction,
+      // client blocked, unexpected response): let the bundled yt-dlp try (ADR 0005).
+      let fallback = if matches!(error, innertube::Error::Http(_)) {
+        None
+      } else {
+        tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
+        cx.background_executor()
+          .spawn(async move { tools::ytdl_options(&video_id) })
+          .await
+      };
       player
-        .update(cx, |player, cx| match result {
-          Some(Ok(stream)) => {
-            tracing::info!(
-              "stream after {:.2} s: {} {}",
-              clicked.elapsed().as_secs_f64(),
-              stream.resolution,
-              stream.codecs
-            );
-            player.start(stream, clicked, cx);
+        .update(cx, |player, cx| match fallback {
+          Some(options) => player.start_with(options, clicked, cx),
+          None => {
+            tracing::warn!("stream: {error}");
+            player.fail(error_text(&error).into(), cx);
           }
-          Some(Err(e)) => {
-            tracing::warn!("stream: {e}");
-            player.fail(error_text(&e).into(), cx);
-          }
-          None => {}
         })
         .ok();
     })
@@ -174,7 +208,65 @@ impl WatchView {
     .detach();
   }
 
-  /// First page, then the next ones ("Plus de commentaires").
+  /// Next comments page once the end of the page is within about a screen.
+  fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
+    let c = &self.comments;
+    if c.requested
+      && !c.loading
+      && !c.failed
+      && c.continuation.is_some()
+      && near_scroll_end(&self.scroll)
+    {
+      self.load_comments(cx);
+    }
+  }
+
+  /// Opens or closes the replies of `comment`, loading them the first time.
+  fn toggle_replies(&mut self, comment: &Comment, cx: &mut Context<Self>) {
+    let replies = self.replies.entry(comment.id.clone()).or_default();
+    replies.open = !replies.open;
+    if replies.open && replies.items.is_empty() && !replies.loading {
+      replies.continuation = comment.replies_continuation.clone();
+      self.load_replies(comment.id.clone(), cx);
+    }
+    cx.notify();
+  }
+
+  /// Next page of replies of comment `id`.
+  fn load_replies(&mut self, id: String, cx: &mut Context<Self>) {
+    let Some(replies) = self.replies.get_mut(&id) else {
+      return;
+    };
+    let Some(token) = replies.continuation.take() else {
+      return;
+    };
+    replies.loading = true;
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          let Some(replies) = this.replies.get_mut(&id) else {
+            return;
+          };
+          replies.loading = false;
+          match result {
+            Some(Ok(page)) => {
+              replies.items.extend(page.comments);
+              replies.continuation = page.continuation;
+            }
+            Some(Err(e)) => tracing::warn!("replies: {e}"),
+            None => {}
+          }
+          cx.notify();
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// First page, then the next ones as the page scrolls.
   fn load_comments(&mut self, cx: &mut Context<Self>) {
     let token = if self.comments.requested {
       self.comments.continuation.clone()
@@ -190,6 +282,7 @@ impl WatchView {
     }
     self.comments.requested = true;
     self.comments.loading = true;
+    self.comments.failed = false;
     let client = self.client.clone();
     let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
     cx.spawn(async move |this, cx| {
@@ -207,7 +300,10 @@ impl WatchView {
                 comments.count = page.count;
               }
             }
-            Some(Err(e)) => tracing::warn!("comments: {e}"),
+            Some(Err(e)) => {
+              tracing::warn!("comments: {e}");
+              comments.failed = true;
+            }
             None => {}
           }
           cx.notify();
@@ -324,17 +420,13 @@ impl WatchView {
     let items: Vec<_> = comments
       .items
       .iter()
-      .map(|c| comment_row(c, window, cx))
+      .map(|c| self.comment_thread(c, window, cx))
       .collect();
-    let more = comments.continuation.as_ref().map(|_| {
+    // Pages load as the page scrolls; the button only shows to retry after a failure.
+    let more = (comments.failed && comments.continuation.is_some()).then(|| {
       Button::new("more-comments")
         .ghost()
-        .label(if comments.loading {
-          "Chargement…"
-        } else {
-          "Plus de commentaires"
-        })
-        .disabled(comments.loading)
+        .label("Réessayer")
         .on_click(cx.listener(|this, _, _, cx| this.load_comments(cx)))
     });
     let empty = (comments.items.is_empty() && !comments.loading && comments.requested)
@@ -344,10 +436,65 @@ impl WatchView {
       .child(header)
       .children(items)
       .children(empty)
-      .when(comments.loading && comments.items.is_empty(), |el| {
+      .when(comments.loading, |el| {
         el.child(div().text_color(theme::muted()).child("Chargement…"))
       })
       .children(more.map(|b| h_flex().child(b)))
+  }
+
+  /// A comment, its "N réponses" toggle and, once opened, its replies.
+  fn comment_thread(
+    &self,
+    comment: &Comment,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
+    let replies = self.replies.get(&comment.id);
+    let open = replies.is_some_and(|r| r.open);
+    let toggle = comment.replies_continuation.as_ref().map(|_| {
+      let label = if open {
+        "Masquer les réponses".to_owned()
+      } else {
+        format!("{} réponses", comment.replies)
+      };
+      let target = comment.clone();
+      Button::new(SharedString::from(format!("replies-{}", comment.id)))
+        .ghost()
+        .label(label)
+        .on_click(cx.listener(move |this, _, _, cx| this.toggle_replies(&target, cx)))
+    });
+    let shown = replies.filter(|r| r.open).map(|r| {
+      let rows: Vec<_> = r
+        .items
+        .iter()
+        .map(|reply| comment_row(reply, window, cx))
+        .collect();
+      let more = r.continuation.as_ref().map(|_| {
+        let id = comment.id.clone();
+        Button::new(SharedString::from(format!("more-replies-{}", comment.id)))
+          .ghost()
+          .label("Plus de réponses")
+          .on_click(cx.listener(move |this, _, _, cx| this.load_replies(id.clone(), cx)))
+      });
+      v_flex()
+        .pl(px(48.))
+        .gap_3()
+        .children(rows)
+        .when(r.loading, |el| {
+          el.child(
+            div()
+              .text_sm()
+              .text_color(theme::muted())
+              .child("Chargement…"),
+          )
+        })
+        .children(more.filter(|_| !r.loading).map(|b| h_flex().child(b)))
+    });
+    v_flex()
+      .gap_2()
+      .child(comment_row(comment, window, cx))
+      .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
+      .children(shown)
   }
 }
 
@@ -414,14 +561,11 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
     }];
     image_fill(&sizes, 36., px(18.), window, cx)
   });
-  let meta = [
-    (!comment.likes.is_empty()).then(|| format!("{} j'aime", comment.likes)),
-    (!comment.replies.is_empty()).then(|| format!("{} réponses", comment.replies)),
-  ]
-  .into_iter()
-  .flatten()
-  .collect::<Vec<_>>()
-  .join(" · ");
+  let meta = if comment.likes.is_empty() {
+    String::new()
+  } else {
+    format!("{} j'aime", comment.likes)
+  };
   h_flex()
     .gap_3()
     .items_start()
@@ -488,12 +632,19 @@ impl Render for WatchView {
       .flat_map(|page| page.related.iter())
       .map(|v| compact_card(v, &self.nav, window, cx))
       .collect();
+    // Offsets from the last layout: enough to start the next comments page early.
+    self.load_more_if_near_end(cx);
     let details = self.details(window, cx);
     let comments = self.comments(window, cx);
-    v_flex()
+    let page = v_flex()
       .id("watch")
       .size_full()
-      .overflow_y_scrollbar()
+      .overflow_y_scroll()
+      .track_scroll(&self.scroll)
+      .on_scroll(cx.listener(|this, _, _, cx| {
+        this.load_more_if_near_end(cx);
+        cx.notify();
+      }))
       .child(
         h_flex()
           .w_full()
@@ -526,7 +677,12 @@ impl Render for WatchView {
               .gap_3()
               .children(related),
           ),
-      )
+      );
+    div()
+      .size_full()
+      .relative()
+      .vertical_scrollbar(&self.scroll)
+      .child(page)
       .into_any_element()
   }
 }

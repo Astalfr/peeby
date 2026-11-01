@@ -23,6 +23,9 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) is copied
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
 - Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peebtube\cookies.txt`
   (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004.
+- YouTube rotates session cookies through `Set-Cookie`: every signed-in request goes through `Client::send` /
+  `keep_rotated_cookies`, which writes the jar back. Ignoring them invalidates the session within about an hour.
+  Never give the user's file to yt-dlp (it rewrites it): give it a copy.
 - Stream URLs embed the user's IP and signatures: never log them at info level or above; the mpv log file is opt-in
   (`PEEBTUBE_MPV_LOG`). Fixtures are redacted (IP 203.0.113.7, signatures `REDACTED`) before they are committed.
 - Nothing installed on the host: libmpv, yt-dlp and Deno ship with the app. yt-dlp always runs with `--ignore-config`,

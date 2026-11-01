@@ -1,16 +1,16 @@
-//! A grid of videos, more on demand: Home (recommendations), subscriptions, or a channel's
+//! A grid of videos, loading the next page as the end comes into view: Home (recommendations), subscriptions, or a channel's
 //! "Videos" tab. Signed out, Home and subscriptions explain how to import the session cookies.
 
 use gpui::prelude::*;
-use gpui::{Context, FontWeight, SharedString, WeakEntity, Window, div, px};
+use gpui::{Context, FontWeight, ScrollHandle, SharedString, WeakEntity, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Disableable, h_flex, v_flex};
+use gpui_component::{h_flex, v_flex};
 use innertube::{Client, Error, Feed, VideoItem};
 
 use crate::app::AppView;
 use crate::images::Images;
-use crate::ui::{error_text, video_card};
+use crate::ui::{error_text, near_scroll_end, video_card};
 use crate::{runtime, settings, theme};
 
 /// Card width, logical pixels.
@@ -44,6 +44,9 @@ pub struct FeedView {
   videos: Vec<VideoItem>,
   continuation: Option<String>,
   loading_more: bool,
+  /// The last next-page request failed: no automatic retry, the button retries.
+  more_failed: bool,
+  scroll: ScrollHandle,
   logged_in: bool,
   message: Option<String>,
 }
@@ -66,6 +69,8 @@ impl FeedView {
       videos: Vec::new(),
       continuation: None,
       loading_more: false,
+      more_failed: false,
+      scroll: ScrollHandle::new(),
       logged_in: false,
       message: None,
     };
@@ -79,6 +84,7 @@ impl FeedView {
     let source = self.source.clone();
     let more = token.is_some();
     self.loading_more = more;
+    self.more_failed = false;
     let fetch = runtime::spawn(cx, async move {
       match (token, source) {
         (Some(token), _) => client.continuation(&token).await,
@@ -97,6 +103,7 @@ impl FeedView {
             Some(Err(Error::SignInRequired)) => this.state = State::SignedOut,
             Some(Err(e)) => {
               tracing::warn!("{:?}: {e}", this.source);
+              this.more_failed = more;
               if !more {
                 this.state = State::Failed(error_text(&e).into());
               }
@@ -108,6 +115,16 @@ impl FeedView {
         .ok();
     })
     .detach();
+  }
+
+  /// Next page once the end of the grid is within about a screen.
+  fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
+    if self.loading_more || self.more_failed || !near_scroll_end(&self.scroll) {
+      return;
+    }
+    if let Some(token) = self.continuation.clone() {
+      self.load(Some(token), cx);
+    }
   }
 
   fn apply(&mut self, feed: Feed, more: bool) {
@@ -179,6 +196,8 @@ impl FeedView {
 
 impl Render for FeedView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // Offsets from the last layout: enough to start the next page before the end is reached.
+    self.load_more_if_near_end(cx);
     let content = match &self.state {
       State::Loading => div()
         .text_color(theme::muted())
@@ -202,16 +221,24 @@ impl Render for FeedView {
           .iter()
           .map(|v| video_card(v, CARD_WIDTH, &self.nav, window, cx))
           .collect();
+        // Pages load by themselves; the button only shows to retry after a failure.
         let more = self.continuation.clone().map(|token| {
-          Button::new("more")
-            .primary()
-            .label(if self.loading_more {
-              "Chargement…"
-            } else {
-              "Plus de vidéos"
-            })
-            .disabled(self.loading_more)
-            .on_click(cx.listener(move |this, _, _, cx| this.load(Some(token.clone()), cx)))
+          if self.more_failed {
+            Button::new("more")
+              .primary()
+              .label("Réessayer")
+              .on_click(cx.listener(move |this, _, _, cx| this.load(Some(token.clone()), cx)))
+              .into_any_element()
+          } else {
+            div()
+              .text_color(theme::muted())
+              .child(if self.loading_more {
+                "Chargement…"
+              } else {
+                ""
+              })
+              .into_any_element()
+          }
         });
         v_flex()
           .gap_6()
@@ -220,23 +247,35 @@ impl Render for FeedView {
           .into_any_element()
       }
     };
-    v_flex()
-      .id("feed")
+    div()
       .size_full()
-      .overflow_y_scrollbar()
+      .relative()
+      .vertical_scrollbar(&self.scroll)
       .child(
         v_flex()
-          .p_6()
-          .gap_6()
-          .when(!matches!(self.source, Source::Home), |el| {
-            el.child(
-              div()
-                .text_2xl()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(self.title()),
-            )
-          })
-          .child(content),
+          .id("feed")
+          .size_full()
+          .overflow_y_scroll()
+          .track_scroll(&self.scroll)
+          // Wheel scrolling does not re-render by itself: check the end on every scroll.
+          .on_scroll(cx.listener(|this, _, _, cx| {
+            this.load_more_if_near_end(cx);
+            cx.notify();
+          }))
+          .child(
+            v_flex()
+              .p_6()
+              .gap_6()
+              .when(!matches!(self.source, Source::Home), |el| {
+                el.child(
+                  div()
+                    .text_2xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(self.title()),
+                )
+              })
+              .child(content),
+          ),
       )
   }
 }

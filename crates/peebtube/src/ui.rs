@@ -200,3 +200,10 @@ pub fn error_text(error: &innertube::Error) -> String {
     Error::Parse { .. } => "Réponse de YouTube inattendue : son format a peut-être changé.".into(),
   }
 }
+
+/// Whether a scroll area is within about a screen of its end, to load the next page early.
+pub fn near_scroll_end(handle: &gpui::ScrollHandle) -> bool {
+  let max = f32::from(handle.max_offset().y);
+  let scrolled = -f32::from(handle.offset().y);
+  max - scrolled < 1200.
+}

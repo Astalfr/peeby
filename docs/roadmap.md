@@ -6,9 +6,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 |---|---|---|---|
 | **Study and spikes** | ✅ | Feasibility study, Home via InnerTube, playback spike (yt-dlp, then VISIONOS HLS), bundled tools | [etude-faisabilite.md](etude-faisabilite.md), ADRs 0001–0005 |
 | **1: foundations** | ✅ | Workspace, CLAUDE.md, docs; `innertube` (Home, watch page, streams, cookies) with fixture tests; app shell, Home grid, watch page with autoplay and related videos | Open a video from a URL and from a related video, ~1 s to playback; signed-in Home shows recommendations |
-| **2: YouTube pages** | 🚧 subscriptions, channels, comments, RYD bar and the player controls done; replies, infinite scroll and RSS fallback left | Subscriptions list and feed (`FEsubscriptions`, RSS fallback), comments (`commentEntityPayload`) and replies, Return YouTube Dislike bar (cache, attribution), channel page, infinite scroll | — |
-| **3: player comfort** | ⏳ | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, fullscreen controls, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
-| **4: session and settings** | ⏳ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
+| **2: YouTube pages** | ✅ (RSS fallback moved to the backlog) | Subscriptions list and feed (`FEsubscriptions`, RSS fallback), comments (`commentEntityPayload`) and replies, Return YouTube Dislike bar (cache, attribution), channel page, infinite scroll | — |
+| **3: player comfort** | 🚧 yt-dlp fallback done | Quality choice, subtitles on demand (`sub-add`), prefetch on hover, yt-dlp fallback ([ADR 0005](decisions/0005-bundled-yt-dlp.md)) | — |
+| **4: session and settings** | 🚧 `Set-Cookie` persistence done | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
 ## Milestone 2 status
@@ -19,7 +19,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   - Player controls adapted from peeby's player page (`player_view.rs`): seek bar with time preview, volume slider, play/pause, ±10 s, fullscreen (only the player is shown), auto-hide, OSD, pause pulse, shortcuts (K/space, J/L, arrows, 0–9, M, F, Esc). Volume is kept for the session.
   - Fixtures from signed-in responses are trimmed (3–4 items) and stripped of account data (`datasyncId`, visitorData, top bar).
 - **Not verified:** clicks in the UI (sidebar, channel link, "Plus de vidéos", "Plus de commentaires", player buttons, volume drag, fullscreen) — same code paths as the logged ones, but not clicked in a test run.
-- Left for this milestone: comment replies (`Comment::replies_continuation` is parsed), infinite scroll, RSS fallback for subscriptions.
+- Then (same day):
+  - Comment replies ("N réponses", then "Plus de réponses"), tested on a real replies page (`comment_replies.json`).
+  - Infinite scroll on feeds and comments: the next page starts within about a screen of the end; a "Réessayer" button only after a failure.
+  - yt-dlp fallback when VISIONOS fails (verified on an age-restricted video: 8.1 s, see ADR 0005).
+  - Cookie rotation: the session was invalidated after about an hour because `Set-Cookie` updates were ignored. They are now applied and saved (ADR 0004). **The cookies must be exported again**, and the fix is not verified over a long session yet.
+- RSS fallback for subscriptions: moved to the backlog (the signed-in feed works).
 
 ## Milestone 1 status
 
@@ -36,6 +41,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   - signed-in Home (needs the user's cookies);
   - clicks in the UI: the URL field, a related card, "Plus de vidéos", the back button (wired, same code paths as the command line);
   - Claude Code hooks (fmt, clippy gate): not installed yet, see CLAUDE.md "Ask before".
+
+## Backlog
+
+- RSS fallback for the subscriptions feed (`feeds/videos.xml?channel_id=`), for use without a session.
+- Shorts shelves (`shortsLockupViewModel`) on Home and subscriptions.
 
 ## Risks
 

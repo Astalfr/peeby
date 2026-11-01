@@ -13,12 +13,15 @@ const CHANNEL: &str = "UCuAXFkgsw1L7xaCfnd5JJOw";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  let cookies = std::env::args().nth(1).map(|path| {
-    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| fail(&format!("{path}: {e}")));
+  let path = std::env::args().nth(1);
+  let cookies = path.as_ref().map(|path| {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("{path}: {e}")));
     Cookies::from_netscape(&text).unwrap_or_else(|e| fail(&e.to_string()))
   });
   let signed_in = cookies.is_some();
-  let client = Client::new(cookies, "fr", "FR").unwrap_or_else(|e| fail(&e.to_string()));
+  // Rotated cookies are written back, as the app does.
+  let client =
+    Client::new(cookies, path.map(Into::into), "fr", "FR").unwrap_or_else(|e| fail(&e.to_string()));
   let mut failures = 0;
   let mut check = |name: &str, result: Result<String, innertube::Error>| match result {
     Ok(summary) => println!("ok    {name:<20} {summary}"),

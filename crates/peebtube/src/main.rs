@@ -11,6 +11,7 @@ mod player_view;
 mod runtime;
 mod settings;
 mod theme;
+mod tools;
 mod ui;
 mod watch;
 
@@ -44,7 +45,7 @@ fn main() {
     }
   );
   let (hl, gl) = settings::LANGUAGE;
-  let client = match innertube::Client::new(cookies, hl, gl) {
+  let client = match innertube::Client::new(cookies, settings::cookies_path(), hl, gl) {
     Ok(client) => client,
     Err(e) => {
       tracing::error!("cannot create the HTTP client: {e}");

@@ -166,6 +166,11 @@ impl PlayerView {
       log_file: std::env::var_os("PEEBTUBE_MPV_LOG").map(Into::into),
       ..Default::default()
     };
+    self.start_with(options, clicked, cx);
+  }
+
+  /// Starts mpv with prepared options (e.g. the yt-dlp fallback).
+  pub fn start_with(&mut self, options: StartOptions, clicked: Instant, cx: &mut Context<Self>) {
     let (event_tx, event_rx) = async_channel::unbounded();
     let (frame_tx, frame_rx) = async_channel::unbounded();
     // libmpv and D3D11 setup block for a moment: off the UI thread.

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
@@ -31,25 +32,43 @@ struct State {
   web_version: Option<String>,
 }
 
+/// Session cookies and the file the rotated values are written back to.
+struct Session {
+  cookies: Mutex<Cookies>,
+  file: Option<PathBuf>,
+}
+
 /// InnerTube client. Cheap to clone; clones share the session state.
 #[derive(Clone)]
 pub struct Client {
   http: reqwest::Client,
-  cookies: Option<Arc<Cookies>>,
+  session: Option<Arc<Session>>,
   language: Arc<(String, String)>,
   state: Arc<Mutex<State>>,
 }
 
 impl Client {
   /// A client, signed in when `cookies` are given. `hl`/`gl` pick the language and region of
-  /// texts and recommendations (e.g. `fr`, `FR`).
-  pub fn new(cookies: Option<Cookies>, hl: &str, gl: &str) -> Result<Self> {
+  /// texts and recommendations (e.g. `fr`, `FR`). YouTube rotates some cookies in its
+  /// responses: when `cookie_file` is given, the updated jar is written back to it, otherwise
+  /// the session is invalidated after a while.
+  pub fn new(
+    cookies: Option<Cookies>,
+    cookie_file: Option<PathBuf>,
+    hl: &str,
+    gl: &str,
+  ) -> Result<Self> {
     let http = reqwest::Client::builder()
       .user_agent(WEB_USER_AGENT)
       .build()?;
     Ok(Self {
       http,
-      cookies: cookies.map(Arc::new),
+      session: cookies.map(|cookies| {
+        Arc::new(Session {
+          cookies: Mutex::new(cookies),
+          file: cookie_file,
+        })
+      }),
       language: Arc::new((hl.to_owned(), gl.to_owned())),
       state: Arc::default(),
     })
@@ -57,7 +76,7 @@ impl Client {
 
   /// Whether requests carry session cookies.
   pub fn signed_in(&self) -> bool {
-    self.cookies.is_some()
+    self.session.is_some()
   }
 
   /// Home recommendations. Signed out, YouTube returns no videos, only a
@@ -167,10 +186,11 @@ impl Client {
   /// Call it once in the background at startup.
   pub async fn refresh_client_version(&self) -> Result<()> {
     let mut request = self.http.get(ORIGIN);
-    if let Some(cookies) = &self.cookies {
-      request = request.header("Cookie", cookies.header());
+    if let Some(session) = &self.session {
+      request = request.header("Cookie", lock(&session.cookies).header());
     }
     let response = request.send().await?;
+    self.keep_rotated_cookies(&response);
     if !response.status().is_success() {
       return Err(Error::Status {
         status: response.status().as_u16(),
@@ -211,8 +231,34 @@ impl Client {
       .unwrap_or_else(std::sync::PoisonError::into_inner)
   }
 
+  /// Applies the `Set-Cookie` headers of a signed-in response and writes the jar back if a
+  /// value changed. The file is small: written synchronously, on the network runtime.
+  fn keep_rotated_cookies(&self, response: &reqwest::Response) {
+    let Some(session) = &self.session else { return };
+    let mut cookies = lock(&session.cookies);
+    let mut changed = false;
+    for header in response.headers().get_all(reqwest::header::SET_COOKIE) {
+      if let Ok(header) = header.to_str() {
+        changed |= cookies.apply_set_cookie(header);
+      }
+    }
+    if !changed {
+      return;
+    }
+    tracing::debug!("session cookies rotated");
+    if let Some(file) = &session.file {
+      // Written next to the file then renamed, so a crash never leaves a truncated jar.
+      let temporary = file.with_extension("txt.tmp");
+      let written = std::fs::write(&temporary, cookies.to_netscape())
+        .and_then(|()| std::fs::rename(&temporary, file));
+      if let Err(e) = written {
+        tracing::warn!("cannot save the rotated cookies: {e}");
+      }
+    }
+  }
+
   fn require_session(&self) -> Result<()> {
-    if self.cookies.is_some() {
+    if self.session.is_some() {
       Ok(())
     } else {
       Err(Error::SignInRequired)
@@ -221,7 +267,7 @@ impl Client {
 
   fn feed(&self, response: &Value) -> Result<Feed> {
     let feed = parse_feed(response);
-    if self.cookies.is_some() && !feed.logged_in {
+    if self.session.is_some() && !feed.logged_in {
       return Err(Error::NotLoggedIn);
     }
     Ok(feed)
@@ -254,17 +300,18 @@ impl Client {
       .header("X-Youtube-Client-Name", "1")
       .header("X-Youtube-Client-Version", &version)
       .json(&body);
-    let cookies = self.cookies.as_ref().filter(|_| signed);
+    let session = self.session.as_ref().filter(|_| signed);
     if let (Some(visitor), true) = (&visitor, signed) {
       request = request.header("X-Goog-Visitor-Id", visitor);
     }
-    if let Some(cookies) = cookies {
+    if let Some(session) = session {
+      let cookies = lock(&session.cookies);
       request = request
         .header("Cookie", cookies.header())
         .header("Authorization", cookies.authorization())
         .header("X-Goog-AuthUser", "0");
     }
-    let response = self.send(endpoint, request).await?;
+    let response = self.send(endpoint, request, signed).await?;
     if signed && let Some(visitor) = response["responseContext"]["visitorData"].as_str() {
       self
         .state()
@@ -274,8 +321,16 @@ impl Client {
     Ok(response)
   }
 
-  async fn send(&self, endpoint: &'static str, request: reqwest::RequestBuilder) -> Result<Value> {
+  async fn send(
+    &self,
+    endpoint: &'static str,
+    request: reqwest::RequestBuilder,
+    signed: bool,
+  ) -> Result<Value> {
     let response = request.send().await?;
+    if signed {
+      self.keep_rotated_cookies(&response);
+    }
     let status = response.status();
     if !status.is_success() {
       return Err(Error::Status {
@@ -290,7 +345,7 @@ impl Client {
   async fn resolver_visitor(&self) -> Result<String> {
     {
       let mut state = self.state();
-      if state.resolver_visitor.is_none() && self.cookies.is_none() {
+      if state.resolver_visitor.is_none() && self.session.is_none() {
         state.resolver_visitor = state.visitor_data.clone();
       }
       if let Some(visitor) = state.resolver_visitor.clone() {
@@ -341,7 +396,7 @@ impl Client {
       .header("X-Youtube-Client-Version", VISIONOS_CLIENT_VERSION)
       .header("X-Goog-Visitor-Id", &visitor)
       .json(&body);
-    let player = self.send("player", request).await?;
+    let player = self.send("player", request, false).await?;
     let master_url = hls_manifest_url(&player)?;
 
     let response = self
@@ -369,6 +424,13 @@ impl Client {
       user_agent: VISIONOS_USER_AGENT,
     })
   }
+}
+
+/// A poisoned lock only means a panic elsewhere; the value stays usable.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+  mutex
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// `streamingData.hlsManifestUrl` of a player response, or why there is none.
