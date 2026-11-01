@@ -137,6 +137,7 @@ impl FeedView {
     self.more_failed = false;
     let fetch = runtime::spawn(cx, async move {
       match (token, source) {
+        (Some(token), Source::Subscriptions) => client.subscriptions_more(&token).await,
         (Some(token), _) => client.continuation(&token).await,
         (None, Source::Home) => client.home().await,
         (None, Source::Subscriptions) => client.subscriptions().await,

@@ -1,6 +1,7 @@
 //! Lenient parsers for InnerTube responses. Shapes verified against `tests/fixtures/`:
 //! - grids (home, subscriptions, channel tabs): `richGridRenderer > richItemRenderer >
-//!   content > lockupViewModel`, continuation in `continuationItemRenderer`;
+//!   content > lockupViewModel`, continuation in `continuationItemRenderer`; shelves between the
+//!   items in `richSectionRenderer` (subscriptions: "Les plus pertinentes", Shorts);
 //! - related videos: `lockupViewModel` under `secondaryResults`;
 //! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`, the rating
 //!   in its `segmentedLikeDislikeButtonViewModel`;
@@ -28,8 +29,19 @@ use crate::models::{
 
 /// Parses a browse response or a browse continuation into a feed.
 pub fn parse_feed(response: &Value) -> Feed {
+  feed(response, true)
+}
+
+/// Parses the subscriptions feed or one of its continuations: a feed without its shelves
+/// (`richSectionRenderer`). The "Les plus pertinentes" one comes first and repeats recent videos
+/// out of date order, which would hide their place in the list (repeated videos are dropped).
+pub fn parse_subscriptions(response: &Value) -> Feed {
+  feed(response, false)
+}
+
+fn feed(response: &Value, shelves: bool) -> Feed {
   let mut items = Vec::new();
-  collect_lockups(response, &mut items);
+  collect_lockups(response, shelves, &mut items);
   Feed {
     items,
     continuation: find_continuation(response),
@@ -64,7 +76,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
 
   let secondary_results = &results["secondaryResults"]["secondaryResults"];
   let mut related = Vec::new();
-  collect_lockups(secondary_results, &mut related);
+  collect_lockups(secondary_results, true, &mut related);
 
   let (like_status, like_params) = parse_like_buttons(&primary["videoActions"]);
 
@@ -659,8 +671,9 @@ fn parse_comment(entity: &Value) -> Option<Comment> {
   })
 }
 
-/// Collects every video lockup under `value`, skipping malformed ones.
-fn collect_lockups(value: &Value, out: &mut Vec<VideoItem>) {
+/// Collects every video lockup under `value`, skipping malformed ones, and those of the grid's
+/// shelves (`richSectionRenderer`) unless `shelves`.
+fn collect_lockups(value: &Value, shelves: bool, out: &mut Vec<VideoItem>) {
   match value {
     Value::Object(map) => {
       if let Some(lockup) = map.get("lockupViewModel") {
@@ -669,9 +682,12 @@ fn collect_lockups(value: &Value, out: &mut Vec<VideoItem>) {
         }
         return;
       }
-      map.values().for_each(|v| collect_lockups(v, out));
+      if !shelves && map.contains_key("richSectionRenderer") {
+        return;
+      }
+      map.values().for_each(|v| collect_lockups(v, shelves, out));
     }
-    Value::Array(values) => values.iter().for_each(|v| collect_lockups(v, out)),
+    Value::Array(values) => values.iter().for_each(|v| collect_lockups(v, shelves, out)),
     _ => {}
   }
 }

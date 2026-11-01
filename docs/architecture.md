@@ -94,6 +94,8 @@ Shuffling uses a small xorshift generator (no dependency) and mixes the videos l
 
 ## Channel notifications
 
+The subscriptions feed (`FEsubscriptions`) mixes shelves (`richSectionRenderer`) into its grid: "Les plus pertinentes" first, then Shorts. `parse_subscriptions` (`Client::subscriptions`, `Client::subscriptions_more`) leaves them out and keeps the grid's own items: the lives on air, then the videos newest first. The shelf's videos are repeated further down, and since feeds drop repeated videos, keeping the shelf moved them to the top, out of date order.
+
 A subscribed channel's subscribe button carries a `subscriptionNotificationToggleButtonRenderer`: the current level is the icon of the state `currentStateId` names, and the menu's items calling `modifyChannelNotificationPreferenceEndpoint` are the levels offered, each with its `params` (some channels offer only "Personnalisées" and "Aucune"). Not subscribed, YouTube still sends a bell, for after a subscription: it is only read when `subscribed` is true. The watch page (`WatchPage::notifications`) and `FEchannels` (`Channel::notifications`) parse it.
 
 `bell::bell_button` shows it. `Client::set_channel_notifications` posts the chosen option's `params` as they are (they embed the page's context, so each page keeps its own); the level set is kept by channel id in a global, so the watch page and the channels page agree, and it is forgotten on a session change. A change shows at once, blocks a second one for that channel while it runs, and goes back with a toast if YouTube refuses. No response of `modify_channel_preference` is saved yet: an HTTP success counts as done.
@@ -107,7 +109,7 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 
 ## Session
 
-`YouTubeSpace::set_session` replaces the space's `Client` after a cookie import or a sign-out and rebuilds Home. The image store and the stream prefetch use an anonymous client of their own, so they never need replacing. Pages that need a session (Home signed out, subscriptions, an expired session) offer an "Importer des cookies" button that opens the settings page, where YouTube's part holds the account. Jellyfin's session is described under Navigation.
+`YouTubeSpace::set_session` replaces the space's `Client` after a cookie import or a sign-out and rebuilds the start page (`start_page`: Home or the subscriptions, the "Page d'accueil" setting; also the page shown at startup). The image store and the stream prefetch use an anonymous client of their own, so they never need replacing. Pages that need a session (Home signed out, subscriptions, an expired session) offer an "Importer des cookies" button that opens the settings page, where YouTube's part holds the account. Jellyfin's session is described under Navigation.
 
 ## Images
 
@@ -117,7 +119,7 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 
 | Data | Location |
 |---|---|
-| Settings: YouTube's (language, region, quality, layouts, theater), the volume, `[player]` (shared player settings), `[jellyfin]` (server, user, device id, playback, home) | `%APPDATA%\peeby\settings.toml`, `settings::Settings` global |
+| Settings: YouTube's (start page, language, region, quality, layouts, theater), the volume, `[player]` (shared player settings), `[jellyfin]` (server, user, device id, playback, home) | `%APPDATA%\peeby\settings.toml`, `settings::Settings` global |
 | YouTube session cookies | `%APPDATA%\peeby\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
 | Jellyfin access token | Windows Credential Manager, service `peeby`, account `<server URL>\|<user id>` ([ADR 0009](decisions/0009-jellyfin-12-single-account.md)) |
 | Image cache | `%LOCALAPPDATA%\peeby\images\` |

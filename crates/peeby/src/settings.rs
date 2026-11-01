@@ -41,6 +41,17 @@ pub enum FeedLayout {
   List,
 }
 
+/// The YouTube page shown when Peeby starts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StartPage {
+  /// The recommendations.
+  #[default]
+  Home,
+  /// The latest videos of the subscribed channels.
+  Subscriptions,
+}
+
 /// The user's settings, a GPUI global. Unknown or missing keys take their default, so an old
 /// or hand-edited file still loads.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -60,6 +71,8 @@ pub struct Settings {
   pub player: Player,
   /// Layout of the subscriptions page.
   pub subscriptions_layout: FeedLayout,
+  /// YouTube page shown at startup and after a session change.
+  pub start_page: StartPage,
   /// Playlists shown and played last video first.
   pub reversed_playlists: Vec<String>,
   /// Watch page in theater mode: the player across the whole width, above the details.
@@ -246,6 +259,7 @@ impl Default for Settings {
       volume: 100.0,
       muted: false,
       subscriptions_layout: FeedLayout::Grid,
+      start_page: StartPage::Home,
       reversed_playlists: Vec::new(),
       theater: false,
       sidebar_collapsed: false,

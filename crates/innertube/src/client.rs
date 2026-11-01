@@ -13,7 +13,7 @@ use crate::models::{
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
   parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_storyboard,
-  parse_unseen_count, parse_watch, tracking_param,
+  parse_subscriptions, parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -101,7 +101,15 @@ impl Client {
     let response = self
       .web("browse", json!({ "browseId": "FEsubscriptions" }), true)
       .await?;
-    self.feed(&response)
+    self.checked(parse_subscriptions(&response))
+  }
+
+  /// Next page of the subscriptions feed.
+  pub async fn subscriptions_more(&self, token: &str) -> Result<Feed> {
+    let response = self
+      .web("browse", json!({ "continuation": token }), true)
+      .await?;
+    self.checked(parse_subscriptions(&response))
   }
 
   /// All subscribed channels, in YouTube's order. Needs cookies.
@@ -454,7 +462,11 @@ impl Client {
   }
 
   fn feed(&self, response: &Value) -> Result<Feed> {
-    let feed = parse_feed(response);
+    self.checked(parse_feed(response))
+  }
+
+  /// With cookies, a feed served as signed out means the session is gone.
+  fn checked(&self, feed: Feed) -> Result<Feed> {
     if self.session.is_some() && !feed.logged_in {
       return Err(Error::NotLoggedIn);
     }

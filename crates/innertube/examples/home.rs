@@ -1,6 +1,6 @@
-//! Prints the Home feed. Replaces the poc-home prototype.
+//! Prints the Home feed, or the subscriptions one. Replaces the poc-home prototype.
 //!
-//! `cargo run -p innertube --example home -- [cookies.txt]`
+//! `cargo run -p innertube --example home -- [cookies.txt] [subscriptions]`
 //! Without cookies the feed is empty (YouTube shows no anonymous recommendations). With cookies
 //! it fails loudly if YouTube answers as signed out.
 
@@ -22,7 +22,12 @@ async fn main() {
   if let Err(e) = client.refresh_client_version().await {
     eprintln!("warning: {e}");
   }
-  let feed = client.home().await.unwrap_or_else(|e| fail(&e.to_string()));
+  let feed = if std::env::args().nth(2).as_deref() == Some("subscriptions") {
+    client.subscriptions().await
+  } else {
+    client.home().await
+  };
+  let feed = feed.unwrap_or_else(|e| fail(&e.to_string()));
   for v in &feed.items {
     println!(
       "{:<12} {:>8}  {}  —  {} · {}",

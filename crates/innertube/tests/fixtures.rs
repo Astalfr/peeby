@@ -168,6 +168,24 @@ fn subscriptions_feed() {
 }
 
 #[test]
+fn subscriptions_feed_skips_shelves() {
+  // Signed-in response, trimmed and stripped of account data: the "Les plus pertinentes" shelf
+  // (2 videos out of date order, repeated further down), a live, a video, the Shorts shelf,
+  // then 2 videos.
+  let response = fixture("subscriptions_feed_shelves.json");
+  let feed = innertube::parse_subscriptions(&response);
+  assert!(feed.logged_in);
+  assert!(feed.continuation.is_some());
+  let ids: Vec<_> = feed.items.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(
+    ids,
+    ["dGNhfO8t7hM", "TWM1kc5e2dI", "nkW7MtSZBfg", "MGETw9KdRAs"]
+  );
+  // The generic parser keeps the shelf's videos.
+  assert_eq!(parse_feed(&response).items[0].id, "Jl_8B_KGkZU");
+}
+
+#[test]
 fn subscribed_channels() {
   let channels = innertube::parse_channels(&fixture("subscriptions_channels.json"));
   assert_eq!(channels.len(), 3);

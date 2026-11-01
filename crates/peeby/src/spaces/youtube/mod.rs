@@ -31,7 +31,7 @@ use ui::theme::Accent;
 use ui::{runtime, theme};
 
 use crate::settings;
-use crate::settings::Settings;
+use crate::settings::{Settings, StartPage};
 use crate::shell::space::{MenuEntry, Space, SpaceEvent, SpaceInfo};
 use account::AccountView;
 use channels::ChannelsView;
@@ -75,6 +75,14 @@ impl Route {
     }
   }
 
+  /// The first page: the one of `start_page` ("Page d'accueil" setting).
+  fn start(cx: &App) -> Self {
+    match Settings::get(cx).start_page {
+      StartPage::Home => Self::Home,
+      StartPage::Subscriptions => Self::Subscriptions,
+    }
+  }
+
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
@@ -100,7 +108,8 @@ pub struct YouTubeSpace {
 }
 
 impl YouTubeSpace {
-  /// The app on the home page, then on `initial_videos` in order (command-line URLs or ids).
+  /// The app on its start page (`Route::start`), then on `initial_videos` in order (command-line
+  /// URLs or ids).
   pub fn new(
     client: Client,
     initial_videos: Vec<String>,
@@ -122,14 +131,15 @@ impl YouTubeSpace {
       account: None,
       reset_to: None,
     };
-    app.open(Route::Home, window, cx);
+    app.open(Route::start(cx), window, cx);
     for id in initial_videos {
       app.open(Route::Watch(id), window, cx);
     }
     app
   }
 
-  /// Switches to a new session (imported cookies) or signs out (`None`), then shows Home.
+  /// Switches to a new session (imported cookies) or signs out (`None`), then shows the start
+  /// page.
   pub fn set_session(&mut self, cookies: Option<Cookies>, cx: &mut Context<Self>) {
     let Settings {
       language, region, ..
@@ -157,8 +167,8 @@ impl YouTubeSpace {
     bell::reset(cx);
     inbox::reset(cx);
     self.client = client;
-    // Pages hold the old client: they are rebuilt on the next navigation; Home now.
-    self.reset_to = Some(Route::Home);
+    // Pages hold the old client: they are rebuilt on the next navigation; the start page now.
+    self.reset_to = Some(Route::start(cx));
     cx.notify();
   }
 
@@ -401,7 +411,7 @@ impl Space for YouTubeSpace {
 impl Render for YouTubeSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     if let Some(route) = self.reset_to.take() {
-      // Every page holds the old client: start over, even if Home is on top.
+      // Every page holds the old client: start over, even if the start page is on top.
       self.stack.clear();
       self.open(route, window, cx);
     }

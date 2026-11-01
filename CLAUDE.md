@@ -15,7 +15,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Lint (must pass): `cargo clippy --workspace --all-targets -- -D warnings`
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
-- Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt]`
+- Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt] [subscriptions]`
+  (give it a copy of the cookies while Peeby runs: both write the rotated cookies back)
 - Jellyfin live tests (ignored by default): set `$env:PEEBY_TEST_SERVER`, `PEEBY_TEST_USER`, `PEEBY_TEST_PASSWORD`,
   then `cargo test -p jellyfin-api --test live -- --ignored --nocapture`
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`

@@ -1,16 +1,16 @@
-//! YouTube's part of the settings page: the account (cookie import), YouTube's language and
-//! region, and the default quality.
+//! YouTube's part of the settings page: the account (cookie import), the start page, YouTube's
+//! language and region, and the default quality.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Entity, Window};
 use gpui_component::v_flex;
 
-use crate::settings::{LANGUAGES, QUALITIES, Settings};
+use crate::settings::{LANGUAGES, QUALITIES, Settings, StartPage};
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::account::AccountView;
 use ui::form::{OnClick, choices, row, section};
 
-/// The part: `account` then the language and the quality.
+/// The part: `account` then the start page, the language and the quality.
 pub fn part(
   account: Entity<AccountView>,
   _window: &mut Window,
@@ -26,10 +26,19 @@ pub fn part(
         s.language = language.to_owned();
         s.region = region.to_owned();
       });
-      // New clients in the new language; Home is reloaded.
+      // New clients in the new language; the start page is reloaded.
       nav.update(cx, |app, cx| app.reload_session(cx)).ok();
     });
     (label.to_owned(), selected, on_click)
+  });
+  let start_pages = [
+    ("Accueil", StartPage::Home),
+    ("Abonnements", StartPage::Subscriptions),
+  ]
+  .into_iter()
+  .map(|(label, page)| {
+    let on_click: OnClick = Box::new(move |_, cx| Settings::update(cx, |s| s.start_page = page));
+    (label.to_owned(), settings.start_page == page, on_click)
   });
   let qualities = QUALITIES.iter().map(|&height| {
     let on_click: OnClick = Box::new(move |_, cx| Settings::update(cx, |s| s.max_height = height));
@@ -45,6 +54,12 @@ pub fn part(
     .child(section(
       "Contenu et lecture",
       vec![
+        row(
+          "Page d'accueil",
+          "Page affichée au lancement de Peeby.",
+          choices("start-page", start_pages),
+        )
+        .into_any_element(),
         row(
           "Langue et région",
           "Langue des titres, des dates et des sous-titres, et région des recommandations. \
