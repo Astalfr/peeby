@@ -13,7 +13,7 @@ mod stats;
 mod tracks;
 
 pub use overlays::format_step;
-pub use source::{Previews, Quality, Source, Subtitle, Tile};
+pub use source::{LiveInfo, Previews, Quality, Source, Subtitle, Tile};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -244,6 +244,11 @@ pub struct PlayerView {
   menu: Option<Menu>,
   /// Playing a queue: whether it has a previous and a next video (buttons, P and N keys).
   queue: Option<(bool, bool)>,
+  /// Viewers and start time next to the live badge, and the task redrawing the uptime.
+  live_info: Option<LiveInfo>,
+  live_tick: Option<Task<()>>,
+  /// A message over the picture from the page, e.g. why it waits (an ad removed from a live).
+  notice: Option<SharedString>,
   _events: Option<Task<()>>,
 }
 
@@ -316,7 +321,46 @@ impl PlayerView {
       captions_added: Vec::new(),
       menu: None,
       queue: None,
+      live_info: None,
+      live_tick: None,
+      notice: None,
       _events: None,
+    }
+  }
+
+  /// Whether the source is a live stream ([`Source::live`]).
+  pub fn is_live(&self) -> bool {
+    self.source.as_ref().is_some_and(|s| s.live)
+  }
+
+  /// Viewers and start time shown next to the live badge; the uptime ticks every second.
+  pub fn set_live_info(&mut self, info: Option<LiveInfo>, cx: &mut Context<Self>) {
+    let ticking = info.as_ref().is_some_and(|i| i.started_at.is_some());
+    self.live_info = info;
+    self.live_tick = ticking.then(|| {
+      cx.spawn(async move |this, cx| {
+        loop {
+          cx.background_executor().timer(Duration::from_secs(1)).await;
+          let alive = this.update(cx, |this, cx| {
+            if this.controls_visible {
+              cx.notify();
+            }
+          });
+          if alive.is_err() {
+            break;
+          }
+        }
+      })
+    });
+    cx.notify();
+  }
+
+  /// A message over the picture, or none: the page says why the picture waits (an ad removed
+  /// from a live, with its countdown). It replaces the loading message meanwhile.
+  pub fn set_notice(&mut self, notice: Option<SharedString>, cx: &mut Context<Self>) {
+    if self.notice != notice {
+      self.notice = notice;
+      cx.notify();
     }
   }
 
@@ -440,8 +484,8 @@ impl PlayerView {
     self.start_with(options, clicked, cx);
   }
 
-  /// Plays another quality from the current position: mpv restarts on the new variant
-  /// (about 0.7 s), and the subtitle track is added again.
+  /// Plays another quality from the current position (a live: from its live edge): mpv
+  /// restarts on the new variant (about 0.7 s), and the subtitle track is added again.
   fn select_quality(&mut self, index: usize, cx: &mut Context<Self>) {
     self.menu = None;
     if self.quality == Some(index) {
@@ -455,7 +499,7 @@ impl PlayerView {
       return;
     };
     let options = StartOptions {
-      start_seconds: self.position,
+      start_seconds: if self.is_live() { 0.0 } else { self.position },
       ..quality.options
     };
     tracing::info!("quality {}", quality.label);
@@ -618,6 +662,9 @@ impl PlayerView {
         self.update_up_next(cx);
       }
       Event::Position(_) => {}
+      // A live's duration is only its playlist's window: kept at 0, it turns off the seek
+      // bar's math, "up next" and `finished`.
+      Event::Duration(_) if self.is_live() => {}
       Event::Duration(seconds) => {
         self.duration = seconds;
         self.refresh_segments();
@@ -805,7 +852,16 @@ impl PlayerView {
       return self.show_controls(cx);
     }
     let page_layout = self.layout.is_page();
-    match keystroke.key.as_str() {
+    let key = keystroke.key.as_str();
+    // A live has nowhere to seek to: those keys go on to the page.
+    let seek_key = matches!(
+      key,
+      "left" | "j" | "right" | "l" | "pageup" | "pagedown" | "home"
+    ) || (key.len() == 1 && key.bytes().all(|b| b.is_ascii_digit()));
+    if seek_key && self.is_live() {
+      return;
+    }
+    match key {
       "space" | "k" => self.with_player(Player::toggle_pause),
       "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
       "right" | "l" => self.seek_by(self.seek_step(shift), cx),
@@ -1236,6 +1292,7 @@ impl PlayerView {
     let has_audio_choice = self.tracks_of(player::TrackKind::Audio).len() > 1;
     let has_qualities = self.source.as_ref().is_some_and(|s| s.qualities.len() > 1);
     let embedded = self.layout == Layout::Embedded;
+    let live = self.is_live();
     let step = self.prefs.seek_step;
     let mut layers = Vec::new();
 
@@ -1301,28 +1358,37 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
         )
       })
-      .child(
-        self
-          .control_button("back-10", cx)
-          .icon(Icon::Back10)
-          .tooltip(format!("Reculer de {} (←)", format_step(step)))
-          .on_click(cx.listener(|this, _, _, cx| this.seek_by(-this.seek_step(false), cx))),
-      )
-      .child(
-        self
-          .control_button("fwd-10", cx)
-          .icon(Icon::Forward10)
-          .tooltip(format!("Avancer de {} (→)", format_step(step)))
-          .on_click(cx.listener(|this, _, _, cx| this.seek_by(this.seek_step(false), cx))),
-      )
+      .when(!live, |row| {
+        row
+          .child(
+            self
+              .control_button("back-10", cx)
+              .icon(Icon::Back10)
+              .tooltip(format!("Reculer de {} (←)", format_step(step)))
+              .on_click(cx.listener(|this, _, _, cx| this.seek_by(-this.seek_step(false), cx))),
+          )
+          .child(
+            self
+              .control_button("fwd-10", cx)
+              .icon(Icon::Forward10)
+              .tooltip(format!("Avancer de {} (→)", format_step(step)))
+              .on_click(cx.listener(|this, _, _, cx| this.seek_by(this.seek_step(false), cx))),
+          )
+      })
       .child(self.render_volume(cx))
-      .child(div().pl_2().text_sm().text_color(white(0.9)).child(format!(
-        "{} / {}",
-        format_time(self.position),
-        format_time(self.duration)
-      )))
+      .map(|row| {
+        if live {
+          row.child(self.render_live_badge(cx))
+        } else {
+          row.child(div().pl_2().text_sm().text_color(white(0.9)).child(format!(
+            "{} / {}",
+            format_time(self.position),
+            format_time(self.duration)
+          )))
+        }
+      })
       .child(div().flex_1())
-      .when(!embedded && self.duration > 0.0, |row| {
+      .when(!embedded && !live && self.duration > 0.0, |row| {
         row.child(
           div()
             .pr_2()
@@ -1397,6 +1463,7 @@ impl PlayerView {
           .on_click(|_, window, _| window.toggle_fullscreen()),
       );
 
+    let seek_bar = (!live).then(|| self.render_seek_bar(cx));
     layers.push(
       v_flex()
         .id("bottom-bar")
@@ -1418,11 +1485,48 @@ impl PlayerView {
           linear_color_stop(gpui::black().opacity(0.0), 0.0),
           linear_color_stop(gpui::black().opacity(0.8), 1.0),
         ))
-        .child(self.render_seek_bar(cx))
+        .children(seek_bar)
         .child(buttons)
         .into_any_element(),
     );
     layers
+  }
+
+  /// "EN DIRECT" on the accent, then the time since the broadcast started and the viewers, when
+  /// the page gave them ([`Self::set_live_info`]).
+  fn render_live_badge(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let primary = cx.theme().primary;
+    let info = self.live_info.clone().unwrap_or_default();
+    let uptime = info
+      .started_at
+      .and_then(|start| std::time::SystemTime::now().duration_since(start).ok())
+      .map(|elapsed| format_time(elapsed.as_secs_f64()));
+    let viewers = info.viewers.map(|n| match n {
+      0 | 1 => format!("{n} spectateur"),
+      n => format!("{} spectateurs", group_thousands(n)),
+    });
+    h_flex()
+      .pl_2()
+      .gap_2()
+      .items_center()
+      .text_sm()
+      .text_color(gpui::white().opacity(0.9))
+      .child(
+        h_flex()
+          .gap_1()
+          .items_center()
+          .px_2()
+          .py(px(2.))
+          .rounded_sm()
+          .bg(primary)
+          .text_xs()
+          .font_weight(FontWeight::BOLD)
+          .text_color(gpui::white())
+          .child(div().size(px(6.)).rounded_full().bg(gpui::white()))
+          .child("EN DIRECT"),
+      )
+      .children(uptime)
+      .children(viewers.map(|v| div().text_color(gpui::white().opacity(0.75)).child(v)))
   }
 
   /// An icon button of the player: white icon that turns to the accent color on hover, over a
@@ -1559,6 +1663,19 @@ fn corner_radii(window: &Window, theater: bool) -> Corners<Pixels> {
   }
 }
 
+/// `12 345` (French grouping, with a narrow no-break space).
+fn group_thousands(n: u64) -> String {
+  let digits = n.to_string();
+  let mut out = String::with_capacity(digits.len() + digits.len() / 3 * 3);
+  for (i, digit) in digits.chars().enumerate() {
+    if i > 0 && (digits.len() - i).is_multiple_of(3) {
+      out.push('\u{202f}');
+    }
+    out.push(digit);
+  }
+  out
+}
+
 /// `1:02:03` or `12:34`.
 pub fn format_time(seconds: f64) -> String {
   let total = seconds.max(0.0) as u64;
@@ -1614,12 +1731,14 @@ impl Render for PlayerView {
           .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx))),
       );
 
+    // The page's notice says why the picture waits better than "loading".
     let status = if self.failed {
       None
     } else {
       self
-        .status
+        .notice
         .clone()
+        .or_else(|| self.status.clone())
         .or_else(|| self.buffering.then(|| "Chargement…".into()))
     };
     if let Some(status) = status {
@@ -1723,5 +1842,18 @@ impl Render for PlayerView {
       root = root.child(self.render_context_menu(at, cx));
     }
     root
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::group_thousands;
+
+  #[test]
+  fn thousands() {
+    assert_eq!(group_thousands(7), "7");
+    assert_eq!(group_thousands(999), "999");
+    assert_eq!(group_thousands(12_345), "12\u{202f}345");
+    assert_eq!(group_thousands(1_234_567), "1\u{202f}234\u{202f}567");
   }
 }

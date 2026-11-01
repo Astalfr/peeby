@@ -99,6 +99,25 @@ The volume shows no number. Hovering the mute button opens a vertical slider rig
 
 Feedback for keys with no visible control (volume, delay, track, chapter) shows as a short message at the top.
 
+## Live streams
+
+A source with `Source::live` (Twitch, [twitch-plan.md](../twitch-plan.md) step 4) plays as a live:
+- **No seeking.** There is no seek bar, no ±10 s buttons and no remaining time. The seeking keys (←/→,
+  J/L, Page Up/Down, Home, 0–9) are left to the page, and their lines leave the help.
+- **The badge.** "EN DIRECT" on the accent stands in for the times, followed by the time since the
+  broadcast started and the viewers, when the page gives them (`PlayerView::set_live_info(LiveInfo)`).
+  The uptime is redrawn every second while the controls show.
+- **mpv's duration is ignored.** It is only the playlist's window, about 25 s. With no duration there
+  is no "up next", and `finished()` stays false.
+- **Quality change.** Changing quality restarts at the live edge rather than at the current position.
+- **End.** The end of the stream (`PlayerEvent::Ended`) is left to the page: the channel went offline.
+
+`PlayerView::set_notice(Option<SharedString>)` puts the page's message over the picture, in place of
+"Chargement…". It is generic: Twitch uses it while an ad is removed and no backup stream covers it, with
+the countdown it updates itself.
+
+`cargo run -p ui --example player` with `PEEBY_LIVE=1` shows the live controls and a notice counting down.
+
 ## Icons
 
 Lucide SVGs (ISC) are embedded by `crates/peeby/src/assets.rs` and registered with `Application::with_assets`. They include the few icons gpui-component draws itself (chevrons, close, check…), which had no asset source before. Adding an icon means copying the SVG to `crates/peeby/assets/icons/` and listing it.

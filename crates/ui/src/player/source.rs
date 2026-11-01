@@ -25,6 +25,19 @@ pub struct Source {
   pub audio_names: Vec<String>,
   /// Same for the subtitle tracks: embedded ones, then the external ones in `options`.
   pub subtitle_names: Vec<String>,
+  /// A live stream: no seek bar, no seeking, a live badge instead of the times, and a quality
+  /// change joins the live edge. mpv still reports a duration (the playlist's window): it is
+  /// ignored.
+  pub live: bool,
+}
+
+/// What the live badge shows next to it ([`super::PlayerView::set_live_info`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LiveInfo {
+  /// Current viewers.
+  pub viewers: Option<u64>,
+  /// When the broadcast started: the badge shows the time since.
+  pub started_at: Option<std::time::SystemTime>,
 }
 
 /// One quality of a source: switching to it restarts mpv with its options at the current

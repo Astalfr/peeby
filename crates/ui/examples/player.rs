@@ -4,19 +4,20 @@
 //!
 //! `cargo run -p ui --example player` · `PEEBY_START=150` starts in the credits ("up next") ·
 //! `PEEBY_DISPLAY=secondary` opens it on another screen · `PEEBY_SIZE=640x360` sets the window's
-//! size (panels larger than the player scroll).
+//! size (panels larger than the player scroll) · `PEEBY_LIVE=1` plays it as a live (badge,
+//! uptime and viewers, no seeking) with a notice counting down for 8 s, as during a removed ad.
 
 // The example reports the player's events on the console on purpose.
 #![allow(clippy::print_stderr)]
 
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
 use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
 use player::StartOptions;
 use ui::player::segments::{Segment, SegmentKind};
-use ui::player::{Layout, PlayerEvent, PlayerView, Prefs, Source};
+use ui::player::{Layout, LiveInfo, PlayerEvent, PlayerView, Prefs, Source};
 use ui::{assets, theme};
 
 /// Length of the generated video, seconds.
@@ -27,6 +28,7 @@ fn main() {
     .ok()
     .and_then(|s| s.parse::<f64>().ok())
     .unwrap_or(0.0);
+  let live = std::env::var("PEEBY_LIVE").as_deref() == Ok("1");
   application()
     .with_assets(assets::Assets)
     .run(move |cx: &mut App| {
@@ -72,8 +74,18 @@ fn main() {
           view.set_layout(Layout::Window, cx);
           view.set_title("Mire de test".into(), cx);
           view.set_subtitle("S1:E1 · Générée par mpv".into(), cx);
-          view.set_queue(Some((false, true)), cx);
-          view.set_up_next(Some("S1:E2 · La suite".into()), cx);
+          if live {
+            view.set_live_info(
+              Some(LiveInfo {
+                viewers: Some(12_345),
+                started_at: SystemTime::now().checked_sub(Duration::from_secs(5_025)),
+              }),
+              cx,
+            );
+          } else {
+            view.set_queue(Some((false, true)), cx);
+            view.set_up_next(Some("S1:E2 · La suite".into()), cx);
+          }
           view.set_segments(
             vec![
               Segment {
@@ -89,9 +101,35 @@ fn main() {
             ],
             cx,
           );
-          view.start(source(start), Instant::now(), cx);
+          view.start(
+            Source {
+              live,
+              ..source(start)
+            },
+            Instant::now(),
+            cx,
+          );
           view
         });
+        if live {
+          // The notice the Twitch space shows while an ad is removed and no backup covers it.
+          let notice = player.downgrade();
+          cx.spawn(async move |cx| {
+            for left in (1..=8).rev() {
+              notice
+                .update(cx, |p, cx| {
+                  p.set_notice(
+                    Some(format!("Publicité retirée · reprise dans {left} s").into()),
+                    cx,
+                  )
+                })
+                .ok();
+              cx.background_executor().timer(Duration::from_secs(1)).await;
+            }
+            notice.update(cx, |p, cx| p.set_notice(None, cx)).ok();
+          })
+          .detach();
+        }
         cx.subscribe(&player, |_, event: &PlayerEvent, cx| match event {
           PlayerEvent::Close => {
             eprintln!("event: close");

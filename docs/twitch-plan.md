@@ -225,23 +225,33 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   by eye (the spike logs no stall; a screenshot was not taken)
 - Exit: met. A live plays through the proxy, an ad break was skipped, and the start stays within 1–2 s
 ### 4. `ui::player`: live mode and notice
-- [ ] `Source::live: bool`. When live:
-  - no seek bar, no remaining time, a "EN DIRECT" badge in the controls instead;
-  - no seeking: arrows, J/L, 0–9, Home, Page Up/Down and chapters do nothing (and their help lines hide);
-  - no "up next" and no `finished()` from the position;
-  - a quality change restarts at the live edge, not at the current position (`start_seconds` unset);
-  - `PlayerEvent::Ended` means the stream stopped (channel offline): the space shows "Le live est
-    terminé" over the last frame.
-- [ ] `PlayerView::set_live_info(Option<LiveInfo>)`: viewers and start time, shown next to the badge
-      (uptime ticks every second; the space refreshes viewers every minute)
-- [ ] `PlayerView::set_notice(Option<Notice>)`, generic (`ui` knows no service): a text, optionally a
-      countdown, shown over the picture. The Twitch space sets "Publicité retirée, reprise dans 25 s" while
-      the proxy holds back an ad and mpv waits. The buffering overlay hides while a notice shows
-- [ ] Mini-player: a live keeps playing there; its controls hide the seek bar too
-- [ ] `cargo run -p ui --example player -- --live`: the example in live mode with a notice
-- [ ] docs/player/ updated (live mode, notice)
-- Exit: the example shows the live controls and the notice; YouTube and Jellyfin unchanged
-
+- [x] `Source::live: bool`. When live:
+  - no seek bar, no ±10 s buttons, no remaining time: an "EN DIRECT" badge on the accent stands in for
+    the times;
+  - no seeking: ←/→, J/L, 0–9, Home and Page Up/Down are left to the page, and their help lines hide;
+  - mpv's duration (the playlist's window) is ignored, so there is no "up next" and `finished()` stays
+    false;
+  - a quality change restarts at the live edge (`start_seconds` 0), not at the current position;
+  - `PlayerEvent::Ended` goes to the page as before: the space says the live ended (step 6).
+- [x] `PlayerView::set_live_info(Option<LiveInfo { viewers, started_at }>)`: shown after the badge
+      (`12 345 spectateurs`, French grouping), the uptime redrawn every second while the controls
+      show. The space refreshes the viewers (step 6)
+- [x] `PlayerView::set_notice(Option<SharedString>)`, generic, in place of the loading message. The page
+      updates the text itself for a countdown, so there is no notice model to keep in sync
+- [x] Mini-player: nothing to change, it has no seek bar (picture, play/pause, back, close)
+- [x] `PEEBY_LIVE=1 cargo run -p ui --example player`: live mode, 12 345 viewers, 1:23:47 of uptime,
+      and an 8 s notice countdown
+- [x] docs/player/playback-ux.md, "Live streams"
+- Verified on a screenshot of the example:
+  - with `PEEBY_LIVE=1`: no seek bar, no ±10 s, no previous/next, the badge, the uptime, the viewers
+    and the notice;
+  - without it: seek bar, previous/next, times and remaining time, as before.
+  - Clippy, and tests: `group_thousands`.
+- The app still opens and plays a YouTube video (`peeby <id>`, screenshot).
+- Not verified: YouTube's control bar in the app (hidden before the screenshot), and Jellyfin. Their path
+  is unchanged: `live` defaults to false, and only live branches were added. The live keys were not
+  pressed
+- Exit: met for the example; YouTube plays
 ### 5. The space and the sign-in (Helix device flow, auth-token)
 - [ ] `spaces/twitch/`: `TwitchSpace` with its accent (Twitch violet) and badge `TW`, one line in
       `main.rs`'s list of spaces; signed out, its only page is the sign-in card
