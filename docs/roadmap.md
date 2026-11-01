@@ -13,6 +13,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Peeby refactor
 
+- Step 3 started (2026-11-01): the player moved to `ui::player` and plays a generic `Source`; the mini-player approach was checked with `PEEBY_PIP=1 spike-yt-play` (zero-copy video in an always-on-top `PopUp` window and back). Verified: clippy, tests, playback 1.44 s with 8 qualities and 6 subtitle tracks. **Not verified:** the quality and subtitle menus and the storyboard by hand (same code, not clicked).
 - Step 2 done (2026-11-01): `ui` crate (theme with a switchable accent, motion, icons, image store behind a `Fetch`, `Picture`, `MediaCard` in four layouts, skeletons, notices, settings rows); YouTube pages use it, no visual change. Verified: clippy, tests (2 new), Home and watch page on screenshots, playback 1.47 s.
 - Step 1 done (2026-11-01): PeebTube renamed Peeby (crate, exe, window, `%APPDATA%\peeby`, `PEEBY_*`), version 0.2.0, [ADR 0007](decisions/0007-multi-space-app.md); `PEEBY_DISPLAY` picks the screen the window opens on. Verified: build, clippy, tests, and `peeby <url>` playing after about 1.5 s. **Not verified:** which screen the window lands on with `PEEBY_DISPLAY=secondary` (no warning, so a second display was found). Next steps and checklists: [refactor-plan.md](refactor-plan.md).
 

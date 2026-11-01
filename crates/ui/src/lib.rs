@@ -8,6 +8,7 @@ pub mod form;
 pub mod images;
 pub mod motion;
 pub mod picture;
+pub mod player;
 pub mod runtime;
 pub mod theme;
 pub mod widgets;

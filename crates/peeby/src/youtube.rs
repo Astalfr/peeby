@@ -1,8 +1,13 @@
-//! YouTube data for the shared UI: thumbnails as pictures, InnerTube errors in French.
+//! YouTube data for the shared UI: thumbnails as pictures, streams as player sources, InnerTube
+//! errors in French.
 
-use innertube::{Client, Thumbnail};
+use std::rc::Rc;
+
+use innertube::{Client, Storyboard, Stream, Thumbnail};
+use player::StartOptions;
 use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
+use ui::player::{Previews, Quality, Source, Subtitle, Tile};
 
 /// Downloads images with an InnerTube client (its HTTP client and User-Agent).
 pub struct ImageFetch(pub Client);
@@ -46,5 +51,73 @@ pub fn error_text(error: &innertube::Error) -> String {
     Error::Http(_) => "Impossible de joindre YouTube. Vérifiez la connexion.".into(),
     Error::Status { status, .. } => format!("YouTube a répondu par une erreur (HTTP {status})."),
     Error::Parse { .. } => "Réponse de YouTube inattendue : son format a peut-être changé.".into(),
+  }
+}
+
+/// mpv options for an HLS variant and its audio rendition (YouTube's variants are video only).
+fn hls_options(video: &str, audio: Option<&str>, user_agent: &str) -> StartOptions {
+  StartOptions {
+    url: video.to_owned(),
+    external_audio: audio.map(str::to_owned).into_iter().collect(),
+    http_headers: vec![format!("User-Agent: {user_agent}")],
+    // Opt-in only: the log contains stream URLs, which carry the user's IP.
+    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
+    ..Default::default()
+  }
+}
+
+/// A resolved stream as the player's source: its quality ladder, captions fetched on demand
+/// and the storyboard for the seek bar.
+pub fn source(stream: Stream) -> Source {
+  let qualities = stream
+    .qualities
+    .iter()
+    .map(|v| Quality {
+      label: v.label().into(),
+      options: hls_options(&v.url, v.audio_url.as_deref(), stream.user_agent),
+    })
+    .collect();
+  Source {
+    options: hls_options(
+      &stream.video_url,
+      stream.audio_url.as_deref(),
+      stream.user_agent,
+    ),
+    qualities,
+    quality: stream
+      .qualities
+      .iter()
+      .position(|q| q.url == stream.video_url),
+    subtitles: stream
+      .captions
+      .into_iter()
+      .map(|c| Subtitle {
+        // YouTube's names, in the app's language: `Anglais (générés automatiquement)`.
+        label: c.name,
+        language: c.language,
+        url: c.url,
+      })
+      .collect(),
+    previews: stream
+      .storyboard
+      .map(|board| Rc::new(StoryboardPreviews(board)) as Rc<dyn Previews>),
+  }
+}
+
+/// A storyboard as the seek bar's previews.
+struct StoryboardPreviews(Storyboard);
+
+impl Previews for StoryboardPreviews {
+  fn tile(&self, seconds: f64, duration: f64) -> Option<Tile> {
+    let frame = self.0.frame(seconds, duration)?;
+    Some(Tile {
+      url: frame.url,
+      column: frame.column,
+      row: frame.row,
+    })
+  }
+
+  fn tile_size(&self) -> (u32, u32) {
+    (self.0.width, self.0.height)
   }
 }

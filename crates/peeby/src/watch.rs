@@ -28,7 +28,6 @@ use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
 use crate::app::{AppView, Route};
 use crate::cards::{compact_card, playlist_row};
-use crate::player_view::{PlayerEvent, PlayerView};
 use crate::queue::{Queue, QueueEvent};
 use crate::settings::Settings;
 use crate::youtube::{self, error_text};
@@ -37,6 +36,7 @@ use ui::assets::Icon;
 use ui::card::skeleton_compact;
 use ui::images::Images;
 use ui::picture::image_fill;
+use ui::player::{PlayerEvent, PlayerView, Prefs};
 use ui::widgets::{loading_more, near_scroll_end};
 use ui::{runtime, theme};
 
@@ -117,23 +117,46 @@ impl WatchView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let player = cx.new(PlayerView::new);
+    let settings = Settings::get(cx);
+    let prefs = Prefs {
+      volume: settings.volume,
+      muted: settings.muted,
+      subtitle_language: Some(settings.language.clone()),
+    };
+    let theater = settings.theater;
+    let player = cx.new(|cx| PlayerView::new(prefs, theater, cx));
     let focus = player.read(cx).focus_handle().clone();
     window.focus(&focus, cx);
     let votes = cx
       .try_global::<VotesCache>()
       .and_then(|cache| cache.0.get(&video_id).copied());
-    let mut subscriptions = vec![cx.subscribe(&player, |this, _, event: &PlayerEvent, cx| {
-      if let PlayerEvent::Theater = event {
-        return cx.notify();
-      }
-      let Some(queue) = &this.queue else { return };
-      match event {
-        PlayerEvent::Ended | PlayerEvent::Next => queue.update(cx, |q, cx| q.next(cx)),
-        PlayerEvent::Previous => queue.update(cx, |q, cx| q.previous(cx)),
-        PlayerEvent::Theater => {}
-      }
-    })];
+    let mut subscriptions = vec![
+      cx.subscribe(&player, |this, player, event: &PlayerEvent, cx| {
+        match *event {
+          // Kept in the settings, so the next videos open the same way.
+          PlayerEvent::Theater => {
+            Settings::update(cx, |s| s.theater = !s.theater);
+            let theater = Settings::get(cx).theater;
+            player.update(cx, |player, cx| player.set_theater(theater, cx));
+            cx.notify();
+          }
+          PlayerEvent::Sound { volume, muted } => Settings::update(cx, |s| {
+            s.volume = volume;
+            s.muted = muted;
+          }),
+          PlayerEvent::Ended | PlayerEvent::Next => {
+            if let Some(queue) = &this.queue {
+              queue.update(cx, |q, cx| q.next(cx));
+            }
+          }
+          PlayerEvent::Previous => {
+            if let Some(queue) = &this.queue {
+              queue.update(cx, |q, cx| q.previous(cx));
+            }
+          }
+        }
+      }),
+    ];
     let queue_scroll = ScrollHandle::new();
     if let Some(queue) = &queue {
       // The queue chose another video: this page makes way for that video's page.
@@ -331,9 +354,9 @@ impl WatchView {
         stream.resolution,
         stream.codecs
       );
-      self
-        .player
-        .update(cx, |player, cx| player.start(stream, clicked, cx));
+      self.player.update(cx, |player, cx| {
+        player.start(youtube::source(stream), clicked, cx)
+      });
       return;
     }
     let max_height = Settings::get(cx).max_height;
@@ -351,7 +374,9 @@ impl WatchView {
             stream.codecs
           );
           player
-            .update(cx, |player, cx| player.start(stream, clicked, cx))
+            .update(cx, |player, cx| {
+              player.start(youtube::source(stream), clicked, cx)
+            })
             .ok();
           return;
         }

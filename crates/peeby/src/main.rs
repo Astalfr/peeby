@@ -10,7 +10,6 @@ mod cards;
 mod channels;
 mod feed;
 mod inbox;
-mod player_view;
 mod playlists;
 mod prefetch;
 mod queue;

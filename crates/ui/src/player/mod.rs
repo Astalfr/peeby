@@ -1,7 +1,11 @@
-//! The video player: picture, auto-hiding controls (seek bar, volume, buttons), OSD and
-//! keyboard shortcuts. Adapted from peeby's `player_page.rs` (controls, seek bar, volume
-//! slider, control buttons), without its Jellyfin parts (reporting, episodes, segments,
-//! tracks). Embedded in the watch page; fills the window in fullscreen.
+//! The video player shared by every space: picture, auto-hiding controls (seek bar with
+//! previews, volume, buttons, quality and subtitle menus), OSD and keyboard shortcuts. It plays a
+//! [`Source`] and tells its page what happens through [`PlayerEvent`]s; it reads no setting
+//! itself. Embedded in a page; fills the window in fullscreen.
+
+mod source;
+
+pub use source::{Previews, Quality, Source, Subtitle, Tile};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -18,14 +22,11 @@ use gpui::{
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
-use innertube::Stream;
-use innertube::hls::Variant;
 use player::{Choice, Event, Player, StartOptions};
 
-use crate::settings::Settings;
-use ui::assets::Icon;
-use ui::images::Images;
-use ui::theme;
+use crate::assets::Icon;
+use crate::images::Images;
+use crate::theme;
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
@@ -40,15 +41,35 @@ const SEEK_LARGE: f64 = 10.0;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
 
-/// What the player tells the watch page.
+/// What the player tells its page.
 pub enum PlayerEvent {
   /// The video played to its end.
   Ended,
   /// The user asked for the next or the previous video of the queue.
   Next,
+  /// See [`PlayerEvent::Next`].
   Previous,
-  /// Theater mode was switched on or off (`Settings::theater`): the page lays itself out again.
+  /// The user asked to switch theater mode (button or T): the page saves it, lays itself out
+  /// again and calls [`PlayerView::set_theater`].
   Theater,
+  /// The volume or the mute changed, to keep for the next videos.
+  Sound {
+    /// 0 to 100.
+    volume: f64,
+    /// Muted.
+    muted: bool,
+  },
+}
+
+/// The user's preferences the player starts with.
+#[derive(Clone, Debug, Default)]
+pub struct Prefs {
+  /// 0 to 100.
+  pub volume: f64,
+  /// Muted.
+  pub muted: bool,
+  /// Language picked first by the subtitles key (C), e.g. `fr`.
+  pub subtitle_language: Option<String>,
 }
 
 /// The open menu of the control bar.
@@ -58,8 +79,12 @@ enum Menu {
   Subtitles,
 }
 
+/// The player: see the module documentation.
 pub struct PlayerView {
   focus: FocusHandle,
+  prefs: Prefs,
+  /// The page is in theater mode: the player spans it and squares its corners but one.
+  theater: bool,
   title: SharedString,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
@@ -103,14 +128,14 @@ pub struct PlayerView {
   /// The left button went down on the seek bar and is still held: the playhead follows the
   /// mouse horizontally wherever it is, and mpv's positions are ignored until the release.
   seek_dragging: bool,
-  /// The stream being played (VISIONOS): its qualities and subtitle tracks.
-  stream: Option<Stream>,
-  /// Index of the playing quality in `stream.qualities`.
+  /// What is being played: its qualities and subtitle tracks.
+  source: Option<Source>,
+  /// Index of the playing quality in `source.qualities`.
   quality: Option<usize>,
-  /// Selected subtitle track, index in `stream.captions`.
+  /// Selected subtitle track, index in `source.subtitles`.
   caption: Option<usize>,
-  /// Caption URLs already given to mpv, in mpv's track order (external subtitles get the ids
-  /// 1, 2… since the HLS streams carry none).
+  /// Subtitle URLs already given to mpv, in mpv's track order (external subtitles get the ids
+  /// 1, 2… since the streams carry none).
   captions_added: Vec<String>,
   menu: Option<Menu>,
   /// Playing a queue: whether it has a previous and a next video (buttons, P and N keys).
@@ -121,8 +146,8 @@ pub struct PlayerView {
 impl EventEmitter<PlayerEvent> for PlayerView {}
 
 impl PlayerView {
-  pub fn new(cx: &mut Context<Self>) -> Self {
-    let sound = Settings::get(cx).clone();
+  /// A player waiting for its source ([`Self::start`]).
+  pub fn new(prefs: Prefs, theater: bool, cx: &mut Context<Self>) -> Self {
     // A storyboard sheet arriving redraws the seek bar's preview.
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |this: &mut Self, _, cx| {
@@ -134,6 +159,7 @@ impl PlayerView {
     }
     Self {
       focus: cx.focus_handle(),
+      theater,
       title: SharedString::default(),
       player: None,
       video: None,
@@ -145,8 +171,8 @@ impl PlayerView {
       started: false,
       pause_pulse: None,
       buffering: false,
-      volume: sound.volume,
-      muted: sound.muted,
+      volume: prefs.volume,
+      muted: prefs.muted,
       covered: false,
       osd: None,
       osd_task: None,
@@ -163,7 +189,8 @@ impl PlayerView {
       seek_bounds: Rc::default(),
       seek_hover: None,
       seek_dragging: false,
-      stream: None,
+      prefs,
+      source: None,
       quality: None,
       caption: None,
       captions_added: Vec::new(),
@@ -173,6 +200,7 @@ impl PlayerView {
     }
   }
 
+  /// Focus of the player, for its keys.
   pub fn focus_handle(&self) -> &FocusHandle {
     &self.focus
   }
@@ -208,30 +236,28 @@ impl PlayerView {
     }
   }
 
-  /// Starts mpv on `stream`; `clicked` is when the user opened the video, for the timing log.
-  pub fn start(&mut self, stream: Stream, clicked: Instant, cx: &mut Context<Self>) {
-    self.quality = stream
-      .qualities
-      .iter()
-      .position(|q| q.url == stream.video_url);
+  /// Switches theater mode on or off (the corners follow).
+  pub fn set_theater(&mut self, theater: bool, cx: &mut Context<Self>) {
+    self.theater = theater;
+    cx.notify();
+  }
+
+  /// Starts mpv on `source`; `clicked` is when the user opened the video, for the timing log.
+  pub fn start(&mut self, source: Source, clicked: Instant, cx: &mut Context<Self>) {
+    self.quality = source.quality;
     tracing::info!(
       "{} qualities ({}), {} subtitle tracks",
-      stream.qualities.len(),
-      stream
+      source.qualities.len(),
+      source
         .qualities
         .iter()
-        .map(Variant::label)
+        .map(|q| q.label.as_ref())
         .collect::<Vec<_>>()
         .join(" "),
-      stream.captions.len()
+      source.subtitles.len()
     );
-    let options = stream_options(
-      &stream.video_url,
-      stream.audio_url.as_deref(),
-      stream.user_agent,
-      0.0,
-    );
-    self.stream = Some(stream);
+    let options = source.options.clone();
+    self.source = Some(source);
     self.start_with(options, clicked, cx);
   }
 
@@ -242,19 +268,20 @@ impl PlayerView {
     if self.quality == Some(index) {
       return cx.notify();
     }
-    let Some(stream) = &self.stream else { return };
-    let Some(variant) = stream.qualities.get(index).cloned() else {
+    let Some(quality) = self
+      .source
+      .as_ref()
+      .and_then(|s| s.qualities.get(index).cloned())
+    else {
       return;
     };
-    let options = stream_options(
-      &variant.url,
-      variant.audio_url.as_deref(),
-      stream.user_agent,
-      self.position,
-    );
-    tracing::info!("quality {}", variant.label());
+    let options = StartOptions {
+      start_seconds: self.position,
+      ..quality.options
+    };
+    tracing::info!("quality {}", quality.label);
     self.quality = Some(index);
-    self.show_osd(format!("Qualité {}", variant.label()).into(), cx);
+    self.show_osd(format!("Qualité {}", quality.label).into(), cx);
     // The old player lives on in the old VideoView until the new one replaces it: pause it so
     // the sounds do not overlap. Its last frame stays on screen meanwhile.
     if let Some(old) = self.player.take() {
@@ -269,8 +296,8 @@ impl PlayerView {
   fn select_caption(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
     self.menu = None;
     self.caption = index;
-    let label = match index.and_then(|i| self.stream.as_ref()?.captions.get(i)) {
-      Some(caption) => caption_label(caption),
+    let label = match index.and_then(|i| self.source.as_ref()?.subtitles.get(i)) {
+      Some(subtitle) => subtitle.label.clone(),
       None => "Désactivés".to_owned(),
     };
     self.apply_caption();
@@ -283,34 +310,36 @@ impl PlayerView {
     };
     let caption = self
       .caption
-      .and_then(|i| self.stream.as_ref()?.captions.get(i).cloned());
+      .and_then(|i| self.source.as_ref()?.subtitles.get(i).cloned());
     match caption {
       None => player.set_subtitle(Choice::Off),
       Some(caption) => match self.captions_added.iter().position(|u| *u == caption.url) {
         Some(added) => player.set_subtitle(Choice::Track(added as i64 + 1)),
         None => {
-          player.add_subtitle(&caption.url, &caption_label(&caption), &caption.language);
+          player.add_subtitle(&caption.url, &caption.label, &caption.language);
           self.captions_added.push(caption.url);
         }
       },
     }
   }
 
-  /// C: off → the first track in the app's language (else the first one) → off.
+  /// C: off → the first track in the preferred language (else the first one) → off.
   fn toggle_captions(&mut self, cx: &mut Context<Self>) {
     if self.caption.is_some() {
       return self.select_caption(None, cx);
     }
-    let Some(stream) = &self.stream else { return };
-    if stream.captions.is_empty() {
+    let Some(source) = &self.source else { return };
+    if source.subtitles.is_empty() {
       return self.show_osd("Aucun sous-titre".into(), cx);
     }
-    let hl = Settings::get(cx).language.clone();
-    let hl = hl.as_str();
-    let index = stream
-      .captions
+    let language = self.prefs.subtitle_language.clone().unwrap_or_default();
+    let index = source
+      .subtitles
       .iter()
-      .position(|c| c.language == hl || c.language.starts_with(&format!("{hl}-")))
+      .position(|c| {
+        !language.is_empty()
+          && (c.language == language || c.language.starts_with(&format!("{language}-")))
+      })
       .unwrap_or(0);
     self.select_caption(Some(index), cx);
   }
@@ -502,12 +531,13 @@ impl PlayerView {
     );
   }
 
-  /// Saved in the settings, so the next video (and the next launch) plays at this level.
-  fn remember_sound(&self, cx: &mut App) {
-    let (volume, muted) = (self.volume, self.muted);
-    Settings::update(cx, |s| {
-      s.volume = volume;
-      s.muted = muted;
+  /// Tells the page, which keeps it for the next video (and the next launch).
+  fn remember_sound(&mut self, cx: &mut Context<Self>) {
+    self.prefs.volume = self.volume;
+    self.prefs.muted = self.muted;
+    cx.emit(PlayerEvent::Sound {
+      volume: self.volume,
+      muted: self.muted,
     });
   }
 
@@ -582,11 +612,9 @@ impl PlayerView {
     self.show_controls(cx);
   }
 
-  /// Switches theater mode, kept in the settings so the next videos open the same way.
+  /// Asks the page to switch theater mode.
   fn toggle_theater(&mut self, cx: &mut Context<Self>) {
-    Settings::update(cx, |s| s.theater = !s.theater);
     cx.emit(PlayerEvent::Theater);
-    cx.notify();
   }
 
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
@@ -624,13 +652,14 @@ impl PlayerView {
 
   // --- Rendering ----------------------------------------------------------------------------
 
-  /// The storyboard frame at `seconds`, cropped out of its sheet, as YouTube shows it over the
-  /// seek bar. A dark box while the sheet loads; `None` when the video has no storyboard.
+  /// The preview tile at `seconds`, cropped out of its sheet, shown over the seek bar. A dark
+  /// box while the sheet loads; `None` when the source has no previews.
   fn render_storyboard_frame(&self, seconds: f64, cx: &mut Context<Self>) -> Option<AnyElement> {
-    let board = self.stream.as_ref()?.storyboard.as_ref()?;
-    let frame = board.frame(seconds, self.duration)?;
-    let scale = PREVIEW_WIDTH / board.width as f32;
-    let height = board.height as f32 * scale;
+    let previews = self.source.as_ref()?.previews.clone()?;
+    let frame = previews.tile(seconds, self.duration)?;
+    let (tile_width, tile_height) = previews.tile_size();
+    let scale = PREVIEW_WIDTH / tile_width.max(1) as f32;
+    let height = tile_height as f32 * scale;
     let sheet = cx
       .try_global::<Images>()
       .cloned()
@@ -933,10 +962,13 @@ impl PlayerView {
     cx: &mut Context<Self>,
   ) -> Vec<gpui::AnyElement> {
     let fullscreen = window.is_fullscreen();
-    let theater = Settings::get(cx).theater;
+    let theater = self.theater;
     let white = |opacity: f32| gpui::white().opacity(opacity);
-    let has_captions = self.stream.as_ref().is_some_and(|s| !s.captions.is_empty());
-    let has_qualities = self.stream.as_ref().is_some_and(|s| s.qualities.len() > 1);
+    let has_captions = self
+      .source
+      .as_ref()
+      .is_some_and(|s| !s.subtitles.is_empty());
+    let has_qualities = self.source.as_ref().is_some_and(|s| s.qualities.len() > 1);
     let mut layers = Vec::new();
 
     if fullscreen && !self.title.is_empty() {
@@ -1082,8 +1114,8 @@ impl PlayerView {
         .pt_8()
         .pb_2()
         // Its gradient reaches the player's bottom corners: rounded like them.
-        .rounded_bl(corner_radii(window, cx).bottom_left)
-        .rounded_br(corner_radii(window, cx).bottom_right)
+        .rounded_bl(corner_radii(window, self.theater).bottom_left)
+        .rounded_br(corner_radii(window, self.theater).bottom_right)
         .bg(linear_gradient(
           180.,
           linear_color_stop(gpui::black().opacity(0.0), 0.0),
@@ -1182,20 +1214,17 @@ impl PlayerView {
         .when(selected, |b| b.primary())
         .when(!selected, |b| b.ghost())
     };
-    let no_variants: Vec<Variant> = Vec::new();
-    let no_captions: Vec<innertube::Caption> = Vec::new();
-    let stream = self.stream.as_ref();
+    let (qualities, subtitles) = match &self.source {
+      Some(source) => (source.qualities.as_slice(), source.subtitles.as_slice()),
+      None => (&[][..], &[][..]),
+    };
     match menu {
       Menu::Quality => {
-        for (i, variant) in stream
-          .map_or(&no_variants, |s| &s.qualities)
-          .iter()
-          .enumerate()
-        {
+        for (i, quality) in qualities.iter().enumerate() {
           list = list.child(
             entry(
               format!("quality-{i}").into(),
-              variant.label(),
+              quality.label.to_string(),
               self.quality == Some(i),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.select_quality(i, cx))),
@@ -1211,15 +1240,11 @@ impl PlayerView {
           )
           .on_click(cx.listener(|this, _, _, cx| this.select_caption(None, cx))),
         );
-        for (i, caption) in stream
-          .map_or(&no_captions, |s| &s.captions)
-          .iter()
-          .enumerate()
-        {
+        for (i, caption) in subtitles.iter().enumerate() {
           list = list.child(
             entry(
               format!("sub-{i}").into(),
-              caption_label(caption),
+              caption.label.clone(),
               self.caption == Some(i),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.select_caption(Some(i), cx))),
@@ -1243,29 +1268,6 @@ impl PlayerView {
       .border_color(border)
       .child(list)
   }
-}
-
-/// Player options for an HLS variant and its audio rendition.
-fn stream_options(
-  video: &str,
-  audio: Option<&str>,
-  user_agent: &str,
-  start_seconds: f64,
-) -> StartOptions {
-  StartOptions {
-    url: video.to_owned(),
-    external_audio: audio.map(str::to_owned).into_iter().collect(),
-    http_headers: vec![format!("User-Agent: {user_agent}")],
-    start_seconds,
-    // Opt-in only: the log contains stream URLs, which carry the user's IP.
-    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
-    ..Default::default()
-  }
-}
-
-/// `Anglais`, `Anglais (générés automatiquement)`: YouTube's names, in the app's language.
-fn caption_label(caption: &innertube::Caption) -> String {
-  caption.name.clone()
 }
 
 /// A player button in a wrapper that reports its hover: the button's own `on_hover` is taken
@@ -1315,10 +1317,10 @@ impl RenderOnce for ControlButton {
 /// fullscreen. In theater mode the player fills the content panel's rounded top-left corner,
 /// so it takes that corner's inner radius. A parent's `overflow_hidden` clips to a
 /// rectangle, so every layer reaching a corner rounds itself.
-fn corner_radii(window: &Window, cx: &App) -> Corners<Pixels> {
+fn corner_radii(window: &Window, theater: bool) -> Corners<Pixels> {
   if window.is_fullscreen() {
     Corners::default()
-  } else if Settings::get(cx).theater {
+  } else if theater {
     Corners {
       top_left: theme::PANEL_INNER_RADIUS,
       ..Corners::default()
@@ -1329,7 +1331,7 @@ fn corner_radii(window: &Window, cx: &App) -> Corners<Pixels> {
 }
 
 /// `1:02:03` or `12:34`.
-fn format_time(seconds: f64) -> String {
+pub fn format_time(seconds: f64) -> String {
   let total = seconds.max(0.0) as u64;
   let (h, m, s) = (total / 3600, total / 60 % 60, total % 60);
   if h > 0 {
@@ -1342,7 +1344,7 @@ fn format_time(seconds: f64) -> String {
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let show_ui = (self.controls_visible || self.failed) && self.player.is_some();
-    let radii = corner_radii(window, cx);
+    let radii = corner_radii(window, self.theater);
     if let Some(video) = &self.video {
       video.update(cx, |video, _| video.set_corner_radii(radii));
     }

@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–2 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–2 done, step 3 under way. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -21,7 +21,7 @@ knows no service, the `ui` crate knows no service.
 | Layout | Top bar shared by every space: logo, space tabs, search, notifications bell, settings gear, window buttons. Left sidebar: the open space's entries only (no "Spaces" section, the tabs replace it) |
 | Accent | One per space: YouTube red `#FF4E45`, Jellyfin amber `#FF8A3D`, Twitch violet. The theme follows the active tab; tabs carry a small colored badge (as in the mock-up) |
 | Navigation | Each space has its own routes and its own page stack; switching tabs keeps each space where it was. A Jellyfin 401 sends only the Jellyfin tab to its login page |
-| Switching tabs while playing | **Mini-player**: the same video keeps playing in a floating window at the bottom right (same video surface, no reload); a click goes back to its space and page, the cross stops it. Within a space, a covered player pauses as today |
+| Switching tabs while playing | **Mini-player** as in Chrome's picture-in-picture: a separate borderless window above every other window (GPUI `WindowKind::PopUp`: `WS_EX_TOPMOST`, no taskbar entry), movable and resizable, outside the main window. The same video keeps playing (same player and video surface, no reload); a button goes back to its space and page, the cross stops it. Within a space, a covered player pauses as today |
 | Search | Searches the active space. YouTube search is added (new InnerTube endpoint, fixture first) |
 | Bell | Aggregated: one panel, one section per space that has notifications (YouTube now, Twitch later), the badge sums the unread counts |
 | Settings and accounts | Behind the gear: general and player sections, then one section per space with its account (YouTube cookies, Jellyfin server and sign-out), storage |
@@ -88,8 +88,11 @@ Principles:
   `feed.rs` and the Jellyfin library
 
 ### 3. Generic player
-- [ ] `PlayerView` takes a playback source and emits events (see principles); YouTube's stream, captions
-      and storyboard become one source among others
+- [x] `PlayerView` moved to `ui::player`: it plays a `Source` (start options, qualities with their own
+      options, subtitles added on demand, `Previews` tiles) and reads no setting: `Prefs` in, `PlayerEvent::Sound`
+      and `Theater` out. YouTube builds its source in `youtube::source` (verified: 8 qualities, 6 subtitle
+      tracks, playback 1.44 s)
+- [ ] The player owned by a `NowPlaying` session rather than by the watch page (needed by the mini-player)
 - [ ] Port peeby's player features one at a time (see the checklist below)
 - [ ] One shortcut table (below), with the `?` help overlay
 - [ ] Two layouts: embedded and full window (own window buttons, Esc/Backspace closes)
@@ -98,7 +101,11 @@ Principles:
 - [ ] Top bar: logo, tabs, search, bell, gear, window buttons
 - [ ] Sidebar with the active space's entries, folding as today
 - [ ] One page stack per space, page fade
-- [ ] `NowPlaying` and the mini-player
+- [ ] `NowPlaying` and the mini-player window (always on top, outside the main window). Checked 2026-11-01 with
+      `PEEBY_PIP=1 spike-yt-play`: the same `VideoView` moves into a `WindowKind::PopUp` window and back, zero-copy,
+      without restarting mpv. To do: give the window its display (`display_id`), drag to move
+      (`start_window_move`), resizing (the PopUp style has no frame), and release a moved view's atlas
+      entries in every window (`cx.drop_image(…, None)` in `gpui-video`)
 - [ ] YouTube as the only space
 
 ### 5. `jellyfin-api`

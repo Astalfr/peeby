@@ -4368,13 +4368,11 @@ name = "peeby"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "async-channel",
  "dirs 6.0.0",
  "embed-resource",
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
- "gpui-video",
  "innertube",
  "player",
  "serde",
@@ -6589,10 +6587,13 @@ dependencies = [
 name = "ui"
 version = "0.2.0"
 dependencies = [
+ "async-channel",
  "dirs 6.0.0",
  "gpui-component",
  "gpui-pre",
+ "gpui-video",
  "image",
+ "player",
  "tokio",
  "tracing",
 ]

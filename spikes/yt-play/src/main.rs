@@ -12,6 +12,10 @@
 //! - `PEEBY_COOKIES`: optional cookies.txt for yt-dlp (age-restricted, members, Premium).
 //! - `PEEBY_FORMAT`: yt-dlp format, default `bv*[height<=?1080]+ba/b`.
 //! - `PEEBY_SOFTWARE_VIDEO=1`: force the software surface.
+//! - `PEEBY_PIP=1`: after 4 s the video moves into an always-on-top borderless window (GPUI
+//!   `WindowKind::PopUp`) at the bottom right of the screen, and back 6 s later: checks that the
+//!   zero-copy surface draws in a second window (the mini-player, docs/refactor-plan.md).
+//! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
 //! - The mpv log goes to `target/yt-play-mpv.log`.
 //!
 //! Keys: space pause · ←/→ seek 10 s · q quit.
@@ -27,7 +31,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{
   App, Bounds, Context, Entity, FocusHandle, KeyDownEvent, Task, Window, WindowBounds,
-  WindowOptions, div, prelude::*, px, rgb, size,
+  WindowHandle, WindowKind, WindowOptions, div, point, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 use gpui_video::VideoView;
@@ -60,10 +64,20 @@ fn main() {
   eprintln!("backend: {:?}", player.backend());
 
   application().run(move |cx: &mut App| {
-    let bounds = Bounds::centered(None, size(px(1280.), px(720.)), cx);
+    let display = (std::env::var("PEEBY_DISPLAY").as_deref() == Ok("secondary"))
+      .then(|| {
+        let primary = cx.primary_display().map(|d| d.id());
+        cx.displays()
+          .into_iter()
+          .find(|d| Some(d.id()) != primary)
+          .map(|d| d.id())
+      })
+      .flatten();
+    let bounds = Bounds::centered(display, size(px(1280.), px(720.)), cx);
     let opened = cx.open_window(
       WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        display_id: display,
         ..Default::default()
       },
       |window, cx| {
@@ -83,7 +97,13 @@ fn main() {
       cx.quit();
       return;
     }
-    cx.on_window_closed(|cx, _| cx.quit()).detach();
+    // The mini-player window closing must not end the spike: quit with the last window.
+    cx.on_window_closed(|cx, _| {
+      if cx.windows().is_empty() {
+        cx.quit();
+      }
+    })
+    .detach();
     cx.activate(true);
   });
 }
@@ -105,7 +125,24 @@ struct Spike {
   video: Entity<VideoView>,
   focus: FocusHandle,
   status: Status,
+  /// The always-on-top window showing the video, while it is open.
+  pip: Option<WindowHandle<Pip>>,
   _events: Task<()>,
+  _pip: Option<Task<()>>,
+}
+
+/// The always-on-top window: the video alone.
+struct Pip {
+  video: Entity<VideoView>,
+}
+
+impl Render for Pip {
+  fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    div()
+      .size_full()
+      .bg(rgb(0x000000))
+      .child(self.video.clone())
+  }
 }
 
 impl Spike {
@@ -130,13 +167,71 @@ impl Spike {
         }
       }
     });
+    let pip = (std::env::var("PEEBY_PIP").as_deref() == Ok("1")).then(|| {
+      cx.spawn_in(window, async move |this, cx| {
+        cx.background_executor().timer(Duration::from_secs(4)).await;
+        this
+          .update_in(cx, |spike, window, cx| spike.open_pip(window, cx))
+          .ok();
+        cx.background_executor().timer(Duration::from_secs(6)).await;
+        this.update(cx, |spike, cx| spike.close_pip(cx)).ok();
+      })
+    });
     Self {
       player,
       video,
       focus,
       status: Status::default(),
+      pip: None,
       _events: task,
+      _pip: pip,
     }
+  }
+
+  /// Moves the video into an always-on-top window at the bottom right of this window's screen.
+  fn open_pip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(display) = window.display(cx) else {
+      return;
+    };
+    let screen = display.bounds();
+    let pip_size = size(px(480.), px(270.));
+    let origin = point(
+      screen.origin.x + screen.size.width - pip_size.width - px(24.),
+      screen.origin.y + screen.size.height - pip_size.height - px(72.),
+    );
+    let video = self.video.clone();
+    let opened = cx.open_window(
+      WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds::new(origin, pip_size))),
+        // Windows checks the bounds against this display (the primary one when unset) and
+        // falls back to a default placement when they are outside it.
+        display_id: Some(display.id()),
+        kind: WindowKind::PopUp,
+        titlebar: None,
+        focus: false,
+        ..Default::default()
+      },
+      |_, cx| cx.new(|_| Pip { video }),
+    );
+    match opened {
+      Ok(handle) => {
+        eprintln!("pip: opened");
+        self.pip = Some(handle);
+      }
+      Err(e) => eprintln!("pip: cannot open the window: {e}"),
+    }
+    cx.notify();
+  }
+
+  /// Brings the video back into this window.
+  fn close_pip(&mut self, cx: &mut Context<Self>) {
+    if let Some(handle) = self.pip.take() {
+      handle
+        .update(cx, |_, window, _| window.remove_window())
+        .ok();
+      eprintln!("pip: closed");
+    }
+    cx.notify();
   }
 
   fn apply(&mut self, event: Event, elapsed: Duration) {
@@ -211,7 +306,14 @@ impl Render for Spike {
       .bg(rgb(0x000000))
       .track_focus(&self.focus)
       .on_key_down(cx.listener(Self::on_key))
-      .child(self.video.clone())
+      .when(self.pip.is_none(), |el| el.child(self.video.clone()))
+      .when(self.pip.is_some(), |el| {
+        el.flex()
+          .items_center()
+          .justify_center()
+          .text_color(rgb(0xffffff))
+          .child("Dans le mini-lecteur")
+      })
       .child(
         div()
           .absolute()
