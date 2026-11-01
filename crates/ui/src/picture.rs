@@ -1,6 +1,6 @@
 //! What a component shows as an image, whatever the service: a set of fixed sizes to pick from
 //! (YouTube thumbnails) or a URL for any size (servers that resize, size templates), and the
-//! element that draws it.
+//! elements that draw it.
 
 use std::rc::Rc;
 
@@ -28,7 +28,12 @@ pub enum Picture {
   /// Fixed sizes: the smallest at least as wide as drawn is used, else the largest.
   Sizes(Vec<Size>),
   /// A URL for any size, for servers that resize (Jellyfin `fillWidth`, Twitch templates).
-  Sized(SizedUrl),
+  Sized {
+    /// The URL for a size.
+    url: SizedUrl,
+    /// Shown blurred while the image loads (Jellyfin's `ImageBlurHashes`).
+    blurhash: Option<SharedString>,
+  },
 }
 
 impl Picture {
@@ -41,7 +46,15 @@ impl Picture {
         .min_by_key(|s| s.width)
         .or_else(|| sizes.iter().max_by_key(|s| s.width))
         .map(|s| s.url.clone()),
-      Self::Sized(url) => Some(url(width, height)),
+      Self::Sized { url, .. } => Some(url(width, height)),
+    }
+  }
+
+  /// A picture from a URL for any size, without a placeholder.
+  pub fn sized(url: impl Fn(u32, u32) -> String + 'static) -> Self {
+    Self::Sized {
+      url: Rc::new(url),
+      blurhash: None,
     }
   }
 
@@ -52,7 +65,8 @@ impl Picture {
 }
 
 /// `picture` filling its parent, drawn `width` logical pixels wide with the `aspect` ratio
-/// (width / height); a flat surface until it is loaded, then the image fades in.
+/// (width / height); its BlurHash, or a flat surface, until it is loaded, then the image fades
+/// in.
 ///
 /// `radius` rounds the image itself: GPUI clips children to a rectangle, so a rounded,
 /// overflow-hidden parent does not round its images.
@@ -88,17 +102,52 @@ pub fn image_fill(
     window,
     cx,
   );
+  let placeholder = match picture {
+    Picture::Sized {
+      blurhash: Some(hash),
+      ..
+    } if opacity < 1. => images.0.update(cx, |store, _| store.blurhash(hash, aspect)),
+    _ => None,
+  };
+  let layer = |render| {
+    img(ImageSource::Render(render))
+      .absolute()
+      .inset_0()
+      .size_full()
+      .rounded(radius)
+      .object_fit(ObjectFit::Cover)
+  };
   base
-    .children(ready.map(|render| {
-      img(ImageSource::Render(render))
-        .absolute()
-        .inset_0()
-        .size_full()
-        .rounded(radius)
-        .object_fit(ObjectFit::Cover)
-        .opacity(opacity)
-    }))
+    .children(placeholder.map(layer))
+    .children(ready.map(|render| layer(render).opacity(opacity)))
     .into_any_element()
+}
+
+/// A transparent picture (a title's logo) scaled to fit `max_width` × `max_height` logical
+/// pixels, keeping its ratio. `None` until it has loaded, so the caller shows the title meanwhile.
+pub fn logo(
+  picture: &Picture,
+  max_width: f32,
+  max_height: f32,
+  window: &mut Window,
+  cx: &mut App,
+) -> Option<AnyElement> {
+  let images = cx.try_global::<Images>().cloned()?;
+  let scale = window.scale_factor();
+  let url = picture.url(
+    (max_width * scale).round() as u32,
+    (max_height * scale).round() as u32,
+  )?;
+  let render = images.0.update(cx, |store, cx| store.get(&url, cx))?;
+  let size = render.size(0);
+  let (w, h) = (size.width.0 as f32 / scale, size.height.0 as f32 / scale);
+  let fit = (max_width / w.max(1.)).min(max_height / h.max(1.)).min(1.);
+  Some(
+    img(ImageSource::Render(render))
+      .w(gpui::px(w * fit))
+      .h(gpui::px(h * fit))
+      .into_any_element(),
+  )
 }
 
 /// A round avatar of `size` logical pixels.
@@ -139,7 +188,7 @@ mod tests {
 
   #[test]
   fn sized_urls_get_the_drawn_size() {
-    let picture = Picture::Sized(Rc::new(|w, h| format!("img?w={w}&h={h}")));
+    let picture = Picture::sized(|w, h| format!("img?w={w}&h={h}"));
     assert_eq!(picture.url(320, 480).as_deref(), Some("img?w=320&h=480"));
     assert!(!picture.is_empty());
   }

@@ -8,14 +8,15 @@ pub mod space;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyView, App, Context, Entity, FontWeight, SharedString, Subscription, WeakEntity,
-  Window, WindowHandle, div, px,
+  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, ObjectFit, SharedString,
+  Subscription, WeakEntity, Window, WindowHandle, div, img, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Selectable, TitleBar, h_flex, v_flex};
 use ui::assets::{self, Icon};
+use ui::images::Images;
 use ui::player::{NowPlaying, PlayerView, now_playing};
 use ui::theme;
 
@@ -23,7 +24,7 @@ use crate::settings::Settings;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::settings_page::SettingsView;
 use mini_player::MiniPlayer;
-use space::{MenuEntry, SpaceHandle};
+use space::{Avatar, MenuEntry, SpaceHandle};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
@@ -227,6 +228,17 @@ impl Shell {
     cx.notify();
   }
 
+  /// The top bar's search: the open space's search page.
+  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if self.settings.take().is_some() {
+      self.enter_page(cx);
+    }
+    if let Some(space) = self.space().cloned() {
+      space.open_search(window, cx);
+    }
+    cx.notify();
+  }
+
   fn open_entry(&mut self, id: SharedString, window: &mut Window, cx: &mut Context<Self>) {
     if self.settings.take().is_some() {
       self.enter_page(cx);
@@ -254,6 +266,10 @@ impl Shell {
         cx.notify();
       }));
     let can_go_back = self.settings.is_some() || self.space().is_some_and(|s| s.can_go_back(cx));
+    let search = self
+      .space()
+      .filter(|s| s.searchable(cx))
+      .map(|s| s.info(cx).name);
     let back = can_go_back.then(|| {
       Button::new("back")
         .ghost()
@@ -279,12 +295,16 @@ impl Shell {
             .mr_2()
             .gap_1()
             .child(
-              // Every space will search its own catalog; none does yet (plan, steps 6–7).
+              // Each space searches its own catalog; YouTube's comes with step 7 of the plan.
               Button::new("search")
                 .ghost()
                 .icon(Icon::Search)
-                .disabled(true)
-                .tooltip("Recherche (bientôt)"),
+                .disabled(search.is_none())
+                .tooltip(match &search {
+                  Some(name) => format!("Rechercher dans {name}"),
+                  None => "Recherche (bientôt)".to_owned(),
+                })
+                .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
             )
             .child(self.bell(cx))
             .child(
@@ -448,34 +468,70 @@ impl Shell {
   // --- Sidebar ------------------------------------------------------------------------------
 
   /// The open space's entries; folded, each shows its icon alone with its label as a tooltip.
-  fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let collapsed = Settings::get(cx).sidebar_collapsed;
     let entries = self.space().map(|s| s.menu(cx)).unwrap_or_default();
     let in_settings = self.settings.is_some();
     let (bottom, top): (Vec<MenuEntry>, Vec<MenuEntry>) =
       entries.into_iter().partition(|e| e.bottom);
-    let item = |entry: MenuEntry, cx: &mut Context<Self>| {
+    let item = |entry: MenuEntry, window: &mut Window, cx: &mut Context<Self>| {
       let label = entry.label.clone();
       let id = entry.id.clone();
-      sidebar_entry(entry.id.clone(), entry.active && !in_settings, collapsed)
-        .child(
-          gpui_component::Icon::new(entry.icon)
-            .size(px(18.))
-            .flex_none(),
-        )
+      let icon = match &entry.avatar {
+        Some(user) => user_avatar(user, window, cx),
+        None => gpui_component::Icon::new(entry.icon)
+          .size(px(18.))
+          .flex_none()
+          .into_any_element(),
+      };
+      let heading = entry.heading.clone().map(|heading| {
+        if collapsed {
+          div()
+            .mx_3()
+            .my_2()
+            .h(px(1.))
+            .bg(theme::border())
+            .into_any_element()
+        } else {
+          div()
+            .px_3()
+            .pt_4()
+            .pb_1()
+            .text_xs()
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(theme::subtle())
+            .child(heading.to_uppercase())
+            .into_any_element()
+        }
+      });
+      let row = sidebar_entry(entry.id.clone(), entry.active && !in_settings, collapsed)
+        .when(entry.detail.is_some() && !collapsed, |el| el.h(px(48.)))
+        .child(icon)
         .map(|el| {
           if collapsed {
             el.tooltip(move |window, cx| {
               gpui_component::tooltip::Tooltip::new(label.clone()).build(window, cx)
             })
           } else {
-            el.child(div().truncate().child(entry.label))
+            el.child(
+              v_flex()
+                .min_w_0()
+                .child(div().truncate().child(entry.label))
+                .children(entry.detail.map(|detail| {
+                  div()
+                    .truncate()
+                    .text_xs()
+                    .text_color(theme::subtle())
+                    .child(detail)
+                })),
+            )
           }
         })
-        .on_click(cx.listener(move |this, _, window, cx| this.open_entry(id.clone(), window, cx)))
+        .on_click(cx.listener(move |this, _, window, cx| this.open_entry(id.clone(), window, cx)));
+      v_flex().children(heading).child(row)
     };
-    let top: Vec<_> = top.into_iter().map(|e| item(e, cx)).collect();
-    let bottom: Vec<_> = bottom.into_iter().map(|e| item(e, cx)).collect();
+    let top: Vec<_> = top.into_iter().map(|e| item(e, window, cx)).collect();
+    let bottom: Vec<_> = bottom.into_iter().map(|e| item(e, window, cx)).collect();
     v_flex()
       .w(theme::sidebar_width(collapsed))
       .h_full()
@@ -550,6 +606,46 @@ fn sidebar_entry(id: SharedString, active: bool, collapsed: bool) -> gpui::State
     })
 }
 
+/// A user's avatar in the sidebar, the size of an entry's icon plus a little: their picture once
+/// loaded, a disc in the accent with their initial meanwhile or without one. Scaled on the CPU
+/// to its exact size: servers do not resize user pictures, and GPUI samples without mipmaps.
+fn user_avatar(user: &Avatar, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
+  const SIZE: f32 = 24.;
+  let side = (SIZE * window.scale_factor()).round() as u32;
+  let ready = user
+    .picture
+    .as_ref()
+    .and_then(|picture| picture.url(side, side))
+    .and_then(|url| {
+      let images = cx.try_global::<Images>()?.0.clone();
+      images.update(cx, |store, cx| store.get_sized(&url, side, side, cx))
+    });
+  let disc = div()
+    .size(px(SIZE))
+    .flex_none()
+    .rounded_full()
+    .flex()
+    .items_center()
+    .justify_center();
+  match ready {
+    Some(image) => disc
+      .child(
+        img(ImageSource::Render(image))
+          .size_full()
+          .rounded_full()
+          .object_fit(ObjectFit::Cover),
+      )
+      .into_any_element(),
+    None => disc
+      .bg(theme::accent())
+      .text_color(theme::on_accent())
+      .text_xs()
+      .font_weight(FontWeight::BOLD)
+      .child(user.initial.clone())
+      .into_any_element(),
+  }
+}
+
 /// Peeby's mark: the round logo and the name.
 fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
   h_flex()
@@ -578,7 +674,7 @@ impl Render for Shell {
         .flex_1()
         .min_h_0()
         .items_start()
-        .child(self.sidebar(cx))
+        .child(self.sidebar(window, cx))
         .child(
           div()
             .flex_1()

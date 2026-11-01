@@ -31,6 +31,10 @@ PeebTube additions to `gpui-video`:
 - `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners);
 - `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window.
 
+Additions to `jellyfin-api` (copied at step 5 of the refactor, ADR 0009):
+- live tests read their credentials from the environment (no `dotenvy`);
+- `jellyfin_api::Url` re-exports `url::Url`, the type of the client's URLs, so the app needs no `url` dependency.
+
 The app's `player_view.rs` adapts peeby's `player_page.rs` (seek bar, volume slider, control buttons, auto-hide, OSD, shortcuts) without its Jellyfin parts.
 
 ## Consequences

@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 async-channel = "2"
+blurhash = "0.2"
 dirs = "6"
 gpui = { package = "gpui-pre", version = "=0.3.10" }
 gpui-component = "=0.8.1"

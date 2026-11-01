@@ -9,6 +9,7 @@ pub mod images;
 pub mod motion;
 pub mod picture;
 pub mod player;
+pub mod rows;
 pub mod runtime;
 pub mod text;
 pub mod theme;

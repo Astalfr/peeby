@@ -1,5 +1,6 @@
 //! Media cards: a picture, a title and muted lines under it, in the layouts the pages use (grid
-//! card, compact card, list row, numbered row), their skeletons, and the buttons they carry.
+//! card, poster, compact card, list row, numbered row), their skeletons, and the buttons they
+//! carry.
 //! Spaces fill a [`MediaCard`] from their own data. The look and the motion follow
 //! docs/design.md.
 
@@ -26,6 +27,10 @@ pub const COMPACT_WIDTH: f32 = 168.;
 pub const ROW_WIDTH: f32 = 246.;
 /// Aspect ratio of video thumbnails.
 pub const WIDE: f32 = 16. / 9.;
+/// Aspect ratio of posters (movies, series).
+pub const TALL: f32 = 2. / 3.;
+/// Height of a poster's two text lines, under its picture.
+const POSTER_TEXT: f32 = 52.;
 
 /// What a click does.
 pub type Handler = dyn Fn(&mut Window, &mut App);
@@ -73,6 +78,15 @@ pub struct RowAction {
   pub busy: bool,
 }
 
+/// A sign in a picture's top right corner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Corner {
+  /// Watched: a check.
+  Watched,
+  /// Items left to watch (a series' unwatched episodes).
+  Count(u32),
+}
+
 /// A media item as a card. Build it, then draw it with one of the layouts.
 pub struct MediaCard {
   id: SharedString,
@@ -82,6 +96,10 @@ pub struct MediaCard {
   picture: Picture,
   avatar: Option<Picture>,
   badge: Option<SharedString>,
+  progress: Option<f32>,
+  corner: Option<Corner>,
+  play: bool,
+  title_click: Option<Rc<Handler>>,
   overlays: Vec<AnyElement>,
   trailing: Option<AnyElement>,
   on_click: Option<Rc<Handler>>,
@@ -104,6 +122,10 @@ impl MediaCard {
       picture,
       avatar: None,
       badge: None,
+      progress: None,
+      corner: None,
+      play: true,
+      title_click: None,
       overlays: Vec::new(),
       trailing: None,
       on_click: None,
@@ -130,6 +152,31 @@ impl MediaCard {
   /// Text in a dark badge at the picture's bottom right (duration).
   pub fn badge(mut self, badge: Option<impl Into<SharedString>>) -> Self {
     self.badge = badge.map(Into::into);
+    self
+  }
+
+  /// How far the item was watched, 0 to 1: a bar at the bottom of the picture.
+  pub fn progress(mut self, progress: Option<f32>) -> Self {
+    self.progress = progress;
+    self
+  }
+
+  /// A sign in the picture's top right corner.
+  pub fn corner(mut self, corner: Option<Corner>) -> Self {
+    self.corner = corner;
+    self
+  }
+
+  /// Whether a play button shows over the picture on hover (on by default): off for cards that
+  /// open a page rather than play.
+  pub fn play(mut self, play: bool) -> Self {
+    self.play = play;
+    self
+  }
+
+  /// Makes the title (a poster's) a link of its own, e.g. an episode's series name.
+  pub fn on_title_click(mut self, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+    self.title_click = Some(Rc::new(on_click));
     self
   }
 
@@ -187,7 +234,8 @@ impl MediaCard {
     }
   }
 
-  /// The picture `width` wide at the 16:9 ratio, with the play button, badge and overlays.
+  /// The picture `width` wide at the 16:9 ratio, with the play button, badges, progress and
+  /// overlays.
   fn thumbnail(
     &mut self,
     width: f32,
@@ -196,15 +244,31 @@ impl MediaCard {
     window: &mut Window,
     cx: &mut App,
   ) -> gpui::Div {
+    self.picture_box(width, WIDE, radius, play, window, cx)
+  }
+
+  /// The picture `width` wide at the `aspect` ratio, with what goes over it.
+  fn picture_box(
+    &mut self,
+    width: f32,
+    aspect: f32,
+    radius: Pixels,
+    play: Option<f32>,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> gpui::Div {
     let t = self.hover.t;
+    let play = play.filter(|_| self.play);
     div()
       .relative()
       .w(px(width))
-      .h(px(width / WIDE))
+      .h(px(width / aspect))
       .flex_none()
       .rounded(radius)
-      .child(image_fill(&self.picture, width, WIDE, radius, window, cx))
+      .child(image_fill(&self.picture, width, aspect, radius, window, cx))
       .children(play.map(|size| play_overlay(t, size, radius)))
+      .children(self.progress.map(progress_bar))
+      .children(self.corner.map(corner))
       .children(self.badge.take().map(badge))
       .children(self.overlays.drain(..))
   }
@@ -263,6 +327,81 @@ impl MediaCard {
                   .child(lines),
               )
               .children(trailing),
+          ),
+      )
+      .into_any_element()
+  }
+
+  /// Poster card, `width` wide, its picture at the `aspect` ratio ([`TALL`] or [`WIDE`]), then
+  /// the title and the first line, one line each, so that every poster of a row or a grid has
+  /// the same height ([`poster_height`]). On hover it rises a little, a ring and the play button
+  /// (if any) fade in, and the title takes the accent.
+  pub fn poster(
+    mut self,
+    width: f32,
+    aspect: f32,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> AnyElement {
+    let t = self.hover.t;
+    let title_color = self.title_color(false);
+    let picture = self
+      .picture_box(width, aspect, theme::RADIUS, Some(44.), window, cx)
+      .when(t > 0.01, |el| el.shadow_lg())
+      .child(
+        div()
+          .absolute()
+          .inset_0()
+          .rounded(theme::RADIUS)
+          .border_2()
+          .border_color(theme::accent().opacity(t)),
+      );
+    let title_id = SharedString::from(format!("{}-title", self.id));
+    let title = match self.title_click.take() {
+      // A flex row, so the link is only as wide as its text.
+      Some(on_click) => div().flex().child(
+        div()
+          .id(ElementId::Name(title_id))
+          .min_w_0()
+          .truncate()
+          .text_color(theme::foreground())
+          .hover(|s| s.text_color(theme::accent_hover()).underline())
+          .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            on_click(window, cx);
+          })
+          .child(self.title.clone()),
+      ),
+      None => div()
+        .truncate()
+        .text_color(title_color)
+        .child(self.title.clone()),
+    };
+    let line = self.lines.first().cloned().unwrap_or_default();
+    self
+      .frame()
+      .w(px(width))
+      .h(px(poster_height(width, aspect)))
+      .flex_none()
+      .child(
+        v_flex()
+          .w_full()
+          .relative()
+          .top(px(-4. * t))
+          .child(picture)
+          .child(
+            div()
+              .pt_2()
+              .text_sm()
+              .font_weight(FontWeight::MEDIUM)
+              .child(title),
+          )
+          .child(
+            div()
+              .text_xs()
+              .text_color(theme::muted())
+              .truncate()
+              .child(line),
           ),
       )
       .into_any_element()
@@ -478,6 +617,61 @@ fn badge(text: SharedString) -> impl IntoElement {
     .child(text)
 }
 
+/// Height of a [`MediaCard::poster`] `width` wide with its picture at the `aspect` ratio.
+pub fn poster_height(width: f32, aspect: f32) -> f32 {
+  width / aspect + POSTER_TEXT
+}
+
+/// How far an item was watched (0 to 1): a rounded bar inset from a picture's bottom edge.
+pub fn progress_bar(progress: f32) -> impl IntoElement {
+  const HEIGHT: f32 = 6.;
+  let radius = px(HEIGHT / 2.);
+  div()
+    .absolute()
+    .left(px(10.))
+    .right(px(10.))
+    .bottom(px(10.))
+    .h(px(HEIGHT))
+    .rounded(radius)
+    .bg(gpui::black().opacity(0.55))
+    .child(
+      div()
+        .h_full()
+        .rounded(radius)
+        .w(relative(progress.clamp(0., 1.)))
+        // Never narrower than it is tall, so the rounded ends keep their shape.
+        .min_w(px(HEIGHT))
+        .bg(theme::accent()),
+    )
+}
+
+/// A picture's top right sign: a check on a dark disc, or a count on the accent.
+fn corner(corner: Corner) -> impl IntoElement {
+  let sign = div()
+    .absolute()
+    .top(px(6.))
+    .right(px(6.))
+    .h(px(20.))
+    .min_w(px(20.))
+    .px_1()
+    .flex()
+    .items_center()
+    .justify_center()
+    .rounded_full()
+    .text_xs()
+    .font_weight(FontWeight::BOLD);
+  match corner {
+    Corner::Count(count) => sign
+      .bg(theme::accent())
+      .text_color(theme::on_accent())
+      .child(count.to_string()),
+    Corner::Watched => sign
+      .bg(gpui::black().opacity(0.6))
+      .text_color(theme::accent())
+      .child(gpui_component::Icon::new(Icon::Check).size(px(12.))),
+  }
+}
+
 /// Dimmed layer with a round play button over a picture, faded in by `t`.
 pub fn play_overlay(t: f32, size: f32, radius: Pixels) -> impl IntoElement {
   div()
@@ -566,6 +760,15 @@ pub fn skeleton_card(width: f32) -> impl IntoElement {
             .child(Skeleton::new().w(px(width * 0.4)).h(px(14.))),
         ),
     )
+}
+
+/// Placeholder shaped like a [`MediaCard::poster`]'s picture.
+pub fn skeleton_poster(width: f32, aspect: f32) -> impl IntoElement {
+  Skeleton::new()
+    .w(px(width))
+    .h(px(width / aspect))
+    .flex_none()
+    .rounded(theme::RADIUS)
 }
 
 /// Placeholder shaped like a [`MediaCard::compact`] card.

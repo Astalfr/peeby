@@ -2,8 +2,9 @@
 //! previews and chapters, volume, buttons, quality, audio, subtitle and chapter menus), skip
 //! button, "up next" card, OSD, shortcut help and keyboard shortcuts. It plays a [`Source`] and
 //! tells its page what happens through [`PlayerEvent`]s; it reads no setting itself. Embedded in
-//! a page ([`Layout::Embedded`], YouTube) or filling the window ([`Layout::Window`], Jellyfin);
-//! fills the window in fullscreen. Controls and behavior come from peeby's player page.
+//! a page ([`Layout::Embedded`], YouTube), filling a page of its own ([`Layout::Page`], Jellyfin)
+//! or the window ([`Layout::Window`], the example); fills the window in fullscreen. Controls and
+//! behavior come from peeby's player page.
 
 mod overlays;
 pub mod segments;
@@ -101,9 +102,19 @@ pub enum Layout {
   /// In a page with other content (YouTube's watch page): theater mode, the wheel scrolls the
   /// page unless in fullscreen.
   Embedded,
-  /// The whole window (Jellyfin): a top bar with back, title and the window buttons; Escape and
-  /// Backspace close it; the wheel sets the volume.
+  /// A page of its own in the content panel (Jellyfin): a top bar with back, title and subtitle
+  /// over the picture; Escape and Backspace close it; the wheel sets the volume.
+  Page,
+  /// The whole window (the example): like [`Layout::Page`], and the top bar has the window
+  /// buttons and moves the window.
   Window,
+}
+
+impl Layout {
+  /// Whether the player is the whole page (back button, Escape closes it).
+  fn is_page(self) -> bool {
+    self != Self::Embedded
+  }
 }
 
 /// The user's preferences the player starts with.
@@ -642,7 +653,7 @@ impl PlayerView {
       }
       Event::Ended(Some(error)) => self.fail(format!("Lecture interrompue : {error}").into(), cx),
       Event::Ended(None) => {
-        if self.layout == Layout::Window {
+        if self.layout.is_page() {
           self.close(cx);
         }
       }
@@ -793,7 +804,7 @@ impl PlayerView {
       cx.stop_propagation();
       return self.show_controls(cx);
     }
-    let window_layout = self.layout == Layout::Window;
+    let page_layout = self.layout.is_page();
     match keystroke.key.as_str() {
       "space" | "k" => self.with_player(Player::toggle_pause),
       "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
@@ -821,10 +832,10 @@ impl PlayerView {
         self.menu = None;
         self.context_menu = None;
       }
-      "t" if !window.is_fullscreen() && !window_layout => self.toggle_theater(cx),
+      "t" if !window.is_fullscreen() && !page_layout => self.toggle_theater(cx),
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
-      "escape" | "backspace" if window_layout => self.close(cx),
+      "escape" | "backspace" if page_layout => self.close(cx),
       _ => return,
     }
     cx.stop_propagation();
@@ -865,8 +876,8 @@ impl PlayerView {
     }
   }
 
-  /// Mouse wheel: volume, in fullscreen or the full-window layout (embedded, the wheel scrolls
-  /// the page).
+  /// Mouse wheel: volume, in fullscreen or when the player is the page (embedded, the wheel
+  /// scrolls the page).
   fn on_wheel(&mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
     if !window.is_fullscreen() && self.layout == Layout::Embedded {
       return;
@@ -1562,7 +1573,8 @@ pub fn format_time(seconds: f64) -> String {
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let show_ui = (self.controls_visible || self.failed) && self.player.is_some();
-    let radii = corner_radii(window, self.theater);
+    // A page of its own fills the panel like theater mode.
+    let radii = corner_radii(window, self.theater || self.layout == Layout::Page);
     if let Some(video) = &self.video {
       video.update(cx, |video, _| video.set_corner_radii(radii));
     }
@@ -1682,7 +1694,7 @@ impl Render for PlayerView {
     }
     if self.failed {
       let error = self.status.clone().unwrap_or_default();
-      if self.layout == Layout::Window {
+      if self.layout.is_page() {
         root = root.child(self.render_top_bar(window, cx));
       }
       return root.child(self.render_error(error, cx));

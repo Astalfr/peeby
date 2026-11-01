@@ -15,3 +15,5 @@ pub use auth::ClientInfo;
 pub use client::{Client, ImageOptions, ItemsQuery, NextUpOptions, Session};
 pub use error::{Error, Result};
 pub use ids::{ItemId, UserId};
+/// The URL type of the client's methods.
+pub use url::Url;

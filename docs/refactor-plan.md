@@ -1,6 +1,6 @@
 # Refactor plan: Peeby, one app for YouTube, Jellyfin and Twitch
 
-Status: agreed 2026-11-01, steps 1–5 done. Tick the boxes as steps land; each step ends with
+Status: agreed 2026-11-01, steps 1–6 done. Tick the boxes as steps land; each step ends with
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and a run of the app,
 and YouTube keeps working after every step.
 
@@ -155,8 +155,22 @@ Principles:
 
 ### 6. Jellyfin space
 - Its player plays in the content panel, under the shared top bar, like YouTube's (agreed 2026-11-01): the
-  tabs and the mini-player stay reachable, F gives fullscreen; `Layout::Window` is not used by the app for now
-- [ ] Every item of the parity checklist below
+  tabs and the mini-player stay reachable, F gives fullscreen. It uses a new `Layout::Page` (back and title, no
+  window buttons); `Layout::Window` stays for the example
+- [x] Every item of the parity checklist below, with these changes: the search is the top bar's (scoped to the
+      space), not a sidebar entry; the user (avatar or initial, name, server host) is the sidebar's bottom
+      entry and opens the space's settings page, which step 8 moves behind the gear; UI strings in French
+- Verified on the user's server (signed in from the former peeby's saved token and the server and user put in
+  `settings.toml`): Home (banner with logo, "À suivre", "Derniers ajouts"), the sidebar (libraries under
+  their heading, user and host), a library (168 posters, badges, progress), a series page (logo, details,
+  genres, "Lire E6", seasons, watched episodes), the search from the top bar, a watched movie playing in the
+  panel for a few seconds and Escape back to its page (it is still marked watched afterwards; the server
+  probably recorded a last played date and a play count),
+  the settings page, the device id saved in `[jellyfin]`. YouTube's Home and watch page unchanged
+- **Not verified**: the login page, Quick Connect, sign-out and the "session expired" path (signing out
+  would revoke the saved token); an episode's playback (segments, skip, up next, previous and next,
+  trickplay, tracks carried over, fonts of external ASS subtitles), "Reprendre" (no item in progress), the
+  banner's rotation and the rows' arrows on hover, the mini-player with a Jellyfin video
 
 ### 7. YouTube search
 - [ ] Save a redacted `search` response, write and test its parser, results page
@@ -201,92 +215,93 @@ Principles:
 Everything peeby does today must work in the Jellyfin space. References are to `D:\DEV\peeby\crates\peeby\src`.
 
 ### Session (`login.rs`, `app.rs`, `settings.rs`)
-- [ ] Login card: server, user name, masked password, Enter submits, `https://` added when no scheme
-- [ ] Server check: `/System/Info/Public`, refuse servers older than 12.0
-- [ ] Quick Connect: code shown, poll every 3 s, cancel
-- [ ] French error messages for each failure (`describe`)
-- [ ] `MediaBrowser` header with client, device name, device id (generated once, kept in settings), token;
+- [x] Login card: server, user name, masked password, Enter submits, `https://` added when no scheme
+- [x] Server check: `/System/Info/Public`, refuse servers older than 12.0
+- [x] Quick Connect: code shown, poll every 3 s, cancel
+- [x] French error messages for each failure (`describe`)
+- [x] `MediaBrowser` header with client, device name, device id (generated once, kept in settings), token;
       the token never in a URL
-- [ ] Token in the Windows Credential Manager (`keyring`), server URL and user id in settings
-- [ ] Session restored at startup; a 401 sends the tab to the login page with "session expired"
-- [ ] Sign out: `POST /Sessions/Logout`, token and user id deleted, server URL kept
-- [ ] User avatar and name (`/Users/Me`, initial on an accent disc as fallback)
+- [x] Token in the Windows Credential Manager (`keyring`), server URL and user id in settings
+- [x] Session restored at startup; a 401 sends the tab to the login page with "session expired"
+- [x] Sign out: `POST /Sessions/Logout`, token and user id deleted, server URL kept
+- [x] User avatar and name (`/Users/Me`, initial on an accent disc as fallback)
 
 ### Sidebar
-- [ ] Home, Search, then one entry per video library (film, tv or folder icon)
-- [ ] Server host name shown
+- [x] Home, then one entry per video library (film, tv or folder icon); the search is the top bar's
+- [x] Server host name shown
 
 ### Home (`home.rs`)
-- [ ] Parallel loads: resume (16), next up (16, with the next-up options), views, latest per library not hidden
-- [ ] Hero: 440 px, up to 5 items from resume and next up (one per series), backdrop cross-fade 700 ms,
+- [x] Parallel loads: resume (16), next up (16, with the next-up options), views, latest per library not hidden
+- [x] Hero: 440 px, up to 5 items from resume and next up (one per series), backdrop cross-fade 700 ms,
       logo or title, meta line (S#:E# · name · "N min restantes", or year), 3-line synopsis (spoiler rule),
       Resume/Play and Details buttons, dots, rotation every 8 s paused on hover, backdrops preloaded
-- [ ] Rows "Reprendre" (play), "À suivre" (play), "Derniers ajouts dans …" (details), each switchable
-- [ ] Skeleton rows cross-faded into content; empty state
+- [x] Rows "Reprendre" (play), "À suivre" (play), "Derniers ajouts dans …" (details), each switchable
+- [x] Skeleton rows cross-faded into content; empty state
 
 ### Library (`library.rs`)
-- [ ] Item types per library type (Movies, TvShows, BoxSets, other)
-- [ ] All pages of 200 loaded in sequence until the total, first load shown as it arrives, reload swaps at once
-- [ ] Virtualized grid of 160 px posters, columns from the viewport, header with title and item count
+- [x] Item types per library type (Movies, TvShows, BoxSets, other)
+- [x] All pages of 200 loaded in sequence until the total, first load shown as it arrives, reload swaps at once
+- [x] Virtualized grid of 160 px posters, columns from the viewport, header with title and item count
 
 ### Search (`search.rs`)
-- [ ] 300 ms debounce, a keystroke cancels the pending search
-- [ ] Movies, series and episodes, limit 60; titles as posters, "Épisodes" as thumbs; empty state
+- [x] 300 ms debounce, a keystroke cancels the pending search
+- [x] Movies, series and episodes, limit 60; titles as posters, "Épisodes" as thumbs; empty state
 
 ### Detail (`detail.rs`)
-- [ ] Hero 540 px: backdrop and gradient, logo or title, meta line (year, runtime, rating badge, star and
+- [x] Hero 540 px: backdrop and gradient, logo or title, meta line (year, runtime, rating badge, star and
       community rating, series status), genre pills, 4-line synopsis
-- [ ] Play button: movie Resume/Play; series: episode in progress, else first unwatched, else first of the
+- [x] Play button: movie Resume/Play; series: episode in progress, else first unwatched, else first of the
       season shown, labelled "Reprendre E5" / "Lire E3"
-- [ ] Season pivot when there is more than one season; initial season: requested, else first with unwatched
+- [x] Season pivot when there is more than one season; initial season: requested, else first with unwatched
       episodes, else first
-- [ ] Episode rows: 224 px thumbnail (spoiler blur), play overlay on hover, progress bar (0.5–99.5 %),
+- [x] Episode rows: 224 px thumbnail (spoiler blur), play overlay on hover, progress bar (0.5–99.5 %),
       "N. title", watched check, duration, "Reprendre à m:ss", 2-line synopsis (spoiler rule)
-- [ ] Skeleton cross-fade
+- [x] Skeleton cross-fade
 
 ### Cards and images (`ui.rs`, `images.rs`)
-- [ ] Shapes Poster 160 px, LargePoster 192 px (2:3), Thumb 288 px (16:9)
-- [ ] Image choice per shape (series poster for episodes; thumb, then backdrop, then primary), logos,
+- [x] Shapes Poster 160 px, LargePoster 192 px (2:3), Thumb 288 px (16:9)
+- [x] Image choice per shape (series poster for episodes; thumb, then backdrop, then primary), logos,
       parent backdrop fallback
-- [ ] Server-sized WebP at quality 85, blurhash placeholder, 200 ms fade-in
-- [ ] Progress bar, watched badge, unplayed count badge, play overlay on play cards, series name as its own link
-- [ ] Episodes and seasons open the series page on that season
-- [ ] Horizontal rows with hover arrows and an 80 % glide over 280 ms
-- [ ] Mojibake repair of chapter titles, HTML overview to plain text
+- [x] Server-sized WebP at quality 85, blurhash placeholder, 200 ms fade-in
+- [x] Progress bar, watched badge, unplayed count badge, play overlay on play cards, series name as its own link
+- [x] Episodes and seasons open the series page on that season
+- [x] Horizontal rows with hover arrows and an 80 % glide over 280 ms
+- [x] Mojibake repair of chapter titles, HTML overview to plain text
 
 ### Player (`player_page.rs`, `tracks.rs`, `segments.rs`)
-- [ ] Playback info and direct play only: refuse transcoding with its reasons
-- [ ] Static stream URL, `Authorization` header given to mpv
-- [ ] External subtitles (delivery URL, else the subtitle stream URL); fonts of external ASS downloaded to
+- [x] Playback info and direct play only: refuse transcoding with its reasons
+- [x] Static stream URL, `Authorization` header given to mpv
+- [x] External subtitles (delivery URL, else the subtitle stream URL); fonts of external ASS downloaded to
       the cache and given to mpv
-- [ ] Resume position from the user data
-- [ ] Reports: Playing on load, Progress every 10 s and on pause, seek and track change, Stopped once
+- [x] Resume position from the user data
+- [x] Reports: Playing on load, Progress every 10 s and on pause, seek and track change, Stopped once
       (also when the page is dropped); mark played at the end; the page underneath refreshed
-- [ ] Track mapping Jellyfin index ↔ mpv id; choice order: series prefs of the session, then the language
+- [x] Track mapping Jellyfin index ↔ mpv id; choice order: series prefs of the session, then the language
       settings, then the server defaults; language normalization and best match (title, forced)
-- [ ] Segments from the server, else from chapter titles (rules of `docs/player/playback-ux.md`, 5–240 s);
+- [x] Segments from the server, else from chapter titles (rules of `docs/player/playback-ux.md`, 5–240 s);
       skip button "Passer l'intro / le récap / le générique / l'aperçu", S key
-- [ ] Up next: from the credits tail or 20 s before the end; countdown with autoplay, "Lire maintenant",
+- [x] Up next: from the credits tail or 20 s before the end; countdown with autoplay, "Lire maintenant",
       "Annuler"; seeking back resets it; watched only past the up-next point
-- [ ] Previous/next episode buttons (disabled at the ends), P/N, track prefs carried over, fullscreen kept
-- [ ] Trickplay thumbnails on the seek bar
-- [ ] Chapters: gaps on the seek bar, hover title, chapters menu, Page Up/Down
-- [ ] Audio and subtitle menus, subtitle delay line, help overlay
-- [ ] Top bar with back, title and subtitle (series · S#:E# · name, or name · year), window buttons
-- [ ] Click toggles pause, double-click fullscreen, wheel volume, pause pulse, OSD 1.5 s, buffering
+- [x] Previous/next episode buttons (disabled at the ends), P/N, track prefs carried over, fullscreen kept
+- [x] Trickplay thumbnails on the seek bar
+- [x] Chapters: gaps on the seek bar, hover title, chapters menu, Page Up/Down
+- [x] Audio and subtitle menus, subtitle delay line, help overlay
+- [x] Top bar with back, title and subtitle (series · S#:E# · name, or name · year); the window buttons are the
+      shell's (the player is in the panel)
+- [x] Click toggles pause, double-click fullscreen, wheel volume, pause pulse, OSD 1.5 s, buffering
       overlay, error panel with Back
-- [ ] Software decoding and software surface options (`PEEBY_SOFTWARE_VIDEO=1` too)
+- [x] Software decoding and software surface options (`PEEBY_SOFTWARE_VIDEO=1` too)
 
 ### Settings (`settings.rs`, `settings_page.rs`)
-- [ ] Playback: autoplay next, countdown (5/10/15/20/30 s), start fullscreen, remember volume, seek step
+- [x] Playback: autoplay next, countdown (5/10/15/20/30 s), start fullscreen, remember volume, seek step
       (5/10/15/30 s), large step (30/60/120/300 s)
-- [ ] Languages: audio (server default, jpn, eng, fra, spa, deu, ita, kor, zho), subtitles (server default,
+- [x] Languages: audio (server default, jpn, eng, fra, spa, deu, ita, kor, zho), subtitles (server default,
       off, fra, eng, spa, deu, ita, por), subtitle scale (0.75–2)
-- [ ] Network buffer (150/300/600/1000 MiB), hardware acceleration
-- [ ] Home: next-up window (7/30/90/365 days, no limit), rewatching, show hero, continue watching, next up,
+- [x] Network buffer (150/300/600/1000 MiB), hardware acceleration
+- [x] Home: next-up window (7/30/90/365 days, no limit), rewatching, show hero, continue watching, next up,
       one switch per library for "latest", hide spoilers
-- [ ] Storage: image cache size and Clear
-- [ ] About: server name and version, address, user, device, app version, sign out
+- [x] Storage: image cache size and Clear
+- [x] About: server name and version, address, user, device, app version, sign out
 
 ## Twitch: what the architecture must allow
 

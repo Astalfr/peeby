@@ -80,6 +80,14 @@ icons! {
   Bell => "bell",
   BellRing => "bell-ring",
   BellOff => "bell-off",
+  Film => "film",
+  Tv => "tv",
+  Folder => "folder",
+  Star => "star",
+  Info => "info",
+  ChevronLeft => "chevron-left",
+  ChevronRight => "chevron-right",
+  SignOut => "log-out",
 }
 
 macro_rules! files {
@@ -88,7 +96,8 @@ macro_rules! files {
   };
 }
 
-/// Icons gpui-component draws inside its own widgets (same paths as its `IconName`).
+/// Icons gpui-component draws inside its own widgets (same paths as its `IconName`), besides
+/// those of [`Icon`] (`info`).
 const COMPONENT: &[(&str, &[u8])] = files!(
   "chevron-down",
   "chevron-up",
@@ -100,7 +109,6 @@ const COMPONENT: &[(&str, &[u8])] = files!(
   "circle-x",
   "triangle-alert",
   "circle-check",
-  "info",
   "window-close",
   "window-maximize",
   "window-minimize",

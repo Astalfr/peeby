@@ -11,6 +11,7 @@ use gpui::{
 };
 use gpui_component::popover::PopoverState;
 use ui::assets::Icon;
+use ui::picture::Picture;
 use ui::player::PlayerView;
 use ui::theme::Accent;
 
@@ -23,6 +24,16 @@ pub struct SpaceInfo {
   pub badge: SharedString,
   /// The app's accent while the space is open.
   pub accent: Accent,
+}
+
+/// A user's picture in the sidebar: their avatar over a disc in the accent with their initial,
+/// which shows while it loads or when there is none.
+#[derive(Clone)]
+pub struct Avatar {
+  /// The avatar, if the user has one.
+  pub picture: Option<Picture>,
+  /// The first letter of their name.
+  pub initial: SharedString,
 }
 
 /// An entry of the sidebar.
@@ -38,6 +49,28 @@ pub struct MenuEntry {
   pub active: bool,
   /// Pinned at the bottom of the sidebar (account).
   pub bottom: bool,
+  /// Shown instead of the icon (the signed-in user).
+  pub avatar: Option<Avatar>,
+  /// A muted second line under the label, e.g. the server's address.
+  pub detail: Option<SharedString>,
+  /// A heading above the entry, e.g. `Bibliothèques` above the first library.
+  pub heading: Option<SharedString>,
+}
+
+impl MenuEntry {
+  /// An entry with its id, label and icon.
+  pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>, icon: Icon) -> Self {
+    Self {
+      id: id.into(),
+      label: label.into(),
+      icon,
+      active: false,
+      bottom: false,
+      avatar: None,
+      detail: None,
+      heading: None,
+    }
+  }
 }
 
 /// What a space asks of the shell.
@@ -62,6 +95,14 @@ pub trait Space: Render + EventEmitter<SpaceEvent> {
 
   /// Goes back one page.
   fn back(&mut self, cx: &mut Context<Self>);
+
+  /// Whether the top bar's search button searches this space (signed in, with a search page).
+  fn searchable(&self) -> bool {
+    false
+  }
+
+  /// Opens the space's search page.
+  fn open_search(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
 
   /// The player of the page on top, if it has one. The shell moves it to the mini-player
   /// when another tab opens while it plays.
@@ -99,6 +140,10 @@ pub trait AnySpace {
   fn can_go_back(&self, cx: &App) -> bool;
   /// See [`Space::back`].
   fn back(&self, cx: &mut App);
+  /// See [`Space::searchable`].
+  fn searchable(&self, cx: &App) -> bool;
+  /// See [`Space::open_search`].
+  fn open_search(&self, window: &mut Window, cx: &mut App);
   /// See [`Space::player`].
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>>;
   /// See [`Space::unseen`].
@@ -139,6 +184,14 @@ impl<T: Space> AnySpace for Entity<T> {
 
   fn back(&self, cx: &mut App) {
     self.update(cx, |space, cx| space.back(cx));
+  }
+
+  fn searchable(&self, cx: &App) -> bool {
+    self.read(cx).searchable()
+  }
+
+  fn open_search(&self, window: &mut Window, cx: &mut App) {
+    self.update(cx, |space, cx| space.open_search(window, cx));
   }
 
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {

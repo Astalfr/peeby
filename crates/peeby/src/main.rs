@@ -17,7 +17,7 @@ use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
 use shell::Shell;
 use shell::space::SpaceHandle;
-use spaces::jellyfin::JellyfinSpace;
+use spaces::jellyfin::{JellyfinSpace, session};
 use spaces::youtube::{YouTubeSpace, convert, prefetch, tools};
 use ui::{assets, images, runtime, theme};
 
@@ -48,6 +48,16 @@ fn main() {
   );
   let prefs = settings::Settings::load();
   let (hl, gl) = (prefs.language.clone(), prefs.region.clone());
+  // The Jellyfin session, with its token from the Credential Manager (a blocking call). A first
+  // run makes this installation's id, saved once the UI is up.
+  let device_id = match prefs.jellyfin.device_id.as_str() {
+    "" => session::new_device_id(),
+    id => id.to_owned(),
+  };
+  let jellyfin_client = session::restore(&settings::Jellyfin {
+    device_id: device_id.clone(),
+    ..prefs.jellyfin.clone()
+  });
   let client = match innertube::Client::new(cookies, settings::cookies_path(), &hl, &gl) {
     Ok(client) => client,
     Err(e) => {
@@ -69,6 +79,7 @@ fn main() {
       // Images and stream resolution need no session: an anonymous client of their own, so
       // a cookie import only replaces the app's client.
       cx.set_global(prefs);
+      settings::Settings::update(cx, |s| s.jellyfin.device_id = device_id);
       match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
           images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);
@@ -105,7 +116,7 @@ fn main() {
       };
       let opened = cx.open_window(options, |window, cx| {
         let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, window, cx));
-        let jellyfin = cx.new(|_| JellyfinSpace);
+        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, window, cx));
         let spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
         let shell = cx.new(|cx| Shell::new(spaces, youtube.downgrade(), window, cx));
         cx.new(|cx| Root::new(shell, window, cx))

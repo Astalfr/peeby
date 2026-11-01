@@ -328,11 +328,9 @@ impl Space for YouTubeSpace {
     ]
     .into_iter()
     .map(|(id, label, icon, bottom)| MenuEntry {
-      id: id.into(),
-      label: label.into(),
-      icon,
       active: root.is_some() && Self::entry_route(id) == root,
       bottom,
+      ..MenuEntry::new(id, label, icon)
     })
     .collect()
   }

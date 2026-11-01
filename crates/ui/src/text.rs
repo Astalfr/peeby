@@ -48,9 +48,66 @@ pub fn repair_mojibake(text: &str) -> std::borrow::Cow<'_, str> {
   }
 }
 
+/// Text of an HTML snippet (synopses with `<br>`, `<i>`, entities): tags dropped, breaks and
+/// paragraph ends turned into newlines, blank lines collapsed.
+pub fn plain_text(html: &str) -> String {
+  let mut out = String::with_capacity(html.len());
+  let mut rest = html;
+  while let Some(start) = rest.find('<') {
+    out.push_str(&rest[..start]);
+    let Some(end) = rest[start..].find('>') else {
+      out.push_str(&rest[start..]);
+      rest = "";
+      break;
+    };
+    let tag = rest[start + 1..start + end].trim().to_ascii_lowercase();
+    if tag.starts_with("br") || tag == "/p" {
+      out.push('\n');
+    }
+    rest = &rest[start + end + 1..];
+  }
+  out.push_str(rest);
+  let out = out
+    .replace("&amp;", "&")
+    .replace("&quot;", "\"")
+    .replace("&#39;", "'")
+    .replace("&apos;", "'")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+    .replace("&nbsp;", " ");
+  // Collapse the blank lines left by consecutive breaks.
+  let mut lines: Vec<&str> = Vec::new();
+  for line in out.lines().map(str::trim) {
+    if !(line.is_empty() && lines.last().is_some_and(|l| l.is_empty())) {
+      lines.push(line);
+    }
+  }
+  lines.join("\n").trim().to_owned()
+}
+
+/// [`plain_text`] on a single line, for a clamped paragraph (`line_clamp` counts the lines of
+/// each paragraph).
+pub fn one_paragraph(html: &str) -> String {
+  plain_text(html)
+    .split_whitespace()
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn plain_text_strips_html() {
+    assert_eq!(
+      plain_text("A<br>\n<br>\nB &amp; <i>C</i><br/>"),
+      "A\n\nB & C"
+    );
+    assert_eq!(plain_text("no tags"), "no tags");
+    assert_eq!(plain_text("broken <tag"), "broken <tag");
+    assert_eq!(one_paragraph("A<br>B\n C"), "A B C");
+  }
 
   #[test]
   fn mojibake_is_repaired_and_good_text_kept() {

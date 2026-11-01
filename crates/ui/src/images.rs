@@ -1,6 +1,8 @@
 //! Remote images (thumbnails, posters, avatars): download on the network runtime, disk cache,
-//! decode off the UI thread, in-memory LRU of GPU-ready images. Shared by every space: the app
-//! gives the store a [`Fetch`], so it depends on no service client.
+//! decode off the UI thread, in-memory LRU of GPU-ready images, and BlurHash placeholders.
+//! Shared by every space: the app gives the store a [`Fetch`], and a space whose server needs
+//! its own requests (Jellyfin's `Authorization` header) adds one for its server's URLs
+//! ([`route`]), so the store depends on no service client.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -44,6 +46,8 @@ struct Cached {
 /// The image store: see the module documentation.
 pub struct ImageStore {
   fetcher: Arc<dyn Fetch>,
+  /// Fetchers for the URLs that start with a prefix (a server's address), before `fetcher`.
+  routes: Vec<(String, Arc<dyn Fetch>)>,
   downloads: Arc<Semaphore>,
   cache_dir: Option<PathBuf>,
   ready: HashMap<String, Cached>,
@@ -52,6 +56,8 @@ pub struct ImageStore {
   bytes: usize,
   pending: HashSet<String>,
   failed: HashSet<String>,
+  /// Decoded BlurHashes by hash and aspect ratio (`None`: the hash is invalid).
+  blurhashes: HashMap<String, Option<Arc<RenderImage>>>,
 }
 
 impl ImageStore {
@@ -64,6 +70,7 @@ impl ImageStore {
     }
     Self {
       fetcher,
+      routes: Vec::new(),
       downloads: Arc::new(Semaphore::new(MAX_DOWNLOADS)),
       cache_dir,
       ready: HashMap::new(),
@@ -71,7 +78,35 @@ impl ImageStore {
       bytes: 0,
       pending: HashSet::new(),
       failed: HashSet::new(),
+      blurhashes: HashMap::new(),
     }
+  }
+
+  /// The fetcher of `url`: the route whose prefix it starts with, else the default one.
+  fn fetcher_for(&self, url: &str) -> Arc<dyn Fetch> {
+    self
+      .routes
+      .iter()
+      .find(|(prefix, _)| url.starts_with(prefix.as_str()))
+      .map_or_else(|| self.fetcher.clone(), |(_, fetch)| fetch.clone())
+  }
+
+  /// A small image decoded from a BlurHash, to show while the real one loads.
+  pub fn blurhash(&mut self, hash: &str, aspect: f32) -> Option<Arc<RenderImage>> {
+    let (w, h) = if aspect >= 1. {
+      (32, (32. / aspect).max(1.) as u32)
+    } else {
+      ((32. * aspect).max(1.) as u32, 32)
+    };
+    let key = format!("{hash}#{w}x{h}");
+    if let Some(image) = self.blurhashes.get(&key) {
+      return image.clone();
+    }
+    let image = blurhash::decode(hash, w, h, 1.)
+      .ok()
+      .and_then(|rgba| bgra_image(w, h, rgba));
+    self.blurhashes.insert(key, image.clone());
+    image
   }
 
   /// The image at `url` if it is ready; otherwise starts loading it and returns `None`.
@@ -119,7 +154,7 @@ impl ImageStore {
   /// the downloaded file, whatever the size.
   fn load(&mut self, url: String, key: String, size: Option<(u32, u32)>, cx: &mut Context<Self>) {
     self.pending.insert(key.clone());
-    let fetcher = self.fetcher.clone();
+    let fetcher = self.fetcher_for(&url);
     let downloads = self.downloads.clone();
     let path = self
       .cache_dir
@@ -278,4 +313,20 @@ pub fn clear_disk_cache() {
 pub fn init(fetcher: Arc<dyn Fetch>, cx: &mut gpui::App) {
   let images = Images(cx.new(|_| ImageStore::new(fetcher)));
   cx.set_global(images);
+}
+
+/// Fetches the URLs that start with `prefix` with `fetcher` (a signed-in server), or with the
+/// default fetcher again when `None` (signed out). Images that failed under the previous route
+/// are tried again.
+pub fn route(prefix: &str, fetcher: Option<Arc<dyn Fetch>>, cx: &mut gpui::App) {
+  let Some(images) = cx.try_global::<Images>().cloned() else {
+    return;
+  };
+  images.0.update(cx, |store, _| {
+    store.routes.retain(|(p, _)| p != prefix);
+    if let Some(fetcher) = fetcher {
+      store.routes.push((prefix.to_owned(), fetcher));
+    }
+    store.failed.retain(|url| !url.starts_with(prefix));
+  });
 }

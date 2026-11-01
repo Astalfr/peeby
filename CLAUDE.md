@@ -67,6 +67,10 @@ The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`) came from
   `ui` crate know no service. Pages of a space keep a `WeakEntity` to their space to navigate.
 - The mini-player is a second window (ADR 0008): never update a window from inside its own event (defer), and add
   window mouse listeners only while painting (a `canvas` paint callback), never from `render`.
+- Jellyfin (ADR 0009): the token lives in the Credential Manager (blocking calls: before the UI or in the background),
+  never in a URL or a log; its images go through `images::route` with the `Authorization` header. Playing anything
+  writes to the user's account (reports: last played date, play count, resume position, watched flag): ask the
+  user before a playback test.
 
 ## Player
 - `ui::player` (crates/ui/src/player/) is the shared player, built from peeby's `player_page.rs`: take controls and

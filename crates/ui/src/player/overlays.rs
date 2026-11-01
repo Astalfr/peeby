@@ -186,10 +186,11 @@ impl PlayerView {
       ))
   }
 
-  /// Top bar of the full-window layout: back, title and subtitle, and the window buttons
-  /// (it doubles as the window's title bar, a drag area).
+  /// Top bar of a player that is the page: back, title and subtitle; in the full-window layout
+  /// also the window buttons (it doubles as the window's title bar, a drag area).
   pub(super) fn render_top_bar(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
     let fullscreen = window.is_fullscreen();
+    let window_chrome = self.layout == Layout::Window && !fullscreen;
     let maximized = window.is_maximized();
     div()
       .id("top-bar")
@@ -219,12 +220,12 @@ impl PlayerView {
               .id("player-drag")
               .flex_1()
               .h_full()
-              .when(!fullscreen, |el| {
+              .when(window_chrome, |el| {
                 el.window_control_area(WindowControlArea::Drag)
               }),
           )
           // A fullscreen window has nothing to drag, minimize or restore: Escape or F leaves it.
-          .when(!fullscreen, |row| {
+          .when(window_chrome, |row| {
             row
               .child(self.window_button(WindowControlArea::Min, IconName::WindowMinimize, cx))
               .child(self.window_button(
@@ -543,11 +544,11 @@ impl PlayerView {
       .into_any_element()
   }
 
-  /// Why the video cannot play, with a way back in the full-window layout.
+  /// Why the video cannot play, with a way back when the player is the page.
   pub(super) fn render_error(&self, error: SharedString, cx: &mut Context<Self>) -> AnyElement {
     let theme = cx.theme();
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
-    let window_layout = self.layout == Layout::Window;
+    let page_layout = self.layout.is_page();
     div()
       .absolute()
       .inset_0()
@@ -572,7 +573,7 @@ impl PlayerView {
               .child("Lecture impossible"),
           )
           .child(div().text_sm().text_color(muted).child(error))
-          .when(window_layout, |el| {
+          .when(page_layout, |el| {
             el.child(
               Button::new("error-back")
                 .primary()

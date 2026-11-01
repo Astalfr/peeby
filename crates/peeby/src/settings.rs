@@ -1,9 +1,9 @@
 //! Where Peeby keeps its files: the settings (`%APPDATA%\peeby\settings.toml`) and the
-//! session cookies.
+//! YouTube session cookies.
 //!
 //! The cookies are a whole browser cookie jar (dozens of values, several KB): too large for the
-//! Windows Credential Manager, which peeby uses for its single token. They live in a file under
-//! the user's profile instead (`%APPDATA%\peeby\cookies.txt`), never in logs.
+//! Windows Credential Manager, which holds Jellyfin's single token (ADR 0009). They live in a file
+//! under the user's profile instead (`%APPDATA%\peeby\cookies.txt`), never in logs.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -64,6 +64,105 @@ pub struct Settings {
   pub theater: bool,
   /// Sidebar reduced to its icons.
   pub sidebar_collapsed: bool,
+  /// The Jellyfin space.
+  pub jellyfin: Jellyfin,
+}
+
+/// `[jellyfin]`: the Jellyfin space's server, user and preferences. The access token is not here:
+/// it lives in the Windows Credential Manager (`spaces::jellyfin::session`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Jellyfin {
+  /// Server address of the last session, kept after signing out.
+  pub server_url: Option<String>,
+  /// User of the current session; `None` when signed out.
+  pub user_id: Option<String>,
+  /// Stable id of this installation, sent to the server with every request.
+  pub device_id: String,
+  /// Playback preferences.
+  pub playback: JellyfinPlayback,
+  /// Home page preferences.
+  pub home: JellyfinHome,
+}
+
+/// `[jellyfin.playback]`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JellyfinPlayback {
+  /// Play the next episode after a countdown when the credits start.
+  pub autoplay_next: bool,
+  /// Countdown length, seconds.
+  pub autoplay_countdown: u32,
+  /// Enter fullscreen when playback starts.
+  pub start_fullscreen: bool,
+  /// Keep the volume and mute state (the app's `volume` and `muted`) between videos and runs.
+  pub remember_volume: bool,
+  /// ← / → step, seconds.
+  pub seek_step: u32,
+  /// Shift + ← / → step, seconds.
+  pub seek_step_large: u32,
+  /// Preferred audio language (ISO 639-2, e.g. `jpn`); `None`: the server's choice.
+  pub audio_language: Option<String>,
+  /// Preferred subtitle language (ISO 639-2) or `off`; `None`: the server's choice.
+  pub subtitle_language: Option<String>,
+  /// Size factor of text subtitles (SRT, VTT). ASS subtitles are never restyled.
+  pub subtitle_scale: f64,
+  /// Read-ahead buffer of the player, MiB.
+  pub network_buffer_mb: u32,
+  /// GPU decoding and rendering; off forces software (troubleshooting).
+  pub hardware_acceleration: bool,
+}
+
+impl Default for JellyfinPlayback {
+  fn default() -> Self {
+    Self {
+      autoplay_next: true,
+      autoplay_countdown: 10,
+      start_fullscreen: false,
+      remember_volume: true,
+      seek_step: 10,
+      seek_step_large: 60,
+      audio_language: None,
+      subtitle_language: None,
+      subtitle_scale: 1.0,
+      network_buffer_mb: 300,
+      hardware_acceleration: true,
+    }
+  }
+}
+
+/// `[jellyfin.home]`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JellyfinHome {
+  /// "À suivre" leaves out series not watched for this many days; `None`: no limit.
+  pub next_up_days: Option<u32>,
+  /// "À suivre" also suggests series watched to the end.
+  pub next_up_rewatching: bool,
+  /// The banner at the top.
+  pub show_hero: bool,
+  /// The "Reprendre" row.
+  pub show_continue_watching: bool,
+  /// The "À suivre" row.
+  pub show_next_up: bool,
+  /// Libraries whose "Derniers ajouts" row is hidden.
+  pub hidden_latest: Vec<String>,
+  /// Blur the stills and hide the synopses of unwatched episodes.
+  pub hide_spoilers: bool,
+}
+
+impl Default for JellyfinHome {
+  fn default() -> Self {
+    Self {
+      next_up_days: Some(365),
+      next_up_rewatching: false,
+      show_hero: true,
+      show_continue_watching: true,
+      show_next_up: true,
+      hidden_latest: Vec::new(),
+      hide_spoilers: false,
+    }
+  }
 }
 
 impl Default for Settings {
@@ -78,6 +177,7 @@ impl Default for Settings {
       reversed_playlists: Vec::new(),
       theater: false,
       sidebar_collapsed: false,
+      jellyfin: Jellyfin::default(),
     }
   }
 }
@@ -190,9 +290,17 @@ mod tests {
 
   #[test]
   fn partial_file_takes_defaults() {
-    let settings: Settings = toml::from_str("max_height = 720\nunknown = 1\n").unwrap();
+    let settings: Settings = toml::from_str(
+      "max_height = 720\nunknown = 1\n[jellyfin]\ndevice_id = \"abc\"\n[jellyfin.home]\nshow_hero = false\n",
+    )
+    .unwrap();
     assert_eq!(settings.max_height, 720);
     assert_eq!(settings.language, "fr");
+    assert_eq!(settings.jellyfin.device_id, "abc");
+    assert!(!settings.jellyfin.home.show_hero);
+    assert!(settings.jellyfin.home.show_next_up);
+    assert_eq!(settings.jellyfin.playback.seek_step, 10);
+    assert_eq!(settings.jellyfin.server_url, None);
     let again: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
     assert_eq!(settings, again);
   }
