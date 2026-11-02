@@ -3,12 +3,12 @@
 
 use std::cell::Cell;
 use std::panic::Location;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::{
   AnyElement, App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId,
-  IntoElement, LayoutId, Pixels, Rgba, Window, WindowAppearance, WindowBackgroundAppearance, px,
-  rgb,
+  IntoElement, LayoutId, Pixels, Rgba, Task, Window, WindowAppearance, WindowBackgroundAppearance,
+  px, rgb,
 };
 use gpui_component::{Theme, ThemeMode, ThemeTokens};
 
@@ -126,20 +126,90 @@ impl Accent {
       active: color(0xe63e36),
     }
   }
+
+  /// `self` moved toward `to` by `t` (0 to 1), channel by channel in RGB.
+  fn mix(self, to: Self, t: f32) -> Self {
+    let mix = |a: Hsla, b: Hsla| {
+      let (a, b): (Rgba, Rgba) = (a.into(), b.into());
+      Hsla::from(Rgba {
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: a.a + (b.a - a.a) * t,
+      })
+    };
+    Self {
+      base: mix(self.base, to.base),
+      hover: mix(self.hover, to.hover),
+      active: mix(self.active, to.active),
+    }
+  }
 }
 
 thread_local! {
-  // The accent of the open space. Kept per thread rather than as a GPUI global so the palette
-  // functions below need no `cx`: they are called from every render, and GPUI renders on the
-  // UI thread only.
+  // The accent of the open space, or the color it is at while it changes. Kept per thread
+  // rather than as a GPUI global so the palette functions below need no `cx`: they are called
+  // from every render, and GPUI renders on the UI thread only.
   static ACCENT: Cell<Accent> = Cell::new(Accent::red());
 }
 
-/// Makes `accent` the app's accent and re-applies the theme so gpui-component's widgets follow.
-/// Windows must be refreshed afterwards (`cx.refresh_windows()`).
+/// How long the colors take to go from a space's accent to the next one's.
+pub const ACCENT_TRANSITION: Duration = Duration::from_secs(1);
+/// Time between two steps of the accent's transition.
+const ACCENT_FRAME: Duration = Duration::from_millis(16);
+
+/// The transition of the accent under way: dropping it (a new transition) stops it.
+struct AccentTransition {
+  _task: Task<()>,
+}
+
+impl gpui::Global for AccentTransition {}
+
+/// Makes `accent` the app's accent at once and re-applies the theme so gpui-component's widgets
+/// follow. Windows must be refreshed afterwards (`cx.refresh_windows()`).
 pub fn set_accent(accent: Accent, cx: &mut App) {
+  if cx.has_global::<AccentTransition>() {
+    cx.remove_global::<AccentTransition>();
+  }
   ACCENT.set(accent);
   apply(cx);
+}
+
+/// Moves the accent to `accent` over [`ACCENT_TRANSITION`], and with it every color it tints
+/// (backgrounds, surfaces, gpui-component's theme); at once when motion is reduced. Each step
+/// refreshes every window.
+pub fn transition_accent(accent: Accent, cx: &mut App) {
+  let from = ACCENT.get();
+  if from == accent || cx.reduce_motion() {
+    set_accent(accent, cx);
+    return;
+  }
+  let started = Instant::now();
+  let task = cx.spawn(async move |cx| {
+    loop {
+      cx.background_executor().timer(ACCENT_FRAME).await;
+      let t = (started.elapsed().as_secs_f32() / ACCENT_TRANSITION.as_secs_f32()).min(1.);
+      ACCENT.set(if t < 1. {
+        from.mix(accent, ease_in_out_cubic(t))
+      } else {
+        accent
+      });
+      // `Theme::update` refreshes every window.
+      cx.update(|cx| Theme::update(cx, accent_colors));
+      if t >= 1. {
+        break;
+      }
+    }
+  });
+  cx.set_global(AccentTransition { _task: task });
+}
+
+fn ease_in_out_cubic(t: f32) -> f32 {
+  if t < 0.5 {
+    4. * t * t * t
+  } else {
+    1. - (-2. * t + 2.).powi(3) / 2.
+  }
 }
 
 /// The accent: primary actions, progress, selection, focus.
@@ -209,33 +279,22 @@ pub fn apply(cx: &mut App) {
     t.radius_lg = RADIUS_LG;
     t.shadow = true;
 
-    t.background = background();
     t.foreground = foreground();
     t.border = border();
     t.input = border();
-    t.muted = surface();
     t.muted_foreground = muted();
-    t.popover = surface();
     t.popover_foreground = foreground();
     t.overlay = color_alpha(0x000000, 0.6);
-    t.skeleton = surface_hover();
     t.window_border = border();
     accent_colors(t);
 
-    t.accent = surface_hover();
     t.accent_foreground = foreground();
     t.primary_foreground = on_accent();
-    t.secondary = surface();
-    t.secondary_hover = surface_hover();
     t.secondary_active = border();
     t.secondary_foreground = foreground();
     t.button_primary_foreground = on_accent();
-    t.button = surface();
-    t.button_hover = surface_hover();
     t.button_active = border();
     t.button_foreground = foreground();
-    t.button_secondary = surface();
-    t.button_secondary_hover = surface_hover();
     t.button_secondary_active = border();
     t.button_secondary_foreground = foreground();
 
@@ -243,18 +302,14 @@ pub fn apply(cx: &mut App) {
     t.switch = color(0x3a3a40);
     t.switch_thumb = foreground();
 
-    t.colors.list = background();
-    t.list_hover = surface_hover();
     t.tab = gpui::transparent_black();
     t.tab_bar = gpui::transparent_black();
-    t.tab_active = surface_hover();
     t.tab_foreground = muted();
     t.tab_active_foreground = foreground();
 
     t.sidebar = gpui::transparent_black();
     t.sidebar_border = gpui::transparent_black();
     t.sidebar_foreground = foreground();
-    t.sidebar_accent = surface_hover();
     t.sidebar_accent_foreground = foreground();
     t.sidebar_primary_foreground = on_accent();
     t.title_bar = gpui::transparent_black();
@@ -269,8 +324,23 @@ pub fn apply(cx: &mut App) {
   });
 }
 
-/// The parts of gpui-component's theme in the accent.
+/// The parts of gpui-component's theme in the accent or tinted by it.
 fn accent_colors(t: &mut Theme) {
+  t.background = background();
+  t.muted = surface();
+  t.popover = surface();
+  t.skeleton = surface_hover();
+  t.accent = surface_hover();
+  t.secondary = surface();
+  t.secondary_hover = surface_hover();
+  t.button = surface();
+  t.button_hover = surface_hover();
+  t.button_secondary = surface();
+  t.button_secondary_hover = surface_hover();
+  t.colors.list = background();
+  t.list_hover = surface_hover();
+  t.tab_active = surface_hover();
+  t.sidebar_accent = surface_hover();
   t.ring = accent();
   t.caret = accent();
   t.selection = accent().opacity(0.3);

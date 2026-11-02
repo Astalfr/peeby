@@ -179,7 +179,7 @@ impl Shell {
     self.settings = None;
     self.active = index;
     self.enter_page(cx);
-    theme::set_accent(self.spaces[index].info(cx).accent, cx);
+    theme::transition_accent(self.spaces[index].info(cx).accent, cx);
     cx.refresh_windows();
   }
 

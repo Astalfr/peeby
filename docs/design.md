@@ -81,6 +81,7 @@ Discreet and short; nothing loops except skeletons and spinners. The one excepti
 | Card hover | Its content rises 4 px inside a box that stays in place (a moving box could slip out from under the pointer and loop), a red ring and a play button fade in, the title turns red, shadow | 150 ms |
 | Related card hover | A soft surface and a play button fade in, the title turns red | 150 ms |
 | Sidebar hover card | Fades in sliding 6 px toward its entry, and out sliding away (`motion::tween`, none with reduced motion) | 150 ms |
+| Space change | The accent and every color it tints (backgrounds, surfaces, gpui-component's theme) move from the old space's to the new one's, ease in-out (`theme::transition_accent`, at once with reduced motion) | 1 s |
 | Seek bar hover | The track thickens, and the hovered chapter's piece grows taller, easing out (`motion::tween`) | 150 ms |
 | Image load | The image fades in over its BlurHash (Jellyfin) or the flat surface | 200 ms |
 | Jellyfin banner | The next backdrop cross-fades over the previous one, the text slides in from the left; it turns every 8 s, not while hovered | 700 ms, 350 ms |
