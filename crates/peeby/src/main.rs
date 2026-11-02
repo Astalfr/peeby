@@ -125,6 +125,8 @@ fn main() {
         display_id: display,
         window_min_size: Some(size(px(960.), px(600.))),
         window_background: theme::window_background(cx),
+        // GPUI caps an unfocused window at 30 fps by default: video plays while you work elsewhere.
+        inactive_frame_interval: None,
         titlebar: Some(TitlebarOptions {
           title: Some("Peeby".into()),
           ..TitleBar::title_bar_options()

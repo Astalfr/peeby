@@ -73,6 +73,8 @@ pub fn open(
     kind: WindowKind::PopUp,
     titlebar: None,
     focus: false,
+    // Never focused, so GPUI's 30 fps cap for unfocused windows would always apply.
+    inactive_frame_interval: None,
     is_resizable: false,
     window_background: WindowBackgroundAppearance::Opaque,
     ..Default::default()

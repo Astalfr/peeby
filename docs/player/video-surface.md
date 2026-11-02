@@ -26,6 +26,7 @@ GPUI (`gpui-pre 0.3.10`, [ADR 0006](../decisions/peeby/0006-gpui-pre-snapshot.md
 - `D3d11Surface` is tried first.
 - If it fails, the player falls back to `SwSurface` and logs the reason. Failures include: creating the D3D11 device, creating the mpv D3D11 render context, opening the shared texture on GPUI's side, or an unrecoverable device loss.
 - The fallback is also available on demand (a setting or an environment variable) for diagnosing GPU issues.
+- Both paths show frames through GPUI's frame loop, which caps unfocused windows at 30 fps by default. The main window and the mini-player (never focused) set `WindowOptions::inactive_frame_interval: None` so video keeps its frame rate.
 
 ### `D3d11Surface`
 

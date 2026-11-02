@@ -60,6 +60,8 @@ fn main() {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         window_min_size: Some(size(px(320.), px(180.))),
         display_id: display,
+        // As in the app: GPUI caps an unfocused window at 30 fps by default.
+        inactive_frame_interval: None,
         titlebar: Some(TitlebarOptions {
           title: Some("Peeby player".into()),
           ..TitleBar::title_bar_options()
