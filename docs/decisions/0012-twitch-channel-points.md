@@ -1,7 +1,7 @@
 # 0012: Twitch channel points
 
-- Status: proposed (narrower than the scope the user chose on 2026-11-02: the bonus is not claimed
-  automatically and watching earns nothing more than before; waiting for the user's answer)
+- Status: accepted for the balance, the spends and the watch-time report (2026-11-02, after the
+  user's measurement); proposed for the bonus chest, claimed on twitch.tv, until the user confirms
 - Date: 2026-11-02
 
 ## Context
@@ -24,9 +24,11 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   sends it under another Client-ID with a token from that client's own sign-in. Using a different
   client's identity to get past an integrity check is circumventing an anti-bot measure: Peeby
   does not do it.
-- **Points for watching**: whether Twitch credits time watched through Peeby is unknown. The web
-  player reports it with `minute-watched` events (spade). Faking those events is how point farmers
-  work, so they wait for a decision.
+- **Points for watching**: the user played a live in Peeby for 20 minutes (2026-11-02), and the
+  balance did not move. Twitch very likely credits time watched from the web player's
+  `minute-watched` events (spade), not from the stream being fetched **[likely]**: one run, and other
+  causes (the `embed` token, session headers) are not ruled out. Point farmers send those events for lives nobody
+  watches. Peeby sends them only for the live on screen, while it plays.
 
 ## Decision
 
@@ -42,7 +44,13 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   10 points. Twitch's refusals keep their code (`Error::Refused`) and read in French.
 - **The bonus chest is not claimed by Peeby.** When one waits, a "Bonus" button opens the channel's
   chat on twitch.tv, where it is claimed with one click.
-- **No spade events.** Peeby only plays the stream, as before.
+- **A watch-time report** (`twitch::spade`), as the web player sends it:
+  - one `minute-watched` event after each minute of the live on the watch page, and only while mpv
+    plays it (`core-idle` is `no`: neither paused nor buffering);
+  - one live at a time: only for the player that started last (`ui::player::now_playing`), never a
+    channel that is not on screen;
+  - it carries the channel id, the live's id and the viewer's id (read with the points), never logged;
+  - the endpoint is `spade_url`, read once from twitch.tv's settings script.
 - Polling, not PubSub: one context request a minute and one predictions request every 20 s per open
   live. No new socket and no new dependency. Transaction ids come from the `uuid` crate that `peeby`
   already uses.
@@ -57,7 +65,6 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   - **The bonus claim**: the user claims it on twitch.tv's own page, which the button opens. Making
     integrity tokens for Peeby's own calls (a hidden WebView2, another client's identity) would be
     the same bypass, so it is not an option.
-  - **Points for watching**: measure first whether the balance grows while Peeby plays a live. If it
-    does not, decide whether to send the web player's `minute-watched` events for the live actually
-    on screen.
+  - **Points for watching**: check that the balance now grows (about 10 points every 5 minutes
+    [mem]) and that a bonus chest shows after about 15 minutes.
 - Revisit if Twitch requires persisted queries, or an integrity token for the spends.

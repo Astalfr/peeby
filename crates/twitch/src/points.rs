@@ -10,11 +10,7 @@ use serde_json::{Value, json};
 use crate::error::{Error, Result};
 use crate::gql::gql_error;
 
-const CONTEXT_QUERY: &str = "query ChannelPoints($login: String!) { user(login: $login) { id \
-  channel { self { communityPoints { balance availableClaim { id } activeMultipliers { factor } } } \
-  communityPointsSettings { isEnabled name image { url url2x } customRewards { id title cost prompt \
-  backgroundColor isEnabled isPaused isInStock isSubOnly isUserInputRequired cooldownExpiresAt \
-  image { url url2x } defaultImage { url url2x } } } } } }";
+const CONTEXT_QUERY: &str = "query ChannelPoints($login: String!) { currentUser { id }   user(login: $login) { id stream { id } channel { self { communityPoints { balance availableClaim { id }   activeMultipliers { factor } } } communityPointsSettings { isEnabled name image { url url2x }   customRewards { id title cost prompt backgroundColor isEnabled isPaused isInStock isSubOnly   isUserInputRequired cooldownExpiresAt image { url url2x } defaultImage { url url2x } } } } } }";
 
 const PREDICTIONS_QUERY: &str = "query Predictions($login: String!) { channel(name: $login) { \
   activePredictionEvents { ...E } lockedPredictionEvents { ...E } } } fragment E on \
@@ -32,6 +28,10 @@ const PREDICT_MUTATION: &str = "mutation Predict($input: MakePredictionInput!) {
 pub struct Points {
   /// The channel's user id (the mutations' `channelID`).
   pub channel_id: String,
+  /// The viewer's user id (the watch-time report's `user_id`).
+  pub viewer_id: Option<String>,
+  /// The live's id, when the channel is on air (the watch-time report's `broadcast_id`).
+  pub broadcast_id: Option<String>,
   /// Whether the channel has channel points at all.
   pub enabled: bool,
   /// The viewer's balance.
@@ -150,6 +150,10 @@ pub fn parse_context(answer: &Value) -> Result<Points> {
   });
   Ok(Points {
     channel_id: user["id"].as_str().unwrap_or_default().to_owned(),
+    viewer_id: answer["data"]["currentUser"]["id"]
+      .as_str()
+      .map(str::to_owned),
+    broadcast_id: user["stream"]["id"].as_str().map(str::to_owned),
     enabled: settings["isEnabled"].as_bool().unwrap_or(false),
     balance,
     claim: mine["availableClaim"]["id"].as_str().map(str::to_owned),

@@ -8,6 +8,7 @@
 use serde_json::{Value, json};
 use twitch::Error;
 use twitch::points::{self, PredictionStatus};
+use twitch::spade;
 
 fn json(name: &str) -> Value {
   let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -130,4 +131,81 @@ fn a_redemption_sends_the_reward_and_the_text() {
   assert_eq!(input["transactionID"], "ab12");
   let bet = points::predict_request("e", "o", 100, "cd34");
   assert_eq!(bet["variables"]["input"]["points"], 100);
+}
+
+#[test]
+fn the_watch_time_report_has_what_it_needs() {
+  let points = points::parse_context(&json("gql_points_context.json")).unwrap();
+  assert_eq!(points.viewer_id.as_deref(), Some("100000001"));
+  assert_eq!(points.broadcast_id.as_deref(), Some("319228038630"));
+}
+
+#[test]
+fn the_spade_url_is_found_from_the_page() {
+  let text = |name: &str| {
+    std::fs::read_to_string(format!(
+      "{}/tests/fixtures/{name}",
+      env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+  };
+  let page = text("twitch_page_settings.html");
+  assert_eq!(
+    spade::settings_url(&page),
+    Some("https://assets.twitch.tv/config/settings.34dfd0a24600e0e02cc2605e1757ce0e.js")
+  );
+  assert_eq!(
+    spade::spade_url(&text("twitch_settings.js")).as_deref(),
+    Some("https://spade.twitch.tv/track")
+  );
+  assert_eq!(spade::settings_url("<html></html>"), None);
+}
+
+#[test]
+fn a_minute_watched_is_base64_json_in_a_form() {
+  let event = spade::MinuteWatched {
+    channel_id: "51653974".into(),
+    channel: "coachlim".into(),
+    broadcast_id: "319228038630".into(),
+    user_id: "100000001".into(),
+  };
+  let body = spade::body(&event);
+  let data = body.strip_prefix("data=").unwrap();
+  assert!(!data.contains(['+', '/', '=']));
+  // Decoded by hand: the JSON list as the web player sends it.
+  let decoded = decode(
+    &data
+      .replace("%2B", "+")
+      .replace("%2F", "/")
+      .replace("%3D", "="),
+  );
+  let events: Value = serde_json::from_slice(&decoded).unwrap();
+  assert_eq!(events[0]["event"], "minute-watched");
+  let p = &events[0]["properties"];
+  assert_eq!(p["channel_id"], "51653974");
+  assert_eq!(p["broadcast_id"], "319228038630");
+  assert_eq!(p["user_id"], "100000001");
+  assert_eq!(p["channel"], "coachlim");
+  assert_eq!(p["player"], "site");
+  assert_eq!(p["live"], true);
+}
+
+fn decode(text: &str) -> Vec<u8> {
+  const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let values: Vec<u32> = text
+    .bytes()
+    .filter(|&b| b != b'=')
+    .map(|b| ALPHABET.iter().position(|&a| a == b).unwrap() as u32)
+    .collect();
+  let mut out = Vec::new();
+  for chunk in values.chunks(4) {
+    let n = chunk
+      .iter()
+      .enumerate()
+      .fold(0u32, |n, (i, v)| n | v << (18 - 6 * i));
+    for i in 0..chunk.len() - 1 {
+      out.push((n >> (16 - 8 * i)) as u8);
+    }
+  }
+  out
 }

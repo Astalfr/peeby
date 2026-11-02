@@ -1,7 +1,13 @@
 {
   "data": {
+    "currentUser": {
+      "id": "100000001"
+    },
     "user": {
       "id": "51653974",
+      "stream": {
+        "id": "319228038630"
+      },
       "channel": {
         "self": {
           "communityPoints": {
@@ -111,7 +117,7 @@
     }
   },
   "extensions": {
-    "durationMilliseconds": 42,
+    "durationMilliseconds": 30,
     "requestID": "REDACTED",
     "operationName": "ChannelPoints"
   }

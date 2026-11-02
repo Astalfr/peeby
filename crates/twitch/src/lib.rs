@@ -19,6 +19,7 @@ pub mod helix;
 pub mod points;
 mod proxy;
 pub mod seventv;
+pub mod spade;
 pub mod splice;
 pub mod time;
 pub mod usher;

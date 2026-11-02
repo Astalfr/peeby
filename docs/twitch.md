@@ -239,11 +239,20 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   even with a made-up claim id. The miner sends it with the Android TV Client-ID (`ue6666…`) and a
   token from that client's own device sign-in **[src]**. Peeby does not try that route
   (ADR 0012).
-- **Points for watching** **[?]**:
+- **Points for watching**:
   - The web player reports time watched by POSTing base64 `minute-watched` events (`channel_id`,
     `broadcast_id`, `user_id`, `player`, `live`) to a `spade_url`. That URL comes from twitch.tv's
     `settings.*.js` **[src]**.
-  - Whether Twitch credits time watched without these events is not measured.
+  - Without these events, Twitch credited nothing: the user played a live in Peeby for 20 minutes
+    (2026-11-02), and the balance did not move. That spade is the missing piece is **[likely]**
+    until the balance grows with it.
+  - On 2026-11-02, the page linked `https://assets.twitch.tv/config/settings.<hash>.js`, whose
+    `spade_url` was `https://spade.twitch.tv/track` (fixtures `twitch_page_settings.html`,
+    `twitch_settings.js`, trimmed). The body is `data=<base64 of the JSON list>`, form-encoded.
+  - DNS filters (Pi-hole, AdGuard, NextDNS lists) often block `spade.twitch.tv` as telemetry. On the
+    user's network it resolved to `0.0.0.0` (2026-11-02), and every report failed with "error
+    sending request". Peeby does not get around it: the user allows the domain or earns nothing. The
+    first failure in a row logs a warning with its causes.
   - The bonus chest comes after about 15 minutes of credited watching **[mem]**.
 - **Live updates**: the miner listens to PubSub (`wss://pubsub-edge.twitch.tv/v1`, topics
   `community-points-user-v1.<id>`, `predictions-channel-v1.<id>`) **[src]**. Whether PubSub still
@@ -319,8 +328,8 @@ A probe run by the user, anonymously, on a live channel:
 - Muxed audio.
 - WebView2 for Client-Integrity.
 - GQL's recommendation queries.
-- A real reward redeemed or a real bet placed (only made-up ids were sent); the watch-time gain without
-  spade; PubSub.
+- A real reward redeemed or a real bet placed (only made-up ids were sent); points earned with the spade
+  report; PubSub.
 
 ## Sources
 

@@ -3,6 +3,9 @@
 //! its predictions with their bets. Spending asks for a second click ("Confirmer", within 8 s; a
 //! bet's shows the amount it sends), since it cannot be undone.
 //!
+//! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
+//! Twitch as its web player does (`twitch::spade`): without it, watching earns no points.
+//!
 //! The bonus chest is not claimed here: Twitch's integrity check refuses its mutation outside the
 //! browser (docs/twitch.md, "Channel points"). When one waits, a button opens the channel's chat
 //! on twitch.tv, where it is claimed with a click.
@@ -11,7 +14,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task, Window, div, px,
+  Anchor, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task, WeakEntity, Window,
+  div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
@@ -19,12 +23,15 @@ use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 use ui::assets::Icon;
+use ui::player::PlayerView;
 use ui::{runtime, theme};
 
 use super::cards;
 
 /// How often the balance and the rewards are read again.
 const POINTS_EVERY: Duration = Duration::from_secs(60);
+/// How often a minute watched is reported.
+const WATCHED_EVERY: Duration = Duration::from_secs(60);
 /// How often the predictions are read again (a bet window is often 2 to 5 minutes).
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
 /// How long a first click waits for its confirmation.
@@ -60,6 +67,10 @@ enum Spend {
 pub struct PointsView {
   login: String,
   client: twitch::Client,
+  /// The page's player: minutes are reported only while it plays.
+  player: WeakEntity<PlayerView>,
+  /// The last watch-time report failed (the next failures log at debug).
+  report_failing: bool,
   points: Option<Points>,
   predictions: Vec<Prediction>,
   /// No auth-token, or the channel has no points: nothing shows and nothing is read again.
@@ -80,10 +91,17 @@ pub struct PointsView {
 }
 
 impl PointsView {
-  pub fn new(login: String, client: twitch::Client, cx: &mut Context<Self>) -> Self {
+  pub fn new(
+    login: String,
+    client: twitch::Client,
+    player: WeakEntity<PlayerView>,
+    cx: &mut Context<Self>,
+  ) -> Self {
     let mut view = Self {
       login,
       client,
+      player,
+      report_failing: false,
       points: None,
       predictions: Vec::new(),
       off: false,
@@ -120,6 +138,21 @@ impl PointsView {
           None => return,
         }
         cx.background_executor().timer(PREDICTIONS_EVERY).await;
+      }
+    }));
+    // A minute watched, after each minute played.
+    view._tasks.push(cx.spawn(async move |this, cx| {
+      loop {
+        cx.background_executor().timer(WATCHED_EVERY).await;
+        let Ok(report) = this.update(cx, |this, cx| this.minute_watched(cx)) else {
+          return;
+        };
+        if let Some(report) = report {
+          let result = report.await;
+          if this.update(cx, |this, _| this.reported(result)).is_err() {
+            return;
+          }
+        }
       }
     }));
     // The countdown of a prediction taking bets, and the end of a confirmation's wait.
@@ -170,6 +203,66 @@ impl PointsView {
         })
         .ok();
     })
+  }
+
+  /// Reports a minute watched when the live plays now, with the channel's points read (the ids
+  /// come with them). Nothing without the auth-token or when the channel has no points.
+  fn minute_watched(
+    &mut self,
+    cx: &mut Context<Self>,
+  ) -> Option<impl Future<Output = Option<twitch::Result<()>>> + use<>> {
+    let points = self.points.as_ref().filter(|_| !self.off)?;
+    // Only the player that started last (the one on screen or in the mini-player): one live at a
+    // time.
+    let current = ui::player::now_playing(cx).map(|p| p.entity_id());
+    let playing = self.player.upgrade().is_some_and(|player| {
+      if current != Some(player.entity_id()) {
+        return false;
+      }
+      let player = player.read(cx);
+      player.is_live() && player.property("core-idle").as_deref() == Some("no")
+    });
+    if !playing {
+      return None;
+    }
+    let event = twitch::spade::MinuteWatched {
+      channel_id: points.channel_id.clone(),
+      channel: self.login.clone(),
+      broadcast_id: points.broadcast_id.clone()?,
+      user_id: points.viewer_id.clone()?,
+    };
+    let client = self.client.clone();
+    Some(runtime::spawn(cx, async move {
+      client.minute_watched(&event).await
+    }))
+  }
+
+  /// A report's outcome: the first failure in a row is a warning with its causes (a DNS filter
+  /// blocking `spade.twitch.tv` shows as a connection to 0.0.0.0), the next ones are debug.
+  fn reported(&mut self, result: Option<twitch::Result<()>>) {
+    match result {
+      Some(Err(e)) => {
+        let mut causes = e.to_string();
+        let mut source = std::error::Error::source(&e);
+        while let Some(cause) = source {
+          causes.push_str(&format!(": {cause}"));
+          source = cause.source();
+        }
+        if self.report_failing {
+          tracing::debug!("Twitch watch-time report: {causes}");
+        } else {
+          tracing::warn!("Twitch watch-time report (no points earned while it fails): {causes}");
+        }
+        self.report_failing = true;
+      }
+      Some(Ok(())) => {
+        if self.report_failing {
+          tracing::info!("Twitch watch-time report: sent again");
+        }
+        self.report_failing = false;
+      }
+      None => {}
+    }
   }
 
   fn load_predictions(&mut self, cx: &mut Context<Self>) -> Task<()> {

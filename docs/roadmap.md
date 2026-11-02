@@ -15,12 +15,14 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
-- Channel points, partly done (2026-11-02, [ADR 0012](decisions/0012-twitch-channel-points.md), proposed; narrower than the user's scope until they decide), with the web auth-token:
+- Channel points (2026-11-02, [ADR 0012](decisions/0012-twitch-channel-points.md); the bonus is claimed on twitch.tv until the user decides), with the web auth-token:
   - `twitch::points`: raw GQL reads and spends. 7 tests on 5 new fixtures.
   - On a live's header: the balance, refreshed every minute; the channel's rewards in a popover; its predictions with odds and a countdown, refreshed every 20 s.
   - Spending takes a second click. A reward can ask for a text; a bet takes a share of the balance.
   - The bonus chest is shown, but claimed on twitch.tv: its mutation fails Twitch's integrity check.
-  - **Not verified:** the page in the app (Peeby was already running); a real redemption or bet; whether watching in Peeby earns points.
+  - Watching earns points: the balance did not move in 20 minutes without it (the user's measurement), so Peeby now reports each minute the live plays, as the web player does (`twitch::spade`; 3 more tests, 2 trimmed fixtures).
+  - Seen by the user in the app: the balance on a live's header.
+  - **Not verified:** that the balance now grows with the report; a real redemption or bet; the rewards popover.
 
 - Step 10 done (2026-11-01), the Twitch space is complete: the bell announces the followed channels that go live while Peeby runs; low latency (Twitch's prefetch segments through the proxy, "Faible latence" on by default) starts a live about 2.6 s behind its capture instead of about 7 s, measured with the spike; HEVC: the 1440p60 source that 16 of the top 100 lives send only in HEVC is now offered, decoded by the GPU here, with a fall back to H.264 when a codec decodes on the CPU (kept in the settings). 10 new tests, a multi-codec master fixture (`twitch_capture -- master`). **Not verified:** a real bell announcement, 1440p HEVC picked in the app, the fallback, AV1 (no channel offered it).
 

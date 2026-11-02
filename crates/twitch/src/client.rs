@@ -5,9 +5,9 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
-use crate::points;
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
+use crate::{points, spade};
 
 const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
@@ -29,6 +29,8 @@ pub struct Client {
   client_id: Arc<RwLock<String>>,
   /// The web `auth-token`, sent to GQL as `Authorization: OAuth …` (a full-access secret).
   auth_token: Option<Arc<str>>,
+  /// The watch-time endpoint, read from twitch.tv once it is first needed.
+  spade_url: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl std::fmt::Debug for Client {
@@ -52,6 +54,7 @@ impl Client {
         client_id.unwrap_or_else(|| gql::WEB_CLIENT_ID.to_owned()),
       )),
       auth_token: auth_token.map(Arc::from),
+      spade_url: Arc::default(),
     })
   }
 
@@ -186,6 +189,61 @@ impl Client {
   ) -> Result<()> {
     let request = points::predict_request(event_id, outcome_id, points, transaction_id);
     points::parse_predict(&self.gql(&request).await?)
+  }
+
+  /// Reports a minute of `event`'s live watched (Twitch's `minute-watched`), which earns its
+  /// channel points. Send it once a minute, only while the live plays on screen.
+  pub async fn minute_watched(&self, event: &spade::MinuteWatched) -> Result<()> {
+    let url = self.spade_url().await?;
+    let response = self
+      .http
+      .post(&url)
+      .header("Content-Type", "application/x-www-form-urlencoded")
+      .body(spade::body(event))
+      .send()
+      .await?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+      return Err(Error::Status {
+        status,
+        endpoint: "spade",
+        code: None,
+      });
+    }
+    Ok(())
+  }
+
+  /// `spade_url` from twitch.tv's settings script, kept once read (a failure is tried again
+  /// next time).
+  async fn spade_url(&self) -> Result<String> {
+    let mut cached = self.spade_url.lock().await;
+    if let Some(url) = cached.as_ref() {
+      return Ok(url.clone());
+    }
+    let missing = |detail: &str| Error::Parse {
+      endpoint: "twitch.tv",
+      detail: detail.into(),
+    };
+    let page = self
+      .http
+      .get("https://www.twitch.tv/")
+      .send()
+      .await?
+      .error_for_status()?
+      .text()
+      .await?;
+    let settings = spade::settings_url(&page).ok_or_else(|| missing("no settings script"))?;
+    let script = self
+      .http
+      .get(settings)
+      .send()
+      .await?
+      .error_for_status()?
+      .text()
+      .await?;
+    let url = spade::spade_url(&script).ok_or_else(|| missing("no spade_url"))?;
+    *cached = Some(url.clone());
+    Ok(url)
   }
 
   /// The playback token of `target`, as `player_type` (normally [`gql::PLAYER_TYPE`]).

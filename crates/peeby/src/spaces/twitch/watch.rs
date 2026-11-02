@@ -140,7 +140,8 @@ impl WatchView {
         view.chat = Some(panel);
         let client = view.client.clone();
         let login_ = login.clone();
-        view.points = Some(cx.new(|cx| PointsView::new(login_, client, cx)));
+        let player = view.player.downgrade();
+        view.points = Some(cx.new(|cx| PointsView::new(login_, client, player, cx)));
         view.start_live(login, cx)
       }
       Kind::Vod(id) => view.start_vod(id, cx),

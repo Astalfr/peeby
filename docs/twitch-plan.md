@@ -108,6 +108,7 @@ crates/twitch/                  NEW, no GPUI; thiserror; lenient parsing from se
   src/helix.rs                  Helix calls, pagination, rate-limit headers
   src/models.rs                 Stream, Channel, User, Category, Video, Clip, Page<T>
   src/points.rs                 channel points (ADR 0012): balance, rewards, predictions, spends
+  src/spade.rs                  the watch-time report (`minute-watched`), which earns points
   src/chat/irc.rs               pure IRC parser (tags, PRIVMSG, CLEARCHAT, CLEARMSG, USERNOTICE, ROOMSTATE)
   src/chat/connection.rs        WebSocket connection, PING/PONG, reconnect with backoff
   src/chat/emotes.rs            Twitch emote ranges, 7TV/BTTV/FFZ sets (later)
