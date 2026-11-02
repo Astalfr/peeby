@@ -540,3 +540,75 @@ fn comment(node: &Value) -> Option<Comment> {
     line,
   })
 }
+
+const VIEWING_QUERY: &str = "query VideoViewing($id: ID!) { currentUser { id } video(id: $id) { id \
+  lengthSeconds self { viewingHistory { position } } } }";
+
+/// twitch.tv's own mutation for a VOD's resume position (`updateUserViewedVideo`); it passes
+/// without an integrity token (checked 2026-11-02).
+const VIEWED_MUTATION: &str = "mutation UpdateUserViewedVideo($input: UpdateUserViewedVideoInput!) \
+  { updateUserViewedVideo(input: $input) { __typename } }";
+
+/// Where the viewer stopped in a VOD, on their account (`video.self.viewingHistory`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Viewing {
+  /// The viewer's user id, for [`viewed_request`]; `None` without an auth-token.
+  pub user_id: Option<String>,
+  /// Seconds from the VOD's start; `None` when never watched or signed out.
+  pub position: Option<u32>,
+  /// The VOD's length, seconds.
+  pub length: u32,
+}
+
+/// The request for the viewer's position in VOD `id`.
+pub fn viewing_request(id: &str) -> Value {
+  json!({
+    "operationName": "VideoViewing",
+    "query": VIEWING_QUERY,
+    "variables": { "id": id },
+  })
+}
+
+/// Reads [`Viewing`]; `video: null` is [`Error::NotFound`].
+pub fn parse_viewing(answer: &Value) -> Result<Viewing> {
+  let video = &answer["data"]["video"];
+  if video.is_null() {
+    return Err(gql_error(answer).unwrap_or(Error::NotFound));
+  }
+  let as_u32 = |v: &Value| v.as_u64().and_then(|s| u32::try_from(s).ok());
+  Ok(Viewing {
+    user_id: answer["data"]["currentUser"]["id"]
+      .as_str()
+      .map(str::to_owned),
+    position: as_u32(&video["self"]["viewingHistory"]["position"]),
+    length: as_u32(&video["lengthSeconds"]).unwrap_or(0),
+  })
+}
+
+/// The request saving `position` seconds as `user_id`'s resume position in VOD `id`.
+pub fn viewed_request(user_id: &str, id: &str, position: u32) -> Value {
+  json!({
+    "operationName": "UpdateUserViewedVideo",
+    "query": VIEWED_MUTATION,
+    "variables": { "input": {
+      "userID": user_id,
+      "videoID": id,
+      "position": position,
+      "videoType": "VOD",
+    }},
+  })
+}
+
+/// Whether the mutation went through.
+pub fn parse_viewed(answer: &Value) -> Result<()> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  if answer["data"]["updateUserViewedVideo"].is_null() {
+    return Err(Error::Parse {
+      endpoint: "gql",
+      detail: "updateUserViewedVideo: null".into(),
+    });
+  }
+  Ok(())
+}

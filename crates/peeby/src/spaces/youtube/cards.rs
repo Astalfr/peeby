@@ -6,7 +6,7 @@ use innertube::VideoItem;
 use ui::card::{Hover, MediaCard, RowAction};
 
 use crate::spaces::youtube::{Route, YouTubeSpace};
-use crate::spaces::youtube::{convert, save};
+use crate::spaces::youtube::{convert, history, save};
 
 /// Opens the watch page of `video`.
 fn open_video(
@@ -15,7 +15,10 @@ fn open_video(
 ) -> impl Fn(&mut Window, &mut App) + use<> {
   let nav = nav.clone();
   let route = Route::Watch(video.id.clone());
+  let (id, resume) = (video.id.clone(), history::card_resume(video));
   move |window, cx| {
+    // Where YouTube resumes it, as a click on youtube.com.
+    history::offer(&id, resume, cx);
     nav
       .update(cx, |app, cx| app.open(route.clone(), window, cx))
       .ok();
@@ -38,6 +41,7 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
   ])
   .badge(video.duration.clone())
   .live(video.live)
+  .progress(video.progress.map(|p| f32::from(p.percent) / 100.0))
   .on_hover(move |hovered, cx| crate::spaces::youtube::prefetch::hover(&video_id, hovered, cx))
 }
 

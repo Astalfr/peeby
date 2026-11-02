@@ -17,6 +17,9 @@
 //! - [`Client::playlists`], [`Client::playlist`], [`Client::playlist_more`]: the user's
 //!   playlists and their videos; [`Client::playlist_choices`], [`Client::add_to_playlist`] and
 //!   [`Client::remove_from_playlist`] save a video to one of them;
+//! - [`Client::tracking`], [`Client::report_playback`], [`Client::report_watchtime`]: the
+//!   account's watch history and resume positions (the stats pings youtube.com sends, ADR 0013);
+//!   the cards' [`Progress`] reads them back;
 //! - [`Client::votes`]: likes and dislikes from Return YouTube Dislike, another service:
 //!   attribution required, at most 100 requests/min and 10,000/day, so cache the results;
 //! - [`Client::stream`]: playable HLS streams through the VISIONOS client, which needs no JS
@@ -40,12 +43,12 @@ pub use models::{
   Caption, Channel, ChannelNotifications, ChatAction, ChatBadge, ChatBadgeKind, ChatMessage,
   ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, Live, LiveChatPage, Notification,
   NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, SearchResult, Storyboard, StoryboardFrame, Stream, Thumbnail,
-  VideoItem, Votes, WatchPage,
+  PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, StoryboardFrame, Stream,
+  Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
   parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
-  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_unseen_count,
-  parse_watch,
+  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_tracking,
+  parse_unseen_count, parse_watch,
 };

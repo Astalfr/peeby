@@ -25,7 +25,8 @@ use crate::models::{
   Caption, Channel, ChannelNotifications, ChatAction, ChatBadge, ChatBadgeKind, ChatMessage,
   ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, Live, LiveChatPage, Notification,
   NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, SearchResult, Storyboard, Thumbnail, VideoItem, WatchPage,
+  PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, Thumbnail, Tracking, VideoItem,
+  WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -438,6 +439,7 @@ fn parse_video_renderer(video: &Value) -> Option<VideoItem> {
         ["thumbnails"],
     ),
     set_video_id: None,
+    progress: renderer_progress(video),
   })
 }
 
@@ -694,6 +696,7 @@ fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
     thumbnails: thumbnails(&r["thumbnail"]["thumbnails"]),
     avatar: Vec::new(),
     set_video_id: removable_entry(r),
+    progress: renderer_progress(r),
   })
 }
 
@@ -886,6 +889,43 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
     thumbnails: thumbnails(&image["image"]["sources"]),
     avatar: thumbnails(&avatar["avatar"]["avatarViewModel"]["image"]["sources"]),
     set_video_id: None,
+    progress: lockup_progress(lockup),
+  })
+}
+
+/// The red bar of a video lockup (`thumbnailOverlayProgressBarViewModel`) and where its click
+/// resumes.
+fn lockup_progress(lockup: &Value) -> Option<Progress> {
+  let percent = lockup["contentImage"]["thumbnailViewModel"]["overlays"]
+    .as_array()?
+    .iter()
+    .find_map(|o| {
+      o["thumbnailBottomOverlayViewModel"]["progressBar"]["thumbnailOverlayProgressBarViewModel"]
+        ["startPercent"]
+        .as_u64()
+    })?;
+  let endpoint = &lockup["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"];
+  progress(percent, &endpoint["watchEndpoint"])
+}
+
+/// The same for a `videoRenderer` or a `playlistVideoRenderer`
+/// (`thumbnailOverlayResumePlaybackRenderer`).
+fn renderer_progress(renderer: &Value) -> Option<Progress> {
+  let percent = renderer["thumbnailOverlays"]
+    .as_array()?
+    .iter()
+    .find_map(|o| o["thumbnailOverlayResumePlaybackRenderer"]["percentDurationWatched"].as_u64())?;
+  progress(percent, &renderer["navigationEndpoint"]["watchEndpoint"])
+}
+
+fn progress(percent: u64, watch_endpoint: &Value) -> Option<Progress> {
+  let percent = u8::try_from(percent.min(100)).ok().filter(|&p| p > 0)?;
+  Some(Progress {
+    percent,
+    resume: watch_endpoint["startTimeSeconds"]
+      .as_u64()
+      .and_then(|s| u32::try_from(s).ok())
+      .filter(|&s| s > 0),
   })
 }
 
@@ -916,6 +956,23 @@ fn find_continuation(value: &Value) -> Option<String> {
   find_key(&item, "continuationCommand")?["token"]
     .as_str()
     .map(str::to_owned)
+}
+
+/// The stats URLs of a WEB `player` response, asked with `client_version`; `None` when it has
+/// none (a signed-out or unplayable response may lack them).
+pub fn parse_tracking(player: &Value, client_version: &str) -> Option<Tracking> {
+  let url = |key: &str| {
+    player["playbackTracking"][key]["baseUrl"]
+      .as_str()
+      .filter(|u| u.starts_with("https://"))
+      .map(str::to_owned)
+  };
+  Some(Tracking {
+    playback: url("videostatsPlaybackUrl")?,
+    watchtime: url("videostatsWatchtimeUrl")?,
+    cpn: crate::client::new_cpn(),
+    client_version: client_version.to_owned(),
+  })
 }
 
 /// Value of `key` in `responseContext.serviceTrackingParams`.

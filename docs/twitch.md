@@ -137,6 +137,11 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - BTTV `https://api.betterttv.net/3/cached/users/twitch/{id}` and `/3/cached/emotes/global` **[mem]**;
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
+- **VOD resume position**, checked on 2026-11-02 with the auth-token: `currentUser { viewedVideos(first: N) }` and
+  `video(id) { self { viewingHistory { position updatedAt } } }` read it (null signed out);
+  `updateUserViewedVideo(input: {userID, videoID, position, videoType: VOD})` writes it, raw, with no integrity
+  token (`UpdateUserViewedVideoPayload`, `updatedAt` moved). Helix has nothing like it. Used by
+  `spaces::twitch::progress` (ADR 0013).
 - **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
   tag, deleted messages, 7TV, badges; BTTV and FFZ dropped (the user's choice: 7TV is enough).
 

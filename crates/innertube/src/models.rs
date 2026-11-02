@@ -44,6 +44,18 @@ pub struct VideoItem {
   /// In a playlist the user can edit: the id of this entry, for
   /// [`crate::Client::remove_playlist_entry`] (a video may be in a playlist twice).
   pub set_video_id: Option<String>,
+  /// How much of it the user watched, signed in.
+  pub progress: Option<Progress>,
+}
+
+/// How much of a video the user watched, as its card shows it (the red bar).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Progress {
+  /// Watched part of the video, 1 to 100.
+  pub percent: u8,
+  /// Where youtube.com resumes it from this card (the card's `watchEndpoint.startTimeSeconds`),
+  /// seconds. `None` once watched to the end, and on some cards of the history page.
+  pub resume: Option<u32>,
 }
 
 /// A page of videos and the token of the next page.
@@ -282,6 +294,96 @@ impl std::fmt::Debug for Caption {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "Caption({} {})", self.language, self.name)
   }
+}
+
+/// Where to report a video's playback to the user's account: the stats URLs of a signed-in WEB
+/// `player` response ([`crate::Client::tracking`]). The URLs carry session ids: never log them.
+#[derive(Clone)]
+pub struct Tracking {
+  /// `videostatsPlaybackUrl`: one ping when playback starts adds the video to the history.
+  pub(crate) playback: String,
+  /// `videostatsWatchtimeUrl`: the pings of the watched segments, whose `cmt` is the resume
+  /// position.
+  pub(crate) watchtime: String,
+  /// Client playback nonce, the same for every ping of one playback.
+  pub(crate) cpn: String,
+  /// WEB `clientVersion` the response was asked with, sent back as `cver`.
+  pub(crate) client_version: String,
+}
+
+impl Tracking {
+  /// The ping of the start of playback, at `position` seconds.
+  pub fn playback_url(&self, position: f64) -> String {
+    self.url(&self.playback, position, Vec::new())
+  }
+
+  /// The ping of a watched segment. youtube.com sends `st`/`et` (where the segment started and
+  /// ended), `cmt` (the position it resumes from), `state` and `final` on the last one.
+  pub fn watchtime_url(&self, segment: Watchtime) -> String {
+    let state = if segment.paused { "paused" } else { "playing" };
+    let mut extra = vec![
+      ("st", seconds(segment.from)),
+      ("et", seconds(segment.to)),
+      ("state", state.to_owned()),
+    ];
+    if segment.last {
+      extra.push(("final", "1".to_owned()));
+    }
+    self.url(&self.watchtime, segment.to, extra)
+  }
+
+  /// `base` with the parameters of yt-dlp's `_mark_watched` (`ver`, `cpn`, `cmt`, `el`), the WEB
+  /// client's (`c`, `cver`) and `extra`, each replacing the base's own.
+  fn url(&self, base: &str, position: f64, extra: Vec<(&str, String)>) -> String {
+    let mut set = vec![
+      ("ver", "2".to_owned()),
+      ("cpn", self.cpn.clone()),
+      ("cmt", seconds(position)),
+      // Otherwise YouTube counts it as a short (yt-dlp).
+      ("el", "detailpage".to_owned()),
+      ("c", "WEB".to_owned()),
+      ("cver", self.client_version.clone()),
+    ];
+    set.extend(extra);
+    let Ok(mut url) = reqwest::Url::parse(base) else {
+      return base.to_owned();
+    };
+    let kept: Vec<(String, String)> = url
+      .query_pairs()
+      .filter(|(k, _)| !set.iter().any(|(key, _)| key == k))
+      .map(|(k, v)| (k.into_owned(), v.into_owned()))
+      .collect();
+    url
+      .query_pairs_mut()
+      .clear()
+      .extend_pairs(kept)
+      .extend_pairs(set);
+    url.into()
+  }
+}
+
+/// Seconds as the stats pings write them, e.g. `12.345`.
+fn seconds(value: f64) -> String {
+  format!("{:.3}", value.max(0.0))
+}
+
+impl std::fmt::Debug for Tracking {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Tracking")
+  }
+}
+
+/// A segment of playback for [`crate::Client::report_watchtime`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Watchtime {
+  /// Where the segment started, seconds of the video.
+  pub from: f64,
+  /// Where it ended: the current position, which youtube.com resumes from.
+  pub to: f64,
+  /// Playback is paused (or stopped) at `to`.
+  pub paused: bool,
+  /// The last ping of this playback (the page goes away or the video ended).
+  pub last: bool,
 }
 
 /// A playable stream: an HLS video variant and its separate audio rendition.

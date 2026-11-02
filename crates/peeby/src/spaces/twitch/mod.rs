@@ -15,6 +15,7 @@ pub mod following;
 pub mod login;
 pub mod play;
 pub mod points;
+pub mod progress;
 pub mod replay;
 pub mod search;
 pub mod session;

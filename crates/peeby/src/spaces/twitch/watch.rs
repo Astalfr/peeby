@@ -26,7 +26,7 @@ use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, theme};
 
 use super::points::PointsView;
-use super::{Route, TwitchSpace, cards, chat, play, replay};
+use super::{Route, TwitchSpace, cards, chat, play, progress, replay};
 use crate::settings::{Player, Settings};
 
 /// How often the decoding of an AV1 or HEVC quality is checked.
@@ -76,6 +76,8 @@ pub struct WatchView {
   header: Option<Header>,
   /// A live's start, for the header's uptime.
   started_at: Option<i64>,
+  /// Saves a VOD's position to the account (with the auth-token).
+  saver: Option<progress::Saver>,
   focused: bool,
   _tasks: Vec<Task<()>>,
 }
@@ -95,9 +97,11 @@ impl WatchView {
     let (prefs, theater) = (Player::prefs(settings), settings.theater);
     let player = cx.new(|cx| PlayerView::new(prefs, theater, cx));
     let live = matches!(kind, Kind::Live(_));
-    cx.subscribe(
-      &player,
-      move |_, player, event: &PlayerEvent, cx| match *event {
+    cx.subscribe(&player, move |this, player, event: &PlayerEvent, cx| {
+      if let Some(saver) = &mut this.saver {
+        saver.on_event(event, &player, cx);
+      }
+      match *event {
         PlayerEvent::Theater => {
           Settings::update(cx, |s| s.theater = !s.theater);
           let theater = Settings::get(cx).theater;
@@ -109,8 +113,16 @@ impl WatchView {
           player.set_notice(Some("Le live est terminé.".into()), cx)
         }),
         _ => {}
-      },
-    )
+      }
+    })
+    .detach();
+    // The page goes: the VOD's last position.
+    cx.on_release(|this: &mut Self, cx| {
+      let player = this.player.clone();
+      if let Some(saver) = &mut this.saver {
+        saver.save(&player, cx);
+      }
+    })
     .detach();
     let mut view = Self {
       kind,
@@ -125,6 +137,7 @@ impl WatchView {
       cpu_reading: None,
       header: None,
       started_at: None,
+      saver: None,
       focused: false,
       _tasks: Vec::new(),
     };
@@ -345,9 +358,15 @@ impl WatchView {
       async move { client.play(&Target::Vod(id), &codecs, false).await }
     });
     let storyboard = runtime::spawn(cx, {
-      let id = id.clone();
+      let (client, id) = (client.clone(), id.clone());
       async move { client.storyboard(&id).await }
     });
+    // About 30 ms, asked with the playback: the start position is known when mpv starts.
+    let viewing = runtime::spawn(cx, {
+      let (client, id) = (client.clone(), id.clone());
+      async move { client.vod_viewing(&id).await }
+    });
+    let video_id = id.clone();
     let info = runtime::spawn(cx, async move {
       let video = helix.video(&id).await?;
       let avatar = cards::avatars(&helix, vec![video.user_id.clone()]).await;
@@ -355,6 +374,14 @@ impl WatchView {
     });
     self._tasks.push(cx.spawn(async move |this, cx| {
       let (play, storyboard, info) = (play.await, storyboard.await, info.await);
+      let viewing = match viewing.await {
+        Some(Ok(viewing)) => Some(viewing),
+        Some(Err(e)) => {
+          tracing::warn!("VOD position: {e}");
+          None
+        }
+        None => None,
+      };
       this
         .update(cx, |this, cx| {
           if let Some(Ok((video, avatars))) = info {
@@ -381,6 +408,15 @@ impl WatchView {
                 &Settings::get(cx).player,
               );
               source.previews = storyboard.and_then(Result::ok).and_then(play::previews);
+              if let Some(viewing) = &viewing {
+                if let Some(start) = progress::start_at(viewing) {
+                  source.options.start_seconds = start;
+                }
+                this.saver = progress::Saver::new(this.client.clone(), video_id, viewing);
+                if this.saver.is_some() {
+                  this.save_periodically(cx);
+                }
+              }
               this.proxy = Some(proxy);
               this.qualities = qualities;
               this.start_source(source, clicked, cx);
@@ -392,6 +428,24 @@ impl WatchView {
           cx.notify();
         })
         .ok();
+    }));
+  }
+
+  /// Saves the VOD's position every [`progress::SAVE_EVERY`] while the page lives.
+  fn save_periodically(&mut self, cx: &mut Context<Self>) {
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      loop {
+        cx.background_executor().timer(progress::SAVE_EVERY).await;
+        let saved = this.update(cx, |this, cx| {
+          let player = this.player.clone();
+          if let Some(saver) = &mut this.saver {
+            saver.tick(&player, cx);
+          }
+        });
+        if saved.is_err() {
+          break;
+        }
+      }
     }));
   }
 

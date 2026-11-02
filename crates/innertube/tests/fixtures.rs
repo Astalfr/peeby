@@ -5,9 +5,10 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, NotificationLevel,
-  SearchResult, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_watch,
+  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, NotificationLevel, Progress,
+  SearchResult, Watchtime, hls, hls_manifest_url, parse_feed, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_tracking,
+  parse_watch,
 };
 use serde_json::Value;
 
@@ -609,6 +610,125 @@ fn search_results() {
   );
   // Protocol-relative avatars get their scheme.
   assert!(channel.avatar.iter().all(|a| a.url.starts_with("https://")));
+}
+
+#[test]
+fn search_result_progress() {
+  let page = parse_search(&fixture("search.json"));
+  let watched: Vec<_> = page
+    .results
+    .iter()
+    .filter_map(|r| match r {
+      SearchResult::Video(v) => v.progress.map(|p| (v.id.as_str(), p)),
+      SearchResult::Channel(_) => None,
+    })
+    .collect();
+  assert_eq!(
+    watched,
+    [(
+      "0y6RKiIk6cs",
+      Progress {
+        percent: 7,
+        resume: Some(57)
+      }
+    )]
+  );
+}
+
+#[test]
+fn history_lockups_progress() {
+  let feed = parse_feed(&fixture("history.json"));
+  let progress: Vec<_> = feed
+    .items
+    .iter()
+    .map(|v| (v.id.as_str(), v.progress))
+    .collect();
+  // Watched to the end: the bar is full and the card starts over.
+  assert_eq!(
+    progress,
+    [
+      (
+        "RJsycDbdSgo",
+        Some(Progress {
+          percent: 100,
+          resume: None
+        })
+      ),
+      (
+        "0s0ltiSqQyU",
+        Some(Progress {
+          percent: 10,
+          resume: Some(10)
+        })
+      ),
+    ]
+  );
+}
+
+#[test]
+fn watch_later_progress() {
+  let page = parse_playlist_page(&fixture("playlist_watch_later_progress.json"));
+  let progress: Vec<_> = page.items.iter().map(|v| v.progress).collect();
+  assert_eq!(
+    progress,
+    [
+      Some(Progress {
+        percent: 10,
+        resume: Some(69)
+      }),
+      None
+    ]
+  );
+}
+
+#[test]
+fn web_player_tracking_urls() {
+  let tracking = parse_tracking(&fixture("player_web_signed_in.json"), "2.20261029.11.00")
+    .expect("signed-in WEB player has playbackTracking");
+  let playback = tracking.playback_url(12.0);
+  assert!(playback.starts_with("https://s.youtube.com/api/stats/playback?"));
+  for part in [
+    "docid=HH6B2p4Om5Y",
+    "len=3529",
+    "ver=2",
+    "cmt=12.000",
+    "el=detailpage",
+    "c=WEB",
+  ] {
+    assert!(playback.contains(part), "{part} in {playback}");
+  }
+  // `el` replaced, not repeated.
+  assert_eq!(playback.matches("el=").count(), 1);
+  let watchtime = tracking.watchtime_url(Watchtime {
+    from: 12.0,
+    to: 42.5,
+    paused: true,
+    last: true,
+  });
+  assert!(watchtime.starts_with("https://s.youtube.com/api/stats/watchtime?"));
+  for part in [
+    "st=12.000",
+    "et=42.500",
+    "cmt=42.500",
+    "state=paused",
+    "final=1",
+  ] {
+    assert!(watchtime.contains(part), "{part} in {watchtime}");
+  }
+  // One nonce per playback, 16 characters.
+  let cpn = |url: &str| {
+    url
+      .split('&')
+      .find_map(|p| p.strip_prefix("cpn="))
+      .map(str::to_owned)
+  };
+  assert_eq!(cpn(&playback), cpn(&watchtime));
+  assert_eq!(cpn(&playback).map(|c| c.len()), Some(16));
+  // Another playback gets another nonce.
+  let other = parse_tracking(&fixture("player_web_signed_in.json"), "2.20261029.11.00").unwrap();
+  assert_ne!(cpn(&other.playback_url(0.0)), cpn(&playback));
+  // No tracking in the VISIONOS-less response of an unplayable video.
+  assert!(parse_tracking(&fixture("player_login_required.json"), "2").is_none());
 }
 
 #[test]

@@ -8,6 +8,7 @@ pub mod channels;
 pub mod chat;
 pub mod convert;
 pub mod feed;
+pub mod history;
 pub mod inbox;
 pub mod playlists;
 pub mod prefetch;
@@ -253,9 +254,14 @@ impl YouTubeSpace {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) {
-    let Some(id) = queue.read(cx).current_video().map(|v| v.id.clone()) else {
+    let Some((id, resume)) = queue
+      .read(cx)
+      .current_video()
+      .map(|v| (v.id.clone(), history::card_resume(v)))
+    else {
       return;
     };
+    history::offer(&id, resume, cx);
     if replace
       && self
         .stack

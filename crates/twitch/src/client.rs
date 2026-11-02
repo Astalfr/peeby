@@ -138,6 +138,25 @@ impl Client {
     Ok(gql::parse_storyboard(&response.text().await?, &url))
   }
 
+  /// Where the viewer stopped in VOD `id` (their account's, as twitch.tv resumes it). Without an
+  /// auth-token, no position and no user id.
+  pub async fn vod_viewing(&self, id: &str) -> Result<gql::Viewing> {
+    let answer = self.gql(&gql::viewing_request(id)).await?;
+    gql::parse_viewing(&answer)
+  }
+
+  /// Saves `position` seconds as `user_id`'s resume position in VOD `id`, as twitch.tv's player
+  /// does (needs the auth-token).
+  pub async fn save_vod_position(&self, user_id: &str, id: &str, position: u32) -> Result<()> {
+    if self.auth_token.is_none() {
+      return Err(Error::NotLoggedIn);
+    }
+    let answer = self
+      .gql(&gql::viewed_request(user_id, id, position))
+      .await?;
+    gql::parse_viewed(&answer)
+  }
+
   /// A page of VOD `id`'s chat from about `offset` seconds.
   pub async fn vod_comments(&self, id: &str, offset: u32) -> Result<gql::Comments> {
     let answer = self.gql(&gql::comments_request(id, offset)).await?;

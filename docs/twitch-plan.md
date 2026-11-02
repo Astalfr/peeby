@@ -448,7 +448,8 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 
   The storyboard of a VOD still being broadcast answers 403: it has none until the broadcast ends
 - [x] VODs: `Client::play(Target::Vod)` through the same proxy (no ads to filter, the token stays out
-      of mpv's URLs), seekable, with the qualities of the master. Resume is not tracked
+      of mpv's URLs), seekable, with the qualities of the master. Resume: the account's position
+      (`viewingHistory`, saved with `updateUserViewedVideo`, ADR 0013)
 - [x] Seek-bar previews:
   - `Client::storyboard` → `gql::StoryboardLevel`s (largest frames first; `frame_at` gives the sheet,
     column and row);

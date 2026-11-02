@@ -359,3 +359,31 @@ fn a_master_asked_with_every_codec_has_its_source_in_hevc_only() {
   names.dedup();
   assert_eq!(names.len(), count);
 }
+
+#[test]
+fn vod_viewing_position() {
+  let viewing = gql::parse_viewing(&json("gql_vod_viewing.json")).unwrap();
+  assert_eq!(
+    viewing,
+    gql::Viewing {
+      user_id: Some("100000001".into()),
+      position: Some(2940),
+      length: 29136,
+    }
+  );
+  // Signed out: the VOD, nobody's position.
+  let anonymous = gql::parse_viewing(&json("gql_vod_viewing_anonymous.json")).unwrap();
+  assert_eq!((anonymous.user_id, anonymous.position), (None, None));
+  assert_eq!(anonymous.length, 29136);
+}
+
+#[test]
+fn vod_position_is_saved() {
+  gql::parse_viewed(&json("gql_viewed_video.json")).unwrap();
+  let request = gql::viewed_request("100000001", "2917171400", 2940);
+  assert_eq!(
+    request["variables"]["input"],
+    serde_json::json!({ "userID": "100000001", "videoID": "2917171400", "position": 2940, "videoType": "VOD" })
+  );
+  assert!(gql::parse_viewed(&json("gql_invalid_auth_token.json")).is_err());
+}

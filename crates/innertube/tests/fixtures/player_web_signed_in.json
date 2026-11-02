@@ -1,0 +1,33 @@
+{
+ "responseContext": {
+  "serviceTrackingParams": [
+   {
+    "service": "GFEEDBACK",
+    "params": [
+     {
+      "key": "logged_in",
+      "value": "1"
+     }
+    ]
+   }
+  ]
+ },
+ "playabilityStatus": {
+  "status": "OK"
+ },
+ "playbackTracking": {
+  "videostatsPlaybackUrl": {
+   "baseUrl": "https://s.youtube.com/api/stats/playback?cl=REDACTED&docid=HH6B2p4Om5Y&ei=REDACTED&ns=REDACTED&plid=REDACTED&el=detailpage&len=3529&of=REDACTED&subscribed=1&uga=REDACTED&vm=REDACTED"
+  },
+  "videostatsWatchtimeUrl": {
+   "baseUrl": "https://s.youtube.com/api/stats/watchtime?cl=REDACTED&docid=HH6B2p4Om5Y&ei=REDACTED&ns=REDACTED&plid=REDACTED&el=detailpage&len=3529&of=REDACTED&subscribed=1&uga=REDACTED&vm=REDACTED"
+  }
+ },
+ "videoDetails": {
+  "videoId": "HH6B2p4Om5Y",
+  "title": "They’re burning everything down..",
+  "lengthSeconds": "3529",
+  "channelId": "UCQeRaTukNYft1_6AZPACnog",
+  "author": "Asmongold TV"
+ }
+}

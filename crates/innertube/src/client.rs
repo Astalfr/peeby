@@ -8,13 +8,13 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
   Channel, CommentPage, Feed, LikeStatus, LiveChatPage, NotificationPage, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, Stream, Votes, WatchPage,
+  PlaylistSummary, SearchPage, Stream, Tracking, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
   parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
-  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_unseen_count,
-  parse_watch, tracking_param,
+  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_tracking,
+  parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -421,6 +421,57 @@ impl Client {
     Ok(())
   }
 
+  /// Where to report the playback of `video_id` to the account: a signed-in WEB `player`
+  /// request, for its stats URLs only (its streams are not used). VISIONOS's are an anonymous
+  /// visitor's: they write no history. Signed in only.
+  pub async fn tracking(&self, video_id: &str) -> Result<Tracking> {
+    self.require_session()?;
+    let body = json!({ "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true });
+    let player = self.web("player", body, true).await?;
+    self.check_session(&player)?;
+    let version = self
+      .state()
+      .web_version
+      .clone()
+      .unwrap_or_else(|| WEB_CLIENT_VERSION.to_owned());
+    parse_tracking(&player, &version).ok_or(Error::Parse {
+      endpoint: "player",
+      detail: "no playbackTracking".into(),
+    })
+  }
+
+  /// Reports the start of playback at `position` seconds: the video goes to the top of the
+  /// account's history (when the history is on).
+  pub async fn report_playback(&self, tracking: &Tracking, position: f64) -> Result<()> {
+    self.ping(&tracking.playback_url(position)).await
+  }
+
+  /// Reports a watched segment: its end becomes the video's resume position on every device.
+  pub async fn report_watchtime(&self, tracking: &Tracking, segment: Watchtime) -> Result<()> {
+    self.ping(&tracking.watchtime_url(segment)).await
+  }
+
+  /// A stats ping (`s.youtube.com/api/stats/…`): a GET with the session cookies, answered 204
+  /// with no body. The URL carries session ids: it appears in no log or error.
+  async fn ping(&self, url: &str) -> Result<()> {
+    let session = self.session.as_ref().ok_or(Error::SignInRequired)?;
+    let cookies = lock(&session.cookies).header();
+    let request = self
+      .http
+      .get(url)
+      .header("Origin", ORIGIN)
+      .header("Cookie", cookies);
+    let response = request.send().await?;
+    self.keep_rotated_cookies(&response);
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "stats",
+      });
+    }
+    Ok(())
+  }
+
   /// Downloads an image (thumbnails, avatars).
   pub async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>> {
     let response = self.http.get(url).send().await?;
@@ -688,6 +739,25 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
   mutex
     .lock()
     .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// A client playback nonce: 16 characters of `A-Za-z0-9-_`. YouTube accepts any (yt-dlp); this
+/// one hashes the time and a counter, so two playbacks never share one.
+pub(crate) fn new_cpn() -> String {
+  use sha1::{Digest, Sha1};
+  use std::sync::atomic::{AtomicU64, Ordering};
+  const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  static COUNTER: AtomicU64 = AtomicU64::new(0);
+  let nanos = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map_or(0, |d| d.as_nanos());
+  let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+  let digest = Sha1::digest(format!("{nanos} {count} {}", std::process::id()).as_bytes());
+  digest
+    .iter()
+    .take(16)
+    .map(|b| char::from(ALPHABET[usize::from(b & 63)]))
+    .collect()
 }
 
 /// `streamingData.hlsManifestUrl` of a player response, or why there is none.

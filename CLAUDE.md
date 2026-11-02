@@ -86,6 +86,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   never in a URL or a log; its images go through `images::route` with the `Authorization` header. Playing anything
   writes to the user's account (reports: last played date, play count, resume position, watched flag): ask the
   user before a playback test.
+- Watch progress lives on the account (ADR 0013): playing a YouTube video signed in writes its history and resume
+  position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`. Ask the user before a playback test.
 
 ## Twitch (docs/twitch-plan.md, ADR 0010)
 - Signing in is Helix's Device Code Grant with Peeby's public Client-ID (`twitch::auth::CLIENT_ID`). Refresh

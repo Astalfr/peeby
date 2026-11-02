@@ -32,6 +32,7 @@ use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 use crate::settings::{Player, Settings};
 use crate::spaces::youtube::cards::{compact_card, playlist_row};
 use crate::spaces::youtube::convert::{self, error_text};
+use crate::spaces::youtube::history::{self, Reporter};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
@@ -107,6 +108,10 @@ pub struct WatchView {
   queue_scroll_to: Option<usize>,
   /// A live's chat, and the task polling it.
   chat: Option<(Entity<ChatPanel>, Task<()>)>,
+  /// Where playback starts: where it stopped last time ([`history::start_at`]).
+  start: Option<f64>,
+  /// Reports the playback to the account's history.
+  history: Reporter,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -135,8 +140,10 @@ impl WatchView {
     let votes = cx
       .try_global::<VotesCache>()
       .and_then(|cache| cache.0.get(&video_id).copied());
+    let start = history::start_at(&video_id, cx);
     let mut subscriptions = vec![
       cx.subscribe(&player, |this, player, event: &PlayerEvent, cx| {
+        this.history.on_event(event, &player, cx);
         match *event {
           // Kept in the settings, so the next videos open the same way.
           PlayerEvent::Theater => {
@@ -156,7 +163,7 @@ impl WatchView {
               queue.update(cx, |q, cx| q.previous(cx));
             }
           }
-          // YouTube reports nothing back, and the embedded player has no close button.
+          // Reported by `history`; the embedded player has no close button.
           PlayerEvent::Started
           | PlayerEvent::Paused(_)
           | PlayerEvent::Seeked
@@ -190,6 +197,13 @@ impl WatchView {
       let current = queue.read(cx).position() - 1;
       current.min(QUEUE_BEFORE).saturating_sub(1)
     });
+    // The page goes (replaced, back, closed): the last watch-time ping.
+    cx.on_release(|this: &mut Self, cx| {
+      let player = this.player.clone();
+      this.history.close(&player, cx);
+    })
+    .detach();
+    let history = Reporter::new(client.clone(), video_id.clone());
     let view = Self {
       client,
       video_id,
@@ -206,10 +220,13 @@ impl WatchView {
       queue_scroll,
       queue_scroll_to,
       chat: None,
+      start,
+      history,
       _subscriptions: subscriptions,
     };
     view.sync_queue_controls(cx);
     view.load_stream(cx);
+    view.report_history(cx);
     view.load_page(cx);
     if view.votes.is_none() {
       view.load_votes(cx);
@@ -368,7 +385,8 @@ impl WatchView {
         stream.resolution,
         stream.codecs
       );
-      let source = convert::source(stream, &Settings::get(cx).player);
+      let mut source = convert::source(stream, &Settings::get(cx).player);
+      resume(&mut source, self.start);
       self
         .player
         .update(cx, |player, cx| player.start(source, clicked, cx));
@@ -380,6 +398,7 @@ impl WatchView {
     let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
     let player = self.player.downgrade();
     let video_id = self.video_id.clone();
+    let start = self.start;
     cx.spawn(async move |_, cx| {
       let error = match fetch.await {
         Some(Ok(stream)) => {
@@ -389,7 +408,8 @@ impl WatchView {
             stream.resolution,
             stream.codecs
           );
-          let source = convert::source(stream, &player_settings);
+          let mut source = convert::source(stream, &player_settings);
+          resume(&mut source, start);
           player
             .update(cx, |player, cx| player.start(source, clicked, cx))
             .ok();
@@ -412,6 +432,10 @@ impl WatchView {
         .update(cx, |player, cx| match fallback {
           Some(mut options) => {
             player_settings.apply(&mut options);
+            // A card's resume is never a live's.
+            if let Some(start) = start {
+              options.start_seconds = start;
+            }
             player.start_with(options, clicked, cx)
           }
           None => {
@@ -420,6 +444,43 @@ impl WatchView {
           }
         })
         .ok();
+    })
+    .detach();
+  }
+
+  /// Asks for the stats URLs (signed in), then pings every [`history::PING_EVERY`] while the
+  /// page lives.
+  fn report_history(&self, cx: &mut Context<Self>) {
+    let Some(tracking) = self.history.fetch_tracking(cx) else {
+      return;
+    };
+    cx.spawn(async move |this, cx| {
+      match tracking.await {
+        Some(Ok(tracking)) => {
+          let set = this.update(cx, |this, cx| {
+            let player = this.player.clone();
+            this.history.set_tracking(tracking, &player, cx);
+          });
+          if set.is_err() {
+            return;
+          }
+        }
+        Some(Err(e)) => {
+          tracing::warn!("YouTube history: no stats URLs: {e}");
+          return;
+        }
+        None => return,
+      }
+      loop {
+        cx.background_executor().timer(history::PING_EVERY).await;
+        let ticked = this.update(cx, |this, cx| {
+          let player = this.player.clone();
+          this.history.tick(&player, cx);
+        });
+        if ticked.is_err() {
+          break;
+        }
+      }
     })
     .detach();
   }
@@ -982,6 +1043,13 @@ impl WatchView {
 }
 
 /// Placeholder for the title, channel and description while the page loads.
+/// Starts a video at `start` (a live keeps its own start, near its edge).
+fn resume(source: &mut ui::player::Source, start: Option<f64>) {
+  if let Some(start) = start.filter(|_| !source.live) {
+    source.options.start_seconds = start;
+  }
+}
+
 fn skeleton_details() -> gpui::Div {
   v_flex()
     .gap_4()
