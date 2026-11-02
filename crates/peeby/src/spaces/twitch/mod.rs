@@ -126,7 +126,7 @@ struct Signed {
   helix: Helix,
   login: String,
   user_id: String,
-  /// The followed channels on air, for the sidebar, with their avatars.
+  /// The followed channels on air, for the sidebar, with their avatars (and the user's).
   live: Vec<Stream>,
   avatars: Avatars,
   /// Who went live since Peeby opened.
@@ -300,7 +300,10 @@ impl TwitchSpace {
             runtime::spawn(cx, async move {
               // Every live of the first page, for the bell; the sidebar shows the first ones.
               let live = helix.followed_streams(&user_id, None).await?.items;
-              let ids = live.iter().map(|s| s.user_id.clone()).collect();
+              // The user's own avatar first, for the account entry.
+              let ids = std::iter::once(user_id.clone())
+                .chain(live.iter().map(|s| s.user_id.clone()))
+                .collect();
               let avatars = cards::avatars(&helix, ids).await;
               Ok::<_, Error>((live, avatars))
             })
@@ -612,7 +615,10 @@ impl Space for TwitchSpace {
       MenuEntry {
         bottom: true,
         avatar: Some(Avatar {
-          picture: None,
+          picture: signed
+            .avatars
+            .get(&signed.user_id)
+            .map(|url| cards::template(url)),
           initial,
         }),
         detail: Some("Twitch".into()),
