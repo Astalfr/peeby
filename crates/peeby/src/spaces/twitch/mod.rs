@@ -41,7 +41,7 @@ use ui::theme::Accent;
 use ui::{runtime, theme};
 
 use crate::settings::Settings;
-use crate::shell::space::{Avatar, MenuEntry, Space, SpaceEvent, SpaceInfo};
+use crate::shell::space::{Avatar, HoverCard, MenuEntry, Space, SpaceEvent, SpaceInfo};
 use browse::{BrowseView, CategoryView};
 use cards::Avatars;
 use channel::ChannelView;
@@ -615,6 +615,11 @@ impl Space for TwitchSpace {
         }),
         detail: Some(stream.game_name.clone().into()),
         live: true,
+        hover: Some(HoverCard {
+          // `line_clamp` only limits wrapped lines.
+          title: stream.title.replace(['\n', '\r'], " ").into(),
+          detail: (!stream.game_name.is_empty()).then(|| stream.game_name.clone().into()),
+        }),
         ..MenuEntry::new(
           format!("live:{}", stream.user_login),
           stream.user_name.clone(),

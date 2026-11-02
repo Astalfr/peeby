@@ -7,10 +7,12 @@ mod mini_player;
 mod settings_page;
 pub mod space;
 
+use std::time::{Duration, Instant};
+
 use gpui::prelude::*;
 use gpui::{
   Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, ObjectFit,
-  SharedString, Subscription, Window, WindowHandle, div, img, px,
+  SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
@@ -21,12 +23,12 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::player::{NowPlaying, PlayerView, now_playing};
 use ui::splash::Splash;
-use ui::{tf, theme};
+use ui::{motion, tf, theme};
 
 use crate::settings::Settings;
 use mini_player::MiniPlayer;
 use settings_page::SettingsView;
-use space::{Avatar, MenuEntry, SpaceEvent, SpaceHandle};
+use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
@@ -46,8 +48,20 @@ pub struct Shell {
   mini: Option<Mini>,
   /// The opening animation over the window, until it ends.
   splash: Option<Splash>,
+  /// The sidebar entry whose [`HoverCard`] shows, or fades out when `false`.
+  card: Option<(SharedString, bool)>,
+  /// When the last card started fading out, for [`CARD_GRACE`].
+  card_hidden: Option<Instant>,
+  /// Shows the card of the entry under the pointer after [`CARD_DELAY`].
+  card_delay: Task<()>,
   _subscriptions: Vec<Subscription>,
 }
+
+/// How long the pointer rests on a sidebar entry before its card shows, as GPUI's tooltips.
+const CARD_DELAY: Duration = Duration::from_millis(500);
+/// From one entry to the next, the pointer may leave the first (the gap between entries, or GPUI
+/// telling the leave first) before it enters the next: the next card still shows at once.
+const CARD_GRACE: Duration = Duration::from_millis(300);
 
 impl Shell {
   /// The shell over `spaces`, the first one open, with the opening animation when `splash` (and
@@ -112,8 +126,44 @@ impl Shell {
       settings: None,
       mini: None,
       splash: (splash && !cx.reduce_motion()).then(Splash::new),
+      card: None,
+      card_hidden: None,
+      card_delay: Task::ready(()),
       _subscriptions: subscriptions,
     }
+  }
+
+  /// The pointer entered (`hovered`) or left the sidebar entry `id`, which has a card. From one
+  /// card to the next, the next shows at once.
+  fn hover_entry(&mut self, id: SharedString, hovered: bool, cx: &mut Context<Self>) {
+    if !hovered {
+      self.card_delay = Task::ready(());
+      if let Some((shown, visible)) = &mut self.card
+        && *shown == id
+      {
+        *visible = false;
+        self.card_hidden = Some(Instant::now());
+        cx.notify();
+      }
+      return;
+    }
+    let recent = self
+      .card_hidden
+      .is_some_and(|hidden| hidden.elapsed() < CARD_GRACE);
+    if matches!(&self.card, Some((_, true))) || recent {
+      self.card = Some((id, true));
+      cx.notify();
+      return;
+    }
+    self.card_delay = cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(CARD_DELAY).await;
+      this
+        .update(cx, |this, cx| {
+          this.card = Some((id, true));
+          cx.notify();
+        })
+        .ok();
+    });
   }
 
   fn space(&self) -> Option<&SpaceHandle> {
@@ -486,7 +536,7 @@ impl Shell {
       let label = entry.label.clone();
       let id = entry.id.clone();
       let icon = match &entry.avatar {
-        Some(user) => user_avatar(user, window, cx),
+        Some(user) => user_avatar(user, 24., window, cx),
         None => gpui_component::Icon::new(entry.icon)
           .size(px(18.))
           .flex_none()
@@ -535,11 +585,36 @@ impl Shell {
       let row = sidebar_entry(entry.id.clone(), entry.active && !in_settings, collapsed)
         .when(entry.detail.is_some() && !collapsed, |el| el.h(px(48.)))
         .child(icon)
+        .map(|el| match entry.hover.clone() {
+          Some(card) => {
+            let visible = match &self.card {
+              Some((shown, visible)) if *shown == entry.id => Some(*visible),
+              _ => None,
+            };
+            let hovered = entry.id.clone();
+            el.on_hover(cx.listener(move |this, hovered_now: &bool, _, cx| {
+              this.hover_entry(hovered.clone(), *hovered_now, cx)
+            }))
+            .children(visible.and_then(|visible| {
+              hover_card(
+                &entry.id,
+                label.clone(),
+                entry.avatar.as_ref(),
+                card,
+                visible,
+                window,
+                cx,
+              )
+            }))
+          }
+          None if collapsed => el.tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(label.clone()).build(window, cx)
+          }),
+          None => el,
+        })
         .map(|el| {
           if collapsed {
-            el.tooltip(move |window, cx| {
-              gpui_component::tooltip::Tooltip::new(label.clone()).build(window, cx)
-            })
+            el
           } else {
             el.child(
               v_flex()
@@ -557,7 +632,12 @@ impl Shell {
             .when(entry.live, |el| el.child(live_pill()))
           }
         })
-        .on_click(cx.listener(move |this, _, window, cx| this.open_entry(id.clone(), window, cx)));
+        .on_click(cx.listener(move |this, _, window, cx| {
+          // A click puts the card away, as GPUI does a tooltip.
+          this.card_delay = Task::ready(());
+          this.card = None;
+          this.open_entry(id.clone(), window, cx)
+        }));
       v_flex().children(heading).child(row)
     };
     let top: Vec<_> = top.into_iter().map(|e| item(e, window, cx)).collect();
@@ -658,12 +738,93 @@ fn live_pill() -> impl IntoElement {
     .child("LIVE")
 }
 
-/// A user's avatar in the sidebar, the size of an entry's icon plus a little: their picture once
+/// A sidebar entry's [`HoverCard`] at its right, over the page: the avatar, larger, beside the
+/// entry's label, the card's title and its detail. It fades in sliding toward the entry while
+/// `visible`, and out sliding away; `None` once it has faded out.
+fn hover_card(
+  id: &SharedString,
+  label: SharedString,
+  avatar: Option<&Avatar>,
+  card: HoverCard,
+  visible: bool,
+  window: &mut Window,
+  cx: &mut App,
+) -> Option<gpui::AnyElement> {
+  let duration = if cx.reduce_motion() {
+    Duration::ZERO
+  } else {
+    theme::FAST
+  };
+  let target = if visible { 1. } else { 0. };
+  let t = motion::tween(
+    SharedString::from(format!("hover-card-{id}")),
+    0.,
+    target,
+    duration,
+    window,
+    cx,
+  );
+  if !visible && t <= 0. {
+    return None;
+  }
+  let content = h_flex()
+    .ml(px(10. + 6. * (1. - t)))
+    .w(px(280.))
+    .p_3()
+    .gap_3()
+    .items_start()
+    .rounded(px(8.))
+    .border_1()
+    .border_color(theme::border())
+    .bg(theme::surface())
+    .shadow_md()
+    .text_sm()
+    .text_color(theme::foreground())
+    .opacity(t)
+    .children(avatar.map(|user| user_avatar(user, 48., window, cx)))
+    .child(
+      v_flex()
+        .flex_1()
+        .min_w_0()
+        .gap_0p5()
+        .child(
+          div()
+            .truncate()
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(label),
+        )
+        .child(
+          div()
+            .line_clamp(3)
+            .text_color(theme::muted())
+            .child(card.title),
+        )
+        .children(card.detail.map(|detail| {
+          div()
+            .truncate()
+            .text_xs()
+            .text_color(theme::accent())
+            .child(detail)
+        })),
+    );
+  // A point at the entry's top right corner; deferred, the card escapes the sidebar's clip.
+  Some(
+    div()
+      .absolute()
+      .top_0()
+      .right_0()
+      .child(
+        deferred(anchored().snap_to_window_with_margin(px(8.)).child(content)).with_priority(1),
+      )
+      .into_any_element(),
+  )
+}
+
+/// A user's avatar in the sidebar, the size of an entry's icon plus a little (24 px): their picture once
 /// loaded, a disc in the accent with their initial meanwhile or without one. Scaled on the CPU
 /// to its exact size: servers do not resize user pictures, and GPUI samples without mipmaps.
-fn user_avatar(user: &Avatar, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
-  const SIZE: f32 = 24.;
-  let side = (SIZE * window.scale_factor()).round() as u32;
+fn user_avatar(user: &Avatar, size: f32, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
+  let side = (size * window.scale_factor()).round() as u32;
   let ready = user
     .picture
     .as_ref()
@@ -673,7 +834,7 @@ fn user_avatar(user: &Avatar, window: &mut Window, cx: &mut App) -> gpui::AnyEle
       images.update(cx, |store, cx| store.get_sized(&url, side, side, cx))
     });
   let disc = div()
-    .size(px(SIZE))
+    .size(px(size))
     .flex_none()
     .rounded_full()
     .flex()

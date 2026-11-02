@@ -36,6 +36,16 @@ pub struct Avatar {
   pub initial: SharedString,
 }
 
+/// What an entry shows on hover, under a larger avatar and the entry's label: e.g. a live's title
+/// and category.
+#[derive(Clone)]
+pub struct HoverCard {
+  /// Wrapped on up to three lines.
+  pub title: SharedString,
+  /// A muted line under the title.
+  pub detail: Option<SharedString>,
+}
+
 /// An entry of the sidebar.
 #[derive(Clone)]
 pub struct MenuEntry {
@@ -57,6 +67,8 @@ pub struct MenuEntry {
   pub heading: Option<SharedString>,
   /// On air: a "LIVE" pill at the right of the entry, a dot on its icon when folded.
   pub live: bool,
+  /// A card on hover, in place of the folded sidebar's tooltip.
+  pub hover: Option<HoverCard>,
 }
 
 impl MenuEntry {
@@ -72,6 +84,7 @@ impl MenuEntry {
       detail: None,
       heading: None,
       live: false,
+      hover: None,
     }
   }
 }
