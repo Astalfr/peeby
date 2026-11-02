@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyElement, App, Bounds, Context, Corners, FollowMode, FontWeight, ImageSource,
-  ListAlignment, ListState, ObjectFit, Pixels, RenderImage, SharedString, Window, canvas, div, img,
-  list, px,
+  Anchor, AnyElement, App, Bounds, Context, Corners, ElementId, FollowMode, FontWeight,
+  ImageSource, ListAlignment, ListState, ObjectFit, Pixels, RenderImage, SharedString,
+  StyleRefinement, Window, canvas, div, img, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
@@ -30,6 +30,10 @@ pub const MAX_MESSAGES: usize = 500;
 const MODES_DELAY: Duration = Duration::from_millis(200);
 /// Size of a badge, logical pixels.
 const BADGE_SIZE: f32 = 18.;
+/// Hover time before an emote's preview shows.
+const PREVIEW_DELAY: Duration = Duration::from_millis(300);
+/// Height of an emote in its preview, logical pixels (Twitch's 3.0 size, 7TV's 4x).
+const PREVIEW_HEIGHT: f32 = 112.;
 /// Width an emote is drawn at, [`EMOTE_HEIGHT`] high.
 fn emote_width(emote: &Emote) -> f32 {
   EMOTE_HEIGHT * emote.aspect.max(0.1)
@@ -63,6 +67,69 @@ fn emote_image(render: Arc<RenderImage>) -> gpui::Canvas<()> {
         .ok();
     },
   )
+}
+
+/// An emote and the overlays drawn on it, `height` high and centered on the widest; `image`
+/// gives a layer's image for a width and a height in logical pixels.
+fn emote_stack<'a>(
+  layers: impl IntoIterator<Item = &'a Emote>,
+  height: f32,
+  mut image: impl FnMut(&Picture, f32, f32) -> Option<Arc<RenderImage>>,
+) -> gpui::Div {
+  let layers: Vec<&Emote> = layers.into_iter().collect();
+  let scale = height / EMOTE_HEIGHT;
+  let width = layers.first().map_or(0., |e| emote_width(e) * scale);
+  let mut drawn = div().relative().w(px(width)).h(px(height)).flex_none();
+  for layer in layers {
+    let layer_width = emote_width(layer) * scale;
+    if let Some(render) = image(&layer.picture, layer_width, height) {
+      drawn = drawn.child(
+        emote_image(render)
+          .absolute()
+          .bottom_0()
+          .left(px((width - layer_width) / 2.))
+          .w(px(layer_width))
+          .h(px(height)),
+      );
+    }
+  }
+  drawn
+}
+
+/// An emote's preview on hover: it at [`PREVIEW_HEIGHT`] with its code, and its overlays' codes.
+fn emote_preview(layers: &[Emote], window: &mut Window, cx: &mut App) -> gpui::Div {
+  let scale = window.scale_factor();
+  let images = cx.try_global::<Images>().cloned();
+  let stack = emote_stack(layers, PREVIEW_HEIGHT, |picture, width, height| {
+    let images = images.as_ref()?;
+    let url = picture.url(
+      (width * scale).round() as u32,
+      (height * scale).round() as u32,
+    )?;
+    images.0.update(cx, |store, cx| store.get(&url, cx))
+  });
+  v_flex()
+    .items_center()
+    .gap_2()
+    .p_1()
+    .child(stack)
+    .children(layers.first().map(|emote| {
+      div()
+        .text_sm()
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(emote.name.clone())
+    }))
+    .when(layers.len() > 1, |el| {
+      el.child(
+        div().text_xs().text_color(theme::muted()).child(
+          layers[1..]
+            .iter()
+            .map(|e| e.name.as_ref())
+            .collect::<Vec<_>>()
+            .join(" · "),
+        ),
+      )
+    })
 }
 
 /// Time since the first animated emote: copies of an emote play in step, as on Twitch.
@@ -327,27 +394,19 @@ impl ChatPanel {
               }
             }
           }
-          let width = emote_width(emote);
-          let mut drawn = div()
-            .relative()
-            .w(px(width))
-            .h(px(EMOTE_HEIGHT))
-            .flex_none()
+          let layers: Vec<Emote> = std::iter::once(emote).chain(overlays).cloned().collect();
+          let drawn = emote_stack(&layers, EMOTE_HEIGHT, &mut image)
             .when(message.deleted, |el| el.opacity(0.35));
-          for layer in std::iter::once(emote).chain(overlays) {
-            let layer_width = emote_width(layer);
-            if let Some(render) = image(&layer.picture, layer_width, EMOTE_HEIGHT) {
-              drawn = drawn.child(
-                emote_image(render)
-                  .absolute()
-                  .bottom_0()
-                  .left(px((width - layer_width) / 2.))
-                  .w(px(layer_width))
-                  .h(px(EMOTE_HEIGHT)),
-              );
-            }
-          }
-          line = line.child(drawn);
+          line = line.child(
+            HoverCard::new(ElementId::NamedInteger(message.id.clone(), index as u64))
+              .anchor(Anchor::BottomCenter)
+              .bg(theme::surface().opacity(0.8))
+              .open_delay(PREVIEW_DELAY)
+              .close_delay(Duration::ZERO)
+              .trigger_style(StyleRefinement::default().flex_none())
+              .trigger(drawn)
+              .content(move |_, window, cx| emote_preview(&layers, window, cx)),
+          );
           index = next;
           continue;
         }
@@ -355,7 +414,11 @@ impl ChatPanel {
       index += 1;
     }
 
-    let item = div().w_full().px_3().py(px(3.));
+    let item = div()
+      .w_full()
+      .px_3()
+      .py(px(3.))
+      .hover(|s| s.bg(theme::foreground().opacity(0.04)));
     match &message.kind {
       MessageKind::Notice(text) => item
         .child(

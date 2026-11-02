@@ -28,6 +28,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Chat hover (2026-11-02): a hovered message is tinted; a hovered emote opens a hover card with it at 112 px (overlays included) and its code. Lint and tests pass; the panel example runs (slowest frame 14 ms). **Not verified:** the hover itself, in the example or the app; on a busy live the messages scroll under a still cursor (pausing the scroll while hovered, as Twitch does, would be the follow-up).
 - Animated chat emotes keep playing when Peeby's window loses the focus (2026-11-02): the chat panel picks and paints the frames itself, GPUI's `img` stopping when the window is inactive. 1 new test. Verified in the app with VS Code focused.
 
 - VOD chat replay (2026-11-02): a VOD's chat beside it, "Rediffusion du chat", each message shown when the playhead reaches it, started over on a seek, with the live chat's emotes (Twitch, 7TV) and badges. GQL comments by offset only: the cursor fails Twitch's integrity check. 7 new tests, 1 fixture (`gql_vod_comments.json`). Verified in the app on a busy public VOD. **Not verified:** a seek in the app.
