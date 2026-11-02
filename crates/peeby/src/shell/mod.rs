@@ -478,6 +478,26 @@ impl Shell {
           .flex_none()
           .into_any_element(),
       };
+      let icon = if entry.live && collapsed {
+        div()
+          .relative()
+          .flex_none()
+          .child(icon)
+          .child(
+            div()
+              .absolute()
+              .bottom(px(-1.))
+              .right(px(-1.))
+              .size(px(9.))
+              .rounded_full()
+              .border_2()
+              .border_color(theme::background())
+              .bg(live_red()),
+          )
+          .into_any_element()
+      } else {
+        icon
+      };
       let heading = entry.heading.clone().map(|heading| {
         if collapsed {
           div()
@@ -509,6 +529,7 @@ impl Shell {
           } else {
             el.child(
               v_flex()
+                .flex_1()
                 .min_w_0()
                 .child(div().truncate().child(entry.label))
                 .children(entry.detail.map(|detail| {
@@ -519,6 +540,7 @@ impl Shell {
                     .child(detail)
                 })),
             )
+            .when(entry.live, |el| el.child(live_pill()))
           }
         })
         .on_click(cx.listener(move |this, _, window, cx| this.open_entry(id.clone(), window, cx)));
@@ -598,6 +620,28 @@ fn sidebar_entry(id: SharedString, active: bool, collapsed: bool) -> gpui::State
       s.bg(gpui::white().opacity(0.04))
         .text_color(theme::foreground())
     })
+}
+
+/// The red of a live, whatever the space's accent.
+fn live_red() -> gpui::Hsla {
+  theme::Accent::red().base
+}
+
+/// "LIVE" with a white dot in red, at the right of a sidebar entry on air.
+fn live_pill() -> impl IntoElement {
+  h_flex()
+    .flex_none()
+    .gap_1()
+    .items_center()
+    .px(px(5.))
+    .py(px(1.))
+    .rounded(px(4.))
+    .bg(live_red())
+    .text_size(px(10.))
+    .font_weight(FontWeight::BOLD)
+    .text_color(gpui::white())
+    .child(div().size(px(5.)).rounded_full().bg(gpui::white()))
+    .child("LIVE")
 }
 
 /// A user's avatar in the sidebar, the size of an entry's icon plus a little: their picture once

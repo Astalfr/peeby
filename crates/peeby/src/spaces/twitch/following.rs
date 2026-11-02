@@ -1,10 +1,12 @@
 //! "Suivies": the followed channels on air as stream cards (most viewers first), then the others
-//! with their avatars. Helix `streams/followed`, `channels/followed` and `users`.
+//! with their avatars, by name, under a field that filters them. Helix `streams/followed`,
+//! `channels/followed` and `users`.
 
 use std::collections::HashSet;
 
 use gpui::prelude::*;
-use gpui::{Context, Task, WeakEntity, Window, div};
+use gpui::{Context, Entity, Subscription, Task, WeakEntity, Window, div, px};
+use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
 use twitch::helix::{Followed, Helix, Stream};
 use ui::images::Images;
@@ -27,6 +29,8 @@ pub struct FollowingView {
   nav: WeakEntity<TwitchSpace>,
   loaded: Option<Loaded>,
   error: Option<String>,
+  /// Filters the offline channels; made on the first render, which has the window.
+  filter: Option<(Entity<InputState>, Subscription)>,
   _load: Task<()>,
 }
 
@@ -61,6 +65,7 @@ impl FollowingView {
       nav,
       loaded: None,
       error: None,
+      filter: None,
       _load: load,
     }
   }
@@ -88,20 +93,18 @@ async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
     }
   }
   let on_air: HashSet<&str> = live.iter().map(|s| s.user_id.as_str()).collect();
-  let offline: Vec<Followed> = followed
+  let mut offline: Vec<Followed> = followed
     .into_iter()
     .filter(|f| !on_air.contains(f.broadcaster_id.as_str()))
     .collect();
+  offline.sort_by_cached_key(|f| f.broadcaster_name.to_lowercase());
   let mut avatars = Avatars::new();
   let ids: Vec<String> = live.iter().map(|s| s.user_id.clone()).collect();
   for chunk in ids.chunks(100) {
     avatars.extend(cards::avatars(&helix, chunk.to_vec()).await);
   }
-  let ids: Vec<String> = offline
-    .iter()
-    .take(200)
-    .map(|f| f.broadcaster_id.clone())
-    .collect();
+  // All of them (5 requests at most): the filter can show any.
+  let ids: Vec<String> = offline.iter().map(|f| f.broadcaster_id.clone()).collect();
   for chunk in ids.chunks(100) {
     avatars.extend(cards::avatars(&helix, chunk.to_vec()).await);
   }
@@ -112,9 +115,33 @@ async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
   })
 }
 
+impl FollowingView {
+  fn filter(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    let (input, _) = self.filter.get_or_insert_with(|| {
+      let input = cx.new(|cx| InputState::new(window, cx).placeholder("Filtrer les chaînes"));
+      let subscription = cx.subscribe(&input, |_, _, event: &InputEvent, cx| {
+        if matches!(event, InputEvent::Change) {
+          cx.notify();
+        }
+      });
+      (input, subscription)
+    });
+    input.clone()
+  }
+}
+
+/// Whether `f`'s name or login contains `query` (lowercase), ignoring case.
+fn shown(f: &Followed, query: &str) -> bool {
+  query.is_empty()
+    || f.broadcaster_name.to_lowercase().contains(query)
+    || f.broadcaster_login.contains(query)
+}
+
 impl Render for FollowingView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let width = cards::stream_width(window, cx);
+    let filter = self.filter(window, cx);
+    let query = filter.read(cx).value().trim().to_lowercase();
     let body = match (&self.loaded, &self.error) {
       (Some(loaded), _) => {
         let live: Vec<_> = loaded
@@ -134,6 +161,7 @@ impl Render for FollowingView {
         let offline: Vec<_> = loaded
           .offline
           .iter()
+          .filter(|f| shown(f, &query))
           .map(|f| {
             cards::channel_chip(
               cards::Chip {
@@ -157,8 +185,19 @@ impl Render for FollowingView {
         v_flex()
           .gap_10()
           .child(cards::section("En direct", live))
-          .when(!offline.is_empty(), |el| {
-            el.child(cards::section("Hors ligne", cards::wrap(offline)))
+          .when(!loaded.offline.is_empty(), |el| {
+            let list = if offline.is_empty() {
+              cards::note("Aucune chaîne ne correspond.").into_any_element()
+            } else {
+              cards::wrap(offline).into_any_element()
+            };
+            el.child(cards::section(
+              "Hors ligne",
+              v_flex()
+                .gap_4()
+                .child(div().w(px(320.)).child(Input::new(&filter)))
+                .child(list),
+            ))
           })
           .into_any_element()
       }

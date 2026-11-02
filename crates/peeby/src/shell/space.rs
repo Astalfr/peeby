@@ -55,6 +55,8 @@ pub struct MenuEntry {
   pub detail: Option<SharedString>,
   /// A heading above the entry, e.g. `Bibliothèques` above the first library.
   pub heading: Option<SharedString>,
+  /// On air: a "LIVE" pill at the right of the entry, a dot on its icon when folded.
+  pub live: bool,
 }
 
 impl MenuEntry {
@@ -69,6 +71,7 @@ impl MenuEntry {
       avatar: None,
       detail: None,
       heading: None,
+      live: false,
     }
   }
 }

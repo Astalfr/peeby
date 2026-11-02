@@ -419,15 +419,16 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 - [x] Pages (`cards.rs` holds the shared cards):
   - **Suivies**: the followed channels on air as stream cards (preview, avatar, title, channel,
     category, viewers), widened to fill their rows, then "Hors ligne", the others as avatars and
-    names. It reads up to 300 live and 500 followed channels;
+    names in alphabetical order, under a field filtering them by name or login. It reads up to 300
+    live and 500 followed channels;
   - **Parcourir**: the top 200 categories as 3:4 box-art posters. A category's page shows its 100
     lives with the most viewers;
   - **Rechercher** from the top bar: up to 20 channels (on air first, with "En direct") and the
     categories.
 
   A click on a channel opens its live; an offline one says so (its page with VODs and clips: step 8)
-- [x] Sidebar: Suivies, Parcourir, then up to 12 followed channels on air (avatar, name, category),
-      refreshed every 2 minutes; the user and sign-out at the bottom
+- [x] Sidebar: Suivies, Parcourir, then up to 12 followed channels on air (avatar, name, category,
+      a red "LIVE" pill, a dot on the avatar when folded), refreshed every 2 minutes; the user and sign-out at the bottom
 - [x] A Helix `SessionExpired` from any page signs the space out with its message
 - Moved to step 8: the channel page (header, live, VODs, clips)
 - Not in `smoke`: Helix needs the user's session; the capture tool is the live check

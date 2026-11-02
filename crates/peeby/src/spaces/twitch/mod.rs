@@ -604,6 +604,7 @@ impl Space for TwitchSpace {
           initial,
         }),
         detail: Some(stream.game_name.clone().into()),
+        live: true,
         ..MenuEntry::new(
           format!("live:{}", stream.user_login),
           stream.user_name.clone(),
