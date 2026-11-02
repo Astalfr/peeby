@@ -6,11 +6,11 @@ Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's vi
 
 | Token | Value | Use |
 |---|---|---|
-| `base` | `#0B0B0C` + 3.5 % of the accent | Window chrome without Mica |
+| `base` | `#0B0B0C` + 5 % of the accent | Window chrome without Mica |
 | Mica veil | `base` at 55 % | Over Mica, so the chrome stays dark |
-| `background` | `#121214` + 3.5 % of the accent | Content panel, pages |
+| `background` | `#121214` + 5 % of the accent | Content panel, pages |
 
-The backgrounds (`base`, the Mica veil, `background`) take 3.5 % of the open space's accent, so each space has its own faint hue; surfaces and borders stay neutral.
+The backgrounds (`base`, the Mica veil, `background`) take 5 % of the open space's accent, so each space has its own faint hue; surfaces and borders stay neutral, and so does the opening animation's background (`neutral_background`), which belongs to no space.
 | `surface` | `#1C1C1F` | Cards, settings rows, description, inputs |
 | `surface_hover` | `#27272B` | Hovered surfaces, skeletons |
 | `border` | `#2F2F34` | Borders, separators |

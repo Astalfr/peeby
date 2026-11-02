@@ -74,6 +74,10 @@ pub fn base() -> Hsla {
 pub fn background() -> Hsla {
   accent_tinted(0x121214, 1.)
 }
+/// [`background`] without the accent's tint: the opening animation, which belongs to no space.
+pub fn neutral_background() -> Hsla {
+  color(0x121214)
+}
 /// Cards, popovers, inputs.
 pub fn surface() -> Hsla {
   color(0x1c1c1f)

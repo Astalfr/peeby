@@ -289,7 +289,7 @@ impl Splash {
         .absolute()
         .inset_0()
         .size_full()
-        .bg(theme::background())
+        .bg(theme::neutral_background())
         .opacity(opacity)
         .child(
           div()
