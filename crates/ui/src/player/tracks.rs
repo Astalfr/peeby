@@ -13,6 +13,8 @@ use crate::text::repair_mojibake;
 
 /// Without segment information, "up next" shows this long before the end.
 const UP_NEXT_LEAD_SECONDS: f64 = 20.0;
+/// mpv's default `chapter-seek-threshold`, seconds.
+const CHAPTER_SEEK_THRESHOLD: f64 = 5.0;
 /// Z and X change the subtitle delay by this much.
 pub(super) const SUBTITLE_DELAY_STEP: f64 = 0.1;
 
@@ -160,8 +162,12 @@ impl PlayerView {
     );
   }
 
-  /// mpv reported the chapters: titles repaired, segments guessed from them.
+  /// mpv reported the chapters: titles repaired, segments guessed from them. Ignored once the
+  /// source gave its own.
   pub(super) fn on_chapters(&mut self, mut chapters: Vec<player::Chapter>) {
+    if self.given_chapters {
+      return;
+    }
     for chapter in &mut chapters {
       if let Some(title) = &mut chapter.title {
         *title = repair_mojibake(title).into_owned();
@@ -190,17 +196,39 @@ impl PlayerView {
     if self.chapters.is_empty() {
       return self.show_osd("Aucun chapitre".into(), cx);
     }
-    self.with_player(|p| p.add_chapter(delta));
-    // The title of the chapter mpv lands on; mpv goes back to the start of the current one
-    // first when "previous" is pressed well into it.
-    let current = self.chapter_at(self.position + 0.5).unwrap_or(0) as i64;
-    let target = (current + delta).clamp(0, self.chapters.len() as i64 - 1) as usize;
+    // As mpv does (`chapter-seek-threshold`): "previous" well into a chapter goes back to its
+    // start first.
+    let current = self.chapter_at(self.position + 0.5).unwrap_or(0);
+    let into = self.position - self.chapters[current].start;
+    let step = if delta < 0 && into > CHAPTER_SEEK_THRESHOLD {
+      delta + 1
+    } else {
+      delta
+    };
+    let target = (current as i64 + step).clamp(0, self.chapters.len() as i64 - 1) as usize;
+    if self.given_chapters {
+      // mpv does not know them. "Next" in the last one stays there.
+      if current as i64 + step < self.chapters.len() as i64 {
+        self.seek_to(self.chapters[target].start, cx);
+      }
+    } else {
+      self.with_player(|p| p.add_chapter(delta));
+    }
     self.show_osd(self.chapter_title(target).into(), cx);
   }
 
-  /// The source's segments when it gave some, else those of the chapter titles.
+  /// Chapters the source's server knows (YouTube's): they replace the file's. Segments are not
+  /// guessed from their titles, whose words (`Intro`, `Outro`) are a creator's, not a release's.
+  pub fn set_chapters(&mut self, chapters: Vec<player::Chapter>, cx: &mut Context<Self>) {
+    self.given_chapters = true;
+    self.chapters = chapters;
+    self.refresh_segments();
+    cx.notify();
+  }
+
+  /// The source's segments when it gave some, else those of the file's chapter titles.
   pub(super) fn refresh_segments(&mut self) {
-    if self.given_segments.is_empty() && self.duration > 0.0 {
+    if self.given_segments.is_empty() && !self.given_chapters && self.duration > 0.0 {
       self.segments = segments::from_chapters(&self.chapters, self.duration);
     } else {
       self.segments = self.given_segments.clone();

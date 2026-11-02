@@ -1,0 +1,71 @@
+{
+  "playerOverlays": {
+    "playerOverlayRenderer": {
+      "decoratedPlayerBarRenderer": {
+        "decoratedPlayerBarRenderer": {
+          "playerBar": {
+            "multiMarkersPlayerBarRenderer": {
+              "visibleOnLoad": {
+                "key": "DESCRIPTION_CHAPTERS"
+              },
+              "markersMap": [
+                {
+                  "key": "DESCRIPTION_CHAPTERS",
+                  "value": {
+                    "chapters": [
+                      {
+                        "chapterRenderer": {
+                          "title": {
+                            "simpleText": "Introduction"
+                          },
+                          "timeRangeStartMillis": 0
+                        }
+                      },
+                      {
+                        "chapterRenderer": {
+                          "title": {
+                            "simpleText": "Installing Python & PyCharm"
+                          },
+                          "timeRangeStartMillis": 105000
+                        }
+                      },
+                      {
+                        "chapterRenderer": {
+                          "title": {
+                            "simpleText": "Malformed: no start"
+                          }
+                        }
+                      },
+                      {
+                        "chapterRenderer": {
+                          "title": {
+                            "simpleText": "Setup & Hello World"
+                          },
+                          "timeRangeStartMillis": 400000
+                        }
+                      },
+                      {
+                        "chapterRenderer": {
+                          "title": {
+                            "simpleText": "Drawing a Shape"
+                          },
+                          "timeRangeStartMillis": 623000
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "ANIMATION_ANNOTATION_MARKERS",
+                  "value": {
+                    "markers": []
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

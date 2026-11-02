@@ -11,7 +11,7 @@ A **Skip intro / Skip recap / Skip credits / Skip preview** button appears botto
 Where the parts come from ([ADR 0009](../decisions/peeby/0009-segments-from-chapters.md)):
 
 1. **Server media segments** (`GET /MediaSegments/{itemId}`), when the server has any. They need a segment provider plugin; the test server has none.
-2. Otherwise, **chapter titles** from mpv's `chapter-list`. Fansub and BD releases name them:
+2. Otherwise, **chapter titles** from mpv's `chapter-list` (never chapters a page gave, see the seek bar below). Fansub and BD releases name them:
 
 | Title (case-insensitive, first word) | Part |
 |---|---|
@@ -61,7 +61,8 @@ When the user changes tracks, the page records the choice for the series, for th
 
 - **Shape.** A rounded track (5 px, 8 px on hover). The amber progress and the lighter hover fill carry the same radius and are never narrower than the track is tall, because GPUI clips children to rectangles and square fill ends would stick out of the rounded track. On hover, a 14 px amber knob with a white ring marks the playhead.
 
-- **Chapter marks** are drawn as gaps in the bar. The chapters menu lists them with their start time, and Page Up / Page Down jump between them.
+- **Chapters** split the track into pieces 2 px apart, as on YouTube; the hovered chapter's piece grows 4 px taller. The chapters menu lists them with their start time, and Page Up / Page Down jump between them ("previous" more than 5 s into a chapter goes back to its start, as mpv's `chapter-seek-threshold`).
+- **Where chapters come from.** The file's (mpv's `chapter-list`), unless the page gives its own with `PlayerView::set_chapters`: YouTube's watch page does, from the `next` response's player bar markers (`DESCRIPTION_CHAPTERS`, else `AUTO_CHAPTERS`), since its HLS streams carry none. Given chapters are never replaced by mpv's list (sent again, empty, by each new mpv after a quality change), Page Up / Page Down seek to them directly, and no skippable segment is guessed from their titles: a creator's `Intro` or `Outro` is not a release's opening or credits.
 - **Hover** shows the time and chapter under the mouse. When the server has trickplay thumbnails (`BaseItemDto.Trickplay`), the matching thumbnail appears too: the tile image (`GET /Videos/{id}/Trickplay/{width}/{tile}.jpg`) comes through the image store, and the thumbnail is shown by offsetting the tile inside a clipped box. **Untested against a server**: the test server generates no trickplay, so only the cell arithmetic has tests.
 
 ## Control bar

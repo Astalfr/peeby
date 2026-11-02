@@ -483,6 +483,32 @@ fn live_player_and_media_playlist() {
 }
 
 #[test]
+fn watch_page_chapters() {
+  // The player bar's markers of a video whose description has timestamps (captured
+  // 2026-11-02, trimmed to a few chapters, one of them made malformed).
+  let page = parse_watch("rfscVS0vtbw", &fixture("next_chapters.json"));
+  let chapters = page
+    .chapters
+    .iter()
+    .map(|c| (c.start, c.title.as_str()))
+    .collect::<Vec<_>>();
+  assert_eq!(
+    chapters,
+    [
+      (0.0, "Introduction"),
+      (105.0, "Installing Python & PyCharm"),
+      (400.0, "Setup & Hello World"),
+      (623.0, "Drawing a Shape"),
+    ]
+  );
+  assert!(
+    parse_watch("dQw4w9WgXcQ", &fixture("next.json"))
+      .chapters
+      .is_empty()
+  );
+}
+
+#[test]
 fn live_watch_page_has_its_chat() {
   // A live's `next` (captured 2026-11-02): its chat's first token; a video has none.
   let page = parse_watch("bygxS5WGoKE", &fixture("next_live.json"));

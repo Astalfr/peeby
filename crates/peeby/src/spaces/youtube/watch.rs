@@ -505,9 +505,13 @@ impl WatchView {
           match result {
             Some(Ok(page)) => {
               let title = SharedString::from(page.title.clone());
-              this
-                .player
-                .update(cx, |player, cx| player.set_title(title, cx));
+              let chapters = convert::chapters(&page.chapters);
+              this.player.update(cx, |player, cx| {
+                player.set_title(title, cx);
+                if !chapters.is_empty() {
+                  player.set_chapters(chapters, cx);
+                }
+              });
               this.like_status = page.like_status;
               if let Some(continuation) = page.live_chat.clone() {
                 this.start_chat(continuation, cx);

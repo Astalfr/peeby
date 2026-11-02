@@ -1,6 +1,7 @@
 //! The shared player alone, in the full-window layout, on a generated video (mpv's `lavfi`): a
 //! test pattern with two audio tracks, an intro segment, previous/next buttons and an "up next"
-//! offer, as the Jellyfin space sets them. Its events are printed.
+//! offer, as the Jellyfin space sets them, and chapters as the YouTube space gives them. Its
+//! events are printed.
 //!
 //! `cargo run -p ui --example player` · `PEEBY_START=150` starts in the credits ("up next") ·
 //! `PEEBY_DISPLAY=secondary` opens it on another screen · `PEEBY_SIZE=640x360` sets the window's
@@ -17,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime};
 use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
-use player::StartOptions;
+use player::{Chapter, StartOptions};
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{Layout, LiveInfo, PlayerEvent, PlayerView, Prefs, Source};
 use ui::{assets, theme};
@@ -89,6 +90,20 @@ fn main() {
           } else {
             view.set_queue(Some((false, true)), cx);
             view.set_up_next(Some("S1:E2 · La suite".into()), cx);
+            view.set_chapters(
+              [
+                (0.0, "Introduction"),
+                (40.0, "Première partie"),
+                (95.0, "Seconde partie"),
+                (150.0, "Générique"),
+              ]
+              .map(|(start, title)| Chapter {
+                start,
+                title: Some(title.to_owned()),
+              })
+              .to_vec(),
+              cx,
+            );
           }
           view.set_segments(
             vec![

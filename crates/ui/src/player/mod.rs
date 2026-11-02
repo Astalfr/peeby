@@ -49,6 +49,8 @@ const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
 const PREVIEW_WIDTH: f32 = 176.;
+/// Space between two chapters on the seek bar.
+const CHAPTER_GAP: f32 = 2.;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
 
@@ -176,6 +178,9 @@ pub struct PlayerView {
   tracks: Vec<Track>,
   subtitle_delay: f64,
   chapters: Vec<Chapter>,
+  /// The chapters come from the source's server (YouTube's), not from the file: mpv's list
+  /// (empty for a stream, sent again by each new mpv) no longer replaces them.
+  given_chapters: bool,
   /// Segments from the source's server; without them, `segments` comes from the chapters.
   given_segments: Vec<Segment>,
   segments: Vec<Segment>,
@@ -280,6 +285,7 @@ impl PlayerView {
       tracks: Vec::new(),
       subtitle_delay: 0.0,
       chapters: Vec::new(),
+      given_chapters: false,
       given_segments: Vec::new(),
       segments: Vec::new(),
       up_next_title: None,
@@ -1141,8 +1147,9 @@ impl PlayerView {
     };
     let dvr = self.dvr_window().is_some();
     let height = if self.seek_hover.is_some() { 6. } else { 4. };
-    let radius = px(height / 2.);
-    let fill = |fraction: f64, color: gpui::Hsla| {
+    // GPUI clips children to rectangles, so each fill carries its piece's rounding and is
+    // never narrower than tall (nor wider than a short piece), or its square ends stick out.
+    let fill = |fraction: f64, height: f32, color: gpui::Hsla| {
       div()
         .absolute()
         .top_0()
@@ -1150,7 +1157,8 @@ impl PlayerView {
         .left_0()
         .w(relative(fraction as f32))
         .min_w(px(height))
-        .rounded(radius)
+        .max_w(relative(1.))
+        .rounded(px(height / 2.))
         .bg(color)
     };
     let bounds_cell = self.seek_bounds.clone();
@@ -1193,18 +1201,49 @@ impl PlayerView {
             .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c))),
         )
     });
-    let marks = self
-      .chapters
-      .iter()
-      .filter(|c| c.start > 1.0 && self.duration > 0.0 && c.start < self.duration)
-      .map(|c| {
+    // One piece of track per chapter, apart by a gap as on YouTube; the hovered one is
+    // thicker. Without chapters, a single piece.
+    let span = end - start;
+    let mut edges = vec![0.0];
+    for chapter in &self.chapters {
+      let edge = (chapter.start - start) / span;
+      if span > 0.0 && chapter.start - start > 1.0 && edge < 1.0 && edge > edges[edges.len() - 1] {
+        edges.push(edge);
+      }
+    }
+    let hover = self.seek_hover;
+    let pieces = (0..edges.len())
+      .map(|i| {
+        let (from, to) = (edges[i], edges.get(i + 1).copied().unwrap_or(1.0));
+        let hovered = edges.len() > 1 && hover.is_some_and(|f| from <= f && f < to);
+        let height = if hovered { height + 4. } else { height };
+        let local = |fraction: f64| ((fraction - from) / (to - from)).clamp(0.0, 1.0);
         div()
           .absolute()
           .top_0()
           .bottom_0()
-          .left(relative((c.start / self.duration) as f32))
-          .w(px(3.))
-          .bg(gpui::black().opacity(0.7))
+          .left(relative(from as f32))
+          .w(relative((to - from) as f32))
+          .when(i + 1 < edges.len(), |el| el.pr(px(CHAPTER_GAP)))
+          .flex()
+          .items_center()
+          .child(
+            div()
+              .relative()
+              .w_full()
+              .h(px(height))
+              .rounded(px(height / 2.))
+              .bg(gpui::white().opacity(0.25))
+              .children(
+                hover
+                  .map(local)
+                  .filter(|&f| f > 0.0)
+                  .map(|f| fill(f, height, gpui::white().opacity(0.25))),
+              )
+              .when(local(progress) > 0.0, |el| {
+                el.child(fill(local(progress), height, primary))
+              }),
+          )
       })
       .collect::<Vec<_>>();
 
@@ -1239,17 +1278,7 @@ impl PlayerView {
           .relative()
           .h(px(height))
           .w_full()
-          .rounded(radius)
-          .bg(gpui::white().opacity(0.25))
-          // GPUI clips children to rectangles, so each fill carries the track's rounding
-          // and is never narrower than tall, or its square ends stick out of the track.
-          .children(
-            self
-              .seek_hover
-              .map(|f| fill(f, gpui::white().opacity(0.25))),
-          )
-          .when(progress > 0.0, |el| el.child(fill(progress, primary)))
-          .children(marks)
+          .children(pieces)
           // A knob at the playhead while the bar is hovered.
           .when(self.seek_hover.is_some(), |el| {
             el.child(

@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use innertube::{Client, Storyboard, Stream, Thumbnail};
+use innertube::{Chapter, Client, Storyboard, Stream, Thumbnail};
 use player::StartOptions;
 use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
@@ -73,6 +73,17 @@ fn hls_options(
   };
   player.apply(&mut options);
   options
+}
+
+/// The watch page's chapters, for the player's seek bar.
+pub fn chapters(chapters: &[Chapter]) -> Vec<player::Chapter> {
+  chapters
+    .iter()
+    .map(|c| player::Chapter {
+      start: c.start,
+      title: Some(c.title.clone()),
+    })
+    .collect()
 }
 
 /// A resolved stream as the player's source: its quality ladder, captions fetched on demand
