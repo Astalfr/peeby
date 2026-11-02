@@ -14,6 +14,7 @@ pub mod chat;
 pub mod following;
 pub mod login;
 pub mod play;
+pub mod points;
 pub mod search;
 pub mod session;
 pub mod settings_page;

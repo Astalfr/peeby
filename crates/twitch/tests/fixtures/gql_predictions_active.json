@@ -1,0 +1,40 @@
+{
+  "data": {
+    "channel": {
+      "activePredictionEvents": [
+        {
+          "id": "34e63ec6-019f-46f4-a78d-6556cd838bc7",
+          "title": "Will They Win Or Lose this game?",
+          "status": "ACTIVE",
+          "createdAt": "2026-11-02T00:06:45.498708346Z",
+          "predictionWindowSeconds": 300,
+          "outcomes": [
+            {
+              "id": "a467fcba-d418-4cc2-bbba-1f9e6d0ddba3",
+              "title": "Win",
+              "color": "BLUE",
+              "totalPoints": 8246935,
+              "totalUsers": 320
+            },
+            {
+              "id": "45e816e6-bd79-43ce-9eb4-e7b05259bcba",
+              "title": "Loss",
+              "color": "PINK",
+              "totalPoints": 1248638,
+              "totalUsers": 87
+            }
+          ],
+          "self": {
+            "prediction": null
+          }
+        }
+      ],
+      "lockedPredictionEvents": []
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 15,
+    "requestID": "REDACTED",
+    "operationName": "Predictions"
+  }
+}

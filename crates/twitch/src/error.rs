@@ -57,6 +57,9 @@ pub enum Error {
   /// The local playlist proxy could not start.
   #[error("local playlist proxy: {0}")]
   Proxy(String),
+  /// Twitch refused a spend of channel points, with its code (`NOT_ENOUGH_POINTS`, `COOLDOWN`…).
+  #[error("Twitch refused: {0}")]
+  Refused(String),
   /// Any other GQL error, with its message.
   #[error("GQL error: {0}")]
   Gql(String),

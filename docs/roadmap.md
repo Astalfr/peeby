@@ -15,6 +15,13 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Channel points, partly done (2026-11-02, [ADR 0012](decisions/0012-twitch-channel-points.md), proposed; narrower than the user's scope until they decide), with the web auth-token:
+  - `twitch::points`: raw GQL reads and spends. 7 tests on 5 new fixtures.
+  - On a live's header: the balance, refreshed every minute; the channel's rewards in a popover; its predictions with odds and a countdown, refreshed every 20 s.
+  - Spending takes a second click. A reward can ask for a text; a bet takes a share of the balance.
+  - The bonus chest is shown, but claimed on twitch.tv: its mutation fails Twitch's integrity check.
+  - **Not verified:** the page in the app (Peeby was already running); a real redemption or bet; whether watching in Peeby earns points.
+
 - Step 10 done (2026-11-01), the Twitch space is complete: the bell announces the followed channels that go live while Peeby runs; low latency (Twitch's prefetch segments through the proxy, "Faible latence" on by default) starts a live about 2.6 s behind its capture instead of about 7 s, measured with the spike; HEVC: the 1440p60 source that 16 of the top 100 lives send only in HEVC is now offered, decoded by the GPU here, with a fall back to H.264 when a codec decodes on the CPU (kept in the settings). 10 new tests, a multi-codec master fixture (`twitch_capture -- master`). **Not verified:** a real bell announcement, 1440p HEVC picked in the app, the fallback, AV1 (no channel offered it).
 
 - Animated emotes (2026-11-01, step 9, which ends with it): the image store keeps the frames of animated GIFs and WebPs, the chat panel plays them, and 7TV's zero-width emotes are drawn over the emote before them. 2 new tests. Checked with a real animated 7TV emote (55 frames) and in the example (120 frames a second). **Not verified:** the motion in the app.

@@ -212,6 +212,46 @@ the rest of the app):
 Peeby checks a pasted token (30 alphanumerics, then a GQL call that answers as signed in) before saving it,
 as it checks imported YouTube cookies.
 
+## Channel points
+
+Probed on 2026-11-02 with the web Client-ID and the user's auth-token, and nothing else: no extra
+headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-points.md).
+
+- **Reads, raw queries** **[src]** (checked):
+  - `user(login) { id channel { self { communityPoints { balance availableClaim { id }
+    activeMultipliers { factor } } } communityPointsSettings { isEnabled name image customRewards { … } } } }`
+    gives the viewer's balance, the waiting bonus chest and the custom rewards (`cost`, `prompt`,
+    `isUserInputRequired`, `isEnabled`, `isPaused`, `isInStock`, `isSubOnly`, `cooldownExpiresAt`,
+    `backgroundColor`, `image`, `defaultImage`).
+  - `channel(name) { activePredictionEvents lockedPredictionEvents }` gives the predictions
+    (`status`, `createdAt`, `predictionWindowSeconds`, `outcomes { totalPoints totalUsers color }`,
+    `self { prediction { points outcome } }`).
+  - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
+    automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
+- **Spends, raw mutations** (checked with made-up ids, so nothing was spent):
+  - `redeemCommunityPointsCustomReward(input: {channelID, cost, prompt, rewardID, title,
+    transactionID, textInput})` and `makePrediction(input: {eventID, outcomeID, points,
+    transactionID})` answer `{ error: { code: "NOT_FOUND" } }`. That is an answer, not an integrity
+    failure. A real spend was **not** tried, so whether a real reward passes is **[?]**.
+  - The miner's smallest bet is 10 points **[src]**.
+- **The bonus claim** (checked): `claimCommunityPoints(input: {channelID, claimID})` answers
+  `failed integrity check` (`extensions.code: IntegrityCheckFailed`, `challenge.type: integrity`),
+  even with a made-up claim id. The miner sends it with the Android TV Client-ID (`ue6666…`) and a
+  token from that client's own device sign-in **[src]**. Peeby does not try that route
+  (ADR 0012).
+- **Points for watching** **[?]**:
+  - The web player reports time watched by POSTing base64 `minute-watched` events (`channel_id`,
+    `broadcast_id`, `user_id`, `player`, `live`) to a `spade_url`. That URL comes from twitch.tv's
+    `settings.*.js` **[src]**.
+  - Whether Twitch credits time watched without these events is not measured.
+  - The bonus chest comes after about 15 minutes of credited watching **[mem]**.
+- **Live updates**: the miner listens to PubSub (`wss://pubsub-edge.twitch.tv/v1`, topics
+  `community-points-user-v1.<id>`, `predictions-channel-v1.<id>`) **[src]**. Whether PubSub still
+  serves them is **[?]**. Peeby polls instead.
+- Fixtures: `gql_points_context.json` (balance replaced by 12345), `gql_predictions_active.json`,
+  `gql_predictions_locked.json`, `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
+  Request ids are redacted. Rewards and predictions are the channels' public data.
+
 ## Checked live on 2026-11-01
 
 A probe run by the user, anonymously, on a live channel:
@@ -279,6 +319,8 @@ A probe run by the user, anonymously, on a live channel:
 - Muxed audio.
 - WebView2 for Client-Integrity.
 - GQL's recommendation queries.
+- A real reward redeemed or a real bet placed (only made-up ids were sent); the watch-time gain without
+  spade; PubSub.
 
 ## Sources
 
@@ -295,6 +337,9 @@ A probe run by the user, anonymously, on a live channel:
 - Rate-limit threads: https://discuss.dev.twitch.com/t/request-limit-not-sufficient-for-helix-api/64433,
   https://discuss.dev.twitch.com/t/error-429-limitation-helix-api/25216
 - ttv-lol-pro, usher v2: https://newreleases.io/project/github/younesaassila/ttv-lol-pro/release/v2.5.1
+- Twitch-Channel-Points-Miner-v2 (GQL operations, claim, spade, PubSub topics):
+  https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2 (`constants.py`, `classes/Twitch.py`,
+  `classes/WebSocketsPool.py`, `classes/entities/Stream.py`)
 - 7TV endpoints (third-party README): https://lobehub.com/fr/mcp/daugustin-7tv-mcp
 - HLS ad discontinuities: https://github.com/video-dev/hls.js/issues/4416,
   https://github.com/xbmc/inputstream.adaptive/issues/1071

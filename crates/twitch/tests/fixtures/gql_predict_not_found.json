@@ -1,0 +1,15 @@
+{
+  "data": {
+    "makePrediction": {
+      "error": {
+        "code": "NOT_FOUND"
+      },
+      "prediction": null
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 12,
+    "requestID": "REDACTED",
+    "operationName": "M"
+  }
+}

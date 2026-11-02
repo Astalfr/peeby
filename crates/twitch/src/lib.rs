@@ -2,7 +2,8 @@
 //!
 //! - [`Client::playback_token`]: the GQL playback token of a live or a VOD, with the raw query and
 //!   the web Client-ID ([`Client::refresh_client_id`] keeps it current), `playerType=embed`;
-//! - [`Client::master`]: the usher master playlist (v2, then v1) and its [`usher::Variant`]s.
+//! - [`Client::master`]: the usher master playlist (v2, then v1) and its [`usher::Variant`]s;
+//! - [`Client::points`]: the viewer's channel points, rewards and predictions ([`points`]).
 //!
 //! Responses are parsed leniently from `serde_json::Value` and HLS text, and every parser is
 //! tested against real, redacted responses in `tests/fixtures/`. Tokens, signatures and usher or
@@ -15,6 +16,7 @@ mod client;
 mod error;
 pub mod gql;
 pub mod helix;
+pub mod points;
 mod proxy;
 pub mod seventv;
 pub mod splice;

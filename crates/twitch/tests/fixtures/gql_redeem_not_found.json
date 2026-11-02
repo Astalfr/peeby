@@ -1,0 +1,15 @@
+{
+  "data": {
+    "redeemCommunityPointsCustomReward": {
+      "error": {
+        "code": "NOT_FOUND"
+      },
+      "redemption": null
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 29,
+    "requestID": "REDACTED",
+    "operationName": "R"
+  }
+}

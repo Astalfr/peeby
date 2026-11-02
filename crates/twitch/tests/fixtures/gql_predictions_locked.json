@@ -1,0 +1,40 @@
+{
+  "data": {
+    "channel": {
+      "activePredictionEvents": [],
+      "lockedPredictionEvents": [
+        {
+          "id": "80b2f29f-c4c8-49d0-9622-b0d5ffe61eb2",
+          "title": "Winning Team Over/Under 10.5 kills?",
+          "status": "LOCKED",
+          "createdAt": "2026-11-01T23:53:17.059538106Z",
+          "predictionWindowSeconds": 300,
+          "outcomes": [
+            {
+              "id": "ad35d797-44c4-4aa8-aa3e-cb0e234fa6d4",
+              "title": "Over",
+              "color": "BLUE",
+              "totalPoints": 4719326,
+              "totalUsers": 292
+            },
+            {
+              "id": "1e9e5864-ee36-4350-ace6-1b5d7c30a04b",
+              "title": "Under",
+              "color": "PINK",
+              "totalPoints": 5122754,
+              "totalUsers": 260
+            }
+          ],
+          "self": {
+            "prediction": null
+          }
+        }
+      ]
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 15,
+    "requestID": "REDACTED",
+    "operationName": "Predictions"
+  }
+}

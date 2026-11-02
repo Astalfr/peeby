@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
+use crate::points;
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
 
@@ -149,6 +150,42 @@ impl Client {
   pub async fn current_user(&self) -> Result<String> {
     let answer = self.gql(&gql::current_user_request()).await?;
     gql::parse_current_user(&answer)
+  }
+
+  /// The viewer's channel points on `login`'s channel and its rewards (needs the auth-token).
+  pub async fn points(&self, login: &str) -> Result<points::Points> {
+    let answer = self.gql(&points::context_request(login)).await?;
+    points::parse_context(&answer)
+  }
+
+  /// `login`'s open and locked predictions.
+  pub async fn predictions(&self, login: &str) -> Result<Vec<points::Prediction>> {
+    let answer = self.gql(&points::predictions_request(login)).await?;
+    points::parse_predictions(&answer)
+  }
+
+  /// Redeems `reward` on `channel_id`: spends the viewer's points.
+  pub async fn redeem(
+    &self,
+    channel_id: &str,
+    reward: &points::Reward,
+    text: Option<&str>,
+    transaction_id: &str,
+  ) -> Result<()> {
+    let request = points::redeem_request(channel_id, reward, text, transaction_id);
+    points::parse_redeem(&self.gql(&request).await?)
+  }
+
+  /// Bets `points` on `outcome_id` of the prediction `event_id`: spends the viewer's points.
+  pub async fn predict(
+    &self,
+    event_id: &str,
+    outcome_id: &str,
+    points: u64,
+    transaction_id: &str,
+  ) -> Result<()> {
+    let request = points::predict_request(event_id, outcome_id, points, transaction_id);
+    points::parse_predict(&self.gql(&request).await?)
   }
 
   /// The playback token of `target`, as `player_type` (normally [`gql::PLAYER_TYPE`]).

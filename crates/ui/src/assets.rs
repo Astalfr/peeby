@@ -88,6 +88,8 @@ icons! {
   ChevronLeft => "chevron-left",
   ChevronRight => "chevron-right",
   SignOut => "log-out",
+  Points => "coins",
+  Gift => "gift",
 }
 
 macro_rules! files {

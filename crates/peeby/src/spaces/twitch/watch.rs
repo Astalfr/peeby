@@ -2,7 +2,7 @@
 //! - a channel's live: the shared player in live mode through the local proxy, the channel's
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
-//!   every minute;
+//!   every minute; the viewer's channel points at the header's right ([`super::points`]);
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar;
 //! - a clip: its direct MP4s.
 //!
@@ -24,6 +24,7 @@ use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, theme};
 
+use super::points::PointsView;
 use super::{Route, TwitchSpace, cards, chat, play};
 use crate::settings::{Player, Settings};
 
@@ -65,6 +66,8 @@ pub struct WatchView {
   proxy: Option<Proxy>,
   /// A live's chat.
   chat: Option<Entity<ChatPanel>>,
+  /// A live's channel points (shows nothing without the auth-token).
+  points: Option<Entity<PointsView>>,
   /// The codec and height of each quality of a live or a VOD, for the decoding check.
   qualities: play::QualityCodecs,
   /// The quality whose last check read `hwdec-current` as `no`: a second reading in a row acts.
@@ -116,6 +119,7 @@ impl WatchView {
       player,
       proxy: None,
       chat: None,
+      points: None,
       qualities: Vec::new(),
       cpu_reading: None,
       header: None,
@@ -134,6 +138,9 @@ impl WatchView {
           cx,
         ));
         view.chat = Some(panel);
+        let client = view.client.clone();
+        let login_ = login.clone();
+        view.points = Some(cx.new(|cx| PointsView::new(login_, client, cx)));
         view.start_live(login, cx)
       }
       Kind::Vod(id) => view.start_vod(id, cx),
@@ -540,6 +547,7 @@ impl WatchView {
           )
           .children(line.map(|l| div().text_sm().text_color(theme::muted()).child(l))),
       )
+      .children(self.points.clone())
   }
 }
 

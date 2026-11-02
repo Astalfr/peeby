@@ -100,6 +100,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Chat: emote ranges count code points (`char`s), never byte or UTF-16 offsets. Chat fixtures are public
   channels' lines with every chatter renamed (`viewerN`, as long as the name it replaces, so that ranges
   still fit), mentions and quoted replies included.
+- Channel points (ADR 0012): every spend (reward, bet) waits for a second click and never happens on its
+  own. `claimCommunityPoints` fails Twitch's integrity check: never route around it (another Client-ID,
+  minted integrity tokens); the bonus is claimed on twitch.tv.
 - Fixtures: redact Twitch's session keys by name (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
   `C`/`E`…, and the ads' `*-SESSION-ID`, `RADS-TOKEN`, `*-URL`), never with a blanket IP regex (it breaks
   HEVC codec strings).

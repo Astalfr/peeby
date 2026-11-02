@@ -17,6 +17,8 @@ the boxes as steps land, and list under each step what was verified and what was
 - **Nothing without signing in**: signed out, the space shows only its sign-in card.
 - **Low latency and HEVC/AV1 are in scope** (step 10).
 - Writes to the account (following, sending chat messages) stay out of scope.
+  2026-11-02: except channel points (redeeming a reward, betting on a prediction), which the user
+  asked for. See [ADR 0012](decisions/0012-twitch-channel-points.md).
 - **Live and chat are generic** (2026-11-01): they must also serve YouTube lives later, and possibly other
   platforms. See the next section.
 
@@ -105,6 +107,7 @@ crates/twitch/                  NEW, no GPUI; thiserror; lenient parsing from se
   src/auth.rs                   device flow, refresh (single-flight), validate
   src/helix.rs                  Helix calls, pagination, rate-limit headers
   src/models.rs                 Stream, Channel, User, Category, Video, Clip, Page<T>
+  src/points.rs                 channel points (ADR 0012): balance, rewards, predictions, spends
   src/chat/irc.rs               pure IRC parser (tags, PRIVMSG, CLEARCHAT, CLEARMSG, USERNOTICE, ROOMSTATE)
   src/chat/connection.rs        WebSocket connection, PING/PONG, reconnect with backoff
   src/chat/emotes.rs            Twitch emote ranges, 7TV/BTTV/FFZ sets (later)
@@ -119,6 +122,7 @@ crates/peeby/src/spaces/twitch/
   play.rs                       resolve a live/VOD/clip into a ui::player::Source (starts the proxy)
   watch.rs                      watch page on ui's layout with a chat column: title, channel, viewers, uptime
   chat.rs                       chat source: twitch::chat lines → ui::chat::ChatEvent (no UI of its own)
+  points.rs                     a live's channel points in the watch header (ADR 0012)
   following.rs, browse.rs, category.rs, channel.rs, search.rs, cards.rs (Twitch → MediaCard)
   settings_page.rs              sign-in (device code), auth-token field with its tutorial, quality, chat
 spikes/twitch-play/             timings: GQL token, usher, proxy, first frame

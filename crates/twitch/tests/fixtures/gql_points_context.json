@@ -1,0 +1,118 @@
+{
+  "data": {
+    "user": {
+      "id": "51653974",
+      "channel": {
+        "self": {
+          "communityPoints": {
+            "balance": 12345,
+            "availableClaim": null,
+            "activeMultipliers": []
+          }
+        },
+        "communityPointsSettings": {
+          "isEnabled": true,
+          "name": null,
+          "image": null,
+          "customRewards": [
+            {
+              "id": "0fdb0e80-ebbc-48a6-a7af-2d5f9d42c54e",
+              "title": "tanzen 1min",
+              "cost": 300000,
+              "prompt": "Coach tanzt für dich.",
+              "backgroundColor": "#8B3EF7",
+              "isEnabled": true,
+              "isPaused": false,
+              "isInStock": true,
+              "isSubOnly": false,
+              "isUserInputRequired": true,
+              "cooldownExpiresAt": null,
+              "image": null,
+              "defaultImage": {
+                "url": "https://static-cdn.jtvnw.net/custom-reward-images/default-1.png",
+                "url2x": "https://static-cdn.jtvnw.net/custom-reward-images/default-2.png"
+              }
+            },
+            {
+              "id": "42f8dd44-fd36-4c54-a3d6-486001c68688",
+              "title": "VIP",
+              "cost": 5000000,
+              "prompt": null,
+              "backgroundColor": "#7100BD",
+              "isEnabled": true,
+              "isPaused": false,
+              "isInStock": true,
+              "isSubOnly": false,
+              "isUserInputRequired": true,
+              "cooldownExpiresAt": null,
+              "image": null,
+              "defaultImage": {
+                "url": "https://static-cdn.jtvnw.net/custom-reward-images/default-1.png",
+                "url2x": "https://static-cdn.jtvnw.net/custom-reward-images/default-2.png"
+              }
+            },
+            {
+              "id": "4cd3c634-b2ef-48d0-b2fc-04ab04feafae",
+              "title": "Gruß von CoachLim",
+              "cost": 150000,
+              "prompt": "Du wirst im Stream namentlich gegrüßt.",
+              "backgroundColor": "#24605F",
+              "isEnabled": true,
+              "isPaused": false,
+              "isInStock": true,
+              "isSubOnly": false,
+              "isUserInputRequired": true,
+              "cooldownExpiresAt": null,
+              "image": null,
+              "defaultImage": {
+                "url": "https://static-cdn.jtvnw.net/custom-reward-images/default-1.png",
+                "url2x": "https://static-cdn.jtvnw.net/custom-reward-images/default-2.png"
+              }
+            },
+            {
+              "id": "cd6742b9-6941-407b-b769-bc7fc4a5fcb6",
+              "title": "Discord Call 3min",
+              "cost": 1000000,
+              "prompt": "Discord Anruf mit Coach Lim für 3 Minuten. Sende deinen Discord Namen mit rein!",
+              "backgroundColor": "#F7CC3E",
+              "isEnabled": true,
+              "isPaused": false,
+              "isInStock": true,
+              "isSubOnly": false,
+              "isUserInputRequired": true,
+              "cooldownExpiresAt": null,
+              "image": null,
+              "defaultImage": {
+                "url": "https://static-cdn.jtvnw.net/custom-reward-images/default-1.png",
+                "url2x": "https://static-cdn.jtvnw.net/custom-reward-images/default-2.png"
+              }
+            },
+            {
+              "id": "eda8ce29-65a2-41c9-b365-7df1b188e152",
+              "title": "Instagram Account Bewerten",
+              "cost": 400000,
+              "prompt": "Instagram Account Bewertung von Coach Lim persönlich. Gib deinen Instagram-Namen mit an!",
+              "backgroundColor": "#3EF73E",
+              "isEnabled": true,
+              "isPaused": false,
+              "isInStock": true,
+              "isSubOnly": false,
+              "isUserInputRequired": true,
+              "cooldownExpiresAt": null,
+              "image": null,
+              "defaultImage": {
+                "url": "https://static-cdn.jtvnw.net/custom-reward-images/default-1.png",
+                "url2x": "https://static-cdn.jtvnw.net/custom-reward-images/default-2.png"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 42,
+    "requestID": "REDACTED",
+    "operationName": "ChannelPoints"
+  }
+}

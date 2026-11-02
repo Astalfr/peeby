@@ -143,7 +143,7 @@ pub fn parse_status(status: u16, body: &str) -> Error {
 /// `errors[0]` of an answer, or a top-level `error`/`message` (the 401 shape). An integrity failure
 /// is its own error: Streamlink sees `failed integrity check` in the message. **Not seen yet**: no
 /// fixture, anonymous tokens did not ask for one.
-fn gql_error(answer: &Value) -> Option<Error> {
+pub(crate) fn gql_error(answer: &Value) -> Option<Error> {
   let message = answer["errors"][0]["message"]
     .as_str()
     .or_else(|| answer["message"].as_str())

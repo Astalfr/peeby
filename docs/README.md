@@ -25,6 +25,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Jellyfin | 12.0 or newer, one server, one account, token in the Credential Manager | [0009](decisions/0009-jellyfin-12-single-account.md) |
 | Twitch | Helix for the catalog (sign-in required), GQL and usher for playback, ads removed by a local playlist proxy, low latency, HEVC above 1080p, the web `auth-token` asked for (optional, with a tutorial), no browser on the host, chat read anonymously with Twitch and 7TV emotes | [0010](decisions/0010-twitch-space.md) |
 | YouTube lives | Started near their edge, seekable over their DVR window (an hour) in the shared player, chat polled from `live_chat/get_live_chat` | [0011](decisions/0011-youtube-live-dvr.md) |
+| Twitch channel points | Read and spent through raw GQL with the auth-token (balance, rewards, predictions; two clicks per spend); the bonus chest claimed on twitch.tv (integrity check), no spade events | [0012](decisions/0012-twitch-channel-points.md) |
 | UI language | French UI strings; code, comments and docs in English | — |
 
 ## Index
