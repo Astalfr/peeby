@@ -37,7 +37,7 @@ use tracks::{SUBTITLE_DELAY_STEP, UpNext};
 
 use crate::assets::Icon;
 use crate::images::Images;
-use crate::theme;
+use crate::{motion, theme};
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
@@ -1137,7 +1137,11 @@ impl PlayerView {
     )
   }
 
-  fn render_seek_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  fn render_seek_bar(
+    &mut self,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
     let primary = cx.theme().primary;
     let (start, end) = self.seek_range();
     let progress = if end > start {
@@ -1146,7 +1150,15 @@ impl PlayerView {
       0.0
     };
     let dvr = self.dvr_window().is_some();
-    let height = if self.seek_hover.is_some() { 6. } else { 4. };
+    // The track thickens on hover, eased rather than at once.
+    let height = motion::tween(
+      "seek-height",
+      4.,
+      if self.seek_hover.is_some() { 6. } else { 4. },
+      theme::FAST,
+      window,
+      cx,
+    );
     // GPUI clips children to rectangles, so each fill carries its piece's rounding and is
     // never narrower than tall (nor wider than a short piece), or its square ends stick out.
     let fill = |fraction: f64, height: f32, color: gpui::Hsla| {
@@ -1216,7 +1228,15 @@ impl PlayerView {
       .map(|i| {
         let (from, to) = (edges[i], edges.get(i + 1).copied().unwrap_or(1.0));
         let hovered = edges.len() > 1 && hover.is_some_and(|f| from <= f && f < to);
-        let height = if hovered { height + 4. } else { height };
+        let grown = motion::tween(
+          ("seek-piece", i),
+          0.,
+          if hovered { 4. } else { 0. },
+          theme::FAST,
+          window,
+          cx,
+        );
+        let height = height + grown;
         let local = |fraction: f64| ((fraction - from) / (to - from)).clamp(0.0, 1.0);
         div()
           .absolute()
@@ -1634,7 +1654,7 @@ impl PlayerView {
           .on_click(|_, window, _| window.toggle_fullscreen()),
       );
 
-    let seek_bar = can_seek.then(|| self.render_seek_bar(cx));
+    let seek_bar = can_seek.then(|| self.render_seek_bar(window, cx));
     layers.push(
       v_flex()
         .id("bottom-bar")

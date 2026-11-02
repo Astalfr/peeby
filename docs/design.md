@@ -77,6 +77,7 @@ Discreet and short; nothing loops except skeletons and spinners. The one excepti
 |---|---|---|
 | Card hover | Its content rises 4 px inside a box that stays in place (a moving box could slip out from under the pointer and loop), a red ring and a play button fade in, the title turns red, shadow | 150 ms |
 | Related card hover | A soft surface and a play button fade in, the title turns red | 150 ms |
+| Seek bar hover | The track thickens, and the hovered chapter's piece grows taller, easing out (`motion::tween`) | 150 ms |
 | Image load | The image fades in over its BlurHash (Jellyfin) or the flat surface | 200 ms |
 | Jellyfin banner | The next backdrop cross-fades over the previous one, the text slides in from the left; it turns every 8 s, not while hovered | 700 ms, 350 ms |
 | Row arrows | Scroll by 80 % of the row's width, easing out | 280 ms |
