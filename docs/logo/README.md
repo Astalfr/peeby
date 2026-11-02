@@ -20,7 +20,7 @@ the back, then Jellyfin blue, then YouTube red right behind the portrait. See do
 `pwsh scripts/render-logo.ps1` screenshots `onglets.html` with headless Edge at 1024 px on a
 transparent background. It then writes:
 
-- `crates/ui/assets/logo.png` (256 px), drawn by `ui::assets::logo` in the top bar (22 px), on
+- `crates/ui/assets/logo.png` (512 px, sharp at the opening animation's zoom), drawn by `ui::assets::logo` in the top bar (22 px), on
   the sign-in cards (40 px) and at the end of the opening animation;
 - `crates/ui/assets/logo-portrait.png` (512 px), the portrait's layer of the opening animation;
 - `crates/peeby/assets/peeby.ico` (16, 20, 24, 32, 40, 48, 64, 128 and 256 px, as PNGs), the

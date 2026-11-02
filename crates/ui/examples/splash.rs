@@ -36,7 +36,7 @@ impl Render for Demo {
       window.request_animation_frame();
       None
     } else {
-      let frame = self.splash.render(window, cx);
+      let frame = self.splash.render(window);
       if frame.is_none() {
         self.ended = self.frozen.is_none().then(Instant::now);
         window.request_animation_frame();

@@ -1,7 +1,8 @@
 //! The opening animation (docs/design.md, "Motion"): the logo's three cards fall one after the
 //! other, spinning into their angles, then the portrait's card lands on them. Every landing
 //! squashes the stack and bounces it, the portrait's hardest, and "Peeby" springs up under it.
-//! The settled stack fades into the real logo, then the whole screen fades out.
+//! The settled stack fades into the real logo, then the whole screen fades out while the logo
+//! zooms in.
 //!
 //! Everything is a function of the time since the first frame, so one render draws any moment.
 //! Only SVGs turn in GPUI (`Transformation`), so the cards are a one-color mask
@@ -15,8 +16,8 @@ use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, FontWeight, ImageSource, ObjectFit, RenderImage, Transformation, Window, div,
-  img, point, px, radians, rgb, size, svg,
+  AnyElement, FontWeight, ImageSource, ObjectFit, RenderImage, Transformation, Window, div, img,
+  point, px, radians, rgb, size, svg,
 };
 
 use crate::{assets, images, theme};
@@ -133,6 +134,8 @@ const CROSSFADE: f32 = 0.15;
 /// When the screen starts fading out (or a click), and for how long.
 const LEAVE: f32 = 2.05;
 const FADE_OUT: f32 = 0.30;
+/// The logo's size at the end of the fade out, easing out from 1.
+const ZOOM: f32 = 1.3;
 
 /// Where the animation's clock stands.
 enum Clock {
@@ -149,7 +152,22 @@ pub struct Splash {
   /// When a click asked to leave, in the animation's time.
   skipped: Option<f32>,
   /// The portrait's layer, decoded once for a device-pixel size.
-  portrait: Option<(u32, Option<Arc<RenderImage>>)>,
+  portrait: Decoded,
+  /// `logo.png`, likewise, at its largest (zoomed) size.
+  logo: Decoded,
+}
+
+/// A picture decoded for a device-pixel size, kept while that size holds.
+#[derive(Default)]
+struct Decoded(Option<(u32, Option<Arc<RenderImage>>)>);
+
+impl Decoded {
+  fn get(&mut self, bytes: &[u8], side: u32) -> Option<Arc<RenderImage>> {
+    if self.0.as_ref().is_none_or(|(s, _)| *s != side) {
+      self.0 = Some((side, images::decode(bytes, Some((side, side)))));
+    }
+    self.0.as_ref()?.1.clone()
+  }
 }
 
 impl Default for Splash {
@@ -164,7 +182,8 @@ impl Splash {
     Self {
       clock: Clock::Waiting,
       skipped: None,
-      portrait: None,
+      portrait: Decoded::default(),
+      logo: Decoded::default(),
     }
   }
 
@@ -193,7 +212,7 @@ impl Splash {
   }
 
   /// The animation's frame filling the window, or `None` once it is over.
-  pub fn render(&mut self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+  pub fn render(&mut self, window: &mut Window) -> Option<AnyElement> {
     if matches!(self.clock, Clock::Waiting) {
       self.clock = Clock::Started(Instant::now());
     }
@@ -205,7 +224,10 @@ impl Splash {
     if !matches!(self.clock, Clock::Frozen(_)) {
       window.request_animation_frame();
     }
-    let opacity = 1. - ((t - leave) / FADE_OUT).clamp(0., 1.);
+    let leaving = ((t - leave) / FADE_OUT).clamp(0., 1.);
+    let opacity = 1. - leaving;
+    // Around the logo's center, in canvas units.
+    let zoom = 1. + (ZOOM - 1.) * (1. - (1. - leaving).powi(3));
 
     let viewport = window.viewport_size();
     let (width, height) = (f32::from(viewport.width), f32::from(viewport.height));
@@ -219,22 +241,27 @@ impl Splash {
     let mut layers: Vec<AnyElement> = Vec::new();
     if logo_shown < 1. {
       for (color, layer) in &CARDS {
-        if let Some(element) = card(*color, layer, t, drop, &stack, k) {
+        if let Some(element) = card(*color, layer, t, drop, &stack, zoom, k) {
           layers.push(element);
         }
       }
-      if let Some(element) = self.portrait(t, drop, &stack, k, window) {
+      if let Some(element) = self.portrait(t, drop, &stack, zoom, k, window) {
         layers.push(element);
       }
     }
-    if logo_shown > 0. {
+    let side = (SIZE * ZOOM * window.scale_factor()).round() as u32;
+    if logo_shown > 0.
+      && let Some(image) = self.logo.get(assets::LOGO_PNG, side)
+    {
+      let edge = 256. * (1. - zoom);
       layers.push(
-        div()
+        img(ImageSource::Render(image))
           .absolute()
-          .left_0()
-          .top(px(stack.hop * k))
+          .left(px(edge * k))
+          .top(px((edge + stack.hop) * k))
+          .size(px(512. * zoom * k))
+          .object_fit(ObjectFit::Fill)
           .opacity(logo_shown)
-          .child(assets::logo(SIZE, window, cx))
           .into_any_element(),
       );
     }
@@ -283,26 +310,25 @@ impl Splash {
     t: f32,
     drop: f32,
     stack: &Stack,
+    zoom: f32,
     k: f32,
     window: &Window,
   ) -> Option<AnyElement> {
     let pose = Pose::of(&PORTRAIT, t, drop, stack)?;
-    let side = (SIZE * window.scale_factor()).round() as u32;
-    if self.portrait.as_ref().is_none_or(|(s, _)| *s != side) {
-      self.portrait = Some((side, images::decode(PORTRAIT_PNG, Some((side, side)))));
-    }
-    let image = self.portrait.as_ref()?.1.clone()?;
-    // Points move as `pivot + (p − pivot) · scale + offset`: the canvas's corner and side follow.
+    let side = (SIZE * ZOOM * window.scale_factor()).round() as u32;
+    let image = self.portrait.get(PORTRAIT_PNG, side)?;
+    // Points move as `pivot + (p − pivot) · scale + offset`, then zoom around the center: the
+    // canvas's corner and side follow.
     let (pivot, scale) = pose.pivot_scale(&PORTRAIT);
-    let x = pivot.0 * (1. - scale.0) + pose.offset.0;
-    let y = pivot.1 * (1. - scale.1) + pose.offset.1;
+    let x = zoomed(pivot.0 * (1. - scale.0) + pose.offset.0, zoom);
+    let y = zoomed(pivot.1 * (1. - scale.1) + pose.offset.1, zoom);
     Some(
       img(ImageSource::Render(image))
         .absolute()
         .left(px(x * k))
         .top(px(y * k))
-        .w(px(512. * scale.0 * k))
-        .h(px(512. * scale.1 * k))
+        .w(px(512. * scale.0 * zoom * k))
+        .h(px(512. * scale.1 * zoom * k))
         .object_fit(ObjectFit::Fill)
         .into_any_element(),
     )
@@ -311,15 +337,24 @@ impl Splash {
 
 /// A card at `t`: the mask at its resting place, moved, turned and squashed at paint time (an SVG
 /// keeps its size, so it is rasterized once).
-fn card(color: u32, layer: &Layer, t: f32, drop: f32, stack: &Stack, k: f32) -> Option<AnyElement> {
+fn card(
+  color: u32,
+  layer: &Layer,
+  t: f32,
+  drop: f32,
+  stack: &Stack,
+  zoom: f32,
+  k: f32,
+) -> Option<AnyElement> {
   let pose = Pose::of(layer, t, drop, stack)?;
   let rest = canvas(layer.center);
   let side = CARD * FIT;
   let (pivot, scale) = pose.pivot_scale(layer);
   let center = (
-    pivot.0 + (rest.0 - pivot.0) * scale.0 + pose.offset.0,
-    pivot.1 + (rest.1 - pivot.1) * scale.1 + pose.offset.1,
+    zoomed(pivot.0 + (rest.0 - pivot.0) * scale.0 + pose.offset.0, zoom),
+    zoomed(pivot.1 + (rest.1 - pivot.1) * scale.1 + pose.offset.1, zoom),
   );
+  let scale = (scale.0 * zoom, scale.1 * zoom);
   Some(
     svg()
       .path(assets::LOGO_CARD)
@@ -338,6 +373,11 @@ fn card(color: u32, layer: &Layer, t: f32, drop: f32, stack: &Stack, k: f32) -> 
       )
       .into_any_element(),
   )
+}
+
+/// A canvas coordinate zoomed by `zoom` around the canvas's center.
+fn zoomed(v: f32, zoom: f32) -> f32 {
+  256. + (v - 256.) * zoom
 }
 
 /// A point of onglets.html in the 512 canvas.

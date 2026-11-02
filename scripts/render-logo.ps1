@@ -78,7 +78,7 @@ try {
     return , $stream.ToArray()
   }
 
-  [IO.File]::WriteAllBytes($Png, (PngBytes (Scale $Source 256)))
+  [IO.File]::WriteAllBytes($Png, (PngBytes (Scale $Source 512)))
   $Portrait = [System.Drawing.Bitmap]::new($PortraitShot)
   [IO.File]::WriteAllBytes($PortraitPng, (PngBytes (Scale $Portrait 512)))
   $Portrait.Dispose()

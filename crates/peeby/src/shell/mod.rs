@@ -706,7 +706,7 @@ fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
 impl Render for Shell {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     // Over everything while it plays; a click skips it.
-    let splash = self.splash.as_mut().and_then(|s| s.render(window, cx));
+    let splash = self.splash.as_mut().and_then(|s| s.render(window));
     if splash.is_none() {
       self.splash = None;
     }

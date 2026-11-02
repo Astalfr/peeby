@@ -117,7 +117,7 @@ const COMPONENT: &[(&str, &[u8])] = files!(
   "window-restore",
 );
 
-const LOGO_PNG: &[u8] = include_bytes!("../assets/logo.png");
+pub(crate) const LOGO_PNG: &[u8] = include_bytes!("../assets/logo.png");
 
 /// The logo, decoded once per device-pixel size.
 #[derive(Default)]
@@ -126,7 +126,7 @@ struct LogoCache(HashMap<u32, Option<Arc<RenderImage>>>);
 impl Global for LogoCache {}
 
 /// The Peeby logo (the portrait over the spaces' three cards), `size` logical pixels wide. It is
-/// scaled on the CPU to the exact device-pixel size: GPUI samples without mipmaps, so the 256 px
+/// scaled on the CPU to the exact device-pixel size: GPUI samples without mipmaps, so the 512 px
 /// file drawn small would look pixelated. Decoding the small embedded PNG is quick and happens
 /// once per size.
 pub fn logo(size: f32, window: &Window, cx: &mut App) -> AnyElement {
