@@ -1,6 +1,6 @@
 //! The notification bell of a subscribed channel, on the watch page and the channels page: a
-//! menu with "Toutes", "Personnalisées" and "Aucune" (those the channel offers), as YouTube's
-//! bell next to "Abonné".
+//! menu with "All", "Personalized" and "None" (those the channel offers), as YouTube's bell
+//! next to "Subscribed".
 //!
 //! The level the pages parsed is the starting point; a change shows at once on every page of
 //! the channel ([`Bells`]) and goes back with a toast if YouTube refuses.
@@ -18,8 +18,9 @@ use innertube::{ChannelNotifications, Error, NotificationLevel};
 use crate::spaces::youtube::convert::error_text;
 use crate::spaces::youtube::save::Session;
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::widgets::loader;
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 /// Levels set in this session, by channel id, over the ones the pages parsed (the watch page
 /// and the channels page agree after a change), and the channels whose change is waiting for
@@ -59,9 +60,18 @@ fn icon(level: NotificationLevel) -> Icon {
 
 fn label(level: NotificationLevel) -> &'static str {
   match level {
-    NotificationLevel::All => "Toutes",
-    NotificationLevel::Personalized => "Personnalisées",
-    NotificationLevel::None => "Aucune",
+    NotificationLevel::All => t("All", "Toutes"),
+    NotificationLevel::Personalized => t("Personalized", "Personnalisées"),
+    NotificationLevel::None => t("None", "Aucune"),
+  }
+}
+
+/// The element id of `level`'s menu item, the same in every language.
+fn item_id(level: NotificationLevel) -> &'static str {
+  match level {
+    NotificationLevel::All => "bell-all",
+    NotificationLevel::Personalized => "bell-personalized",
+    NotificationLevel::None => "bell-none",
   }
 }
 
@@ -78,7 +88,11 @@ pub fn bell_button(
   let busy = is_pending(channel_id, cx);
   let button = Button::new(ElementId::Name(format!("{key}-button").into()))
     .ghost()
-    .tooltip(format!("Notifications : {}", label(current).to_lowercase()))
+    .tooltip(tf!(
+      "Notifications: {}",
+      "Notifications : {}",
+      label(current).to_lowercase()
+    ))
     .map(|b| if small { b.small() } else { b })
     .map(|b| {
       if busy {
@@ -106,13 +120,13 @@ pub fn bell_button(
                 .px_2()
                 .pb_1()
                 .font_weight(FontWeight::SEMIBOLD)
-                .child("Notifications"),
+                .child(t("Notifications", "Notifications")),
             )
             .children(bell.options.iter().map(|(level, params)| {
               let (level, params) = (*level, params.clone());
               let channel_id = channel_id.clone();
               h_flex()
-                .id(label(level))
+                .id(item_id(level))
                 .w_full()
                 .px_2()
                 .py_1p5()
@@ -171,11 +185,18 @@ fn set_level(
     let Some(result) = task.await else { return };
     let note = match &result {
       Ok(()) => Notification::success(match level {
-        NotificationLevel::All => "Vous recevrez toutes les notifications de cette chaîne.",
-        NotificationLevel::Personalized => {
-          "Vous recevrez des notifications personnalisées de cette chaîne."
-        }
-        NotificationLevel::None => "Vous ne recevrez plus de notifications de cette chaîne.",
+        NotificationLevel::All => t(
+          "You will get every notification from this channel.",
+          "Vous recevrez toutes les notifications de cette chaîne.",
+        ),
+        NotificationLevel::Personalized => t(
+          "You will get personalized notifications from this channel.",
+          "Vous recevrez des notifications personnalisées de cette chaîne.",
+        ),
+        NotificationLevel::None => t(
+          "You will no longer get notifications from this channel.",
+          "Vous ne recevrez plus de notifications de cette chaîne.",
+        ),
       }),
       Err(e) => {
         tracing::warn!("channel notifications: {e}");
@@ -199,11 +220,13 @@ fn set_level(
 
 fn bell_error(error: &Error) -> String {
   match error {
-    Error::SignInRequired => {
-      "Connectez-vous pour régler les notifications : importez vos cookies depuis la page Compte."
-        .into()
-    }
-    e => format!(
+    Error::SignInRequired => t(
+      "Sign in to set notifications: import your cookies from the Account page.",
+      "Connectez-vous pour régler les notifications : importez vos cookies depuis la page Compte.",
+    )
+    .into(),
+    e => tf!(
+      "Cannot change the notifications. {}",
       "Impossible de modifier les notifications. {}",
       error_text(e)
     ),

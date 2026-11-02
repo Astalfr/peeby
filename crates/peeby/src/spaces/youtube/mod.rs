@@ -27,6 +27,7 @@ use gpui::{
 use gpui_component::popover::PopoverState;
 use innertube::{Client, Cookies};
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::player::PlayerView;
 use ui::theme::Accent;
@@ -73,15 +74,24 @@ impl Route {
   fn watch_later() -> Self {
     Self::Playlist {
       id: save::WATCH_LATER.into(),
-      title: save::WATCH_LATER_TITLE.into(),
+      title: save::watch_later_title().into(),
     }
   }
 
-  /// The first page: the one of `start_page` ("Page d'accueil" setting).
+  /// The first page: the one of `start_page` ("Start page" setting).
   fn start(cx: &App) -> Self {
     match Settings::get(cx).start_page {
       StartPage::Home => Self::Home,
       StartPage::Subscriptions => Self::Subscriptions,
+    }
+  }
+
+  /// Whether `self` and `other` are the same page. A playlist is its id: the title of "Watch
+  /// later" follows the interface's language.
+  fn same_page(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Self::Playlist { id: a, .. }, Self::Playlist { id: b, .. }) => a == b,
+      _ => self == other,
     }
   }
 
@@ -202,7 +212,11 @@ impl YouTubeSpace {
 
   /// Shows `route`: top-level pages reset the stack, the others are pushed.
   pub fn open(&mut self, route: Route, window: &mut Window, cx: &mut Context<Self>) {
-    if self.stack.last().is_some_and(|page| page.route == route) {
+    if self
+      .stack
+      .last()
+      .is_some_and(|page| page.route.same_page(&route))
+    {
       return;
     }
     if route.is_top_level() {
@@ -338,19 +352,32 @@ impl Space for YouTubeSpace {
   fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
     let root = self.stack.first().map(|page| page.route.clone());
     [
-      ("home", "Accueil", Icon::Home, false),
-      ("subscriptions", "Abonnements", Icon::Subscriptions, false),
+      ("home", t("Home", "Accueil"), Icon::Home, false),
+      (
+        "subscriptions",
+        t("Subscriptions", "Abonnements"),
+        Icon::Subscriptions,
+        false,
+      ),
       (
         "watch-later",
-        save::WATCH_LATER_TITLE,
+        save::watch_later_title(),
         Icon::WatchLater,
         false,
       ),
-      ("playlists", "Playlists", Icon::Playlists, false),
+      (
+        "playlists",
+        t("Playlists", "Playlists"),
+        Icon::Playlists,
+        false,
+      ),
     ]
     .into_iter()
     .map(|(id, label, icon, bottom)| MenuEntry {
-      active: root.is_some() && Self::entry_route(id) == root,
+      active: root
+        .as_ref()
+        .zip(Self::entry_route(id))
+        .is_some_and(|(root, entry)| root.same_page(&entry)),
       bottom,
       ..MenuEntry::new(id, label, icon)
     })

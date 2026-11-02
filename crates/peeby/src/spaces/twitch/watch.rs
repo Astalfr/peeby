@@ -20,10 +20,11 @@ use twitch::helix::Helix;
 use twitch::usher::Codec;
 use twitch::{Proxy, Target};
 use ui::chat::{ChatPanel, watch_layout};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 use super::points::PointsView;
 use super::{Route, TwitchSpace, cards, chat, play, progress, replay};
@@ -110,7 +111,10 @@ impl WatchView {
         }
         PlayerEvent::Sound { volume, muted } => Player::save_sound(volume, muted, cx),
         PlayerEvent::Ended if live => player.update(cx, |player, cx| {
-          player.set_notice(Some("Le live est terminé.".into()), cx)
+          player.set_notice(
+            Some(t("The live has ended.", "Le live est terminé.").into()),
+            cx,
+          )
         }),
         _ => {}
       }
@@ -159,7 +163,7 @@ impl WatchView {
         view.start_live(login, cx)
       }
       Kind::Vod(id) => {
-        let panel = cx.new(|cx| ChatPanel::new(cx).titled("Rediffusion du chat"));
+        let panel = cx.new(|cx| ChatPanel::new(cx).titled(t("Chat replay", "Rediffusion du chat")));
         view._tasks.push(replay::start(
           id.clone(),
           view.client.clone(),
@@ -200,8 +204,10 @@ impl WatchView {
       .upgrade()
       .is_some_and(|nav| nav.read(cx).has_auth_token());
     if matches!(error, twitch::Error::SubscriberOnly) && !token {
-      message
-        .push_str(" Abonné ? Ajoutez le jeton du site Twitch dans les réglages pour la regarder.");
+      message.push_str(t(
+        " Subscribed? Add the Twitch site token in the settings to watch it.",
+        " Abonné ? Ajoutez le jeton du site Twitch dans les réglages pour la regarder.",
+      ));
     }
     self.player.update(cx, |p, cx| p.fail(message.into(), cx));
   }
@@ -209,7 +215,7 @@ impl WatchView {
   fn login_hint(&self) -> String {
     match &self.kind {
       Kind::Live(login) => login.clone(),
-      _ => "Cette chaîne".into(),
+      _ => t("This channel", "Cette chaîne").into(),
     }
   }
 
@@ -478,7 +484,8 @@ impl WatchView {
               name: clip.broadcaster_name.clone(),
               login: user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
               avatar: user.map(|u| u.profile_image_url),
-              line: Some(format!(
+              line: Some(tf!(
+                "Clipped by {} · {} · {}",
                 "Clip de {} · {} · {}",
                 clip.creator_name,
                 cards::views(clip.view_count),
@@ -509,12 +516,19 @@ impl WatchView {
     };
     let notice: Option<SharedString> =
       (state.active && !state.covered).then(|| match state.duration {
-        Some(duration) if duration > state.elapsed => format!(
-          "Publicité retirée · reprise dans {:.0} s",
-          (duration - state.elapsed).ceil()
+        Some(duration) if duration > state.elapsed => {
+          let left = (duration - state.elapsed).ceil();
+          tf!(
+            "Ad removed · back in {left:.0} s",
+            "Publicité retirée · reprise dans {left:.0} s"
+          )
+          .into()
+        }
+        _ => t(
+          "Ad removed · back in a moment",
+          "Publicité retirée · reprise dans un instant",
         )
         .into(),
-        _ => "Publicité retirée · reprise dans un instant".into(),
       });
     self
       .player
@@ -539,7 +553,7 @@ impl WatchView {
       if let Some(category) = &live.category {
         parts.push(category.clone());
       }
-      parts.push(format!("{} spectateurs", cards::grouped(live.viewers)));
+      parts.push(cards::viewers(live.viewers));
       parts.join(" · ")
     });
     self.started_at = started;
@@ -572,10 +586,8 @@ impl WatchView {
           .ok()
       })
       .map(|elapsed| {
-        format!(
-          "en direct depuis {}",
-          ui::player::format_time(elapsed.as_secs_f64())
-        )
+        let time = ui::player::format_time(elapsed.as_secs_f64());
+        tf!("live for {time}", "en direct depuis {time}")
       });
     let line = match (header.line.clone(), uptime) {
       (Some(line), Some(uptime)) => Some(format!("{line} · {uptime}")),

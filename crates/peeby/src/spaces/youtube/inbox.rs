@@ -23,10 +23,11 @@ use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::save::Session;
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::card::WIDE;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::widgets::{loading_more, near_scroll_end};
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 /// How often the unseen count is read again.
 const POLL: Duration = Duration::from_secs(30 * 60);
@@ -359,11 +360,16 @@ impl InboxPanel {
 
 fn inbox_error(error: &Error) -> String {
   match error {
-    Error::SignInRequired | Error::NotLoggedIn => {
-      "Connectez-vous pour voir vos notifications : importez vos cookies depuis la page Compte."
-        .into()
-    }
-    e => format!("Impossible de charger les notifications. {}", error_text(e)),
+    Error::SignInRequired | Error::NotLoggedIn => t(
+      "Sign in to see your notifications: import your cookies from the Account page.",
+      "Connectez-vous pour voir vos notifications : importez vos cookies depuis la page Compte.",
+    )
+    .into(),
+    e => tf!(
+      "Cannot load the notifications. {}",
+      "Impossible de charger les notifications. {}",
+      error_text(e)
+    ),
   }
 }
 
@@ -401,7 +407,7 @@ impl Render for InboxPanel {
         .px_2()
         .text_sm()
         .text_color(theme::muted())
-        .child("Aucune notification.")
+        .child(t("No notifications.", "Aucune notification."))
         .into_any_element(),
       State::Loaded => {
         let mut list = v_flex()

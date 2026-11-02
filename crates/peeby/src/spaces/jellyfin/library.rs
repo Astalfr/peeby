@@ -10,9 +10,10 @@ use gpui_component::{h_flex, v_flex};
 use jellyfin_api::models::{BaseItem, CollectionType, ItemKind};
 use jellyfin_api::{Client, ItemId, ItemsQuery};
 use ui::card::poster_height;
+use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::rows::{GridLayout, Width};
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 use super::items::{Shape, card, route_for};
 use super::{JellyfinSpace, report};
@@ -61,7 +62,7 @@ impl LibraryView {
     let title = library
       .as_ref()
       .and_then(|l| l.name.clone())
-      .unwrap_or_else(|| "Bibliothèque".into());
+      .unwrap_or_else(|| t("Library", "Bibliothèque").into());
     let kinds = item_types(library.as_ref().and_then(|l| l.collection_type));
     let mut view = Self {
       client,
@@ -166,9 +167,8 @@ impl Render for LibraryView {
     let layout = GridLayout::new(available, shape.width(), GAP);
     let rows = layout.rows(self.items.len());
     let count = match (self.total, self.loading) {
-      (Some(1), _) => "1 titre".to_owned(),
-      (Some(total), _) => format!("{total} titres"),
-      (None, true) => "Chargement…".into(),
+      (Some(total), _) => titles(total),
+      (None, true) => t("Loading…", "Chargement…").into(),
       (None, false) => String::new(),
     };
 
@@ -241,5 +241,14 @@ impl Render for LibraryView {
           .child(grid)
           .vertical_scrollbar(&self.scroll),
       )
+  }
+}
+
+/// `1 title`, `12 titles` (French: `0 titre`, `1 titre`, `12 titres`).
+fn titles(total: u32) -> String {
+  match (lang(), total) {
+    (Lang::En, 1) => "1 title".to_owned(),
+    (Lang::Fr, 0 | 1) => format!("{total} titre"),
+    _ => tf!("{total} titles", "{total} titres"),
   }
 }

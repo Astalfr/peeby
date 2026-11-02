@@ -29,8 +29,9 @@ use innertube::{Client, Error, PlaylistChoice};
 use crate::spaces::youtube::convert::error_text;
 use ui::assets::Icon;
 use ui::card::RowAction;
+use ui::i18n::t;
 use ui::widgets::loader;
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 /// The app's current client, for actions started from any page. `YouTubeSpace` sets it at startup
 /// and on every session change.
@@ -38,9 +39,13 @@ pub struct Session(pub Client);
 
 impl Global for Session {}
 
-/// "Watch later": its playlist id and its title in the app.
+/// "Watch later": its playlist id, and [`watch_later_title`] its title in the app.
 pub const WATCH_LATER: &str = "WL";
-pub const WATCH_LATER_TITLE: &str = "À regarder plus tard";
+
+/// The title of "Watch later" in the app, in the interface's language.
+pub fn watch_later_title() -> &'static str {
+  t("Watch later", "À regarder plus tard")
+}
 const POPOVER_WIDTH: f32 = 280.;
 
 /// A change to a playlist.
@@ -204,8 +209,14 @@ fn edit(
   cx.spawn(async move |cx| {
     let Some(result) = task.await else { return };
     let note = match &result {
-      Ok(()) if adding => Notification::success(format!("Ajoutée à « {playlist_title} »")),
-      Ok(()) => Notification::info(format!("Retirée de « {playlist_title} »")),
+      Ok(()) if adding => Notification::success(tf!(
+        "Added to \"{playlist_title}\"",
+        "Ajoutée à « {playlist_title} »"
+      )),
+      Ok(()) => Notification::info(tf!(
+        "Removed from \"{playlist_title}\"",
+        "Retirée de « {playlist_title} »"
+      )),
       Err(e) => {
         tracing::warn!("edit playlist: {e}");
         Notification::error(save_error(e, adding))
@@ -243,12 +254,21 @@ fn edit(
 
 fn save_error(error: &Error, adding: bool) -> String {
   match error {
-    Error::SignInRequired => {
-      "Connectez-vous pour modifier vos playlists : importez vos cookies depuis la page Compte."
-        .into()
-    }
-    e if adding => format!("Impossible d'enregistrer la vidéo. {}", error_text(e)),
-    e => format!("Impossible de retirer la vidéo. {}", error_text(e)),
+    Error::SignInRequired => t(
+      "Sign in to edit your playlists: import your cookies from the Account page.",
+      "Connectez-vous pour modifier vos playlists : importez vos cookies depuis la page Compte.",
+    )
+    .into(),
+    e if adding => tf!(
+      "Cannot save the video. {}",
+      "Impossible d'enregistrer la vidéo. {}",
+      error_text(e)
+    ),
+    e => tf!(
+      "Cannot remove the video. {}",
+      "Impossible de retirer la vidéo. {}",
+      error_text(e)
+    ),
   }
 }
 
@@ -273,7 +293,7 @@ pub fn removal(
     video_id.to_owned(),
   );
   RowAction {
-    label: "Retirer de la playlist".into(),
+    label: t("Remove from the playlist", "Retirer de la playlist").into(),
     busy,
     run: Box::new(move |window, cx| {
       edit(
@@ -300,7 +320,7 @@ pub fn toggle_watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
   };
   edit(
     WATCH_LATER.into(),
-    WATCH_LATER_TITLE.into(),
+    watch_later_title().into(),
     change,
     window.window_handle(),
     cx,
@@ -352,9 +372,12 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl In
     })
     .tooltip(move |window, cx| {
       let label = if saved {
-        "Retirer de « À regarder plus tard »"
+        ui::i18n::t(
+          "Remove from \"Watch later\"",
+          "Retirer de « À regarder plus tard »",
+        )
       } else {
-        WATCH_LATER_TITLE
+        watch_later_title()
       };
       gpui_component::tooltip::Tooltip::new(label).build(window, cx)
     })
@@ -385,7 +408,7 @@ pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
             .ghost()
             .small()
             .icon(Icon::More)
-            .tooltip("Plus d'actions"),
+            .tooltip(ui::i18n::t("More actions", "Plus d'actions")),
         )
         .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Card, window, cx)),
     )
@@ -402,7 +425,7 @@ pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
       Button::new("watch-menu")
         .ghost()
         .icon(Icon::More)
-        .tooltip("Plus d'actions"),
+        .tooltip(t("More actions", "Plus d'actions")),
     )
     .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Watch, window, cx))
 }
@@ -454,8 +477,8 @@ fn picker_content(
       .child(label)
   };
   let save_label = match menu {
-    Menu::Card => "Ajouter à une playlist",
-    Menu::Watch => "Enregistrer dans une playlist",
+    Menu::Card => t("Add to a playlist", "Ajouter à une playlist"),
+    Menu::Watch => t("Save to a playlist", "Enregistrer dans une playlist"),
   };
   v_flex()
     .w(px(220.))
@@ -466,10 +489,13 @@ fn picker_content(
           item(
             "menu-watch-later",
             Icon::Check,
-            "Retirer de « À regarder plus tard »",
+            t(
+              "Remove from \"Watch later\"",
+              "Retirer de « À regarder plus tard »",
+            ),
           )
         } else {
-          item("menu-watch-later", Icon::WatchLater, WATCH_LATER_TITLE)
+          item("menu-watch-later", Icon::WatchLater, watch_later_title())
         }
         .on_click(cx.listener(move |state, _, window, cx| {
           toggle_watch_later(&video_id, window, cx);
@@ -654,7 +680,7 @@ impl Render for Picker {
         div()
           .px_2()
           .font_weight(FontWeight::SEMIBOLD)
-          .child("Enregistrer dans…"),
+          .child(t("Save to…", "Enregistrer dans…")),
       )
       .child(body)
   }

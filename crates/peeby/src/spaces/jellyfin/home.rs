@@ -16,11 +16,12 @@ use jellyfin_api::models::{BaseItem, CollectionType, ItemKind};
 use jellyfin_api::{Client, Error, NextUpOptions};
 use ui::assets::Icon;
 use ui::card::skeleton_poster;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{Picture, image_fill, logo};
 use ui::rows::scroll_row;
 use ui::text::one_paragraph;
-use ui::{motion, runtime, theme};
+use ui::{motion, runtime, tf, theme};
 
 use super::items::{
   Shape, TICKS_PER_SECOND, backdrop_ref, card, episode_number, is_spoiler, logo_ref, resumable,
@@ -149,7 +150,7 @@ impl HomeView {
       let mut rows = Vec::new();
       if prefs.show_continue_watching {
         rows.push(Row {
-          title: "Reprendre".into(),
+          title: t("Continue watching", "Reprendre").into(),
           shape: Shape::Thumb,
           items: resume,
           // Playback resumes from the saved position.
@@ -158,7 +159,7 @@ impl HomeView {
       }
       if prefs.show_next_up {
         rows.push(Row {
-          title: "À suivre".into(),
+          title: t("Next up", "À suivre").into(),
           shape: Shape::Thumb,
           items: next_up,
           play: true,
@@ -167,7 +168,12 @@ impl HomeView {
       for (library, fetch) in libraries.into_iter().zip(latest) {
         match fetch.await {
           Some(Ok(items)) => rows.push(Row {
-            title: format!("Derniers ajouts dans {}", library.name.unwrap_or_default()).into(),
+            title: tf!(
+              "Latest in {}",
+              "Derniers ajouts dans {}",
+              library.name.unwrap_or_default()
+            )
+            .into(),
             shape: Shape::LargePoster,
             items,
             play: false,
@@ -337,9 +343,9 @@ impl HomeView {
               .large()
               .icon(Icon::Play)
               .label(if resumable(&item) {
-                "Reprendre"
+                t("Resume", "Reprendre")
               } else {
-                "Lire"
+                t("Play", "Lire")
               })
               .on_click(cx.listener(move |this, _, window, cx| {
                 this.open(Route::Play(play_id.clone()), window, cx)
@@ -349,7 +355,7 @@ impl HomeView {
             Button::new("hero-details")
               .large()
               .icon(Icon::Info)
-              .label("Détails")
+              .label(t("Details", "Détails"))
               .on_click(
                 cx.listener(move |this, _, window, cx| this.open(details.clone(), window, cx)),
               ),
@@ -432,7 +438,7 @@ fn hero_text(item: &BaseItem) -> (String, String) {
     .zip(item.run_time_ticks)
     .map(|(u, total)| {
       let minutes = (total - u.playback_position_ticks).max(0) / (60 * TICKS_PER_SECOND);
-      format!(" · {minutes} min restantes")
+      tf!(" · {minutes} min left", " · {minutes} min restantes")
     })
     .unwrap_or_default();
   match item.kind {
@@ -513,7 +519,7 @@ impl Render for HomeView {
       rows = rows.child(
         div()
           .text_color(theme::muted())
-          .child("Rien à afficher pour l'instant."),
+          .child(t("Nothing to show yet.", "Rien à afficher pour l'instant.")),
       );
     }
     let skeleton = v_flex()

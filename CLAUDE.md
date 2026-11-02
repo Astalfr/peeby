@@ -63,7 +63,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Every `#[allow(...)]` carries a comment saying why.
 - Log with `tracing`. Cookies never appear in logs; stream URLs only at debug level, never in error messages.
 - Nothing blocking on the GPUI UI thread: network and disk I/O run in the background.
-- Code, identifiers, comments and docs in English. UI strings in French.
+- Code, identifiers, comments and docs in English. UI strings in English and French, both at the call site:
+  `ui::i18n::t("Settings", "Réglages")`, `ui::tf!("{n} videos", "{n} vidéos")` (ADR 0014). Logs stay English;
+  tests never call `i18n::set` and expect English.
 
 ## InnerTube
 - Source of truth for client contexts (VISIONOS values, client name ids, headers): the yt-dlp source at the pinned

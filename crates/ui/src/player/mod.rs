@@ -36,8 +36,9 @@ use segments::{Segment, SegmentKind};
 use tracks::{SUBTITLE_DELAY_STEP, UpNext};
 
 use crate::assets::Icon;
+use crate::i18n::{Lang, lang, t};
 use crate::images::Images;
-use crate::{motion, theme};
+use crate::{motion, tf, theme};
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
@@ -303,7 +304,7 @@ impl PlayerView {
       title: SharedString::default(),
       player: None,
       video: None,
-      status: Some("Chargement…".into()),
+      status: Some(t("Loading…", "Chargement…").into()),
       failed: false,
       position: 0.0,
       duration: 0.0,
@@ -387,7 +388,7 @@ impl PlayerView {
   /// Back to a DVR live's edge: a seek, mpv keeps reloading the playlist.
   fn go_live(&mut self, cx: &mut Context<Self>) {
     self.seek_to(self.duration - LIVE_DELAY, cx);
-    self.show_osd("Retour au direct".into(), cx);
+    self.show_osd(t("Back to live", "Retour au direct").into(), cx);
   }
 
   /// Where the live edge is in a new mpv's timeline ([`Source::live`]).
@@ -515,7 +516,7 @@ impl PlayerView {
     };
     tracing::info!("live resumed after a pause: back to its live edge");
     self.paused_since = None;
-    self.show_osd("Retour au direct".into(), cx);
+    self.show_osd(t("Back to live", "Retour au direct").into(), cx);
     // Already paused: its last frame stays on screen until the new player's first one.
     self.player = None;
     self.captions_added.clear();
@@ -630,7 +631,7 @@ impl PlayerView {
     };
     tracing::info!("quality {}", quality.label);
     self.quality = Some(index);
-    self.show_osd(format!("Qualité {}", quality.label).into(), cx);
+    self.show_osd(tf!("Quality {}", "Qualité {}", quality.label).into(), cx);
     // The old player lives on in the old VideoView until the new one replaces it: pause it so
     // the sounds do not overlap. Its last frame stays on screen meanwhile.
     if let Some(old) = self.player.take() {
@@ -647,10 +648,13 @@ impl PlayerView {
     self.caption = index;
     let label = match index.and_then(|i| self.source.as_ref()?.subtitles.get(i)) {
       Some(subtitle) => subtitle.label.clone(),
-      None => "Désactivés".to_owned(),
+      None => t("Off", "Désactivés").to_owned(),
     };
     self.apply_caption();
-    self.show_osd(format!("Sous-titres : {label}").into(), cx);
+    self.show_osd(
+      tf!("Subtitles: {label}", "Sous-titres : {label}").into(),
+      cx,
+    );
   }
 
   fn apply_caption(&mut self) {
@@ -679,7 +683,7 @@ impl PlayerView {
     }
     let Some(source) = &self.source else { return };
     if source.subtitles.is_empty() {
-      return self.show_osd("Aucun sous-titre".into(), cx);
+      return self.show_osd(t("No subtitles", "Aucun sous-titre").into(), cx);
     }
     let language = self.prefs.subtitle_language.clone().unwrap_or_default();
     let index = source
@@ -716,7 +720,10 @@ impl PlayerView {
         Err(e) => {
           this
             .update(cx, |this, cx| {
-              this.fail(format!("Lecteur indisponible : {e}").into(), cx)
+              this.fail(
+                tf!("Player unavailable: {e}", "Lecteur indisponible : {e}").into(),
+                cx,
+              )
             })
             .ok();
           return;
@@ -830,7 +837,10 @@ impl PlayerView {
           cx.emit(PlayerEvent::Ended);
         }
       }
-      Event::Ended(Some(error)) => self.fail(format!("Lecture interrompue : {error}").into(), cx),
+      Event::Ended(Some(error)) => self.fail(
+        tf!("Playback stopped: {error}", "Lecture interrompue : {error}").into(),
+        cx,
+      ),
       Event::Ended(None) => {
         if self.layout.is_page() {
           self.close(cx);
@@ -870,7 +880,10 @@ impl PlayerView {
       self.toggle_mute(cx);
     }
     self.remember_sound(cx);
-    self.show_osd(format!("Volume {:.0} %", self.volume).into(), cx);
+    self.show_osd(
+      tf!("Volume {:.0}%", "Volume {:.0} %", self.volume).into(),
+      cx,
+    );
   }
 
   /// Volume from a mouse position on the vertical slider: bottom is 0 %, top 100 %.
@@ -912,9 +925,9 @@ impl PlayerView {
     self.remember_sound(cx);
     self.show_osd(
       if self.muted {
-        "Son coupé"
+        t("Muted", "Son coupé")
       } else {
-        "Son activé"
+        t("Unmuted", "Son activé")
       }
       .into(),
       cx,
@@ -935,7 +948,10 @@ impl PlayerView {
   fn tell_muted(&mut self, cx: &mut Context<Self>) {
     let start = segments::muted_at(&self.segments, self.position).map(|s| s.start);
     if start.is_some() && start != self.muted_at {
-      self.show_osd("Son coupé (droits d'auteur)".into(), cx);
+      self.show_osd(
+        t("Muted (copyright)", "Son coupé (droits d'auteur)").into(),
+        cx,
+      );
     }
     self.muted_at = start;
   }
@@ -1230,7 +1246,7 @@ impl PlayerView {
                 div()
                   .text_xs()
                   .text_color(theme::muted_audio())
-                  .child("Son coupé"),
+                  .child(t("Muted", "Son coupé")),
               )
             }),
         )
@@ -1507,7 +1523,7 @@ impl PlayerView {
         self
           .control_button("mute", cx)
           .icon(icon)
-          .tooltip("Couper le son (M)")
+          .tooltip(t("Mute (M)", "Couper le son (M)"))
           .on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))),
       )
       .when(shown, |el| {
@@ -1575,7 +1591,7 @@ impl PlayerView {
           self
             .control_button("previous", cx)
             .icon(Icon::Previous)
-            .tooltip("Précédent (P)")
+            .tooltip(t("Previous (P)", "Précédent (P)"))
             .disabled(!previous)
             .on_click(cx.listener(|_, _, _, cx| cx.emit(PlayerEvent::Previous))),
         )
@@ -1585,9 +1601,9 @@ impl PlayerView {
           .control_button("play-pause", cx)
           .icon(if self.paused { Icon::Play } else { Icon::Pause })
           .tooltip(if self.paused {
-            "Lecture (K)"
+            t("Play (K)", "Lecture (K)")
           } else {
-            "Pause (K)"
+            t("Pause (K)", "Pause (K)")
           })
           .on_click(cx.listener(|this, _, _, cx| {
             this.toggle_pause(cx);
@@ -1599,7 +1615,7 @@ impl PlayerView {
           self
             .control_button("next", cx)
             .icon(Icon::Next)
-            .tooltip("Suivant (N)")
+            .tooltip(t("Next (N)", "Suivant (N)"))
             .disabled(!next)
             .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
         )
@@ -1610,14 +1626,18 @@ impl PlayerView {
             self
               .control_button("back-10", cx)
               .icon(Icon::Back10)
-              .tooltip(format!("Reculer de {} (←)", format_step(step)))
+              .tooltip(tf!("Back {} (←)", "Reculer de {} (←)", format_step(step)))
               .on_click(cx.listener(|this, _, _, cx| this.seek_by(-this.seek_step(false), cx))),
           )
           .child(
             self
               .control_button("fwd-10", cx)
               .icon(Icon::Forward10)
-              .tooltip(format!("Avancer de {} (→)", format_step(step)))
+              .tooltip(tf!(
+                "Forward {} (→)",
+                "Avancer de {} (→)",
+                format_step(step)
+              ))
               .on_click(cx.listener(|this, _, _, cx| this.seek_by(this.seek_step(false), cx))),
           )
       })
@@ -1648,7 +1668,10 @@ impl PlayerView {
           self
             .control_button("chapters-menu", cx)
             .icon(Icon::Chapters)
-            .tooltip("Chapitres (Page préc. / Page suiv.)")
+            .tooltip(t(
+              "Chapters (Page Up / Page Down)",
+              "Chapitres (Page préc. / Page suiv.)",
+            ))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Chapters, cx))),
         )
       })
@@ -1657,7 +1680,7 @@ impl PlayerView {
           self
             .control_button("audio-menu", cx)
             .icon(Icon::Audio)
-            .tooltip("Audio (A)")
+            .tooltip(t("Audio (A)", "Audio (A)"))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Audio, cx))),
         )
       })
@@ -1666,7 +1689,7 @@ impl PlayerView {
           self
             .control_button("subs-menu", cx)
             .icon(Icon::Subtitles)
-            .tooltip("Sous-titres (C)")
+            .tooltip(t("Subtitles (C)", "Sous-titres (C)"))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Subtitles, cx))),
         )
       })
@@ -1675,7 +1698,7 @@ impl PlayerView {
           self
             .control_button("quality-menu", cx)
             .icon(Icon::Settings)
-            .tooltip("Qualité")
+            .tooltip(t("Quality", "Qualité"))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Quality, cx))),
         )
       })
@@ -1686,9 +1709,9 @@ impl PlayerView {
             .control_button("theater", cx)
             .icon(Icon::Theater)
             .tooltip(if theater {
-              "Quitter le mode cinéma (T)"
+              t("Exit theater mode (T)", "Quitter le mode cinéma (T)")
             } else {
-              "Mode cinéma (T)"
+              t("Theater mode (T)", "Mode cinéma (T)")
             })
             .on_click(cx.listener(|this, _, _, cx| this.toggle_theater(cx))),
         )
@@ -1702,9 +1725,9 @@ impl PlayerView {
             Icon::Maximize
           })
           .tooltip(if fullscreen {
-            "Quitter le plein écran (F)"
+            t("Exit full screen (F)", "Quitter le plein écran (F)")
           } else {
-            "Plein écran (F)"
+            t("Full screen (F)", "Plein écran (F)")
           })
           .on_click(|_, window, _| window.toggle_fullscreen()),
       );
@@ -1738,7 +1761,7 @@ impl PlayerView {
     layers
   }
 
-  /// "EN DIRECT" on the accent, then the time since the broadcast started and the viewers, when
+  /// "LIVE" on the accent, then the time since the broadcast started and the viewers, when
   /// the page gave them ([`Self::set_live_info`]).
   fn render_live_badge(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let primary = cx.theme().primary;
@@ -1747,9 +1770,13 @@ impl PlayerView {
       .started_at
       .and_then(|start| std::time::SystemTime::now().duration_since(start).ok())
       .map(|elapsed| format_time(elapsed.as_secs_f64()));
-    let viewers = info.viewers.map(|n| match n {
-      0 | 1 => format!("{n} spectateur"),
-      n => format!("{} spectateurs", group_thousands(n)),
+    let viewers = info.viewers.map(|n| {
+      let count = group_thousands(n);
+      // French's singular covers 0 and 1, English's only 1.
+      match (lang(), n) {
+        (Lang::En, 1) | (Lang::Fr, 0 | 1) => tf!("{count} viewer", "{count} spectateur"),
+        _ => tf!("{count} viewers", "{count} spectateurs"),
+      }
     });
     let dvr = self.dvr_window().is_some();
     let behind = (dvr && !self.at_live_edge()).then(|| self.behind_live());
@@ -1773,12 +1800,14 @@ impl PlayerView {
       } else {
         gpui::white()
       }))
-      .child("EN DIRECT")
+      .child(t("LIVE", "EN DIRECT"))
       .when(dvr, |badge| {
         badge
           .cursor_pointer()
           .hover(|s| s.bg(primary))
-          .tooltip(|window, cx| Tooltip::new("Revenir au direct").build(window, cx))
+          .tooltip(|window, cx| {
+            Tooltip::new(t("Go to live", "Revenir au direct")).build(window, cx)
+          })
           .on_click(cx.listener(|this, _, _, cx| {
             this.go_live(cx);
             this.show_controls(cx);
@@ -1930,13 +1959,14 @@ fn corner_radii(window: &Window, theater: bool) -> Corners<Pixels> {
   }
 }
 
-/// `12 345` (French grouping, with a narrow no-break space).
+/// `12,345` in English, `12 345` in French (with a narrow no-break space).
 fn group_thousands(n: u64) -> String {
+  let separator = lang().pick(',', '\u{202f}');
   let digits = n.to_string();
   let mut out = String::with_capacity(digits.len() + digits.len() / 3 * 3);
   for (i, digit) in digits.chars().enumerate() {
     if i > 0 && (digits.len() - i).is_multiple_of(3) {
-      out.push('\u{202f}');
+      out.push(separator);
     }
     out.push(digit);
   }
@@ -2006,7 +2036,7 @@ impl Render for PlayerView {
         .notice
         .clone()
         .or_else(|| self.status.clone())
-        .or_else(|| self.buffering.then(|| "Chargement…".into()))
+        .or_else(|| self.buffering.then(|| t("Loading…", "Chargement…").into()))
     };
     if let Some(status) = status {
       root = root.child(
@@ -2120,7 +2150,8 @@ mod tests {
   fn thousands() {
     assert_eq!(group_thousands(7), "7");
     assert_eq!(group_thousands(999), "999");
-    assert_eq!(group_thousands(12_345), "12\u{202f}345");
-    assert_eq!(group_thousands(1_234_567), "1\u{202f}234\u{202f}567");
+    // Tests see the default language, English.
+    assert_eq!(group_thousands(12_345), "12,345");
+    assert_eq!(group_thousands(1_234_567), "1,234,567");
   }
 }

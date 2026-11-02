@@ -16,8 +16,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use gpui::{App, Entity, Hsla, SharedString, Task};
 use innertube::{ChatAction, ChatBadgeKind, ChatRun, Client};
 use ui::chat::{Author, Badge, ChatEvent, ChatMessage, ChatPanel, Emote, Fragment, split_text};
+use ui::i18n::t;
 use ui::picture::Picture;
-use ui::runtime;
+use ui::{runtime, tf};
 
 /// YouTube asks for the next page after up to 10 s; sooner keeps the chat closer to the live
 /// at one request every few seconds.
@@ -45,7 +46,9 @@ pub fn start(
       panel.update(cx, |p, cx| p.push(events, cx)).is_ok()
     };
     if !push(
-      vec![ChatEvent::Status(Some("Connexion au chat…".into()))],
+      vec![ChatEvent::Status(Some(
+        t("Connecting to the chat…", "Connexion au chat…").into(),
+      ))],
       cx,
     ) {
       return;
@@ -83,7 +86,9 @@ pub fn start(
             Some(next) => token = next,
             None => {
               push(
-                vec![ChatEvent::Status(Some("Le chat est terminé".into()))],
+                vec![ChatEvent::Status(Some(
+                  t("The chat has ended", "Le chat est terminé").into(),
+                ))],
                 cx,
               );
               return;
@@ -96,7 +101,11 @@ pub fn start(
           failures += 1;
           let wait = (RETRY_STEP * failures).min(MAX_RETRY);
           tracing::info!("live chat: {e}");
-          let status = format!("Chat indisponible · nouvel essai dans {} s", wait.as_secs());
+          let secs = wait.as_secs();
+          let status = tf!(
+            "Chat unavailable · retrying in {secs} s",
+            "Chat indisponible · nouvel essai dans {secs} s"
+          );
           if !push(vec![ChatEvent::Status(Some(status.into()))], cx) {
             return;
           }

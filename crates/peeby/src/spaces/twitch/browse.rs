@@ -5,6 +5,7 @@ use gpui::prelude::*;
 use gpui::{Context, FontWeight, Task, WeakEntity, Window, div};
 use gpui_component::v_flex;
 use twitch::helix::{Category, Helix, Stream};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::runtime;
 
@@ -88,9 +89,9 @@ impl Render for BrowseView {
       )
       .into_any_element(),
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
-      None => cards::note("Chargement…").into_any_element(),
+      None => cards::note(t("Loading…", "Chargement…")).into_any_element(),
     };
-    page("twitch-browse", "Parcourir", None, body)
+    page("twitch-browse", t("Browse", "Parcourir"), None, body)
   }
 }
 
@@ -139,9 +140,11 @@ impl Render for CategoryView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let width = cards::stream_width(window, cx);
     let body = match &self.streams {
-      Some(Ok((streams, _))) if streams.is_empty() => {
-        cards::note("Personne n'est en direct dans cette catégorie.").into_any_element()
-      }
+      Some(Ok((streams, _))) if streams.is_empty() => cards::note(t(
+        "No one is live in this category.",
+        "Personne n'est en direct dans cette catégorie.",
+      ))
+      .into_any_element(),
       Some(Ok((streams, avatars))) => cards::wrap(
         streams
           .iter()
@@ -150,12 +153,12 @@ impl Render for CategoryView {
       )
       .into_any_element(),
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
-      None => cards::note("Chargement…").into_any_element(),
+      None => cards::note(t("Loading…", "Chargement…")).into_any_element(),
     };
     page(
       "twitch-category",
       &self.name,
-      Some("Chaînes en direct"),
+      Some(t("Live channels", "Chaînes en direct")),
       body,
     )
   }

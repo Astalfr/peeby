@@ -23,6 +23,7 @@ use gpui::{
 use jellyfin_api::models::{BaseItem, CollectionType, User};
 use jellyfin_api::{Client, Error, ItemId};
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::Picture;
 use ui::player::PlayerView;
@@ -187,7 +188,16 @@ impl JellyfinSpace {
   /// page, the rest is logged.
   pub fn handle_error(&mut self, error: &Error, cx: &mut Context<Self>) {
     if matches!(error, Error::Status { status: 401, .. }) {
-      self.sign_out(Some("Votre session a expiré. Reconnectez-vous.".into()), cx);
+      self.sign_out(
+        Some(
+          t(
+            "Your session has expired. Sign in again.",
+            "Votre session a expiré. Reconnectez-vous.",
+          )
+          .into(),
+        ),
+        cx,
+      );
     } else {
       tracing::warn!("Jellyfin: {error}");
     }
@@ -390,7 +400,7 @@ impl Space for JellyfinSpace {
     let active = |id: &str| root.as_deref() == Some(id);
     let mut entries = vec![MenuEntry {
       active: active("home"),
-      ..MenuEntry::new("home", "Accueil", Icon::Home)
+      ..MenuEntry::new("home", t("Home", "Accueil"), Icon::Home)
     }];
     for (index, library) in self.video_libraries().enumerate() {
       let id = format!("library:{}", library.id);
@@ -401,11 +411,13 @@ impl Space for JellyfinSpace {
       };
       entries.push(MenuEntry {
         active: active(&id),
-        heading: (index == 0).then(|| "Bibliothèques".into()),
+        heading: (index == 0).then(|| t("Libraries", "Bibliothèques").into()),
         ..MenuEntry::new(id, library.name.clone().unwrap_or_default(), icon)
       });
     }
-    let name = self.user_name().unwrap_or_else(|| "Compte".into());
+    let name = self
+      .user_name()
+      .unwrap_or_else(|| t("Account", "Compte").into());
     let avatar = signed.user.as_ref().map(|user| Avatar {
       picture: user.primary_image_tag.as_deref().and_then(|tag| {
         let url = signed
@@ -436,7 +448,7 @@ impl Space for JellyfinSpace {
     });
     entries.push(MenuEntry {
       bottom: true,
-      ..MenuEntry::new("sign-out", "Se déconnecter", Icon::SignOut)
+      ..MenuEntry::new("sign-out", t("Sign out", "Se déconnecter"), Icon::SignOut)
     });
     entries
   }
@@ -476,7 +488,10 @@ impl Space for JellyfinSpace {
         div()
           .text_sm()
           .text_color(theme::muted())
-          .child("Connectez-vous à votre serveur depuis l'onglet Jellyfin.")
+          .child(t(
+            "Sign in to your server from the Jellyfin tab.",
+            "Connectez-vous à votre serveur depuis l'onglet Jellyfin.",
+          ))
           .into_any_element(),
       );
     };

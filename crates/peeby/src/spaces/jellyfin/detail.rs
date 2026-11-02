@@ -16,10 +16,11 @@ use jellyfin_api::models::{BaseItem, ItemKind};
 use jellyfin_api::{Client, Error, ItemId};
 use ui::assets::Icon;
 use ui::card::{WIDE, play_overlay, progress_bar};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{Picture, image_fill, logo};
 use ui::text::{one_paragraph, plain_text};
-use ui::{motion, runtime, theme};
+use ui::{motion, runtime, tf, theme};
 
 use super::items::{
   Shape, backdrop_ref, card_picture, clock, is_spoiler, logo_ref, progress, resumable, runtime,
@@ -144,7 +145,11 @@ impl DetailView {
   /// progress, else the first unwatched one, else the first of the season shown.
   fn play_target(&self, item: &BaseItem) -> (Option<ItemId>, SharedString) {
     if item.kind != ItemKind::Series {
-      let label = if resumable(item) { "Reprendre" } else { "Lire" };
+      let label = if resumable(item) {
+        t("Resume", "Reprendre")
+      } else {
+        t("Play", "Lire")
+      };
       return (Some(item.id.clone()), label.into());
     }
     let next = self
@@ -161,9 +166,9 @@ impl DetailView {
     match next {
       Some(episode) => {
         let verb = if resumable(episode) {
-          "Reprendre"
+          t("Resume", "Reprendre")
         } else {
-          "Lire"
+          t("Play", "Lire")
         };
         let number = episode
           .index_number
@@ -171,7 +176,7 @@ impl DetailView {
           .unwrap_or_default();
         (Some(episode.id.clone()), format!("{verb}{number}").into())
       }
-      None => (None, "Lire".into()),
+      None => (None, t("Play", "Lire").into()),
     }
   }
 
@@ -375,7 +380,7 @@ impl DetailView {
     let duration = episode.run_time_ticks.map(runtime).unwrap_or_default();
     let group = SharedString::from(format!("episode-{}", episode.id));
     let hovered = motion::hover_state(group.clone(), window, cx);
-    let t = if *hovered.read(cx) { 1. } else { 0. };
+    let hover = if *hovered.read(cx) { 1. } else { 0. };
     let id = episode.id.clone();
 
     h_flex()
@@ -401,7 +406,7 @@ impl DetailView {
           .rounded(theme::RADIUS)
           .child(thumb)
           // A play button over the thumbnail on hover.
-          .child(play_overlay(t, 44., theme::RADIUS))
+          .child(play_overlay(hover, 44., theme::RADIUS))
           .children(progress(episode).map(progress_bar)),
       )
       .child(
@@ -428,7 +433,7 @@ impl DetailView {
                     .text_xs()
                     .text_color(theme::accent())
                     .child(gpui_component::Icon::new(Icon::Check).xsmall())
-                    .child("Vu"),
+                    .child(t("Watched", "Vu")),
                 )
               })
               .child(div().flex_1())
@@ -445,7 +450,7 @@ impl DetailView {
               div()
                 .text_xs()
                 .text_color(theme::accent_hover())
-                .child(format!("Reprendre à {at}")),
+                .child(tf!("Resume at {at}", "Reprendre à {at}")),
             )
           })
           .when_some(
@@ -488,7 +493,7 @@ impl DetailView {
           .px_8()
           .pb_8()
           .gap_4()
-          .child(section_title("Épisodes"))
+          .child(section_title(t("Episodes", "Épisodes")))
           .when(self.seasons.len() > 1, |el| {
             el.child(self.render_seasons(cx))
           })
@@ -553,8 +558,8 @@ fn meta_parts(item: &BaseItem) -> Vec<Meta> {
   {
     parts.push(Meta::Text(
       match status {
-        "Continuing" => "En cours",
-        "Ended" => "Terminée",
+        "Continuing" => t("Continuing", "En cours"),
+        "Ended" => t("Ended", "Terminée"),
         other => other,
       }
       .to_owned(),

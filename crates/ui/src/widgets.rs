@@ -60,7 +60,7 @@ pub fn loading_more() -> impl IntoElement {
     .text_sm()
     .text_color(theme::muted())
     .child(loader(16., theme::accent()))
-    .child("Chargement…")
+    .child(crate::i18n::t("Loading…", "Chargement…"))
 }
 
 /// Length of one grow-and-shrink cycle of the [`loader`]'s arc.

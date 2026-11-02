@@ -23,8 +23,9 @@ use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::player::PlayerView;
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 use super::cards;
 
@@ -38,8 +39,33 @@ const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
 const CONFIRM_FOR: Duration = Duration::from_secs(8);
 /// Twitch's smallest bet.
 const MIN_BET: u64 = 10;
-/// The bet amounts offered, as shares of the balance.
-const SHARES: [(u64, &str); 4] = [(10, "10 %"), (25, "25 %"), (50, "50 %"), (100, "Tout")];
+/// The bet amounts offered, as shares of the balance in percent.
+const SHARES: [u64; 4] = [10, 25, 50, 100];
+
+/// A share's button: `25%`, or "All" for the whole balance.
+fn share_label(share: u64) -> String {
+  if share == 100 {
+    t("All", "Tout").into()
+  } else {
+    percent(share)
+  }
+}
+
+/// `25%` (French: `25 %`, a no-break space).
+fn percent(n: impl std::fmt::Display) -> String {
+  tf!("{n}%", "{n}\u{a0}%")
+}
+
+/// `1 point`, `1,200 points`.
+fn points_text(n: u64) -> String {
+  let count = cards::grouped(n);
+  // The same word in both languages, but not the same plural rule.
+  if cards::plural(n) {
+    format!("{count} points")
+  } else {
+    format!("{count} point")
+  }
+}
 
 /// A spend as it is sent: a reward on a channel with the viewer's text, or a bet of points on an
 /// outcome of a prediction.
@@ -323,16 +349,24 @@ impl PointsView {
           .map(|input| input.read(cx).value().trim().to_owned())
           .filter(|t| !t.is_empty());
         if reward.input_required && text.is_none() {
-          self.outcome = Some(("Écrivez le message de la récompense.".into(), false));
+          self.outcome = Some((
+            t(
+              "Write the reward's message.",
+              "Écrivez le message de la récompense.",
+            )
+            .into(),
+            false,
+          ));
           return cx.notify();
         }
-        let done = format!("« {} » échangée.", reward.title).into();
+        let done = tf!("Redeemed “{}”.", "« {} » échangée.", reward.title).into();
         (Order::Redeem(points.channel_id.clone(), reward, text), done)
       }
       Spend::Bet { event, outcome } => {
         // The amount the button showed, not one made from a balance read since.
         let amount = pending.amount;
-        let done = format!("Pari de {} points placé.", cards::grouped(amount)).into();
+        let points = points_text(amount);
+        let done = tf!("Bet of {points} placed.", "Pari de {points} placé.").into();
         (Order::Bet(event.clone(), outcome.clone(), amount), done)
       }
     };
@@ -419,7 +453,10 @@ impl PointsView {
           .ghost()
           .icon(Icon::Points)
           .label(format!("{} {name}", cards::grouped(points.balance)))
-          .tooltip("Points de chaîne · récompenses"),
+          .tooltip(t(
+            "Channel Points · rewards",
+            "Points de chaîne · récompenses",
+          )),
       )
       .content(move |_, _, cx| {
         this
@@ -437,13 +474,10 @@ impl PointsView {
       .overflow_y_scroll()
       .gap_1();
     if points.rewards.is_empty() {
-      list = list.child(
-        div()
-          .px_2()
-          .text_sm()
-          .text_color(theme::muted())
-          .child("Cette chaîne n'a pas de récompense personnalisée."),
-      );
+      list = list.child(div().px_2().text_sm().text_color(theme::muted()).child(t(
+        "This channel has no custom rewards.",
+        "Cette chaîne n'a pas de récompense personnalisée.",
+      )));
     }
     let now = now_millis();
     for reward in &points.rewards {
@@ -452,13 +486,13 @@ impl PointsView {
       let affordable = reward.cost <= points.balance;
       let usable = reward.available && !cooling && affordable && !self.busy;
       let label = if confirming {
-        "Confirmer".to_owned()
+        t("Confirm", "Confirmer")
       } else if cooling {
-        "En recharge".to_owned()
+        t("On cooldown", "En recharge")
       } else if !reward.available {
-        "Indisponible".to_owned()
+        t("Unavailable", "Indisponible")
       } else {
-        "Échanger".to_owned()
+        t("Redeem", "Échanger")
       };
       let spend = Spend::Reward(reward.id.clone());
       list = list.child(
@@ -495,9 +529,13 @@ impl PointsView {
                         theme::subtle()
                       })
                       .child(format!(
-                        "{} points{}",
-                        cards::grouped(reward.cost),
-                        if reward.sub_only { " · abonnés" } else { "" }
+                        "{}{}",
+                        points_text(reward.cost),
+                        if reward.sub_only {
+                          t(" · subscribers", " · abonnés")
+                        } else {
+                          ""
+                        }
                       )),
                   ),
               )
@@ -533,12 +571,16 @@ impl PointsView {
           .px_2()
           .pb_1()
           .justify_between()
-          .child(div().font_weight(FontWeight::SEMIBOLD).child("Récompenses"))
+          .child(
+            div()
+              .font_weight(FontWeight::SEMIBOLD)
+              .child(t("Rewards", "Récompenses")),
+          )
           .child(
             div()
               .text_sm()
               .text_color(theme::muted())
-              .child(format!("{} points", cards::grouped(points.balance))),
+              .child(points_text(points.balance)),
           ),
       )
       .children(self.outcome_line())
@@ -565,18 +607,24 @@ impl PointsView {
           .iter()
           .find(|o| &o.id == outcome)
           .map_or("", |o| o.title.as_str());
-        format!(
-          "Votre pari : {} points sur « {title} »",
-          cards::grouped(*points)
+        let points = points_text(*points);
+        tf!(
+          "Your bet: {points} on “{title}”",
+          "Votre pari : {points} sur « {title} »"
         )
       }
       (PredictionStatus::Active, None) => match remaining(p) {
         Some(left) if left > 0 => {
-          format!("Paris ouverts · {}", ui::player::format_time(left as f64))
+          let left = ui::player::format_time(left as f64);
+          tf!("Betting open · {left}", "Paris ouverts · {left}")
         }
-        _ => "Paris en cours de fermeture".into(),
+        _ => t("Betting closing", "Paris en cours de fermeture").into(),
       },
-      (PredictionStatus::Locked, None) => "Paris clos · en attente du résultat".into(),
+      (PredictionStatus::Locked, None) => t(
+        "Betting closed · waiting for the result",
+        "Paris clos · en attente du résultat",
+      )
+      .into(),
     };
     let amount = self.bet_amount();
     let balance = self.points.as_ref().map_or(0, |p| p.balance);
@@ -618,8 +666,8 @@ impl PointsView {
                   .child(outcome.title.clone()),
               )
               .child(div().text_xs().text_color(theme::muted()).child(format!(
-                "{:.0} %{}",
-                share * 100.0,
+                "{}{}",
+                percent(format!("{:.0}", share * 100.0)),
                 ratio.map(|r| format!(" · 1:{r:.2}")).unwrap_or_default()
               )))
               .when(open, |row| {
@@ -630,9 +678,11 @@ impl PointsView {
                   .xsmall()
                   .when(confirming, |b| b.primary())
                   .label(if confirming {
-                    format!("Confirmer {}", cards::grouped(pending_amount))
+                    let amount = cards::grouped(pending_amount);
+                    tf!("Confirm {amount}", "Confirmer {amount}")
                   } else {
-                    format!("Parier {}", cards::grouped(amount))
+                    let amount = cards::grouped(amount);
+                    tf!("Bet {amount}", "Parier {amount}")
                   })
                   .loading(confirming && self.busy)
                   .disabled(self.busy || balance < MIN_BET)
@@ -654,11 +704,15 @@ impl PointsView {
                   .bg(outcome_color(&outcome.color)),
               ),
           )
-          .child(div().text_xs().text_color(theme::subtle()).child(format!(
-            "{} points · {} parieurs",
-            cards::grouped(outcome.points),
-            cards::grouped(outcome.users)
-          ))),
+          .child(div().text_xs().text_color(theme::subtle()).child({
+            let points = points_text(outcome.points);
+            let users = cards::grouped(outcome.users);
+            if cards::plural(outcome.users) {
+              tf!("{points} · {users} bettors", "{points} · {users} parieurs")
+            } else {
+              tf!("{points} · {users} bettor", "{points} · {users} parieur")
+            }
+          })),
       );
     }
     let shares = open.then(|| {
@@ -669,14 +723,14 @@ impl PointsView {
             .text_xs()
             .text_color(theme::muted())
             .mr_1()
-            .child("Mise"),
+            .child(t("Amount", "Mise")),
         )
-        .children(SHARES.iter().map(|&(share, label)| {
+        .children(SHARES.iter().map(|&share| {
           Button::new(ElementId::Name(format!("twitch-bet-share-{share}").into()))
             .xsmall()
             .when(self.share == share, |b| b.primary())
             .when(self.share != share, |b| b.ghost())
-            .label(label)
+            .label(share_label(share))
             .on_click(cx.listener(move |this, _, _, cx| {
               this.share = share;
               this.confirm = None;
@@ -696,7 +750,7 @@ impl PointsView {
           .text_xs()
           .text_color(theme::muted())
           .font_weight(FontWeight::MEDIUM)
-          .child("Prédiction"),
+          .child(t("Prediction", "Prédiction")),
       )
       .child(
         div()
@@ -716,7 +770,9 @@ impl Render for PointsView {
       return div().into_any_element();
     }
     if self.input.is_none() {
-      self.input = Some(cx.new(|cx| InputState::new(window, cx).placeholder("Votre message")));
+      self.input = Some(
+        cx.new(|cx| InputState::new(window, cx).placeholder(t("Your message", "Votre message"))),
+      );
     }
     let claim = self.points.as_ref().and_then(|p| p.claim.clone());
     let login = self.login.clone();
@@ -741,7 +797,10 @@ impl Render for PointsView {
                 .primary()
                 .icon(Icon::Gift)
                 .label("Bonus")
-                .tooltip("Un bonus attend : le réclamer dans le chat de twitch.tv")
+                .tooltip(t(
+                  "A bonus is waiting: claim it in the chat on twitch.tv",
+                  "Un bonus attend : le réclamer dans le chat de twitch.tv",
+                ))
                 .on_click(move |_, _, cx| {
                   cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"))
                 }),
@@ -781,18 +840,44 @@ fn now_millis() -> i64 {
 fn refusal(error: &twitch::Error) -> String {
   match error {
     twitch::Error::Refused(code) => match code.as_str() {
-      "NOT_ENOUGH_POINTS" => "Pas assez de points.".into(),
-      "COOLDOWN" | "GLOBAL_COOLDOWN" => "Cette récompense est en recharge.".into(),
-      "MAX_PER_STREAM" | "MAX_PER_USER_PER_STREAM" => "Limite atteinte pour ce live.".into(),
-      "DISABLED" | "PAUSED" | "OUT_OF_STOCK" => "Cette récompense n'est pas disponible.".into(),
-      "NOT_FOUND" => "Introuvable : elle vient peut-être de se terminer.".into(),
-      code => format!("Twitch a refusé ({code})."),
+      "NOT_ENOUGH_POINTS" => t("Not enough points.", "Pas assez de points.").into(),
+      "COOLDOWN" | "GLOBAL_COOLDOWN" => t(
+        "This reward is on cooldown.",
+        "Cette récompense est en recharge.",
+      )
+      .into(),
+      "MAX_PER_STREAM" | "MAX_PER_USER_PER_STREAM" => t(
+        "Limit reached for this live.",
+        "Limite atteinte pour ce live.",
+      )
+      .into(),
+      "DISABLED" | "PAUSED" | "OUT_OF_STOCK" => t(
+        "This reward isn't available.",
+        "Cette récompense n'est pas disponible.",
+      )
+      .into(),
+      "NOT_FOUND" => t(
+        "Not found: it may have just ended.",
+        "Introuvable : elle vient peut-être de se terminer.",
+      )
+      .into(),
+      code => tf!("Twitch refused ({code}).", "Twitch a refusé ({code})."),
     },
-    twitch::Error::IntegrityRequired => {
-      "Twitch demande une vérification que seul son site peut faire.".into()
-    }
-    twitch::Error::NotLoggedIn => "Twitch n'accepte plus le jeton auth-token.".into(),
-    _ => "Twitch n'a pas répondu. Réessayez.".into(),
+    twitch::Error::IntegrityRequired => t(
+      "Twitch asks for a check only its site can do.",
+      "Twitch demande une vérification que seul son site peut faire.",
+    )
+    .into(),
+    twitch::Error::NotLoggedIn => t(
+      "Twitch no longer accepts the auth-token.",
+      "Twitch n'accepte plus le jeton auth-token.",
+    )
+    .into(),
+    _ => t(
+      "Twitch didn't answer. Try again.",
+      "Twitch n'a pas répondu. Réessayez.",
+    )
+    .into(),
   }
 }
 
@@ -823,10 +908,18 @@ mod tests {
   use super::*;
 
   #[test]
-  fn refusals_read_in_french() {
+  fn refusals_read() {
     let refused = |code: &str| refusal(&twitch::Error::Refused(code.into()));
-    assert_eq!(refused("NOT_ENOUGH_POINTS"), "Pas assez de points.");
-    assert_eq!(refused("WHATEVER"), "Twitch a refusé (WHATEVER).");
+    assert_eq!(refused("NOT_ENOUGH_POINTS"), "Not enough points.");
+    assert_eq!(refused("WHATEVER"), "Twitch refused (WHATEVER).");
+  }
+
+  #[test]
+  fn amounts_read() {
+    assert_eq!(points_text(1), "1 point");
+    assert_eq!(points_text(1_200), "1,200 points");
+    assert_eq!(share_label(25), "25%");
+    assert_eq!(share_label(100), "All");
   }
 
   #[test]

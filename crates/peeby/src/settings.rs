@@ -57,6 +57,8 @@ pub enum StartPage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+  /// Language of Peeby's interface (`ui::i18n::Lang::code`), e.g. `en`.
+  pub interface_language: String,
   /// Language of YouTube's texts (`hl`), e.g. `fr`.
   pub language: String,
   /// Region of the recommendations (`gl`), e.g. `FR`.
@@ -253,6 +255,7 @@ impl Default for JellyfinHome {
 impl Default for Settings {
   fn default() -> Self {
     Self {
+      interface_language: "en".into(),
       language: "fr".into(),
       region: "FR".into(),
       max_height: 1080,
@@ -295,6 +298,11 @@ impl Settings {
       }),
       Err(_) => Self::default(),
     }
+  }
+
+  /// The interface's language.
+  pub fn interface_lang(&self) -> ui::i18n::Lang {
+    ui::i18n::Lang::from_code(&self.interface_language)
   }
 
   /// The current settings.
@@ -384,6 +392,7 @@ mod tests {
     .unwrap();
     assert_eq!(settings.max_height, 720);
     assert_eq!(settings.language, "fr");
+    assert_eq!(settings.interface_language, "en");
     assert_eq!(settings.jellyfin.device_id, "abc");
     assert!(!settings.jellyfin.home.show_hero);
     assert!(settings.jellyfin.home.show_next_up);

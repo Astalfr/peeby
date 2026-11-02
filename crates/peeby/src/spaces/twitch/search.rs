@@ -6,6 +6,7 @@ use gpui::{Context, Entity, Subscription, Task, WeakEntity, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
 use twitch::helix::{Category, ChannelResult, Helix};
+use ui::i18n::t;
 use ui::images::Images;
 
 use super::TwitchSpace;
@@ -34,7 +35,9 @@ impl SearchView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher sur Twitch"));
+    let input = cx.new(|cx| {
+      InputState::new(window, cx).placeholder(t("Search Twitch", "Rechercher sur Twitch"))
+    });
     input.update(cx, |state, cx| state.focus(window, cx));
     let subscription = cx.subscribe_in(
       &input,
@@ -86,9 +89,9 @@ impl SearchView {
 impl Render for SearchView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let results = match &self.results {
-      _ if self.searching => cards::note("Recherche…").into_any_element(),
+      _ if self.searching => cards::note(t("Searching…", "Recherche…")).into_any_element(),
       Some(Ok((channels, categories))) if channels.is_empty() && categories.is_empty() => {
-        cards::note("Aucun résultat.").into_any_element()
+        cards::note(t("No results.", "Aucun résultat.")).into_any_element()
       }
       Some(Ok((channels, categories))) => {
         let channels: Vec<_> = channels
@@ -116,21 +119,31 @@ impl Render for SearchView {
         v_flex()
           .gap_10()
           .when(!channels.is_empty(), |el| {
-            el.child(cards::section("Chaînes", cards::wrap(channels)))
+            el.child(cards::section(
+              t("Channels", "Chaînes"),
+              cards::wrap(channels),
+            ))
           })
           .when(!categories.is_empty(), |el| {
-            el.child(cards::section("Catégories", cards::wrap(categories)))
+            el.child(cards::section(
+              t("Categories", "Catégories"),
+              cards::wrap(categories),
+            ))
           })
           .into_any_element()
       }
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
-      None => cards::note("Une chaîne ou une catégorie, puis Entrée.").into_any_element(),
+      None => cards::note(t(
+        "A channel or a category, then Enter.",
+        "Une chaîne ou une catégorie, puis Entrée.",
+      ))
+      .into_any_element(),
     };
     let body = v_flex()
       .gap_6()
       .child(Input::new(&self.input))
       .child(results)
       .into_any_element();
-    page("twitch-search", "Rechercher", None, body)
+    page("twitch-search", t("Search", "Rechercher"), None, body)
   }
 }

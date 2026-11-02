@@ -15,40 +15,81 @@ use player::TrackKind;
 use super::tracks::{SUBTITLE_DELAY_STEP, UpNext};
 use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView, format_time};
 use crate::assets::Icon;
+use crate::i18n::t;
+use crate::tf;
 
-/// The help's rows; the seek steps come from the preferences (see `render_help`).
-const SHORTCUTS: &[(&str, &str)] = &[
-  ("Espace / K", "Lecture ou pause"),
-  ("← / → · J / L", ""),
-  ("Page préc. / Page suiv.", "Chapitre précédent ou suivant"),
-  ("0 – 9", "Aller à 0 % – 90 %"),
-  ("Début", "Retour au début"),
-  ("↑ / ↓", "Volume"),
-  ("M", "Couper le son"),
-  ("A", "Piste audio suivante"),
-  ("C", "Sous-titres suivants (ou désactivés)"),
-  ("Z / X", "Décalage des sous-titres −/+ 0,1 s"),
-  ("S", "Passer l'intro, le récap ou le générique"),
-  ("P / N", "Précédent ou suivant"),
-  ("T", "Mode cinéma"),
-  ("F / double-clic", "Plein écran"),
+/// The help's rows, keys and action in English then French; an empty action is the seek line,
+/// whose steps come from the preferences (see `render_help`).
+const SHORTCUTS: &[(&str, &str, &str, &str)] = &[
   (
+    "Space / K",
+    "Espace / K",
+    "Play or pause",
+    "Lecture ou pause",
+  ),
+  ("← / → · J / L", "← / → · J / L", "", ""),
+  (
+    "Page Up / Page Down",
+    "Page préc. / Page suiv.",
+    "Previous or next chapter",
+    "Chapitre précédent ou suivant",
+  ),
+  ("0 – 9", "0 – 9", "Jump to 0% – 90%", "Aller à 0 % – 90 %"),
+  ("Home", "Début", "Back to the start", "Retour au début"),
+  ("↑ / ↓", "↑ / ↓", "Volume", "Volume"),
+  ("M", "M", "Mute", "Couper le son"),
+  ("A", "A", "Next audio track", "Piste audio suivante"),
+  (
+    "C",
+    "C",
+    "Next subtitles (or off)",
+    "Sous-titres suivants (ou désactivés)",
+  ),
+  (
+    "Z / X",
+    "Z / X",
+    "Subtitle delay −/+ 0.1 s",
+    "Décalage des sous-titres −/+ 0,1 s",
+  ),
+  (
+    "S",
+    "S",
+    "Skip the intro, recap or credits",
+    "Passer l'intro, le récap ou le générique",
+  ),
+  ("P / N", "P / N", "Previous or next", "Précédent ou suivant"),
+  ("T", "T", "Theater mode", "Mode cinéma"),
+  (
+    "F / double-click",
+    "F / double-clic",
+    "Full screen",
+    "Plein écran",
+  ),
+  (
+    "Esc",
     "Échap",
+    "Close the menu, leave full screen, then go back",
     "Fermer le menu, quitter le plein écran, puis revenir",
   ),
-  ("?", "Cette aide"),
-  ("Clic droit", "Raccourcis clavier, statistiques"),
+  ("?", "?", "This help", "Cette aide"),
+  (
+    "Right-click",
+    "Clic droit",
+    "Keyboard shortcuts, statistics",
+    "Raccourcis clavier, statistiques",
+  ),
 ];
 
-/// Rows of [`SHORTCUTS`] that move the playhead, left out for a live without its past.
-const SEEK_KEYS: &[&str] = &["← / → · J / L", "Page préc. / Page suiv.", "0 – 9", "Début"];
+/// Rows of [`SHORTCUTS`] that move the playhead (by their English keys), left out for a live
+/// without its past.
+const SEEK_KEYS: &[&str] = &["← / → · J / L", "Page Up / Page Down", "0 – 9", "Home"];
 
-/// `10 s`, `1 min`, `1 min 30 s`.
+/// `10 sec`, `1 min`, `1 min 30 sec` (`10 s`, `1 min`, `1 min 30 s` in French).
 pub fn format_step(seconds: u32) -> String {
   match (seconds / 60, seconds % 60) {
-    (0, s) => format!("{s} s"),
-    (m, 0) => format!("{m} min"),
-    (m, s) => format!("{m} min {s} s"),
+    (0, s) => tf!("{s} sec", "{s} s"),
+    (m, 0) => tf!("{m} min", "{m} min"),
+    (m, s) => tf!("{m} min {s} sec", "{m} min {s} s"),
   }
 }
 
@@ -100,7 +141,7 @@ impl PlayerView {
         list = list.child(
           entry(
             "sub-off".into(),
-            "Désactivés".into(),
+            t("Off", "Désactivés").into(),
             self.caption.is_none(),
           )
           .on_click(cx.listener(|this, _, _, cx| this.select_caption(None, cx))),
@@ -125,8 +166,12 @@ impl PlayerView {
       Menu::Subtitles => {
         let current = self.selected(TrackKind::Subtitle);
         list = list.child(
-          entry("sub-off".into(), "Désactivés".into(), current.is_none())
-            .on_click(cx.listener(|this, _, _, cx| this.select_subtitle(None, cx))),
+          entry(
+            "sub-off".into(),
+            t("Off", "Désactivés").into(),
+            current.is_none(),
+          )
+          .on_click(cx.listener(|this, _, _, cx| this.select_subtitle(None, cx))),
         );
         for track in self.tracks_of(TrackKind::Subtitle) {
           let id = track.id;
@@ -183,7 +228,8 @@ impl PlayerView {
       .pt_1()
       .text_xs()
       .text_color(gpui::white().opacity(0.6))
-      .child(format!(
+      .child(tf!(
+        "Delay {:+.1} s (Z / X, steps of {SUBTITLE_DELAY_STEP} s)",
         "Décalage {:+.1} s (Z / X, pas de {SUBTITLE_DELAY_STEP} s)",
         self.subtitle_delay
       ))
@@ -257,7 +303,7 @@ impl PlayerView {
             self
               .control_button("player-back", cx)
               .icon(Icon::ArrowLeft)
-              .tooltip("Retour (Échap)")
+              .tooltip(t("Back (Esc)", "Retour (Échap)"))
               .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
           )
           .child(
@@ -363,8 +409,8 @@ impl PlayerView {
     let theme = cx.theme();
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
     let status = match left {
-      Some(n) => format!("Lecture dans {n} s"),
-      None => "À suivre".to_owned(),
+      Some(n) => tf!("Playing in {n} s", "Lecture dans {n} s"),
+      None => t("Up next", "À suivre").to_owned(),
     };
     Some(
       v_flex()
@@ -394,13 +440,13 @@ impl PlayerView {
               Button::new("up-next-play")
                 .primary()
                 .icon(Icon::Next)
-                .label("Lire maintenant")
+                .label(t("Play now", "Lire maintenant"))
                 .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
             )
             .child(
               Button::new("up-next-cancel")
                 .ghost()
-                .label("Annuler")
+                .label(t("Cancel", "Annuler"))
                 .on_click(cx.listener(|this, _, _, cx| this.dismiss_up_next(cx))),
             ),
         )
@@ -414,7 +460,8 @@ impl PlayerView {
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
     let embedded = self.layout == Layout::Embedded;
     let can_seek = self.can_seek();
-    let seek = format!(
+    let seek = tf!(
+      "Seek back or forward {} (Shift: {})",
       "Reculer ou avancer de {} (Maj : {})",
       format_step(self.prefs.seek_step),
       format_step(self.prefs.seek_step_large)
@@ -450,7 +497,7 @@ impl PlayerView {
                 div()
                   .text_lg()
                   .font_weight(FontWeight::SEMIBOLD)
-                  .child("Raccourcis clavier"),
+                  .child(t("Keyboard shortcuts", "Raccourcis clavier")),
               )
               .child(
                 Button::new("help-close")
@@ -467,13 +514,13 @@ impl PlayerView {
             SHORTCUTS
               .iter()
               // Theater mode exists in the embedded layout only; a live without DVR does not seek.
-              .filter(|(keys, _)| embedded || *keys != "T")
-              .filter(|(keys, _)| can_seek || !SEEK_KEYS.contains(keys))
-              .map(|(keys, action)| {
-                let action: SharedString = if action.is_empty() {
+              .filter(|(keys, ..)| embedded || *keys != "T")
+              .filter(|(keys, ..)| can_seek || !SEEK_KEYS.contains(keys))
+              .map(|&(keys_en, keys_fr, action_en, action_fr)| {
+                let action: SharedString = if action_en.is_empty() {
                   seek.clone().into()
                 } else {
-                  (*action).into()
+                  t(action_en, action_fr).into()
                 };
                 h_flex()
                   .gap_4()
@@ -482,7 +529,7 @@ impl PlayerView {
                       .w(px(190.))
                       .text_sm()
                       .font_weight(FontWeight::MEDIUM)
-                      .child(*keys),
+                      .child(t(keys_en, keys_fr)),
                   )
                   .child(div().text_sm().text_color(muted).child(action))
               }),
@@ -530,16 +577,19 @@ impl PlayerView {
       .border_color(border)
       .shadow_lg()
       .child(
-        entry("context-help", "Raccourcis clavier", self.help).on_click(cx.listener(
-          |this, _, _, cx| {
-            this.context_menu = None;
-            this.help = !this.help;
-            this.show_controls(cx);
-          },
-        )),
+        entry(
+          "context-help",
+          t("Keyboard shortcuts", "Raccourcis clavier"),
+          self.help,
+        )
+        .on_click(cx.listener(|this, _, _, cx| {
+          this.context_menu = None;
+          this.help = !this.help;
+          this.show_controls(cx);
+        })),
       )
       .child(
-        entry("context-stats", "Statistiques", self.stats).on_click(cx.listener(
+        entry("context-stats", t("Statistics", "Statistiques"), self.stats).on_click(cx.listener(
           |this, _, _, cx| {
             this.context_menu = None;
             this.toggle_stats(cx);
@@ -575,14 +625,14 @@ impl PlayerView {
             div()
               .text_lg()
               .font_weight(FontWeight::SEMIBOLD)
-              .child("Lecture impossible"),
+              .child(t("Unable to play", "Lecture impossible")),
           )
           .child(div().text_sm().text_color(muted).child(error))
           .when(page_layout, |el| {
             el.child(
               Button::new("error-back")
                 .primary()
-                .label("Retour")
+                .label(t("Back", "Retour"))
                 .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
             )
           }),

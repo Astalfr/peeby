@@ -10,8 +10,9 @@ use gpui::{AnyElement, App, FontWeight, SharedString, WeakEntity, Window, div, p
 use gpui_component::{h_flex, v_flex};
 use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
 use ui::card::{Hover, MediaCard};
+use ui::i18n::{Lang, lang, t};
 use ui::picture::{self, Picture};
-use ui::theme;
+use ui::{tf, theme};
 
 use super::{Route, TwitchSpace};
 
@@ -59,12 +60,43 @@ fn preview(url: &str) -> Picture {
   Picture::sized(move |w, h| format!("{}?t={stamp}", helix::sized(&url, w, h)))
 }
 
-/// `41 770` spectators, short: `41,8 k`.
+/// `41770` viewers, short: `41.8K` (French: `41,8 k`).
 pub fn compact(n: u64) -> String {
-  match n {
-    0..1_000 => n.to_string(),
-    1_000..1_000_000 => format!("{:.1} k", n as f64 / 1e3).replace('.', ","),
-    _ => format!("{:.1} M", n as f64 / 1e6).replace('.', ","),
+  let (value, en, fr) = match n {
+    0..1_000 => return n.to_string(),
+    1_000..1_000_000 => (n as f64 / 1e3, "K", " k"),
+    _ => (n as f64 / 1e6, "M", " M"),
+  };
+  let value = format!("{value:.1}");
+  match lang() {
+    Lang::En => format!("{value}{en}"),
+    Lang::Fr => format!("{}{fr}", value.replace('.', ",")),
+  }
+}
+
+/// Whether `n` takes the plural in the interface's language: in English everything but 1, in
+/// French 2 and more (0 and 1 are singular).
+pub fn plural(n: u64) -> bool {
+  lang().pick(n != 1, n > 1)
+}
+
+/// `1 viewer`, `41.8K viewers`: the count shortened.
+pub fn compact_viewers(n: u64) -> String {
+  let count = compact(n);
+  if plural(n) {
+    tf!("{count} viewers", "{count} spectateurs")
+  } else {
+    tf!("{count} viewer", "{count} spectateur")
+  }
+}
+
+/// `1 viewer`, `80,308 viewers`: the count in full.
+pub fn viewers(n: u64) -> String {
+  let count = grouped(n);
+  if plural(n) {
+    tf!("{count} viewers", "{count} spectateurs")
+  } else {
+    tf!("{count} viewer", "{count} spectateur")
   }
 }
 
@@ -99,10 +131,7 @@ pub fn stream_card(
   )
   .avatar(avatar.map(|url| template(url)))
   .lines([stream.user_name.clone(), stream.game_name.clone()])
-  .badge(Some(format!(
-    "{} spectateurs",
-    compact(stream.viewer_count)
-  )))
+  .badge(Some(compact_viewers(stream.viewer_count)))
   .on_click(move |_, cx| {
     nav
       .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
@@ -227,7 +256,7 @@ pub fn channel_chip(
             div()
               .text_xs()
               .text_color(theme::accent_hover())
-              .child("En direct"),
+              .child(t("Live", "En direct")),
           )
         }),
     )
@@ -264,34 +293,50 @@ pub fn note(text: impl Into<SharedString>) -> impl IntoElement {
     .child(text.into())
 }
 
-/// `80 308` (French grouping, a narrow no-break space).
+/// `80,308` (French grouping: `80 308`, a narrow no-break space).
 pub fn grouped(n: u64) -> String {
+  let separator = lang().pick(',', '\u{202f}');
   let digits = n.to_string();
   let mut out = String::new();
   for (i, d) in digits.chars().enumerate() {
     if i > 0 && (digits.len() - i).is_multiple_of(3) {
-      out.push('\u{202f}');
+      out.push(separator);
     }
     out.push(d);
   }
   out
 }
 
-/// `12 345 vues`.
+/// `12,345 views`.
 pub fn views(n: u64) -> String {
-  if n > 1 {
-    format!("{} vues", grouped(n))
+  let count = grouped(n);
+  if plural(n) {
+    tf!("{count} views", "{count} vues")
   } else {
-    format!("{n} vue")
+    tf!("{count} view", "{count} vue")
   }
 }
 
-/// `1 nov. 2026` from milliseconds since the epoch; empty when unknown.
+/// A month's short name, `month` from 1 to 12.
+fn month_name(month: i64) -> &'static str {
+  match month {
+    1 => t("Jan", "janv."),
+    2 => t("Feb", "févr."),
+    3 => t("Mar", "mars"),
+    4 => t("Apr", "avr."),
+    5 => t("May", "mai"),
+    6 => t("Jun", "juin"),
+    7 => t("Jul", "juil."),
+    8 => t("Aug", "août"),
+    9 => t("Sep", "sept."),
+    10 => t("Oct", "oct."),
+    11 => t("Nov", "nov."),
+    _ => t("Dec", "déc."),
+  }
+}
+
+/// `Nov 1, 2026` (French: `1 nov. 2026`) from milliseconds since the epoch; empty when unknown.
 pub fn date(millis: Option<i64>) -> String {
-  const MONTHS: [&str; 12] = [
-    "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
-    "déc.",
-  ];
   let Some(millis) = millis else {
     return String::new();
   };
@@ -305,7 +350,8 @@ pub fn date(millis: Option<i64>) -> String {
   let day = doy - (153 * mp + 2) / 5 + 1;
   let month = if mp < 10 { mp + 3 } else { mp - 9 };
   let year = yoe + era * 400 + i64::from(month <= 2);
-  format!("{day} {} {year}", MONTHS[(month - 1) as usize])
+  let month = month_name(month);
+  tf!("{month} {day}, {year}", "{day} {month} {year}")
 }
 
 /// How far `position` seconds is into a VOD `length` seconds long (0 to 1), for its card.
@@ -368,7 +414,7 @@ pub fn clip_card(
     Picture::sized(move |_, _| thumbnail.clone()),
   )
   .lines([
-    format!("Clip de {}", clip.creator_name),
+    tf!("Clipped by {}", "Clip de {}", clip.creator_name),
     format!("{} · {}", views(clip.view_count), date(clip.created_at)),
   ])
   .badge(Some(ui::player::format_time(clip.duration)))
@@ -382,14 +428,20 @@ pub fn clip_card(
 
 #[cfg(test)]
 mod tests {
-  use super::{compact, date, grouped, progress};
+  use super::{compact, date, grouped, progress, viewers, views};
 
   #[test]
   fn formats() {
-    assert_eq!(grouped(80_308), "80\u{202f}308");
-    assert_eq!(compact(41_770), "41,8 k");
-    assert_eq!(date(Some(1_793_563_851_000)), "1 nov. 2026");
-    assert_eq!(date(Some(0)), "1 janv. 1970");
+    assert_eq!(grouped(80_308), "80,308");
+    assert_eq!(grouped(1_234_567), "1,234,567");
+    assert_eq!(compact(41_770), "41.8K");
+    assert_eq!(compact(2_500_000), "2.5M");
+    assert_eq!(compact(999), "999");
+    assert_eq!(viewers(1), "1 viewer");
+    assert_eq!(viewers(0), "0 viewers");
+    assert_eq!(views(1_000), "1,000 views");
+    assert_eq!(date(Some(1_793_563_851_000)), "Nov 1, 2026");
+    assert_eq!(date(Some(0)), "Jan 1, 1970");
     assert_eq!(date(None), "");
   }
 

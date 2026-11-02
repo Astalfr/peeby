@@ -14,7 +14,8 @@ use crate::settings::Settings;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::convert::error_text;
 use ui::assets::Icon;
-use ui::{runtime, theme};
+use ui::i18n::t;
+use ui::{runtime, tf, theme};
 
 enum Status {
   Idle,
@@ -43,7 +44,7 @@ impl AccountView {
       files: true,
       directories: false,
       multiple: false,
-      prompt: Some("Importer".into()),
+      prompt: Some(t("Import", "Importer").into()),
     });
     cx.spawn(async move |this, cx| {
       let Ok(Ok(Some(paths))) = paths.await else {
@@ -68,7 +69,8 @@ impl AccountView {
       ..
     } = Settings::get(cx).clone();
     let check = runtime::spawn(cx, async move {
-      let text = std::fs::read_to_string(&path).map_err(|e| format!("Lecture impossible : {e}"))?;
+      let text = std::fs::read_to_string(&path)
+        .map_err(|e| tf!("Cannot read the file: {e}", "Lecture impossible : {e}"))?;
       let cookies = Cookies::from_netscape(&text).map_err(|e| error_text(&e))?;
       // No cookie file yet: a rotation during the check must not touch the current one.
       let client =
@@ -78,7 +80,12 @@ impl AccountView {
         "imported cookies accepted: {} videos on Home",
         feed.items.len()
       );
-      settings::save_cookies(&cookies).map_err(|e| format!("Enregistrement impossible : {e}"))?;
+      settings::save_cookies(&cookies).map_err(|e| {
+        tf!(
+          "Cannot save the cookies: {e}",
+          "Enregistrement impossible : {e}"
+        )
+      })?;
       Ok::<Cookies, String>(cookies)
     });
     cx.spawn(async move |this, cx| {
@@ -88,7 +95,13 @@ impl AccountView {
           match result {
             Some(Ok(cookies)) => {
               this.signed_in = true;
-              this.status = Status::Done("Connecté. L'accueil affiche vos recommandations.".into());
+              this.status = Status::Done(
+                t(
+                  "Signed in. Home shows your recommendations.",
+                  "Connecté. L'accueil affiche vos recommandations.",
+                )
+                .into(),
+              );
               this
                 .nav
                 .update(cx, |app, cx| app.set_session(Some(cookies), cx))
@@ -109,11 +122,23 @@ impl AccountView {
       && let Err(e) = std::fs::remove_file(&path)
       && e.kind() != std::io::ErrorKind::NotFound
     {
-      self.status = Status::Failed(format!("Suppression impossible : {e}").into());
+      self.status = Status::Failed(
+        tf!(
+          "Cannot delete the cookies: {e}",
+          "Suppression impossible : {e}"
+        )
+        .into(),
+      );
       return cx.notify();
     }
     self.signed_in = false;
-    self.status = Status::Done("Déconnecté. Les cookies ont été supprimés.".into());
+    self.status = Status::Done(
+      t(
+        "Signed out. The cookies were deleted.",
+        "Déconnecté. Les cookies ont été supprimés.",
+      )
+      .into(),
+    );
     self
       .nav
       .update(cx, |app, cx| app.set_session(None, cx))
@@ -130,7 +155,10 @@ impl Render for AccountView {
     let checking = matches!(self.status, Status::Checking);
     let message = match &self.status {
       Status::Idle => None,
-      Status::Checking => Some(("Vérification auprès de YouTube…".into(), theme::muted())),
+      Status::Checking => Some((
+        t("Checking with YouTube…", "Vérification auprès de YouTube…").into(),
+        theme::muted(),
+      )),
       Status::Failed(e) => Some((e.clone(), theme::accent())),
       Status::Done(m) => Some((m.clone(), theme::foreground())),
     };
@@ -162,7 +190,7 @@ impl Render for AccountView {
             .pb_2()
             .text_base()
             .font_weight(FontWeight::SEMIBOLD)
-            .child("Compte"),
+            .child(t("Account", "Compte")),
         )
         .child(
           h_flex()
@@ -197,9 +225,12 @@ impl Render for AccountView {
                   div()
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(if self.signed_in {
-                      "Connecté avec des cookies YouTube"
+                      t(
+                        "Signed in with YouTube cookies",
+                        "Connecté avec des cookies YouTube",
+                      )
                     } else {
-                      "Non connecté"
+                      t("Not signed in", "Non connecté")
                     }),
                 )
                 .child(
@@ -207,14 +238,14 @@ impl Render for AccountView {
                     .text_xs()
                     .text_color(theme::muted())
                     .truncate()
-                    .child(format!("Fichier : {path}")),
+                    .child(tf!("File: {path}", "Fichier : {path}")),
                 ),
             )
             .when(self.signed_in, |row| {
               row.child(
                 Button::new("sign-out")
                   .ghost()
-                  .label("Se déconnecter")
+                  .label(t("Sign out", "Se déconnecter"))
                   .disabled(checking)
                   .on_click(cx.listener(|this, _, _, cx| this.sign_out(cx))),
               )
@@ -228,42 +259,53 @@ impl Render for AccountView {
             .border_1()
             .border_color(theme::border())
             .text_sm()
-            .child(
-              div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child("Exporter les cookies de youtube.com au format Netscape"),
-            )
+            .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
+              "Export the cookies of youtube.com in Netscape format",
+              "Exporter les cookies de youtube.com au format Netscape",
+            )))
             .child(
               v_flex()
                 .gap_3()
                 .text_color(theme::muted())
                 .child(step(
                   1,
-                  "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
+                  t(
+                    "Open a private browsing window and sign in to YouTube.",
+                    "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
+                  ),
                 ))
                 .child(step(
                   2,
-                  "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
+                  t(
+                    "In the same tab, go to youtube.com/robots.txt, then export the cookies \
+                     with the \"Get cookies.txt LOCALLY\" extension.",
+                    "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
                      cookies avec l'extension « Get cookies.txt LOCALLY ».",
+                  ),
                 ))
                 .child(step(
                   3,
-                  "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
+                  t(
+                    "Close the private window without signing out, then import the file here.",
+                    "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
                      ici.",
+                  ),
                 )),
             )
-            .child(div().text_xs().text_color(theme::subtle()).child(
+            .child(div().text_xs().text_color(theme::subtle()).child(t(
+              "Peeby keeps the cookies up to date when YouTube renews them. This file \
+                 gives access to your account: do not share it.",
               "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
-                   donne accès à votre compte : ne le partagez pas.",
-            ))
+                 donne accès à votre compte : ne le partagez pas.",
+            )))
             .child(
               h_flex().child(
                 Button::new("import")
                   .primary()
                   .label(if checking {
-                    "Vérification…"
+                    t("Checking…", "Vérification…")
                   } else {
-                    "Importer cookies.txt…"
+                    t("Import cookies.txt…", "Importer cookies.txt…")
                   })
                   .disabled(checking)
                   .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),

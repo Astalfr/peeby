@@ -9,10 +9,11 @@ use gpui_component::button::Button;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Icon, IconName, Sizable, h_flex, v_flex};
 use ui::form::{chips, format_size, row, section, toggle};
+use ui::i18n::{Lang, t};
 use ui::player::format_step;
 use ui::theme::Accent;
 use ui::widgets::page_title;
-use ui::{images, theme};
+use ui::{images, tf, theme};
 
 use crate::settings::{Player, Settings};
 use crate::shell::space::SpaceHandle;
@@ -92,13 +93,40 @@ fn set_player(cx: &mut gpui::App, edit: impl FnOnce(&mut Player)) {
   Settings::update(cx, |s| edit(&mut s.player));
 }
 
+/// Switches the interface to `lang` and re-renders every window (the mini-player's too).
+fn set_language(lang: Lang, cx: &mut gpui::App) {
+  Settings::update(cx, |s| s.interface_language = lang.code().to_owned());
+  ui::i18n::set(lang);
+  cx.refresh_windows();
+}
+
 fn general_section(settings: &Settings) -> AnyElement {
+  let languages = Lang::ALL.map(|l| (l, l.name().to_owned())).to_vec();
   section(
-    "Général",
+    t("General", "Général"),
     vec![
       row(
-        "Menu réduit",
-        "La barre latérale ne montre que ses icônes.",
+        t("Language", "Langue"),
+        t(
+          "Language of Peeby's interface. What the services send (titles, YouTube's dates) \
+           keeps the language of their settings.",
+          "Langue de l'interface de Peeby. Ce que les services envoient (titres, dates de \
+           YouTube) garde la langue de leurs réglages.",
+        ),
+        chips(
+          "interface-language",
+          languages,
+          &settings.interface_lang(),
+          set_language,
+        ),
+      )
+      .into_any_element(),
+      row(
+        t("Collapsed menu", "Menu réduit"),
+        t(
+          "The sidebar shows only its icons.",
+          "La barre latérale ne montre que ses icônes.",
+        ),
         toggle("sidebar-collapsed", settings.sidebar_collapsed, |v, cx| {
           Settings::update(cx, |s| s.sidebar_collapsed = v)
         }),
@@ -114,19 +142,22 @@ fn player_section(p: &Player) -> AnyElement {
   let steps = [5, 10, 15, 30].map(|s| (s, format_step(s))).to_vec();
   let large_steps = [30, 60, 120, 300].map(|s| (s, format_step(s))).to_vec();
   section(
-    "Lecteur",
+    t("Player", "Lecteur"),
     vec![
       row(
-        "Lire la suite automatiquement",
-        "L'épisode suivant ou la vidéo suivante d'une playlist, après un compte à rebours.",
+        t("Autoplay next", "Lire la suite automatiquement"),
+        t(
+          "The next episode or the next video of a playlist, after a countdown.",
+          "L'épisode suivant ou la vidéo suivante d'une playlist, après un compte à rebours.",
+        ),
         toggle("autoplay", p.autoplay_next, |v, cx| {
           set_player(cx, |p| p.autoplay_next = v)
         }),
       )
       .into_any_element(),
       row(
-        "Compte à rebours",
-        "Avant de lancer la suite.",
+        t("Countdown", "Compte à rebours"),
+        t("Before playing the next one.", "Avant de lancer la suite."),
         div()
           .when(!p.autoplay_next, |el| el.opacity(0.5))
           .child(chips(
@@ -138,33 +169,43 @@ fn player_section(p: &Player) -> AnyElement {
       )
       .into_any_element(),
       row(
-        "Mémoriser le volume",
-        "Garder le volume et la coupure du son d'une vidéo à l'autre.",
+        t("Remember the volume", "Mémoriser le volume"),
+        t(
+          "Keep the volume and the mute from one video to the next.",
+          "Garder le volume et la coupure du son d'une vidéo à l'autre.",
+        ),
         toggle("remember-volume", p.remember_volume, |v, cx| {
           set_player(cx, |p| p.remember_volume = v)
         }),
       )
       .into_any_element(),
       row(
-        "Saut",
-        "← / → et les boutons autour de lecture/pause.",
+        t("Seek step", "Saut"),
+        t(
+          "← / → and the buttons around play/pause.",
+          "← / → et les boutons autour de lecture/pause.",
+        ),
         chips("seek", steps, &p.seek_step, |v, cx| {
           set_player(cx, |p| p.seek_step = v)
         }),
       )
       .into_any_element(),
       row(
-        "Grand saut",
-        "Maj + ← / →.",
+        t("Large seek step", "Grand saut"),
+        t("Shift + ← / →.", "Maj + ← / →."),
         chips("seek-large", large_steps, &p.seek_step_large, |v, cx| {
           set_player(cx, |p| p.seek_step_large = v)
         }),
       )
       .into_any_element(),
       row(
-        "Accélération matérielle",
-        "Décoder et afficher la vidéo avec la carte graphique. À couper seulement pour un \
-         dépannage.",
+        t("Hardware acceleration", "Accélération matérielle"),
+        t(
+          "Decode and display the video with the graphics card. Turn it off only to \
+           troubleshoot.",
+          "Décoder et afficher la vidéo avec la carte graphique. À couper seulement pour un \
+           dépannage.",
+        ),
         toggle("hwaccel", p.hardware_acceleration, |v, cx| {
           set_player(cx, |p| p.hardware_acceleration = v)
         }),
@@ -219,28 +260,39 @@ impl SettingsView {
 
   fn storage_section(&self, cx: &mut Context<Self>) -> AnyElement {
     let size = match self.cache_size {
-      Some(bytes) => format!("{} sur le disque.", format_size(bytes)),
-      None => "Calcul…".to_owned(),
+      Some(bytes) => {
+        let size = format_size(bytes);
+        tf!("{size} on disk.", "{size} sur le disque.")
+      }
+      None => t("Measuring…", "Calcul…").to_owned(),
     };
     section(
-      "Stockage",
+      t("Storage", "Stockage"),
       vec![
         row(
-          "Cache des images",
-          &format!("Miniatures, affiches et fonds gardés sur ce PC. {size}"),
+          t("Image cache", "Cache des images"),
+          &tf!(
+            "Thumbnails, posters and backdrops kept on this PC. {size}",
+            "Miniatures, affiches et fonds gardés sur ce PC. {size}"
+          ),
           Button::new("clear-cache")
             .small()
-            .label("Vider")
+            .label(t("Clear", "Vider"))
             .loading(self.clearing)
             .disabled(self.clearing)
             .on_click(cx.listener(|this, _, _, cx| this.clear_cache(cx))),
         )
         .into_any_element(),
         row(
-          "Fichiers",
-          "Réglages et cookies YouTube dans %APPDATA%\\peeby, caches (images, polices, \
-           yt-dlp) dans %LOCALAPPDATA%\\peeby. Les jetons Jellyfin et Twitch sont dans le \
-           Gestionnaire d'identification de Windows.",
+          t("Files", "Fichiers"),
+          t(
+            "Settings and YouTube cookies in %APPDATA%\\peeby, caches (images, fonts, yt-dlp) \
+             in %LOCALAPPDATA%\\peeby. The Jellyfin and Twitch tokens are in the Windows \
+             Credential Manager.",
+            "Réglages et cookies YouTube dans %APPDATA%\\peeby, caches (images, polices, \
+             yt-dlp) dans %LOCALAPPDATA%\\peeby. Les jetons Jellyfin et Twitch sont dans le \
+             Gestionnaire d'identification de Windows.",
+          ),
           div(),
         )
         .into_any_element(),
@@ -251,15 +303,17 @@ impl SettingsView {
 }
 
 fn about_section() -> AnyElement {
+  let version = env!("CARGO_PKG_VERSION");
   section(
-    "À propos",
+    t("About", "À propos"),
     vec![
       row(
         "Peeby",
-        &format!(
-          "Version {}. Lecture avec libmpv ; « J'aime » et « Je n'aime pas » de Return YouTube \
+        &tf!(
+          "Version {version}. Playback with libmpv; likes and dislikes from Return YouTube \
            Dislike (returnyoutubedislike.com).",
-          env!("CARGO_PKG_VERSION")
+          "Version {version}. Lecture avec libmpv ; « J'aime » et « Je n'aime pas » de Return \
+           YouTube Dislike (returnyoutubedislike.com)."
         ),
         div(),
       )
@@ -295,18 +349,16 @@ impl Render for SettingsView {
           .px_8()
           .py_6()
           .gap_8()
-          .child(page_title("Réglages"))
+          .child(page_title(t("Settings", "Réglages")))
           .child(general_section(&settings))
           .child(player_section(&settings.player))
           .children(parts)
           .child(self.storage_section(cx))
           .child(about_section())
-          .child(
-            div()
-              .text_xs()
-              .text_color(theme::subtle())
-              .child("Les changements sont enregistrés aussitôt."),
-          ),
+          .child(div().text_xs().text_color(theme::subtle()).child(t(
+            "Changes are saved at once.",
+            "Les changements sont enregistrés aussitôt.",
+          ))),
       )
   }
 }

@@ -9,7 +9,9 @@ use player::{Choice, Track, TrackKind};
 
 use super::segments::{self, Segment, SegmentKind};
 use super::{PlayerEvent, PlayerView};
+use crate::i18n::t;
 use crate::text::repair_mojibake;
+use crate::tf;
 
 /// Without segment information, "up next" shows this long before the end.
 const UP_NEXT_LEAD_SECONDS: f64 = 20.0;
@@ -75,7 +77,7 @@ impl PlayerView {
       parts.push(lang.clone());
     }
     if parts.is_empty() {
-      parts.push(format!("Piste {}", track.id));
+      parts.push(tf!("Track {}", "Piste {}", track.id));
     }
     if let Some(codec) = &track.codec {
       parts.push(codec.to_uppercase());
@@ -117,31 +119,39 @@ impl PlayerView {
   pub(super) fn cycle_audio(&mut self, cx: &mut Context<Self>) {
     let tracks = self.tracks_of(TrackKind::Audio);
     if tracks.len() < 2 {
-      return self.show_osd("Une seule piste audio".into(), cx);
+      return self.show_osd(
+        t("Only one audio track", "Une seule piste audio").into(),
+        cx,
+      );
     }
     let current = self.selected(TrackKind::Audio);
     let pos = tracks.iter().position(|t| Some(t.id) == current);
     let next = tracks[pos.map_or(0, |p| (p + 1) % tracks.len())].clone();
     self.select_audio(next.id, cx);
-    self.show_osd(format!("Audio : {}", self.track_label(&next)).into(), cx);
+    let label = self.track_label(&next);
+    self.show_osd(tf!("Audio: {label}", "Audio : {label}").into(), cx);
   }
 
   /// C with the file's own subtitles: off → first → … → last → off.
   pub(super) fn cycle_subtitles(&mut self, cx: &mut Context<Self>) {
     let tracks = self.tracks_of(TrackKind::Subtitle);
     if tracks.is_empty() {
-      return self.show_osd("Aucun sous-titre".into(), cx);
+      return self.show_osd(t("No subtitles", "Aucun sous-titre").into(), cx);
     }
     let current = self.selected(TrackKind::Subtitle);
     let next = match tracks.iter().position(|t| Some(t.id) == current) {
       None => Some(tracks[0].clone()),
       Some(p) => tracks.get(p + 1).cloned(),
     };
-    let label = next
-      .as_ref()
-      .map_or_else(|| "Désactivés".to_owned(), |t| self.track_label(t));
+    let label = next.as_ref().map_or_else(
+      || t("Off", "Désactivés").to_owned(),
+      |t| self.track_label(t),
+    );
     self.select_subtitle(next.map(|t| t.id), cx);
-    self.show_osd(format!("Sous-titres : {label}").into(), cx);
+    self.show_osd(
+      tf!("Subtitles: {label}", "Sous-titres : {label}").into(),
+      cx,
+    );
   }
 
   /// Whether the subtitles come from the source, added on demand (YouTube), rather than from
@@ -157,7 +167,12 @@ impl PlayerView {
     self.subtitle_delay = ((self.subtitle_delay + delta) * 10.0).round() / 10.0;
     self.with_player(|p| p.set_subtitle_delay(self.subtitle_delay));
     self.show_osd(
-      format!("Décalage des sous-titres {:+.1} s", self.subtitle_delay).into(),
+      tf!(
+        "Subtitle delay {:+.1} s",
+        "Décalage des sous-titres {:+.1} s",
+        self.subtitle_delay
+      )
+      .into(),
       cx,
     );
   }
@@ -188,13 +203,13 @@ impl PlayerView {
       .chapters
       .get(index)
       .and_then(|c| c.title.clone())
-      .unwrap_or_else(|| format!("Chapitre {}", index + 1))
+      .unwrap_or_else(|| tf!("Chapter {}", "Chapitre {}", index + 1))
   }
 
   /// Page Up / Page Down: the previous or next chapter.
   pub(super) fn add_chapter(&mut self, delta: i64, cx: &mut Context<Self>) {
     if self.chapters.is_empty() {
-      return self.show_osd("Aucun chapitre".into(), cx);
+      return self.show_osd(t("No chapters", "Aucun chapitre").into(), cx);
     }
     // As mpv does (`chapter-seek-threshold`): "previous" well into a chapter goes back to its
     // start first.
@@ -303,15 +318,15 @@ impl PlayerView {
     let in_tail = segments::tail_start(&self.segments, self.duration)
       .is_some_and(|start| segment.start >= start);
     if in_tail && self.up_next_title.is_some() {
-      return Some(("Épisode suivant", SkipAction::Next));
+      return Some((t("Next episode", "Épisode suivant"), SkipAction::Next));
     }
     let label = match segment.kind {
-      SegmentKind::Intro => "Passer l'intro",
-      SegmentKind::Recap => "Passer le récap",
-      SegmentKind::Outro => "Passer le générique",
-      SegmentKind::Preview => "Passer l'aperçu",
-      SegmentKind::Commercial => "Passer la pub",
-      SegmentKind::Muted => "Passer la partie muette",
+      SegmentKind::Intro => t("Skip intro", "Passer l'intro"),
+      SegmentKind::Recap => t("Skip recap", "Passer le récap"),
+      SegmentKind::Outro => t("Skip credits", "Passer le générique"),
+      SegmentKind::Preview => t("Skip preview", "Passer l'aperçu"),
+      SegmentKind::Commercial => t("Skip ad", "Passer la pub"),
+      SegmentKind::Muted => t("Skip muted part", "Passer la partie muette"),
     };
     Some((label, SkipAction::SeekTo(segment.end)))
   }

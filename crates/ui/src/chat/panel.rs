@@ -1,6 +1,6 @@
 //! The chat panel: a virtual list of variable-height messages (`gpui::list`) that follows the
 //! newest, with emotes drawn inline. Scrolled up, it stops following and holds the new messages
-//! until "Reprendre le défilement", so that what is read does not move.
+//! until "Resume scrolling", so that what is read does not move.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, OnceLock};
@@ -20,9 +20,10 @@ use super::{
   Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind, name_color,
 };
 use crate::assets::Icon;
+use crate::i18n::t;
 use crate::images::Images;
 use crate::picture::Picture;
-use crate::theme;
+use crate::{tf, theme};
 
 /// Messages kept; older ones are dropped (and held ones beyond it, while scrolled up).
 pub const MAX_MESSAGES: usize = 500;
@@ -189,12 +190,12 @@ impl ChatPanel {
       held: VecDeque::new(),
       list,
       modes: Vec::new(),
-      status: Some("Connexion au chat…".into()),
-      title: "Chat du live".into(),
+      status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
+      title: t("Live chat", "Chat du live").into(),
     }
   }
 
-  /// The panel with another title than "Chat du live" (a replay).
+  /// The panel with another title than "Live chat" (a replay).
   pub fn titled(mut self, title: impl Into<SharedString>) -> Self {
     self.title = title.into();
     self
@@ -327,7 +328,7 @@ impl ChatPanel {
           .child(if action {
             format!("{} ", author.name)
           } else {
-            format!("{} : ", author.name)
+            tf!("{}: ", "{} : ", author.name)
           }),
       );
     }
@@ -496,7 +497,7 @@ impl Render for ChatPanel {
                     .text_xs()
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(theme::muted())
-                    .child("Modes du chat"),
+                    .child(t("Chat modes", "Modes du chat")),
                 )
                 .children(modes.iter().map(|mode| div().text_sm().child(mode.clone())))
             }),
@@ -504,9 +505,16 @@ impl Render for ChatPanel {
       });
     let resume = (!following).then(|| {
       let label = match held {
-        0 => "Reprendre le défilement".to_owned(),
-        1 => "Reprendre le défilement · 1 nouveau message".to_owned(),
-        n => format!("Reprendre le défilement · {n} nouveaux messages"),
+        0 => t("Resume scrolling", "Reprendre le défilement").to_owned(),
+        1 => t(
+          "Resume scrolling · 1 new message",
+          "Reprendre le défilement · 1 nouveau message",
+        )
+        .to_owned(),
+        n => tf!(
+          "Resume scrolling · {n} new messages",
+          "Reprendre le défilement · {n} nouveaux messages"
+        ),
       };
       h_flex()
         .absolute()
@@ -559,7 +567,7 @@ impl Render for ChatPanel {
                 .justify_center()
                 .text_sm()
                 .text_color(theme::subtle())
-                .child("Bienvenue dans le chat !"),
+                .child(t("Welcome to the chat!", "Bienvenue dans le chat !")),
             )
           })
           .children(resume),

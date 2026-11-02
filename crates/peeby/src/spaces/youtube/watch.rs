@@ -39,11 +39,12 @@ use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
 use ui::chat::{ChatPanel, watch_layout};
+use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::{PlayerEvent, PlayerView, Prefs};
 use ui::widgets::{loading_more, near_scroll_end};
-use ui::{runtime, theme};
+use ui::{runtime, tf, theme};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
@@ -332,21 +333,31 @@ impl WatchView {
                 ))),
             )
             .child(
-              toggle("queue-shuffle", Icon::Shuffle, "Lecture aléatoire", shuffle).on_click(
-                cx.listener(|this, _, _, cx| {
-                  let Some(queue) = this.queue.clone() else {
-                    return;
-                  };
-                  queue.update(cx, |q, cx| q.toggle_shuffle(cx));
-                  // The order changed: bring the current video back into view.
-                  let current = queue.read(cx).position() - 1;
-                  this.queue_scroll_to = Some(current.min(QUEUE_BEFORE).saturating_sub(1));
-                  cx.notify();
-                }),
-              ),
+              toggle(
+                "queue-shuffle",
+                Icon::Shuffle,
+                t("Shuffle", "Lecture aléatoire"),
+                shuffle,
+              )
+              .on_click(cx.listener(|this, _, _, cx| {
+                let Some(queue) = this.queue.clone() else {
+                  return;
+                };
+                queue.update(cx, |q, cx| q.toggle_shuffle(cx));
+                // The order changed: bring the current video back into view.
+                let current = queue.read(cx).position() - 1;
+                this.queue_scroll_to = Some(current.min(QUEUE_BEFORE).saturating_sub(1));
+                cx.notify();
+              })),
             )
             .child(
-              toggle("queue-repeat", Icon::Repeat, "Répéter la playlist", repeat).on_click({
+              toggle(
+                "queue-repeat",
+                Icon::Repeat,
+                t("Repeat the playlist", "Répéter la playlist"),
+                repeat,
+              )
+              .on_click({
                 let queue = entity.clone();
                 move |_, _, cx| queue.update(cx, |q, cx| q.toggle_repeat(cx))
               }),
@@ -555,9 +566,10 @@ impl WatchView {
   /// current one. The button changes at once and goes back if YouTube refuses.
   fn rate(&mut self, clicked: LikeStatus, window: &mut Window, cx: &mut Context<Self>) {
     if !self.client.signed_in() {
-      let note = Notification::info(
+      let note = Notification::info(t(
+        "Sign in to rate videos: import your cookies from the Account page.",
         "Connectez-vous pour noter les vidéos : importez vos cookies depuis la page Compte.",
-      );
+      ));
       return window.push_notification(note, cx);
     }
     let Some(page) = &self.page else { return };
@@ -591,7 +603,8 @@ impl WatchView {
           cx.notify();
           if let Some(Err(e)) = result {
             tracing::warn!("rate: {e}");
-            let note = Notification::error(format!(
+            let note = Notification::error(tf!(
+              "Cannot save your rating. {}",
               "Impossible d'enregistrer votre avis. {}",
               error_text(&e)
             ));
@@ -649,9 +662,15 @@ impl WatchView {
         })
     };
     let (like_tip, dislike_tip) = match current {
-      LikeStatus::Like => ("Je n'aime plus", "Je n'aime pas"),
-      LikeStatus::Dislike => ("J'aime", "Retirer « Je n'aime pas »"),
-      LikeStatus::Indifferent => ("J'aime", "Je n'aime pas"),
+      LikeStatus::Like => (
+        t("Remove like", "Je n'aime plus"),
+        t("Dislike", "Je n'aime pas"),
+      ),
+      LikeStatus::Dislike => (
+        t("Like", "J'aime"),
+        t("Remove dislike", "Retirer « Je n'aime pas »"),
+      ),
+      LikeStatus::Indifferent => (t("Like", "J'aime"), t("Dislike", "Je n'aime pas")),
     };
     let pill = h_flex()
       .h(px(36.))
@@ -716,7 +735,10 @@ impl WatchView {
         .cursor_pointer()
         .hover(|s| s.text_color(theme::muted()))
         .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
-        .child("Dislikes : Return YouTube Dislike")
+        .child(t(
+          "Dislikes: Return YouTube Dislike",
+          "Dislikes : Return YouTube Dislike",
+        ))
     });
     // The ratio bar takes the pill's width: both sit in a column as wide as the pill.
     v_flex()
@@ -970,7 +992,7 @@ impl WatchView {
           comments
             .count
             .clone()
-            .unwrap_or_else(|| "Commentaires".into()),
+            .unwrap_or_else(|| t("Comments", "Commentaires").into()),
         ),
       );
     let items: Vec<_> = comments
@@ -982,11 +1004,14 @@ impl WatchView {
     let more = (comments.failed && comments.continuation.is_some()).then(|| {
       Button::new("more-comments")
         .ghost()
-        .label("Réessayer")
+        .label(t("Retry", "Réessayer"))
         .on_click(cx.listener(|this, _, _, cx| this.load_comments(cx)))
     });
-    let empty = (comments.items.is_empty() && !comments.loading && comments.requested)
-      .then(|| div().text_color(theme::muted()).child("Aucun commentaire"));
+    let empty = (comments.items.is_empty() && !comments.loading && comments.requested).then(|| {
+      div()
+        .text_color(theme::muted())
+        .child(t("No comments", "Aucun commentaire"))
+    });
     v_flex()
       .pt_2()
       .gap_5()
@@ -997,7 +1022,7 @@ impl WatchView {
       .children(more.map(|b| h_flex().child(b)))
   }
 
-  /// A comment, its "N réponses" toggle and, once opened, its replies.
+  /// A comment, its "N replies" toggle and, once opened, its replies.
   fn comment_thread(
     &self,
     comment: &Comment,
@@ -1008,9 +1033,9 @@ impl WatchView {
     let open = replies.is_some_and(|r| r.open);
     let toggle = comment.replies_continuation.as_ref().map(|_| {
       let label = if open {
-        "Masquer les réponses".to_owned()
+        t("Hide replies", "Masquer les réponses").to_owned()
       } else {
-        format!("{} réponses", comment.replies)
+        replies_label(&comment.replies)
       };
       let target = comment.clone();
       Button::new(SharedString::from(format!("replies-{}", comment.id)))
@@ -1028,7 +1053,7 @@ impl WatchView {
         let id = comment.id.clone();
         Button::new(SharedString::from(format!("more-replies-{}", comment.id)))
           .ghost()
-          .label("Plus de réponses")
+          .label(t("More replies", "Plus de réponses"))
           .on_click(cx.listener(move |this, _, _, cx| this.load_replies(id.clone(), cx)))
       });
       v_flex()
@@ -1129,21 +1154,40 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
     )
 }
 
-/// `1,2 k`, `3,4 M`: French short counts.
+/// The toggle of a comment's replies: "3 replies", from YouTube's count (`1,2 k` stays
+/// plural); singular for one (and for zero in French).
+fn replies_label(count: &str) -> String {
+  match (lang(), count.trim().parse::<u64>().ok()) {
+    (Lang::En, Some(1)) => "1 reply".to_owned(),
+    (Lang::Fr, Some(0 | 1)) => format!("{count} réponse"),
+    _ => tf!("{count} replies", "{count} réponses"),
+  }
+}
+
+/// A short count in the interface's language ([`compact_number_in`]).
 fn compact_number(n: u64) -> String {
-  let short = |value: f64, unit: &str| {
+  compact_number_in(n, lang())
+}
+
+/// `1.2K`, `3.4M`, `1.2B` in English; `1,2 k`, `3,4 M`, `1,2 Md` in French.
+fn compact_number_in(n: u64, lang: Lang) -> String {
+  let short = |value: f64, en: &str, fr: &str| {
     let text = if value < 10.0 {
       format!("{value:.1}")
     } else {
       format!("{value:.0}")
     };
-    format!("{} {unit}", text.replace('.', ",").trim_end_matches(",0"))
+    let text = text.trim_end_matches(".0");
+    match lang {
+      Lang::En => format!("{text}{en}"),
+      Lang::Fr => format!("{} {fr}", text.replace('.', ",")),
+    }
   };
   match n {
     0..1_000 => n.to_string(),
-    1_000..1_000_000 => short(n as f64 / 1e3, "k"),
-    1_000_000..1_000_000_000 => short(n as f64 / 1e6, "M"),
-    _ => short(n as f64 / 1e9, "Md"),
+    1_000..1_000_000 => short(n as f64 / 1e3, "K", "k"),
+    1_000_000..1_000_000_000 => short(n as f64 / 1e6, "M", "M"),
+    _ => short(n as f64 / 1e9, "B", "Md"),
   }
 }
 
@@ -1266,14 +1310,26 @@ impl Render for WatchView {
 
 #[cfg(test)]
 mod tests {
-  use super::compact_number;
+  use super::{compact_number, compact_number_in};
+  use ui::i18n::Lang;
 
   #[test]
   fn compact_numbers() {
     assert_eq!(compact_number(999), "999");
-    assert_eq!(compact_number(1_234), "1,2 k");
-    assert_eq!(compact_number(19_491_081), "19 M");
-    assert_eq!(compact_number(521_536), "522 k");
-    assert_eq!(compact_number(2_000_000), "2 M");
+    assert_eq!(compact_number(1_234), "1.2K");
+    assert_eq!(compact_number(19_491_081), "19M");
+    assert_eq!(compact_number(521_536), "522K");
+    assert_eq!(compact_number(2_000_000), "2M");
+    assert_eq!(compact_number(3_400_000_000), "3.4B");
+  }
+
+  #[test]
+  fn compact_numbers_in_french() {
+    assert_eq!(compact_number_in(999, Lang::Fr), "999");
+    assert_eq!(compact_number_in(1_234, Lang::Fr), "1,2 k");
+    assert_eq!(compact_number_in(19_491_081, Lang::Fr), "19 M");
+    assert_eq!(compact_number_in(521_536, Lang::Fr), "522 k");
+    assert_eq!(compact_number_in(2_000_000, Lang::Fr), "2 M");
+    assert_eq!(compact_number_in(3_400_000_000, Lang::Fr), "3,4 Md");
   }
 }

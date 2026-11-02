@@ -5,11 +5,12 @@
 use std::collections::HashMap;
 
 use gpui::prelude::*;
-use gpui::{Context, FontWeight, SharedString, Task, WeakEntity, Window, div, px};
+use gpui::{Context, FontWeight, Task, WeakEntity, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex};
 use twitch::gql::Channel;
 use twitch::helix::{Clip, Helix, User, Video};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture;
 use ui::theme;
@@ -99,7 +100,10 @@ impl ChannelView {
   }
 
   fn tab_button(&self, tab: Tab, label: &'static str, cx: &mut Context<Self>) -> Button {
-    let id = SharedString::from(format!("twitch-channel-tab-{label}"));
+    let id = match tab {
+      Tab::Videos => "twitch-channel-tab-videos",
+      Tab::Clips => "twitch-channel-tab-clips",
+    };
     let button = Button::new(id)
       .label(label)
       .on_click(cx.listener(move |this, _, _, cx| {
@@ -132,7 +136,7 @@ impl Render for ChannelView {
           "twitch-channel",
           &self.login,
           None,
-          cards::note("Chargement…").into_any_element(),
+          cards::note(t("Loading…", "Chargement…")).into_any_element(),
         )
         .into_any_element();
       }
@@ -147,7 +151,7 @@ impl Render for ChannelView {
       let nav = self.nav.clone();
       let detail = [
         live.category.clone().unwrap_or_default(),
-        format!("{} spectateurs", cards::grouped(live.viewers)),
+        cards::viewers(live.viewers),
       ]
       .into_iter()
       .filter(|s| !s.is_empty())
@@ -172,7 +176,7 @@ impl Render for ChannelView {
                   .text_xs()
                   .font_weight(FontWeight::BOLD)
                   .text_color(theme::accent_hover())
-                  .child("EN DIRECT"),
+                  .child(t("LIVE", "EN DIRECT")),
               )
               .child(
                 div()
@@ -185,7 +189,7 @@ impl Render for ChannelView {
           .child(
             Button::new("twitch-channel-watch")
               .primary()
-              .label("Regarder")
+              .label(t("Watch", "Regarder"))
               .on_click(move |_, _, cx| {
                 nav
                   .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
@@ -195,9 +199,11 @@ impl Render for ChannelView {
       )
     });
     let list = match self.tab {
-      Tab::Videos if loaded.videos.is_empty() => {
-        cards::note("Aucune rediffusion publique.").into_any_element()
-      }
+      Tab::Videos if loaded.videos.is_empty() => cards::note(t(
+        "No public past broadcasts.",
+        "Aucune rediffusion publique.",
+      ))
+      .into_any_element(),
       Tab::Videos => cards::wrap(
         loaded
           .videos
@@ -209,7 +215,9 @@ impl Render for ChannelView {
           .collect(),
       )
       .into_any_element(),
-      Tab::Clips if loaded.clips.is_empty() => cards::note("Aucun clip.").into_any_element(),
+      Tab::Clips if loaded.clips.is_empty() => {
+        cards::note(t("No clips.", "Aucun clip.")).into_any_element()
+      }
       Tab::Clips => cards::wrap(
         loaded
           .clips
@@ -255,8 +263,8 @@ impl Render for ChannelView {
       .child(
         h_flex()
           .gap_2()
-          .child(self.tab_button(Tab::Videos, "Vidéos", cx))
-          .child(self.tab_button(Tab::Clips, "Clips", cx)),
+          .child(self.tab_button(Tab::Videos, t("Videos", "Vidéos"), cx))
+          .child(self.tab_button(Tab::Clips, t("Clips", "Clips"), cx)),
       )
       .child(list)
       .into_any_element()

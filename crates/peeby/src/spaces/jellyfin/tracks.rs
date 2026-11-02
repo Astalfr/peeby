@@ -12,6 +12,7 @@
 
 use jellyfin_api::playback::{MediaSource, MediaStream, StreamKind};
 use player::Choice;
+use ui::tf;
 
 /// A selectable track, for menus.
 #[derive(Clone, Debug)]
@@ -222,9 +223,9 @@ fn label(stream: &MediaStream) -> String {
     .clone()
     .or_else(|| stream.title.clone())
     .or_else(|| stream.language.clone())
-    .unwrap_or_else(|| format!("Piste {}", stream.index));
+    .unwrap_or_else(|| tf!("Track {}", "Piste {}", stream.index));
   if stream.is_external && !base.to_ascii_lowercase().contains("extern") {
-    format!("{base} (externe)")
+    tf!("{base} (external)", "{base} (externe)")
   } else {
     base
   }
@@ -351,6 +352,6 @@ mod tests {
     assert_eq!(map.mpv_subtitle(Some(-1)), Choice::Off);
     assert_eq!(map.mpv_subtitle(None), Choice::Off);
     assert_eq!(map.external_subtitles().len(), 1);
-    assert_eq!(map.subtitles()[2].label, "Piste 5 (externe)");
+    assert_eq!(map.subtitles()[2].label, "Track 5 (external)");
   }
 }

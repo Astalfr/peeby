@@ -20,8 +20,9 @@ use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatPanel, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
   split_text,
 };
+use ui::i18n::t;
 use ui::picture::Picture;
-use ui::runtime;
+use ui::{runtime, tf};
 
 /// Updates given to the panel at most at once, so that a burst does not stall a frame.
 const BATCH: usize = 200;
@@ -189,10 +190,16 @@ where
 /// The panel's event for a connection's update, `room` keeping the merged modes.
 fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEvent> {
   Some(match update {
-    Update::Status(Status::Connecting) => ChatEvent::Status(Some("Connexion au chat…".into())),
+    Update::Status(Status::Connecting) => {
+      ChatEvent::Status(Some(t("Connecting to chat…", "Connexion au chat…").into()))
+    }
     Update::Status(Status::Connected) => ChatEvent::Status(None),
     Update::Status(Status::Retrying(seconds)) => ChatEvent::Status(Some(
-      format!("Chat déconnecté · nouvel essai dans {seconds} s").into(),
+      tf!(
+        "Chat disconnected · retrying in {seconds} s",
+        "Chat déconnecté · nouvel essai dans {seconds} s"
+      )
+      .into(),
     )),
     Update::Event(Event::Message(line)) => ChatEvent::Message(message(&line, None, extras)),
     Update::Event(Event::Notice(line)) => {
@@ -208,7 +215,8 @@ fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEv
     }
     Update::Event(Event::ServerNotice(id)) => {
       let mut notice = ChatMessage::new(format!("notice-{id}"), None, Vec::new());
-      notice.kind = MessageKind::Notice(format!("Message de Twitch : {id}").into());
+      notice.kind =
+        MessageKind::Notice(tf!("Message from Twitch: {id}", "Message de Twitch : {id}").into());
       ChatEvent::Message(notice)
     }
     Update::Event(Event::Ping(_) | Event::Reconnect | Event::Joined) => return None,
@@ -326,30 +334,31 @@ fn color(hex: &str) -> Option<Hsla> {
 fn modes(room: &RoomState) -> Vec<SharedString> {
   let mut labels: Vec<SharedString> = Vec::new();
   if room.emote_only == Some(true) {
-    labels.push("Emotes uniquement".into());
+    labels.push(t("Emote-only", "Emotes uniquement").into());
   }
   if room.subs_only == Some(true) {
-    labels.push("Abonnés uniquement".into());
+    labels.push(t("Subscribers-only", "Abonnés uniquement").into());
   }
   match room.followers_only {
-    Some(0) => labels.push("Followers uniquement".into()),
+    Some(0) => labels.push(t("Followers-only", "Followers uniquement").into()),
     Some(minutes) if minutes > 0 => {
       let since = if minutes < 60 {
         format!("{minutes} min")
       } else if minutes < 24 * 60 {
         format!("{} h", minutes / 60)
       } else {
-        format!("{} j", minutes / (24 * 60))
+        let days = minutes / (24 * 60);
+        tf!("{days} d", "{days} j")
       };
-      labels.push(format!("Followers depuis {since}").into());
+      labels.push(tf!("Followers for {since}", "Followers depuis {since}").into());
     }
     _ => {}
   }
   if let Some(seconds) = room.slow.filter(|s| *s > 0) {
-    labels.push(format!("Mode lent : {seconds} s").into());
+    labels.push(tf!("Slow mode: {seconds} s", "Mode lent : {seconds} s").into());
   }
   if room.unique == Some(true) {
-    labels.push("Messages uniques".into());
+    labels.push(t("Unique messages", "Messages uniques").into());
   }
   labels
 }
@@ -370,11 +379,7 @@ mod tests {
     };
     assert_eq!(
       modes(&room),
-      [
-        "Abonnés uniquement",
-        "Followers depuis 1 j",
-        "Mode lent : 30 s"
-      ]
+      ["Subscribers-only", "Followers for 1 d", "Slow mode: 30 s"]
     );
     let off = RoomState {
       followers_only: Some(-1),

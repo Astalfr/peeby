@@ -10,6 +10,7 @@ use jellyfin_api::models::{BaseItem, ImageType, ItemKind};
 use jellyfin_api::{Client, ImageOptions, ItemId};
 use ui::card::{Corner, Hover, MediaCard, TALL, WIDE};
 use ui::picture::Picture;
+use ui::tf;
 
 use super::{JellyfinSpace, Route};
 use crate::settings::Settings;
@@ -336,13 +337,13 @@ pub fn route_for(item: &BaseItem) -> Route {
 /// Ticks (100 ns) per second.
 pub const TICKS_PER_SECOND: i64 = 10_000_000;
 
-/// `1 h 42 min`, `48 min`.
+/// `1 h 42 min` (French: `1 h 42`), `48 min`.
 pub fn runtime(ticks: i64) -> String {
   let minutes = ticks / (60 * TICKS_PER_SECOND);
   match (minutes / 60, minutes % 60) {
     (0, m) => format!("{m} min"),
     (h, 0) => format!("{h} h"),
-    (h, m) => format!("{h} h {m:02}"),
+    (h, m) => tf!("{h} h {m:02} min", "{h} h {m:02}"),
   }
 }
 
@@ -367,7 +368,7 @@ mod tests {
   fn durations() {
     assert_eq!(runtime(23 * 60 * TICKS_PER_SECOND), "23 min");
     assert_eq!(runtime(120 * 60 * TICKS_PER_SECOND), "2 h");
-    assert_eq!(runtime(102 * 60 * TICKS_PER_SECOND), "1 h 42");
+    assert_eq!(runtime(102 * 60 * TICKS_PER_SECOND), "1 h 42 min");
     assert_eq!(clock(754 * TICKS_PER_SECOND), "12:34");
   }
 }

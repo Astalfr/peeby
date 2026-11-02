@@ -13,6 +13,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, h_flex, v_flex};
 use twitch::Error;
 use twitch::auth::{Auth, DeviceCode, Poll, Session, Validation};
+use ui::i18n::t;
 use ui::{assets, runtime, theme};
 
 use super::session;
@@ -153,11 +154,31 @@ async fn poll(
 /// What the user reads for a sign-in error.
 pub fn describe(error: &Error) -> SharedString {
   match error {
-    Error::DeviceExpired => "Le code a expiré. Recommencez la connexion.".into(),
-    Error::DeviceDenied => "La connexion a été refusée sur Twitch.".into(),
-    Error::SessionExpired => "Votre session Twitch a expiré. Reconnectez-vous.".into(),
-    Error::Http(_) => "Twitch est injoignable. Vérifiez votre connexion.".into(),
-    _ => "Twitch a répondu de façon inattendue. Réessayez dans un moment.".into(),
+    Error::DeviceExpired => t(
+      "The code expired. Start signing in again.",
+      "Le code a expiré. Recommencez la connexion.",
+    )
+    .into(),
+    Error::DeviceDenied => t(
+      "Signing in was declined on Twitch.",
+      "La connexion a été refusée sur Twitch.",
+    )
+    .into(),
+    Error::SessionExpired => t(
+      "Your Twitch session expired. Sign in again.",
+      "Votre session Twitch a expiré. Reconnectez-vous.",
+    )
+    .into(),
+    Error::Http(_) => t(
+      "Twitch can't be reached. Check your connection.",
+      "Twitch est injoignable. Vérifiez votre connexion.",
+    )
+    .into(),
+    _ => t(
+      "Twitch answered unexpectedly. Try again in a moment.",
+      "Twitch a répondu de façon inattendue. Réessayez dans un moment.",
+    )
+    .into(),
   }
 }
 
@@ -170,51 +191,49 @@ impl Render for LoginView {
         v_flex()
           .gap_3()
           .items_center()
-          .child(
-            div()
-              .text_color(theme::muted())
-              .text_center()
-              .child("Sur twitch.tv/activate, connecté à votre compte, saisissez :"),
-          )
+          .child(div().text_color(theme::muted()).text_center().child(t(
+            "On twitch.tv/activate, signed in to your account, enter:",
+            "Sur twitch.tv/activate, connecté à votre compte, saisissez :",
+          )))
           .child(
             div()
               .text_size(px(40.))
               .font_weight(FontWeight::BOLD)
               .child(waiting.code.clone()),
           )
-          .child(
-            div()
-              .text_sm()
-              .text_color(theme::muted())
-              .child("En attente de votre validation…"),
-          )
+          .child(div().text_sm().text_color(theme::muted()).child(t(
+            "Waiting for your approval…",
+            "En attente de votre validation…",
+          )))
           .child(
             h_flex()
               .gap_2()
               .child(
                 Button::new("twitch-open-activate")
                   .ghost()
-                  .label("Rouvrir la page")
+                  .label(t("Reopen the page", "Rouvrir la page"))
                   .on_click(move |_, _, cx| cx.open_url(&url)),
               )
               .child(
                 Button::new("twitch-cancel")
                   .ghost()
-                  .label("Annuler")
+                  .label(t("Cancel", "Annuler"))
                   .on_click(cx.listener(|this, _, _, cx| this.cancel(cx))),
               ),
           )
       }
       None => v_flex()
         .gap_3()
-        .child(div().text_sm().text_color(theme::muted()).child(
+        .child(div().text_sm().text_color(theme::muted()).child(t(
+          "Peeby shows a code to enter on twitch.tv: no password goes through the app. It \
+           reads your followed channels, nothing else.",
           "Peeby affiche un code à saisir sur twitch.tv : aucun mot de passe ne passe par \
-               l'application. Il lit vos chaînes suivies, rien d'autre.",
-        ))
+           l'application. Il lit vos chaînes suivies, rien d'autre.",
+        )))
         .child(
           Button::new("twitch-login")
             .primary()
-            .label("Se connecter avec Twitch")
+            .label(t("Sign in with Twitch", "Se connecter avec Twitch"))
             .loading(self.busy)
             .disabled(self.busy)
             .on_click(cx.listener(|this, _, _, cx| this.start(cx))),
@@ -259,11 +278,10 @@ impl Render for LoginView {
                       .child("Twitch"),
                   ),
               )
-              .child(
-                div()
-                  .text_color(theme::muted())
-                  .child("Connectez-vous pour regarder vos chaînes"),
-              ),
+              .child(div().text_color(theme::muted()).child(t(
+                "Sign in to watch your channels",
+                "Connectez-vous pour regarder vos chaînes",
+              ))),
           )
           .child(body)
           .when_some(self.error.clone(), |el, error| {

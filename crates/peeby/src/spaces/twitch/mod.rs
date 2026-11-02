@@ -34,6 +34,7 @@ use twitch::Error;
 use twitch::auth::{Auth, Session, Validation};
 use twitch::helix::{Helix, Stream};
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::player::PlayerView;
 use ui::theme::Accent;
@@ -230,10 +231,7 @@ impl TwitchSpace {
       this
         .update(cx, |this, cx| match result {
           Some(Ok((session, validation))) => this.signed_in(session, validation, cx),
-          Some(Err(Error::SessionExpired)) => this.sign_out(
-            Some("Votre session Twitch a expiré. Reconnectez-vous.".into()),
-            cx,
-          ),
+          Some(Err(Error::SessionExpired)) => this.sign_out(Some(expired()), cx),
           Some(Err(e)) => {
             // The refresh token was not spent (Twitch did not answer): it stays for next time.
             tracing::warn!("Twitch session restore: {e}");
@@ -268,12 +266,7 @@ impl TwitchSpace {
             Some(Ok(_)) => {}
             Some(Err(Error::SessionExpired)) => {
               this
-                .update(cx, |this, cx| {
-                  this.sign_out(
-                    Some("Votre session Twitch a expiré. Reconnectez-vous.".into()),
-                    cx,
-                  )
-                })
+                .update(cx, |this, cx| this.sign_out(Some(expired()), cx))
                 .ok();
               return;
             }
@@ -440,10 +433,7 @@ impl TwitchSpace {
   /// Reacts to an error of any page: an expired session signs out, the rest is logged.
   pub fn handle_error(&mut self, error: &Error, cx: &mut Context<Self>) {
     match error {
-      Error::SessionExpired => self.sign_out(
-        Some("Votre session Twitch a expiré. Reconnectez-vous.".into()),
-        cx,
-      ),
+      Error::SessionExpired => self.sign_out(Some(expired()), cx),
       other => tracing::warn!("Twitch: {other}"),
     }
   }
@@ -529,13 +519,33 @@ impl TwitchSpace {
   }
 }
 
+/// Why the sign-in card shows again after the session expired.
+fn expired() -> SharedString {
+  login::describe(&Error::SessionExpired)
+}
+
 /// What the user reads for a Helix error of a page.
 pub fn error_text(error: &Error) -> String {
   match error {
-    Error::SessionExpired => "Votre session Twitch a expiré.".into(),
-    Error::RateLimited => "Trop de requêtes vers Twitch. Réessayez dans un instant.".into(),
-    Error::Http(_) => "Twitch est injoignable. Vérifiez votre connexion.".into(),
-    other => format!("Twitch a répondu par une erreur : {other}"),
+    Error::SessionExpired => t(
+      "Your Twitch session expired.",
+      "Votre session Twitch a expiré.",
+    )
+    .into(),
+    Error::RateLimited => t(
+      "Too many requests to Twitch. Try again in a moment.",
+      "Trop de requêtes vers Twitch. Réessayez dans un instant.",
+    )
+    .into(),
+    Error::Http(_) => t(
+      "Twitch can't be reached. Check your connection.",
+      "Twitch est injoignable. Vérifiez votre connexion.",
+    )
+    .into(),
+    other => ui::tf!(
+      "Twitch answered with an error: {other}",
+      "Twitch a répondu par une erreur : {other}"
+    ),
   }
 }
 
@@ -576,11 +586,11 @@ impl Space for TwitchSpace {
     let mut entries = vec![
       MenuEntry {
         active: root == Some(&Route::Following),
-        ..MenuEntry::new("following", "Suivies", Icon::Subscriptions)
+        ..MenuEntry::new("following", t("Following", "Suivies"), Icon::Subscriptions)
       },
       MenuEntry {
         active: root == Some(&Route::Browse),
-        ..MenuEntry::new("browse", "Parcourir", Icon::Grid)
+        ..MenuEntry::new("browse", t("Browse", "Parcourir"), Icon::Grid)
       },
     ];
     for (i, stream) in signed.live.iter().enumerate() {
@@ -595,7 +605,7 @@ impl Space for TwitchSpace {
       let watching = top == Some(&Route::Watch(stream.user_login.clone()));
       entries.push(MenuEntry {
         active: watching,
-        heading: (i == 0).then(|| "En direct".into()),
+        heading: (i == 0).then(|| t("Live", "En direct").into()),
         avatar: Some(Avatar {
           picture: signed
             .avatars
@@ -627,7 +637,7 @@ impl Space for TwitchSpace {
       },
       MenuEntry {
         bottom: true,
-        ..MenuEntry::new("sign-out", "Se déconnecter", Icon::SignOut)
+        ..MenuEntry::new("sign-out", t("Sign out", "Se déconnecter"), Icon::SignOut)
       },
     ]);
     entries
@@ -723,7 +733,7 @@ impl Render for TwitchSpace {
         .child(
           div()
             .text_color(theme::muted())
-            .child("Connexion à Twitch…"),
+            .child(t("Connecting to Twitch…", "Connexion à Twitch…")),
         )
         .into_any_element(),
       State::SignedOut => div()

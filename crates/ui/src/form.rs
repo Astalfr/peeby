@@ -63,13 +63,14 @@ pub fn toggle(id: &str, checked: bool, on_change: impl Fn(bool, &mut App) + 'sta
     .on_click(move |checked, _, cx| on_change(*checked, cx))
 }
 
-/// `12 Mo`, `1.5 Go`.
+/// `12 MB`, `1.5 GB` (`12 Mo`, `1.5 Go` in French).
 pub fn format_size(bytes: u64) -> String {
   let mb = bytes as f64 / (1024. * 1024.);
   if mb >= 1024. {
-    format!("{:.1} Go", mb / 1024.)
+    let gb = mb / 1024.;
+    crate::tf!("{gb:.1} GB", "{gb:.1} Go")
   } else {
-    format!("{mb:.0} Mo")
+    crate::tf!("{mb:.0} MB", "{mb:.0} Mo")
   }
 }
 

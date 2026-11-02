@@ -7,20 +7,36 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use ui::form::{chips, row, section, toggle};
-use ui::{runtime, theme};
+use ui::i18n::t;
+use ui::{runtime, tf, theme};
 
 use super::{TwitchSpace, play, session};
 use crate::settings::Settings;
 
 /// The tutorial's steps (docs/twitch.md, "The auth-token tutorial").
-const TUTORIAL: &[&str] = &[
-  "Dans votre navigateur, ouvrez twitch.tv et connectez-vous.",
-  "Appuyez sur F12 pour ouvrir les outils de développement.",
-  "Chrome ou Edge : onglet « Application », puis « Cookies ». Firefox : onglet « Stockage », puis \
-   « Cookies ». Choisissez le site twitch.tv.",
-  "Dans la liste, trouvez la ligne auth-token et copiez sa valeur (30 lettres et chiffres).",
-  "Collez-la ici.",
-];
+fn tutorial() -> [&'static str; 5] {
+  [
+    t(
+      "In your browser, open twitch.tv and sign in.",
+      "Dans votre navigateur, ouvrez twitch.tv et connectez-vous.",
+    ),
+    t(
+      "Press F12 to open the developer tools.",
+      "Appuyez sur F12 pour ouvrir les outils de développement.",
+    ),
+    t(
+      "Chrome or Edge: the \"Application\" tab, then \"Cookies\". Firefox: the \"Storage\" tab, \
+       then \"Cookies\". Pick the twitch.tv site.",
+      "Chrome ou Edge : onglet « Application », puis « Cookies ». Firefox : onglet « Stockage », \
+       puis « Cookies ». Choisissez le site twitch.tv.",
+    ),
+    t(
+      "In the list, find the auth-token row and copy its value (30 letters and digits).",
+      "Dans la liste, trouvez la ligne auth-token et copiez sa valeur (30 lettres et chiffres).",
+    ),
+    t("Paste it here.", "Collez-la ici."),
+  ]
+}
 
 pub struct SettingsView {
   nav: WeakEntity<TwitchSpace>,
@@ -35,7 +51,7 @@ impl SettingsView {
     cx.observe_global::<Settings>(|_, cx| cx.notify()).detach();
     let input = cx.new(|cx| {
       InputState::new(window, cx)
-        .placeholder("Jeton auth-token")
+        .placeholder(t("auth-token", "Jeton auth-token"))
         .masked(true)
     });
     Self {
@@ -52,7 +68,11 @@ impl SettingsView {
     let token = self.input.read(cx).value().trim().to_owned();
     if !twitch::gql::is_auth_token_shape(&token) {
       self.outcome = Some((
-        "Ce n'est pas un jeton auth-token : il fait 30 lettres et chiffres.".into(),
+        t(
+          "This isn't an auth-token: it is 30 letters and digits.",
+          "Ce n'est pas un jeton auth-token : il fait 30 lettres et chiffres.",
+        )
+        .into(),
         false,
       ));
       return cx.notify();
@@ -88,16 +108,25 @@ impl SettingsView {
             Err(e) => {
               tracing::warn!("cannot save the Twitch auth-token: {e}");
               Err(
-                "Le jeton est valide, mais le Gestionnaire d'identification a refusé de le garder."
-                  .into(),
+                t(
+                  "The token is valid, but the Credential Manager refused to keep it.",
+                  "Le jeton est valide, mais le Gestionnaire d'identification a refusé de le garder.",
+                )
+                .into(),
               )
             }
           }
         }
-        Some(Err(twitch::Error::NotLoggedIn)) => Err("Twitch refuse ce jeton.".into()),
+        Some(Err(twitch::Error::NotLoggedIn)) => Err(t("Twitch rejects this token.", "Twitch refuse ce jeton.").into()),
         Some(Err(e)) => {
           tracing::warn!("Twitch auth-token check: {e}");
-          Err("Impossible de vérifier le jeton auprès de Twitch. Réessayez.".into())
+          Err(
+            t(
+              "Couldn't check the token with Twitch. Try again.",
+              "Impossible de vérifier le jeton auprès de Twitch. Réessayez.",
+            )
+            .into(),
+          )
         }
         None => return,
       };
@@ -110,7 +139,14 @@ impl SettingsView {
                 .nav
                 .update(cx, |space, cx| space.set_auth_token(Some(token), cx))
                 .ok();
-              (format!("Jeton enregistré, compte {login}.").into(), true)
+              (
+                tf!(
+                  "Token saved, account {login}.",
+                  "Jeton enregistré, compte {login}."
+                )
+                .into(),
+                true,
+              )
             }
             Err(message) => (message, false),
           });
@@ -129,7 +165,7 @@ impl SettingsView {
       .nav
       .update(cx, |space, cx| space.set_auth_token(None, cx))
       .ok();
-    self.outcome = Some(("Jeton supprimé.".into(), true));
+    self.outcome = Some((t("Token removed.", "Jeton supprimé.").into(), true));
     cx.notify();
   }
 
@@ -143,25 +179,23 @@ impl SettingsView {
           div()
             .flex_1()
             .text_sm()
-            .child(format!("Connecté en tant que {login}")),
+            .child(tf!("Signed in as {login}", "Connecté en tant que {login}")),
         )
         .child(
           Button::new("twitch-sign-out")
             .small()
-            .label("Se déconnecter")
+            .label(t("Sign out", "Se déconnecter"))
             .on_click(cx.listener(|this, _, _, cx| {
               this.nav.update(cx, |space, cx| space.log_out(cx)).ok();
             })),
         ),
-      None => h_flex().child(
-        div()
-          .text_sm()
-          .text_color(theme::muted())
-          .child("Connectez-vous depuis l'onglet Twitch."),
-      ),
+      None => h_flex().child(div().text_sm().text_color(theme::muted()).child(t(
+        "Sign in from the Twitch tab.",
+        "Connectez-vous depuis l'onglet Twitch.",
+      ))),
     };
     section(
-      "Compte",
+      t("Account", "Compte"),
       vec![
         div()
           .px_5()
@@ -181,7 +215,7 @@ impl SettingsView {
       .nav
       .upgrade()
       .is_some_and(|nav| nav.read(cx).has_auth_token());
-    let steps = TUTORIAL.iter().enumerate().map(|(i, step)| {
+    let steps = tutorial().into_iter().enumerate().map(|(i, step)| {
       h_flex()
         .gap_2()
         .items_start()
@@ -194,7 +228,7 @@ impl SettingsView {
             .child(format!("{}.", i + 1)),
         )
         // `min_w_0` lets the text wrap instead of widening the row.
-        .child(div().flex_1().min_w_0().text_sm().child(*step))
+        .child(div().flex_1().min_w_0().text_sm().child(step))
     });
     let card = v_flex()
       .px_5()
@@ -202,18 +236,24 @@ impl SettingsView {
       .gap_3()
       .rounded(theme::RADIUS)
       .bg(theme::surface())
-      .child(div().text_sm().child(
+      .child(div().text_sm().child(t(
+        "With it, Peeby plays videos as your account does on twitch.tv: without ads if you have \
+         Turbo or a subscription to the channel, and subscriber-only VODs. Without it, playback \
+         works too: Peeby removes the ads itself.",
         "Avec lui, Peeby lit les vidéos comme votre compte sur twitch.tv : sans publicité si vous \
          avez Turbo ou un abonnement à la chaîne, et les VOD réservées aux abonnés. Sans lui, la \
          lecture marche aussi : Peeby retire lui-même les publicités.",
-      ))
+      )))
       .child(v_flex().gap_1().children(steps))
-      .child(div().text_xs().text_color(theme::muted()).child(
+      .child(div().text_xs().text_color(theme::muted()).child(t(
+        "This token gives full access to your account: don't share it. Peeby keeps it in the \
+         Windows Credential Manager. It stays valid even after signing out of the site; to revoke \
+         it, change your Twitch password or use \"Log out everywhere\".",
         "Ce jeton donne un accès complet à votre compte : ne le partagez pas. Peeby le garde dans \
-           le Gestionnaire d'identification de Windows. Il reste valable même après une \
-           déconnexion du site ; pour l'annuler, changez votre mot de passe Twitch ou utilisez \
-           « Se déconnecter partout ».",
-      ))
+         le Gestionnaire d'identification de Windows. Il reste valable même après une \
+         déconnexion du site ; pour l'annuler, changez votre mot de passe Twitch ou utilisez \
+         « Se déconnecter partout ».",
+      )))
       .child(
         h_flex()
           .gap_2()
@@ -226,7 +266,7 @@ impl SettingsView {
             Button::new("twitch-auth-token-save")
               .primary()
               .small()
-              .label("Enregistrer")
+              .label(t("Save", "Enregistrer"))
               .loading(self.checking)
               .disabled(self.checking)
               .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
@@ -236,15 +276,15 @@ impl SettingsView {
               Button::new("twitch-auth-token-forget")
                 .ghost()
                 .small()
-                .label("Supprimer le jeton")
+                .label(t("Remove the token", "Supprimer le jeton"))
                 .on_click(cx.listener(|this, _, _, cx| this.forget(cx))),
             )
           }),
       )
       .child(div().text_xs().text_color(theme::muted()).child(if saved {
-        "Un jeton est enregistré."
+        t("A token is saved.", "Un jeton est enregistré.")
       } else {
-        "Aucun jeton enregistré."
+        t("No token saved.", "Aucun jeton enregistré.")
       }))
       .when_some(self.outcome.clone(), |card, (message, ok)| {
         card.child(
@@ -255,7 +295,10 @@ impl SettingsView {
         )
       });
     section(
-      "Jeton du site Twitch (facultatif)",
+      t(
+        "Twitch site token (optional)",
+        "Jeton du site Twitch (facultatif)",
+      ),
       vec![card.into_any_element()],
     )
     .into_any_element()
@@ -268,19 +311,28 @@ fn playback_section(max_height: u32, low_latency: bool) -> AnyElement {
     .map(|&h| (h, format!("{h}p")))
     .collect();
   section(
-    "Lecture",
+    t("Playback", "Lecture"),
     vec![
       row(
-        "Qualité par défaut",
-        "La plus haute choisie au lancement d'un live. Sans le jeton du site, Twitch s'arrête à 1080p.",
+        t("Default quality", "Qualité par défaut"),
+        t(
+          "The highest one picked when a live starts. Without the site token, Twitch stops at \
+           1080p.",
+          "La plus haute choisie au lancement d'un live. Sans le jeton du site, Twitch s'arrête à \
+           1080p.",
+        ),
         chips("twitch-quality", qualities, &max_height, |h, cx| {
           Settings::update(cx, |s| s.twitch.max_height = Some(h))
         }),
       )
       .into_any_element(),
       row(
-        "Faible latence",
-        "Les lives démarrent plus près du direct, quelques secondes de moins. Au prochain live ouvert.",
+        t("Low latency", "Faible latence"),
+        t(
+          "Lives start closer to real time, a few seconds less. From the next live opened.",
+          "Les lives démarrent plus près du direct, quelques secondes de moins. Au prochain live \
+           ouvert.",
+        ),
         toggle("twitch-low-latency", low_latency, |on, cx| {
           Settings::update(cx, |s| s.twitch.low_latency = Some(on))
         }),

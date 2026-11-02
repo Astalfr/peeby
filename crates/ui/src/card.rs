@@ -157,7 +157,7 @@ impl MediaCard {
     self
   }
 
-  /// Whether the item is live now: an "EN DIRECT" badge on the accent takes the badge's place.
+  /// Whether the item is live now: a "LIVE" badge on the accent takes the badge's place.
   pub fn live(mut self, live: bool) -> Self {
     self.live = live;
     self
@@ -626,7 +626,7 @@ fn badge(text: SharedString) -> impl IntoElement {
     .child(text)
 }
 
-/// "EN DIRECT" with a white dot on the accent at a picture's bottom right, like the player's.
+/// "LIVE" with a white dot on the accent at a picture's bottom right, like the player's.
 fn live_badge() -> impl IntoElement {
   h_flex()
     .absolute()
@@ -642,7 +642,7 @@ fn live_badge() -> impl IntoElement {
     .font_weight(FontWeight::BOLD)
     .text_color(gpui::white())
     .child(div().size(px(6.)).rounded_full().bg(gpui::white()))
-    .child("EN DIRECT")
+    .child(crate::i18n::t("LIVE", "EN DIRECT"))
 }
 
 /// Height of a [`MediaCard::poster`] `width` wide with its picture at the `aspect` ratio.

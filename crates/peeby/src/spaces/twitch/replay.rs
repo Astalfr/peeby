@@ -16,6 +16,7 @@ use gpui::{App, Entity, Task, WeakEntity};
 use twitch::gql::{Comment, Comments};
 use twitch::helix::Helix;
 use ui::chat::{ChatEvent, ChatPanel};
+use ui::i18n::t;
 use ui::player::PlayerView;
 use ui::runtime;
 
@@ -153,7 +154,9 @@ pub fn start(
         }
         started = true;
         replay.reset(position);
-        events.push(ChatEvent::Status(Some("Chargement du chat…".into())));
+        events.push(ChatEvent::Status(Some(
+          t("Loading chat…", "Chargement du chat…").into(),
+        )));
         // A seek bar being dragged moves on every tick: ask once it settles.
         not_before = Instant::now() + TICK;
       } else if let Some(from) = replay.wants(position)
@@ -183,14 +186,22 @@ pub fn start(
             tracing::info!("VOD chat: {e}");
             replay.stop();
             events.push(ChatEvent::Status(Some(
-              "Le chat de cette vidéo est indisponible.".into(),
+              t(
+                "This video's chat is unavailable.",
+                "Le chat de cette vidéo est indisponible.",
+              )
+              .into(),
             )));
           }
           Some(Err(e)) => {
             tracing::info!("VOD chat: {e}");
             not_before = Instant::now() + RETRY;
             events.push(ChatEvent::Status(Some(
-              "Chat indisponible · nouvel essai dans 5 s".into(),
+              t(
+                "Chat unavailable · retrying in 5 s",
+                "Chat indisponible · nouvel essai dans 5 s",
+              )
+              .into(),
             )));
           }
           None => return,

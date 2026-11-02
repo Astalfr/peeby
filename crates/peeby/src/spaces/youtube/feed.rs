@@ -21,6 +21,7 @@ use crate::spaces::youtube::convert::error_text;
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::card::{skeleton_card, skeleton_row};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::widgets::{loading_more, notice, page_title};
 use ui::{motion, runtime, theme};
@@ -289,7 +290,7 @@ impl FeedView {
     let element = if self.more_failed {
       Button::new("more")
         .primary()
-        .label("Réessayer")
+        .label(t("Retry", "Réessayer"))
         .on_click(cx.listener(move |this, _, _, cx| this.load(Some(token.clone()), cx)))
         .into_any_element()
     } else if self.loading_more {
@@ -302,8 +303,8 @@ impl FeedView {
 
   fn title(&self) -> String {
     match &self.source {
-      Source::Home => "Accueil".into(),
-      Source::Subscriptions => "Abonnements".into(),
+      Source::Home => t("Home", "Accueil").into(),
+      Source::Subscriptions => t("Subscriptions", "Abonnements").into(),
       Source::Channel { name, .. } => name.clone(),
     }
   }
@@ -311,27 +312,43 @@ impl FeedView {
   fn empty_state(&self) -> impl IntoElement + use<> {
     let (title, body) = match (&self.state, &self.source, self.logged_in) {
       (State::Expired, _, _) => (
-        "Session expirée".to_owned(),
-        "YouTube ne reconnaît plus les cookies de la session. Importez-en de nouveaux depuis \
-         la page Compte."
-          .to_owned(),
+        t("Session expired", "Session expirée").to_owned(),
+        t(
+          "YouTube no longer recognizes the session's cookies. Import new ones from the \
+           Account page.",
+          "YouTube ne reconnaît plus les cookies de la session. Importez-en de nouveaux depuis \
+           la page Compte.",
+        )
+        .to_owned(),
       ),
       (State::SignedOut, _, _) | (_, Source::Home, false) => (
-        "Connectez-vous pour voir cette page".to_owned(),
-        "YouTube n'affiche plus de recommandations sans compte. Importez les cookies d'une \
-         session YouTube depuis la page Compte."
-          .to_owned(),
+        t(
+          "Sign in to see this page",
+          "Connectez-vous pour voir cette page",
+        )
+        .to_owned(),
+        t(
+          "YouTube no longer shows recommendations without an account. Import the cookies of \
+           a YouTube session from the Account page.",
+          "YouTube n'affiche plus de recommandations sans compte. Importez les cookies d'une \
+           session YouTube depuis la page Compte.",
+        )
+        .to_owned(),
       ),
       (_, Source::Home, true) => (
         self
           .message
           .clone()
-          .unwrap_or_else(|| "Aucune recommandation".into()),
-        "YouTube ne propose rien pour l'instant : l'historique des vidéos regardées est \
-         peut-être désactivé sur ce compte."
-          .to_owned(),
+          .unwrap_or_else(|| t("No recommendations", "Aucune recommandation").into()),
+        t(
+          "YouTube has nothing to suggest for now: the watch history may be turned off on \
+           this account.",
+          "YouTube ne propose rien pour l'instant : l'historique des vidéos regardées est \
+           peut-être désactivé sur ce compte.",
+        )
+        .to_owned(),
       ),
-      _ => ("Aucune vidéo".to_owned(), String::new()),
+      _ => (t("No videos", "Aucune vidéo").to_owned(), String::new()),
     };
     let needs_session = matches!(self.state, State::SignedOut | State::Expired)
       || (matches!(self.source, Source::Home) && !self.logged_in);
@@ -350,7 +367,7 @@ impl FeedView {
         h_flex().pt_2().child(
           Button::new("to-account")
             .primary()
-            .label("Importer des cookies")
+            .label(t("Import cookies", "Importer des cookies"))
             .on_click(move |_, _, cx| {
               nav.update(cx, |app, cx| app.open_settings(cx)).ok();
             }),
@@ -382,10 +399,15 @@ fn layout_switch(list: bool, cx: &mut Context<FeedView>) -> impl IntoElement {
     .child(choice(
       "layout-grid",
       Icon::Grid,
-      "Grille",
+      t("Grid", "Grille"),
       FeedLayout::Grid,
     ))
-    .child(choice("layout-list", Icon::List, "Liste", FeedLayout::List))
+    .child(choice(
+      "layout-list",
+      Icon::List,
+      t("List", "Liste"),
+      FeedLayout::List,
+    ))
 }
 
 /// Cards per row of the grid and their width, from the window: the content panel is the window
@@ -472,22 +494,20 @@ impl Render for FeedView {
         State::Loading => skeleton,
         State::Failed(e) => notice(
           IconName::TriangleAlert,
-          "Impossible de charger la page",
+          t("Cannot load the page", "Impossible de charger la page"),
           e.clone(),
         )
         .child(
-          h_flex()
-            .pt_2()
-            .child(
-              Button::new("retry")
-                .primary()
-                .label("Réessayer")
-                .on_click(cx.listener(|this, _, _, cx| {
-                  this.state = State::Loading;
-                  this.load(None, cx);
-                  cx.notify();
-                })),
-            ),
+          h_flex().pt_2().child(
+            Button::new("retry")
+              .primary()
+              .label(t("Retry", "Réessayer"))
+              .on_click(cx.listener(|this, _, _, cx| {
+                this.state = State::Loading;
+                this.load(None, cx);
+                cx.notify();
+              })),
+          ),
         )
         .into_any_element(),
         _ => self.empty_state().into_any_element(),
@@ -520,7 +540,7 @@ impl Render for FeedView {
           el.child(layout_switch(list_mode, cx)).child(
             Button::new("all-channels")
               .icon(Icon::Subscriptions)
-              .label("Toutes les chaînes")
+              .label(t("All channels", "Toutes les chaînes"))
               .on_click(move |_, window, cx| {
                 nav
                   .update(cx, |app, cx| app.open(Route::Channels, window, cx))

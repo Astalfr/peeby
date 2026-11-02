@@ -12,8 +12,10 @@ use twitch::Proxy;
 use twitch::gql::{ClipPlayback, StoryboardLevel};
 use twitch::helix::MutedSegment;
 use twitch::usher::{Codec, Variant};
+use ui::i18n::t;
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{Previews, Quality, Source, Tile};
+use ui::tf;
 
 use crate::settings;
 
@@ -72,7 +74,7 @@ fn source(
 pub type QualityCodecs = Vec<(Option<Codec>, Option<u32>)>;
 
 /// A live's or a VOD's source from `proxy`'s variants: the landscape ones with a picture, then
-/// "Audio seul"; with the codec and height of each quality.
+/// "Audio only"; with the codec and height of each quality.
 pub fn proxied(
   proxy: &Proxy,
   live: bool,
@@ -96,13 +98,13 @@ pub fn proxied(
 }
 
 /// The quality menu's labels: the variant's name, with its codec when another variant has the
-/// same name; "Audio seul".
+/// same name; "Audio only".
 fn labels(variants: &[&Variant]) -> Vec<String> {
   variants
     .iter()
     .map(|v| {
       if v.audio_only() {
-        return "Audio seul".to_owned();
+        return t("Audio only", "Audio seul").to_owned();
       }
       let shared = variants
         .iter()
@@ -222,19 +224,34 @@ pub fn muted(parts: &[MutedSegment]) -> Vec<Segment> {
 pub fn describe(error: &twitch::Error, channel: &str) -> String {
   use twitch::Error;
   match error {
-    Error::Offline => format!("{channel} n'est pas en direct."),
-    Error::NotFound => "Cette chaîne ou cette vidéo n'existe pas.".into(),
-    Error::SubscriberOnly => "Réservé aux abonnés de la chaîne.".into(),
-    Error::IntegrityRequired => {
+    Error::Offline => tf!("{channel} is offline.", "{channel} n'est pas en direct."),
+    Error::NotFound => t(
+      "This channel or video doesn't exist.",
+      "Cette chaîne ou cette vidéo n'existe pas.",
+    )
+    .into(),
+    Error::SubscriberOnly => t(
+      "Only for the channel's subscribers.",
+      "Réservé aux abonnés de la chaîne.",
+    )
+    .into(),
+    Error::IntegrityRequired => t(
+      "Twitch asks for a check Peeby can't do without a browser. Try again later.",
       "Twitch demande une vérification que Peeby ne peut pas faire sans navigateur. Réessayez plus \
-       tard."
-        .into()
-    }
-    Error::NotLoggedIn => {
-      "Twitch refuse votre jeton du site : remplacez-le ou supprimez-le dans les réglages.".into()
-    }
-    Error::Http(_) => "Twitch est injoignable. Vérifiez votre connexion.".into(),
-    other => format!("Lecture impossible : {other}"),
+       tard.",
+    )
+    .into(),
+    Error::NotLoggedIn => t(
+      "Twitch rejects your site token: replace or remove it in the settings.",
+      "Twitch refuse votre jeton du site : remplacez-le ou supprimez-le dans les réglages.",
+    )
+    .into(),
+    Error::Http(_) => t(
+      "Twitch can't be reached. Check your connection.",
+      "Twitch est injoignable. Vérifiez votre connexion.",
+    )
+    .into(),
+    other => tf!("Can't play: {other}", "Lecture impossible : {other}"),
   }
 }
 
@@ -278,7 +295,7 @@ mod tests {
     let d = variant("audio_only", None, None);
     assert_eq!(
       labels(&[&a, &b, &c, &d]),
-      ["1440p60", "1080p60 HEVC", "1080p60 H.264", "Audio seul"]
+      ["1440p60", "1080p60 HEVC", "1080p60 H.264", "Audio only"]
     );
   }
 

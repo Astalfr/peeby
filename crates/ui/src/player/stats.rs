@@ -1,4 +1,4 @@
-//! The statistics panel (right click > Statistiques): what mpv decodes and how, read once a
+//! The statistics panel (right click > Statistics): what mpv decodes and how, read once a
 //! second while the panel is open, for debugging playback. Only the properties listed here are
 //! read: never `path` or `stream-open-filename`, whose stream URLs carry the user's IP.
 
@@ -11,6 +11,8 @@ use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
 use player::{Backend, Player};
 
 use super::{PlayerView, format_time};
+use crate::i18n::t;
+use crate::tf;
 
 /// How often the open panel reads mpv again.
 const REFRESH: Duration = Duration::from_secs(1);
@@ -51,10 +53,13 @@ impl PlayerView {
       .map(|q| q.label.to_string());
     self.stats_rows = match &self.player {
       Some(player) => rows(player, quality),
-      None => vec![("Lecteur", "pas démarré".to_owned())],
+      None => vec![(
+        t("Player", "Lecteur"),
+        t("not started", "pas démarré").to_owned(),
+      )],
     };
     self.stats_rows.push((
-      "Position",
+      t("Position", "Position"),
       format!(
         "{} / {}",
         format_time(self.position),
@@ -93,7 +98,7 @@ impl PlayerView {
               .child(
                 div()
                   .font_weight(FontWeight::SEMIBOLD)
-                  .child("Statistiques"),
+                  .child(t("Statistics", "Statistiques")),
               )
               .child(
                 Button::new("stats-close")
@@ -142,18 +147,18 @@ fn rows(player: &Player, quality: Option<String>) -> Vec<Row> {
     }
   };
   push(
-    "Rendu",
+    t("Rendering", "Rendu"),
     Some(
       match player.backend() {
-        Backend::Gpu => "GPU (D3D11, sans copie)",
-        Backend::Software => "logiciel (copie CPU)",
+        Backend::Gpu => t("GPU (D3D11, zero-copy)", "GPU (D3D11, sans copie)"),
+        Backend::Software => t("software (CPU copy)", "logiciel (copie CPU)"),
       }
       .to_owned(),
     ),
   );
-  push("Qualité", quality);
+  push(t("Quality", "Qualité"), quality);
   push(
-    "Vidéo",
+    t("Video", "Vidéo"),
     joined(vec![
       get("video-codec"),
       match (get("video-params/w"), get("video-params/h")) {
@@ -164,7 +169,7 @@ fn rows(player: &Player, quality: Option<String>) -> Vec<Row> {
     ]),
   );
   push(
-    "Couleurs",
+    t("Colors", "Couleurs"),
     joined(vec![
       get("video-params/colormatrix"),
       get("video-params/primaries"),
@@ -172,33 +177,33 @@ fn rows(player: &Player, quality: Option<String>) -> Vec<Row> {
     ]),
   );
   push(
-    "Décodage",
+    t("Decoding", "Décodage"),
     Some(match get("hwdec-current") {
-      Some(hwdec) if hwdec != "no" => format!("matériel ({hwdec})"),
-      _ => "logiciel".to_owned(),
+      Some(hwdec) if hwdec != "no" => tf!("hardware ({hwdec})", "matériel ({hwdec})"),
+      _ => t("software", "logiciel").to_owned(),
     }),
   );
   push(
-    "Images/s",
+    t("Frame rate", "Images/s"),
     joined(vec![
-      number("container-fps").map(|f| format!("fichier {f:.3}")),
-      number("estimated-vf-fps").map(|f| format!("affichées {f:.2}")),
-      number("display-fps").map(|f| format!("écran {f:.0} Hz")),
+      number("container-fps").map(|f| tf!("file {f:.3}", "fichier {f:.3}")),
+      number("estimated-vf-fps").map(|f| tf!("shown {f:.2}", "affichées {f:.2}")),
+      number("display-fps").map(|f| tf!("display {f:.0} Hz", "écran {f:.0} Hz")),
     ]),
   );
   push(
-    "Images perdues",
+    t("Dropped frames", "Images perdues"),
     joined(vec![
-      get("frame-drop-count").map(|n| format!("{n} à l'affichage")),
-      get("decoder-frame-drop-count").map(|n| format!("{n} au décodage")),
+      get("frame-drop-count").map(|n| tf!("{n} on display", "{n} à l'affichage")),
+      get("decoder-frame-drop-count").map(|n| tf!("{n} on decoding", "{n} au décodage")),
     ]),
   );
   push(
-    "Synchro A/V",
+    t("A/V sync", "Synchro A/V"),
     number("avsync").map(|s| format!("{:+.1} ms", s * 1000.0)),
   );
   push(
-    "Audio",
+    t("Audio", "Audio"),
     joined(vec![
       get("audio-codec-name"),
       number("audio-params/samplerate").map(|r| format!("{:.1} kHz", r / 1000.0)),
@@ -206,23 +211,23 @@ fn rows(player: &Player, quality: Option<String>) -> Vec<Row> {
     ]),
   );
   push(
-    "Sortie audio",
+    t("Audio output", "Sortie audio"),
     joined(vec![get("current-ao"), get("audio-device")]),
   );
   push(
-    "Débit",
+    t("Bitrate", "Débit"),
     joined(vec![
-      number("video-bitrate").map(|b| format!("vidéo {:.0} kb/s", b / 1000.0)),
-      number("audio-bitrate").map(|b| format!("audio {:.0} kb/s", b / 1000.0)),
+      number("video-bitrate").map(|b| tf!("video {:.0} kb/s", "vidéo {:.0} kb/s", b / 1000.0)),
+      number("audio-bitrate").map(|b| tf!("audio {:.0} kb/s", "audio {:.0} kb/s", b / 1000.0)),
     ]),
   );
   push(
-    "Tampon",
+    t("Buffer", "Tampon"),
     joined(vec![
-      number("demuxer-cache-duration").map(|s| format!("{s:.1} s d'avance")),
-      number("cache-speed").map(|b| format!("{:.1} Mo/s", b / 1_000_000.0)),
+      number("demuxer-cache-duration").map(|s| tf!("{s:.1} s ahead", "{s:.1} s d'avance")),
+      number("cache-speed").map(|b| tf!("{:.1} MB/s", "{:.1} Mo/s", b / 1_000_000.0)),
     ]),
   );
-  push("Conteneur", get("file-format"));
+  push(t("Container", "Conteneur"), get("file-format"));
   out
 }

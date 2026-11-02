@@ -1,7 +1,7 @@
 //! Jellyfin's part of the settings page (behind the gear): its own playback options, the
 //! languages, the home page, and the server, user and sign-out. Each control edits
 //! `Settings::jellyfin`, saved at once; most apply to the next video or the next visit of Home.
-//! The player's shared options are the shell's ("Lecteur").
+//! The player's shared options are the shell's ("Player").
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Context, WeakEntity, Window, div, px};
@@ -10,33 +10,41 @@ use gpui_component::{Sizable, h_flex, v_flex};
 use jellyfin_api::Client;
 use jellyfin_api::models::PublicSystemInfo;
 use ui::form::{chips, row, section, toggle};
-use ui::{runtime, theme};
+use ui::i18n::t;
+use ui::{runtime, tf, theme};
 
 use super::JellyfinSpace;
 use super::session::device_name;
 use crate::settings::{JellyfinHome, JellyfinPlayback, Settings};
 
 /// Audio languages offered (ISO 639-2), after "the server's".
-const AUDIO_LANGUAGES: &[(&str, &str)] = &[
-  ("jpn", "Japonais"),
-  ("eng", "Anglais"),
-  ("fra", "Français"),
-  ("spa", "Espagnol"),
-  ("deu", "Allemand"),
-  ("ita", "Italien"),
-  ("kor", "Coréen"),
-  ("zho", "Chinois"),
-];
+const AUDIO_LANGUAGES: &[&str] = &["jpn", "eng", "fra", "spa", "deu", "ita", "kor", "zho"];
 
 /// Subtitle languages offered, after "the server's" and "off".
-const SUBTITLE_LANGUAGES: &[(&str, &str)] = &[
-  ("fra", "Français"),
-  ("eng", "Anglais"),
-  ("spa", "Espagnol"),
-  ("deu", "Allemand"),
-  ("ita", "Italien"),
-  ("por", "Portugais"),
-];
+const SUBTITLE_LANGUAGES: &[&str] = &["fra", "eng", "spa", "deu", "ita", "por"];
+
+/// The name of a language offered above, in the interface's language.
+fn language_name(code: &str) -> &'static str {
+  match code {
+    "jpn" => t("Japanese", "Japonais"),
+    "eng" => t("English", "Anglais"),
+    "fra" => t("French", "Français"),
+    "spa" => t("Spanish", "Espagnol"),
+    "deu" => t("German", "Allemand"),
+    "ita" => t("Italian", "Italien"),
+    "kor" => t("Korean", "Coréen"),
+    "zho" => t("Chinese", "Chinois"),
+    "por" => t("Portuguese", "Portugais"),
+    _ => "?",
+  }
+}
+
+/// The languages `codes` as chips' options.
+fn language_options(codes: &[&str]) -> impl Iterator<Item = (Option<String>, String)> {
+  codes
+    .iter()
+    .map(|code| (Some((*code).to_owned()), language_name(code).to_owned()))
+}
 
 pub struct SettingsView {
   client: Client,
@@ -81,22 +89,28 @@ fn set_home(cx: &mut App, edit: impl FnOnce(&mut JellyfinHome)) {
 impl SettingsView {
   fn playback_section(&self, p: &JellyfinPlayback) -> impl IntoElement {
     let buffers = [150, 300, 600, 1000]
-      .map(|mb| (mb, format!("{mb} Mo")))
+      .map(|mb| (mb, tf!("{mb} MB", "{mb} Mo")))
       .to_vec();
     section(
-      "Lecture",
+      t("Playback", "Lecture"),
       vec![
         row(
-          "Démarrer en plein écran",
-          "La lecture s'ouvre en plein écran, et en sort au retour.",
+          t("Start in full screen", "Démarrer en plein écran"),
+          t(
+            "Playback opens in full screen, and leaves it on the way back.",
+            "La lecture s'ouvre en plein écran, et en sort au retour.",
+          ),
           toggle("fullscreen", p.start_fullscreen, |v, cx| {
             set_playback(cx, |p| p.start_fullscreen = v)
           }),
         )
         .into_any_element(),
         row(
-          "Mémoire tampon réseau",
-          "Jusqu'où le lecteur lit en avance. Plus aide les connexions lentes ou instables.",
+          t("Network buffer", "Mémoire tampon réseau"),
+          t(
+            "How far ahead the player reads. More helps slow or unstable connections.",
+            "Jusqu'où le lecteur lit en avance. Plus aide les connexions lentes ou instables.",
+          ),
           chips("buffer", buffers, &p.network_buffer_mb, |v, cx| {
             set_playback(cx, |p| p.network_buffer_mb = v)
           }),
@@ -107,46 +121,51 @@ impl SettingsView {
   }
 
   fn languages_section(&self, p: &JellyfinPlayback) -> impl IntoElement {
-    let mut audio: Vec<(Option<String>, String)> = vec![(None, "Celle du serveur".into())];
-    audio.extend(
-      AUDIO_LANGUAGES
-        .iter()
-        .map(|(code, name)| (Some((*code).to_owned()), (*name).to_owned())),
-    );
+    let mut audio: Vec<(Option<String>, String)> =
+      vec![(None, t("The server's", "Celle du serveur").into())];
+    audio.extend(language_options(AUDIO_LANGUAGES));
     let mut subtitles: Vec<(Option<String>, String)> = vec![
-      (None, "Ceux du serveur".into()),
-      (Some("off".into()), "Désactivés".into()),
+      (None, t("The server's", "Ceux du serveur").into()),
+      (Some("off".into()), t("Off", "Désactivés").into()),
     ];
-    subtitles.extend(
-      SUBTITLE_LANGUAGES
-        .iter()
-        .map(|(code, name)| (Some((*code).to_owned()), (*name).to_owned())),
-    );
+    subtitles.extend(language_options(SUBTITLE_LANGUAGES));
     let scales = [0.75, 1.0, 1.25, 1.5, 2.0]
-      .map(|s| (s, format!("{:.0} %", s * 100.)))
+      .map(|s| {
+        let percent = s * 100.;
+        (s, tf!("{percent:.0}%", "{percent:.0} %"))
+      })
       .to_vec();
     section(
-      "Langues et sous-titres",
+      t("Languages and subtitles", "Langues et sous-titres"),
       vec![
         row(
-          "Langue audio",
-          "Tant que vous n'avez pas choisi de piste dans la série.",
+          t("Audio language", "Langue audio"),
+          t(
+            "Until you pick a track in the series.",
+            "Tant que vous n'avez pas choisi de piste dans la série.",
+          ),
           chips("audio-lang", audio, &p.audio_language, |v, cx| {
             set_playback(cx, |p| p.audio_language = v)
           }),
         )
         .into_any_element(),
         row(
-          "Langue des sous-titres",
-          "Les sous-titres complets passent avant ceux des seuls panneaux.",
+          t("Subtitle language", "Langue des sous-titres"),
+          t(
+            "Full subtitles come before signs-only ones.",
+            "Les sous-titres complets passent avant ceux des seuls panneaux.",
+          ),
           chips("sub-lang", subtitles, &p.subtitle_language, |v, cx| {
             set_playback(cx, |p| p.subtitle_language = v)
           }),
         )
         .into_any_element(),
         row(
-          "Taille des sous-titres texte",
-          "SRT et autres sous-titres texte. Les sous-titres ASS gardent leurs styles.",
+          t("Text subtitle size", "Taille des sous-titres texte"),
+          t(
+            "SRT and other text subtitles. ASS subtitles keep their styles.",
+            "SRT et autres sous-titres texte. Les sous-titres ASS gardent leurs styles.",
+          ),
           chips("sub-scale", scales, &p.subtitle_scale, |v, cx| {
             set_playback(cx, |p| p.subtitle_scale = v)
           }),
@@ -158,58 +177,76 @@ impl SettingsView {
 
   fn home_section(&self, h: &JellyfinHome, cx: &App) -> impl IntoElement {
     let ages = [
-      (Some(7), "7 jours"),
-      (Some(30), "30 jours"),
-      (Some(90), "90 jours"),
-      (Some(365), "1 an"),
-      (None, "Sans limite"),
+      (Some(7), t("7 days", "7 jours")),
+      (Some(30), t("30 days", "30 jours")),
+      (Some(90), t("90 days", "90 jours")),
+      (Some(365), t("1 year", "1 an")),
+      (None, t("No limit", "Sans limite")),
     ]
     .map(|(d, l)| (d, l.to_owned()))
     .to_vec();
     let mut rows = vec![
       row(
-        "À suivre : séries regardées depuis",
-        "Les séries délaissées depuis plus longtemps sortent de « À suivre ».",
+        t(
+          "Next up: series watched within",
+          "À suivre : séries regardées depuis",
+        ),
+        t(
+          "Series left aside for longer drop out of \"Next up\".",
+          "Les séries délaissées depuis plus longtemps sortent de « À suivre ».",
+        ),
         chips("next-up-days", ages, &h.next_up_days, |v, cx| {
           set_home(cx, |h| h.next_up_days = v)
         }),
       )
       .into_any_element(),
       row(
-        "À suivre : séries terminées",
-        "Proposer à nouveau les séries regardées jusqu'au bout.",
+        t("Next up: finished series", "À suivre : séries terminées"),
+        t(
+          "Suggest again the series watched to the end.",
+          "Proposer à nouveau les séries regardées jusqu'au bout.",
+        ),
         toggle("rewatching", h.next_up_rewatching, |v, cx| {
           set_home(cx, |h| h.next_up_rewatching = v)
         }),
       )
       .into_any_element(),
       row(
-        "Masquer les spoilers",
-        "Flouter les images et cacher les résumés des épisodes pas encore vus.",
+        t("Hide spoilers", "Masquer les spoilers"),
+        t(
+          "Blur the pictures and hide the synopses of episodes not watched yet.",
+          "Flouter les images et cacher les résumés des épisodes pas encore vus.",
+        ),
         toggle("spoilers", h.hide_spoilers, |v, cx| {
           set_home(cx, |h| h.hide_spoilers = v)
         }),
       )
       .into_any_element(),
       row(
-        "Bannière",
-        "Le titre à reprendre, en haut de l'accueil.",
+        t("Banner", "Bannière"),
+        t(
+          "The title to resume, at the top of Home.",
+          "Le titre à reprendre, en haut de l'accueil.",
+        ),
         toggle("show-hero", h.show_hero, |v, cx| {
           set_home(cx, |h| h.show_hero = v)
         }),
       )
       .into_any_element(),
       row(
-        "Reprendre",
-        "Les vidéos commencées.",
+        t("Continue watching", "Reprendre"),
+        t("The videos you started.", "Les vidéos commencées."),
         toggle("show-continue", h.show_continue_watching, |v, cx| {
           set_home(cx, |h| h.show_continue_watching = v)
         }),
       )
       .into_any_element(),
       row(
-        "À suivre",
-        "L'épisode suivant de chaque série en cours.",
+        t("Next up", "À suivre"),
+        t(
+          "The next episode of each series in progress.",
+          "L'épisode suivant de chaque série en cours.",
+        ),
         toggle("show-next-up", h.show_next_up, |v, cx| {
           set_home(cx, |h| h.show_next_up = v)
         }),
@@ -231,8 +268,8 @@ impl SettingsView {
       let shown = !h.hidden_latest.contains(&id);
       rows.push(
         row(
-          &format!("Derniers ajouts dans {name}"),
-          "Une rangée de l'accueil.",
+          &tf!("Latest in {name}", "Derniers ajouts dans {name}"),
+          t("A row of Home.", "Une rangée de l'accueil."),
           toggle(&format!("show-latest-{id}"), shown, move |v, cx| {
             let id = id.clone();
             set_home(cx, move |h| {
@@ -246,7 +283,7 @@ impl SettingsView {
         .into_any_element(),
       );
     }
-    section("Accueil", rows)
+    section(t("Home", "Accueil"), rows)
   }
 
   fn account_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -277,7 +314,7 @@ impl SettingsView {
         .child(div().text_sm().min_w_0().truncate().child(value))
     };
     section(
-      "Compte",
+      t("Account", "Compte"),
       vec![
         v_flex()
           .px_5()
@@ -285,15 +322,18 @@ impl SettingsView {
           .gap_2()
           .rounded(theme::RADIUS)
           .bg(theme::surface())
-          .child(line("Serveur", server))
-          .child(line("Adresse", self.client.base_url().to_string()))
-          .child(line("Utilisateur", user))
-          .child(line("Appareil", device_name()))
+          .child(line(t("Server", "Serveur"), server))
+          .child(line(
+            t("Address", "Adresse"),
+            self.client.base_url().to_string(),
+          ))
+          .child(line(t("User", "Utilisateur"), user))
+          .child(line(t("Device", "Appareil"), device_name()))
           .child(
             h_flex().pt_2().child(
               Button::new("jellyfin-sign-out")
                 .small()
-                .label("Se déconnecter")
+                .label(t("Sign out", "Se déconnecter"))
                 .on_click(cx.listener(|this, _, _, cx| {
                   this.nav.update(cx, |space, cx| space.log_out(cx)).ok();
                 })),

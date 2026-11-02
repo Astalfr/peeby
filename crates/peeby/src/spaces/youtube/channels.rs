@@ -15,10 +15,11 @@ use crate::spaces::youtube::bell;
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
+use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::widgets::{notice, page_title};
-use ui::{motion, runtime, theme};
+use ui::{motion, runtime, tf, theme};
 
 /// Width of a channel tile, and side of its avatar.
 const TILE_WIDTH: f32 = 168.;
@@ -50,7 +51,9 @@ impl ChannelsView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Filtrer les chaînes…"));
+    let filter = cx.new(|cx| {
+      InputState::new(window, cx).placeholder(t("Filter channels…", "Filtrer les chaînes…"))
+    });
     let subscription = cx.subscribe(&filter, |_, _, event: &InputEvent, cx| {
       if matches!(event, InputEvent::Change) {
         cx.notify();
@@ -195,6 +198,15 @@ impl ChannelsView {
   }
 }
 
+/// "12 subscriptions", singular for one (and for zero in French).
+fn subscription_count(n: usize) -> String {
+  match (lang(), n) {
+    (Lang::En, 1) => "1 subscription".to_owned(),
+    (Lang::Fr, 0 | 1) => format!("{n} abonnement"),
+    _ => tf!("{n} subscriptions", "{n} abonnements"),
+  }
+}
+
 fn skeleton_tile() -> impl IntoElement {
   v_flex()
     .w(px(TILE_WIDTH))
@@ -219,14 +231,20 @@ impl Render for ChannelsView {
         let nav = self.nav.clone();
         notice(
           Icon::Account,
-          "Connectez-vous pour voir vos abonnements",
-          "Importez les cookies d'une session YouTube depuis la page Compte.",
+          t(
+            "Sign in to see your subscriptions",
+            "Connectez-vous pour voir vos abonnements",
+          ),
+          t(
+            "Import the cookies of a YouTube session from the Account page.",
+            "Importez les cookies d'une session YouTube depuis la page Compte.",
+          ),
         )
         .child(
           h_flex().pt_2().child(
             Button::new("to-account")
               .primary()
-              .label("Importer des cookies")
+              .label(t("Import cookies", "Importer des cookies"))
               .on_click(move |_, _, cx| {
                 nav.update(cx, |app, cx| app.open_settings(cx)).ok();
               }),
@@ -236,21 +254,22 @@ impl Render for ChannelsView {
       }
       State::Failed(e) => notice(
         IconName::TriangleAlert,
-        "Impossible de charger les chaînes",
+        t(
+          "Cannot load the channels",
+          "Impossible de charger les chaînes",
+        ),
         e.clone(),
       )
       .child(
-        h_flex()
-          .pt_2()
-          .child(
-            Button::new("retry")
-              .primary()
-              .label("Réessayer")
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.load(cx);
-                cx.notify();
-              })),
-          ),
+        h_flex().pt_2().child(
+          Button::new("retry")
+            .primary()
+            .label(t("Retry", "Réessayer"))
+            .on_click(cx.listener(|this, _, _, cx| {
+              this.load(cx);
+              cx.notify();
+            })),
+        ),
       )
       .into_any_element(),
       State::Loaded(channels) => {
@@ -263,9 +282,9 @@ impl Render for ChannelsView {
           div()
             .text_color(theme::muted())
             .child(if channels.is_empty() {
-              "Aucun abonnement."
+              t("No subscriptions.", "Aucun abonnement.")
             } else {
-              "Aucune chaîne ne correspond."
+              t("No channel matches.", "Aucune chaîne ne correspond.")
             })
             .into_any_element()
         } else {
@@ -309,11 +328,11 @@ impl Render for ChannelsView {
             h_flex()
               .gap_4()
               .items_center()
-              .child(page_title("Chaînes"))
+              .child(page_title(t("Channels", "Chaînes")))
               .children(count.map(|n| {
                 div()
                   .text_color(theme::muted())
-                  .child(format!("{n} abonnements"))
+                  .child(subscription_count(n))
               }))
               .child(div().flex_1())
               .when(show_filter, |el| {

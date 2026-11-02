@@ -1,13 +1,15 @@
 //! YouTube data for the shared UI: thumbnails as pictures, streams as player sources, InnerTube
-//! errors in French.
+//! errors in the interface's language.
 
 use std::rc::Rc;
 
 use innertube::{Chapter, Client, Storyboard, Stream, Thumbnail};
 use player::StartOptions;
+use ui::i18n::t;
 use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
 use ui::player::{LIVE_DELAY, Previews, Quality, Source, Subtitle, Tile};
+use ui::tf;
 
 use crate::settings;
 
@@ -34,25 +36,53 @@ pub fn picture(sizes: &[Thumbnail]) -> Picture {
   )
 }
 
-/// French text for an InnerTube error, as shown in the UI (the `Display` text is English).
+/// The text of an InnerTube error as shown in the UI, in the interface's language (the
+/// `Display` text is for the logs). YouTube's own reasons stay in its content language.
 pub fn error_text(error: &innertube::Error) -> String {
   use innertube::Error;
   match error {
-    Error::NotLoggedIn => "YouTube ne reconnaît plus la session : les cookies ont expiré ou ont \
-                           changé. Exportez-les à nouveau."
-      .into(),
-    Error::SignInRequired => "Cette page demande d'être connecté.".into(),
-    Error::Cookies(detail) => format!("Fichier de cookies invalide : {detail}"),
-    Error::Unplayable { status, reason } if status == "LOGIN_REQUIRED" => {
-      format!("Cette vidéo demande d'être connecté. {reason}")
-    }
-    Error::Unplayable { reason, .. } if !reason.is_empty() => {
-      format!("Vidéo indisponible : {reason}")
-    }
-    Error::Unplayable { status, .. } => format!("Vidéo indisponible ({status})"),
-    Error::Http(_) => "Impossible de joindre YouTube. Vérifiez la connexion.".into(),
-    Error::Status { status, .. } => format!("YouTube a répondu par une erreur (HTTP {status})."),
-    Error::Parse { .. } => "Réponse de YouTube inattendue : son format a peut-être changé.".into(),
+    Error::NotLoggedIn => t(
+      "YouTube no longer recognizes the session: the cookies have expired or changed. \
+       Export them again.",
+      "YouTube ne reconnaît plus la session : les cookies ont expiré ou ont changé. \
+       Exportez-les à nouveau.",
+    )
+    .into(),
+    Error::SignInRequired => t(
+      "This page requires signing in.",
+      "Cette page demande d'être connecté.",
+    )
+    .into(),
+    Error::Cookies(detail) => tf!(
+      "Invalid cookie file: {detail}",
+      "Fichier de cookies invalide : {detail}"
+    ),
+    Error::Unplayable { status, reason } if status == "LOGIN_REQUIRED" => tf!(
+      "This video requires signing in. {reason}",
+      "Cette vidéo demande d'être connecté. {reason}"
+    ),
+    Error::Unplayable { reason, .. } if !reason.is_empty() => tf!(
+      "Video unavailable: {reason}",
+      "Vidéo indisponible : {reason}"
+    ),
+    Error::Unplayable { status, .. } => tf!(
+      "Video unavailable ({status})",
+      "Vidéo indisponible ({status})"
+    ),
+    Error::Http(_) => t(
+      "Cannot reach YouTube. Check the connection.",
+      "Impossible de joindre YouTube. Vérifiez la connexion.",
+    )
+    .into(),
+    Error::Status { status, .. } => tf!(
+      "YouTube answered with an error (HTTP {status}).",
+      "YouTube a répondu par une erreur (HTTP {status})."
+    ),
+    Error::Parse { .. } => t(
+      "Unexpected answer from YouTube: its format may have changed.",
+      "Réponse de YouTube inattendue : son format a peut-être changé.",
+    )
+    .into(),
   }
 }
 
@@ -121,7 +151,7 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
       .captions
       .into_iter()
       .map(|c| Subtitle {
-        // YouTube's names, in the app's language: `Anglais (générés automatiquement)`.
+        // YouTube's names, in its content language: `Anglais (générés automatiquement)`.
         label: c.name,
         language: c.language,
         url: c.url,

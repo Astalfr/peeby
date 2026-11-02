@@ -9,6 +9,7 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::v_flex;
 use jellyfin_api::models::{BaseItem, ItemKind};
 use jellyfin_api::{Client, ItemsQuery};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::widgets::page_title;
 use ui::{runtime, theme};
@@ -40,7 +41,10 @@ impl SearchView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("Films, séries, épisodes…"));
+    let input = cx.new(|cx| {
+      InputState::new(window, cx)
+        .placeholder(t("Movies, shows, episodes…", "Films, séries, épisodes…"))
+    });
     input.update(cx, |state, cx| state.focus(window, cx));
     let subscription = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| {
       if matches!(event, InputEvent::Change) {
@@ -142,16 +146,20 @@ impl Render for SearchView {
       .overflow_y_scrollbar()
       .p_8()
       .gap_6()
-      .child(page_title("Recherche"))
+      .child(page_title(t("Search", "Recherche")))
       .child(div().max_w(px(560.)).child(Input::new(&self.input)))
       .when(empty, |el| {
-        el.child(div().text_color(theme::muted()).child("Aucun résultat."))
+        el.child(
+          div()
+            .text_color(theme::muted())
+            .child(t("No results.", "Aucun résultat.")),
+        )
       })
       .when(!title_cards.is_empty(), |el| {
         el.child(div().flex().flex_wrap().gap_4().children(title_cards))
       })
       .when(!episode_cards.is_empty(), |el| {
-        el.child(section_title("Épisodes"))
+        el.child(section_title(t("Episodes", "Épisodes")))
           .child(div().flex().flex_wrap().gap_4().children(episode_cards))
       })
   }

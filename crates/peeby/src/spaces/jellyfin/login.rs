@@ -11,7 +11,8 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::{ActiveTheme, Disableable, h_flex, v_flex};
 use jellyfin_api::{Client, ClientInfo, Error};
-use ui::{assets, runtime, theme};
+use ui::i18n::t;
+use ui::{assets, runtime, tf, theme};
 
 /// Emitted once a session is open.
 pub struct LoggedIn(pub Client);
@@ -46,16 +47,20 @@ impl LoginView {
     cx: &mut Context<Self>,
   ) -> Self {
     let server = cx.new(|cx| {
-      let state = InputState::new(window, cx).placeholder("https://jellyfin.exemple.fr");
+      let state = InputState::new(window, cx).placeholder(t(
+        "https://jellyfin.example.com",
+        "https://jellyfin.exemple.fr",
+      ));
       match &server_url {
         Some(url) => state.default_value(url.clone()),
         None => state,
       }
     });
-    let username = cx.new(|cx| InputState::new(window, cx).placeholder("Nom d'utilisateur"));
+    let username =
+      cx.new(|cx| InputState::new(window, cx).placeholder(t("Username", "Nom d'utilisateur")));
     let password = cx.new(|cx| {
       InputState::new(window, cx)
-        .placeholder("Mot de passe")
+        .placeholder(t("Password", "Mot de passe"))
         .masked(true)
     });
     let submit_on_enter = |this: &mut Self,
@@ -94,7 +99,13 @@ impl LoginView {
   fn client(&self, cx: &Context<Self>) -> Result<Client, SharedString> {
     let raw = self.server.read(cx).value().trim().to_string();
     if raw.is_empty() {
-      return Err("Saisissez l'adresse du serveur.".into());
+      return Err(
+        t(
+          "Enter the server's address.",
+          "Saisissez l'adresse du serveur.",
+        )
+        .into(),
+      );
     }
     let url = if raw.contains("://") {
       raw
@@ -115,7 +126,10 @@ impl LoginView {
     let username = self.username.read(cx).value().trim().to_string();
     let password = self.password.read(cx).value().to_string();
     if username.is_empty() {
-      return self.fail("Saisissez votre nom d'utilisateur.".into(), cx);
+      return self.fail(
+        t("Enter your username.", "Saisissez votre nom d'utilisateur.").into(),
+        cx,
+      );
     }
     self.busy = true;
     self.error = None;
@@ -135,7 +149,14 @@ impl LoginView {
         .update(cx, |this, cx| match result {
           Some(Ok(client)) => cx.emit(LoggedIn(client)),
           Some(Err(e)) => this.fail(describe(&e), cx),
-          None => this.fail("Le réseau de l'application s'est arrêté.".into(), cx),
+          None => this.fail(
+            t(
+              "The app's network has stopped.",
+              "Le réseau de l'application s'est arrêté.",
+            )
+            .into(),
+            cx,
+          ),
         })
         .ok();
     })
@@ -170,7 +191,14 @@ impl LoginView {
         Some(Ok(None)) => {
           this
             .update(cx, |this, cx| {
-              this.fail("Quick Connect est désactivé sur ce serveur.".into(), cx)
+              this.fail(
+                t(
+                  "Quick Connect is disabled on this server.",
+                  "Quick Connect est désactivé sur ce serveur.",
+                )
+                .into(),
+                cx,
+              )
             })
             .ok();
           return;
@@ -258,31 +286,59 @@ async fn poll_quick_connect(
 /// What the user reads for an API error.
 pub fn describe(error: &Error) -> SharedString {
   match error {
-    Error::Status { status: 401, .. } => "Nom d'utilisateur ou mot de passe incorrect.".into(),
-    Error::Status { status, .. } => {
-      format!("Le serveur a répondu par une erreur (HTTP {status}).").into()
-    }
-    Error::Http(e) if e.is_timeout() => "Le serveur n'a pas répondu à temps.".into(),
-    Error::Http(_) => "Serveur injoignable. Vérifiez l'adresse et votre connexion.".into(),
-    Error::InvalidUrl(_) => "Cette adresse de serveur n'est pas valide.".into(),
-    Error::UnsupportedServer { version } => format!(
+    Error::Status { status: 401, .. } => t(
+      "Incorrect username or password.",
+      "Nom d'utilisateur ou mot de passe incorrect.",
+    )
+    .into(),
+    Error::Status { status, .. } => tf!(
+      "The server answered with an error (HTTP {status}).",
+      "Le serveur a répondu par une erreur (HTTP {status})."
+    )
+    .into(),
+    Error::Http(e) if e.is_timeout() => t(
+      "The server did not answer in time.",
+      "Le serveur n'a pas répondu à temps.",
+    )
+    .into(),
+    Error::Http(_) => t(
+      "Server unreachable. Check the address and your connection.",
+      "Serveur injoignable. Vérifiez l'adresse et votre connexion.",
+    )
+    .into(),
+    Error::InvalidUrl(_) => t(
+      "This server address is not valid.",
+      "Cette adresse de serveur n'est pas valide.",
+    )
+    .into(),
+    Error::UnsupportedServer { version } => tf!(
+      "Jellyfin {version} is not supported: version 12.0 or newer is required.",
       "Jellyfin {version} n'est pas pris en charge : il faut la version 12.0 ou plus récente."
     )
     .into(),
-    Error::Decode { .. } => {
-      "Le serveur a envoyé une réponse inattendue. Est-ce bien un serveur Jellyfin ?".into()
-    }
-    Error::NotAuthenticated => "Vous n'êtes pas connecté.".into(),
-    Error::TranscodingRequired { reasons } => format!(
-      "Le serveur voudrait transcoder ce fichier, ce que Peeby ne fait pas ({}).",
-      if reasons.is_empty() {
-        "sans raison donnée".to_owned()
-      } else {
-        reasons.join(", ")
-      }
+    Error::Decode { .. } => t(
+      "The server sent an unexpected response. Is it really a Jellyfin server?",
+      "Le serveur a envoyé une réponse inattendue. Est-ce bien un serveur Jellyfin ?",
     )
     .into(),
-    Error::PlaybackRefused { code } => format!("Le serveur refuse la lecture ({code}).").into(),
+    Error::NotAuthenticated => t("You are not signed in.", "Vous n'êtes pas connecté.").into(),
+    Error::TranscodingRequired { reasons } => {
+      let reasons = if reasons.is_empty() {
+        t("no reason given", "sans raison donnée").to_owned()
+      } else {
+        reasons.join(", ")
+      };
+      tf!(
+        "The server would transcode this file, which Peeby does not do ({reasons}).",
+        "Le serveur voudrait transcoder ce fichier, ce que Peeby ne fait pas ({reasons})."
+      )
+      .into()
+    }
+    Error::PlaybackRefused { code } => tf!(
+      "The server refuses playback ({code}).",
+      "Le serveur refuse la lecture ({code})."
+    )
+    .into(),
   }
 }
 
@@ -292,21 +348,21 @@ impl Render for LoginView {
     let form = v_flex()
       .gap_3()
       .child(field(
-        "Serveur",
+        t("Server", "Serveur"),
         Input::new(&self.server).disabled(self.busy),
       ))
       .child(field(
-        "Nom d'utilisateur",
+        t("Username", "Nom d'utilisateur"),
         Input::new(&self.username).disabled(self.busy),
       ))
       .child(field(
-        "Mot de passe",
+        t("Password", "Mot de passe"),
         Input::new(&self.password).disabled(self.busy),
       ))
       .child(
         Button::new("login")
           .primary()
-          .label("Se connecter")
+          .label(t("Sign in", "Se connecter"))
           .loading(self.busy && self.quick_connect.is_none())
           .disabled(self.busy)
           .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
@@ -314,7 +370,7 @@ impl Render for LoginView {
       .child(
         Button::new("quick-connect")
           .ghost()
-          .label("Utiliser Quick Connect")
+          .label(t("Use Quick Connect", "Utiliser Quick Connect"))
           .disabled(self.busy)
           .on_click(cx.listener(|this, _, _, cx| this.start_quick_connect(cx))),
       );
@@ -323,12 +379,10 @@ impl Render for LoginView {
       Some(qc) => v_flex()
         .gap_3()
         .items_center()
-        .child(
-          div()
-            .text_color(theme::muted())
-            .text_center()
-            .child("Sur un appareil déjà connecté, ouvrez Quick Connect et saisissez :"),
-        )
+        .child(div().text_color(theme::muted()).text_center().child(t(
+          "On a device already signed in, open Quick Connect and enter:",
+          "Sur un appareil déjà connecté, ouvrez Quick Connect et saisissez :",
+        )))
         .child(
           div()
             .text_size(px(40.))
@@ -339,12 +393,12 @@ impl Render for LoginView {
           div()
             .text_sm()
             .text_color(theme::muted())
-            .child("En attente de validation…"),
+            .child(t("Waiting for approval…", "En attente de validation…")),
         )
         .child(
           Button::new("cancel-qc")
             .ghost()
-            .label("Annuler")
+            .label(t("Cancel", "Annuler"))
             .on_click(cx.listener(|this, _, _, cx| this.cancel_quick_connect(cx))),
         ),
       None => form,
@@ -388,11 +442,10 @@ impl Render for LoginView {
                       .child("Jellyfin"),
                   ),
               )
-              .child(
-                div()
-                  .text_color(theme::muted())
-                  .child("Connectez-vous à votre serveur Jellyfin"),
-              ),
+              .child(div().text_color(theme::muted()).child(t(
+                "Sign in to your Jellyfin server",
+                "Connectez-vous à votre serveur Jellyfin",
+              ))),
           )
           .child(body)
           .when_some(self.error.clone(), |el, error| {

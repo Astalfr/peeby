@@ -17,10 +17,11 @@ use gpui_component::popover::Popover;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Selectable, TitleBar, h_flex, v_flex};
 use ui::assets::{self, Icon};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::player::{NowPlaying, PlayerView, now_playing};
 use ui::splash::Splash;
-use ui::theme;
+use ui::{tf, theme};
 
 use crate::settings::Settings;
 use mini_player::MiniPlayer;
@@ -274,9 +275,9 @@ impl Shell {
       .ghost()
       .icon(Icon::Menu)
       .tooltip(if collapsed {
-        "Développer le menu"
+        t("Expand the menu", "Développer le menu")
       } else {
-        "Réduire le menu"
+        t("Collapse the menu", "Réduire le menu")
       })
       .on_click(cx.listener(|_, _, _, cx| {
         Settings::update(cx, |s| s.sidebar_collapsed = !s.sidebar_collapsed);
@@ -292,7 +293,7 @@ impl Shell {
       .ghost()
       .icon(Icon::ArrowLeft)
       .disabled(!can_go_back)
-      .tooltip("Retour")
+      .tooltip(t("Back", "Retour"))
       .on_click(cx.listener(|this, _, _, cx| this.back(cx)));
     TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
       h_flex()
@@ -318,8 +319,8 @@ impl Shell {
                 .icon(Icon::Search)
                 .disabled(search.is_none())
                 .tooltip(match &search {
-                  Some(name) => format!("Rechercher dans {name}"),
-                  None => "Recherche (bientôt)".to_owned(),
+                  Some(name) => tf!("Search {name}", "Rechercher dans {name}"),
+                  None => t("Search (soon)", "Recherche (bientôt)").to_owned(),
                 })
                 .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
             )
@@ -328,7 +329,7 @@ impl Shell {
               Button::new("settings")
                 .ghost()
                 .icon(Icon::Settings)
-                .tooltip("Réglages")
+                .tooltip(t("Settings", "Réglages"))
                 .when(self.settings.is_some(), |b| b.selected(true))
                 .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
             ),
@@ -414,7 +415,7 @@ impl Shell {
     let trigger = Button::new("notifications-button")
       .ghost()
       .icon(Icon::Bell)
-      .tooltip("Notifications");
+      .tooltip(t("Notifications", "Notifications"));
     div()
       .relative()
       .child(
@@ -439,7 +440,7 @@ impl Shell {
                   .px_2()
                   .pb_1()
                   .font_weight(FontWeight::SEMIBOLD)
-                  .child("Notifications"),
+                  .child(t("Notifications", "Notifications")),
               )
               .when(empty, |el| {
                 el.child(
@@ -448,7 +449,10 @@ impl Shell {
                     .pb_2()
                     .text_sm()
                     .text_color(theme::muted())
-                    .child("Aucune notification. Celles de YouTube s'affichent une fois connecté."),
+                    .child(t(
+                      "No notifications. YouTube's appear once signed in.",
+                      "Aucune notification. Celles de YouTube s'affichent une fois connecté.",
+                    )),
                 )
               })
               .children(sections.into_iter().map(|(info, panel)| {

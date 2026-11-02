@@ -1,5 +1,5 @@
-//! The user's playlists (a grid, from the sidebar) and a playlist's page: its header, "Tout
-//! lire" and "Aléatoire", and its videos, loading the next ones as the end comes into view.
+//! The user's playlists (a grid, from the sidebar) and a playlist's page: its header, "Play
+//! all" and "Shuffle", and its videos, loading the next ones as the end comes into view.
 //! Playing starts a [`Queue`] on a watch page. In playlists the user can edit, an "x" on each
 //! video removes it.
 //!
@@ -26,10 +26,11 @@ use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::card::WIDE;
 use ui::card::skeleton_card;
+use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::widgets::{loader, loading_more, near_scroll_end, notice, page_title};
-use ui::{motion, runtime, theme};
+use ui::{motion, runtime, tf, theme};
 
 /// Width of a playlist card, and of a playlist page's cover.
 const CARD_WIDTH: f32 = 320.;
@@ -58,14 +59,20 @@ fn signed_out(nav: &WeakEntity<YouTubeSpace>) -> AnyElement {
   let nav = nav.clone();
   notice(
     Icon::Account,
-    "Connectez-vous pour voir vos playlists",
-    "Importez les cookies d'une session YouTube depuis la page Compte.",
+    t(
+      "Sign in to see your playlists",
+      "Connectez-vous pour voir vos playlists",
+    ),
+    t(
+      "Import the cookies of a YouTube session from the Account page.",
+      "Importez les cookies d'une session YouTube depuis la page Compte.",
+    ),
   )
   .child(
     h_flex().pt_2().child(
       Button::new("to-account")
         .primary()
-        .label("Importer des cookies")
+        .label(t("Import cookies", "Importer des cookies"))
         .on_click(move |_, _, cx| {
           nav.update(cx, |app, cx| app.open_settings(cx)).ok();
         }),
@@ -76,6 +83,21 @@ fn signed_out(nav: &WeakEntity<YouTubeSpace>) -> AnyElement {
 
 fn failed(title: &'static str, error: SharedString) -> gpui::Div {
   notice(IconName::TriangleAlert, title, error)
+}
+
+/// "Loading the whole playlist to reverse it… 12 videos", singular for one (and for zero in
+/// French).
+fn gathering_text(count: usize) -> String {
+  match (lang(), count) {
+    (Lang::En, 1) => "Loading the whole playlist to reverse it… 1 video".to_owned(),
+    (Lang::Fr, 0 | 1) => {
+      format!("Chargement de toute la playlist pour l'inverser… {count} vidéo")
+    }
+    _ => tf!(
+      "Loading the whole playlist to reverse it… {count} videos",
+      "Chargement de toute la playlist pour l'inverser… {count} vidéos"
+    ),
+  }
 }
 
 // --- The playlists ---------------------------------------------------------------------------
@@ -273,24 +295,28 @@ impl Render for PlaylistsView {
       // Replaced by the skeleton below.
       State::Loading => div().into_any_element(),
       State::SignedOut => signed_out(&self.nav),
-      State::Failed(e) => failed("Impossible de charger les playlists", e.clone())
-        .child(
-          h_flex()
-            .pt_2()
-            .child(
-              Button::new("retry")
-                .primary()
-                .label("Réessayer")
-                .on_click(cx.listener(|this, _, _, cx| {
-                  this.load(cx);
-                  cx.notify();
-                })),
-            ),
-        )
-        .into_any_element(),
+      State::Failed(e) => failed(
+        t(
+          "Cannot load the playlists",
+          "Impossible de charger les playlists",
+        ),
+        e.clone(),
+      )
+      .child(
+        h_flex().pt_2().child(
+          Button::new("retry")
+            .primary()
+            .label(t("Retry", "Réessayer"))
+            .on_click(cx.listener(|this, _, _, cx| {
+              this.load(cx);
+              cx.notify();
+            })),
+        ),
+      )
+      .into_any_element(),
       State::Loaded(playlists) if playlists.is_empty() => div()
         .text_color(theme::muted())
-        .child("Aucune playlist.")
+        .child(t("No playlists.", "Aucune playlist."))
         .into_any_element(),
       State::Loaded(playlists) => {
         let cards: Vec<_> = playlists
@@ -329,7 +355,7 @@ impl Render for PlaylistsView {
           .px_8()
           .py_6()
           .gap_6()
-          .child(page_title("Playlists"))
+          .child(page_title(t("Playlists", "Playlists")))
           .child(body),
       )
   }
@@ -551,14 +577,14 @@ impl PlaylistView {
             Button::new("play-all")
               .primary()
               .icon(Icon::Play)
-              .label("Tout lire")
+              .label(t("Play all", "Tout lire"))
               .disabled(empty)
               .on_click(cx.listener(|this, _, window, cx| this.play(Some(0), false, window, cx))),
           )
           .child(
             Button::new("shuffle")
               .icon(Icon::Shuffle)
-              .label("Aléatoire")
+              .label(t("Shuffle", "Aléatoire"))
               .disabled(empty)
               .on_click(cx.listener(|this, _, window, cx| this.play(None, true, window, cx))),
           )
@@ -568,9 +594,9 @@ impl PlaylistView {
               .icon(Icon::Reverse)
               .selected(reversed)
               .tooltip(if reversed {
-                "Remettre dans l'ordre"
+                t("Restore the order", "Remettre dans l'ordre")
               } else {
-                "Inverser l'ordre"
+                t("Reverse the order", "Inverser l'ordre")
               })
               .on_click(cx.listener(|this, _, _, cx| this.toggle_reversed(cx))),
           ),
@@ -628,21 +654,25 @@ impl Render for PlaylistView {
       // Replaced by the skeleton below.
       State::Loading => div().into_any_element(),
       State::SignedOut => signed_out(&self.nav),
-      State::Failed(e) => failed("Impossible de charger la playlist", e.clone())
-        .child(
-          h_flex()
-            .pt_2()
-            .child(
-              Button::new("retry")
-                .primary()
-                .label("Réessayer")
-                .on_click(cx.listener(|this, _, _, cx| {
-                  this.load(cx);
-                  cx.notify();
-                })),
-            ),
-        )
-        .into_any_element(),
+      State::Failed(e) => failed(
+        t(
+          "Cannot load the playlist",
+          "Impossible de charger la playlist",
+        ),
+        e.clone(),
+      )
+      .child(
+        h_flex().pt_2().child(
+          Button::new("retry")
+            .primary()
+            .label(t("Retry", "Réessayer"))
+            .on_click(cx.listener(|this, _, _, cx| {
+              this.load(cx);
+              cx.notify();
+            })),
+        ),
+      )
+      .into_any_element(),
       State::Loaded(playlist) => {
         let header = self.header(playlist, window, cx);
         let view = cx.weak_entity();
@@ -691,7 +721,7 @@ impl Render for PlaylistView {
           Some(
             Button::new("more")
               .primary()
-              .label("Réessayer")
+              .label(t("Retry", "Réessayer"))
               .on_click(cx.listener(|this, _, _, cx| {
                 this.more_failed = false;
                 this.load_more_if_near_end(cx);
@@ -707,9 +737,7 @@ impl Render for PlaylistView {
               .text_sm()
               .text_color(theme::muted())
               .child(loader(16., theme::accent()))
-              .child(format!(
-                "Chargement de toute la playlist pour l'inverser… {count} vidéos"
-              ))
+              .child(gathering_text(count))
               .into_any_element(),
           )
         } else {
@@ -727,11 +755,10 @@ impl Render for PlaylistView {
               .max_w(px(960.))
               .gap_1()
               .when(empty, |el| {
-                el.child(
-                  div()
-                    .text_color(theme::muted())
-                    .child("Cette playlist ne contient aucune vidéo lisible."),
-                )
+                el.child(div().text_color(theme::muted()).child(t(
+                  "This playlist has no playable videos.",
+                  "Cette playlist ne contient aucune vidéo lisible.",
+                )))
               })
               .children(rows)
               .children(more.map(|b| h_flex().pt_4().justify_center().child(b))),

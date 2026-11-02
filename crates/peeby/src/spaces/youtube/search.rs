@@ -17,6 +17,7 @@ use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::assets::Icon;
 use ui::card::{ROW_WIDTH, WIDE, skeleton_row};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::avatar;
 use ui::widgets::{loading_more, near_scroll_end, notice, page_title};
@@ -60,7 +61,9 @@ impl SearchView {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher sur YouTube"));
+    let input = cx.new(|cx| {
+      InputState::new(window, cx).placeholder(t("Search YouTube", "Rechercher sur YouTube"))
+    });
     input.update(cx, |state, cx| state.focus(window, cx));
     let subscription = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
       if matches!(event, InputEvent::PressEnter { .. }) {
@@ -260,9 +263,11 @@ fn key(result: &SearchResult) -> &str {
 fn failure(error: &Error) -> SharedString {
   tracing::warn!("search: {error}");
   match error {
-    Error::NotLoggedIn => {
-      "YouTube n'accepte plus la session : importez de nouveaux cookies depuis Compte.".into()
-    }
+    Error::NotLoggedIn => t(
+      "YouTube no longer accepts the session: import new cookies from Account.",
+      "YouTube n'accepte plus la session : importez de nouveaux cookies depuis Compte.",
+    )
+    .into(),
     e => error_text(e).into(),
   }
 }
@@ -276,12 +281,18 @@ impl Render for SearchView {
         .gap_2()
         .children((0..4).map(|_| skeleton_row()))
         .into_any_element(),
-      State::Failed(message) => {
-        notice(Icon::Search, "Recherche impossible", message.clone()).into_any_element()
-      }
-      State::Loaded { results, .. } if results.is_empty() => {
-        notice(Icon::Search, "Aucun résultat", "Essayez d'autres mots.").into_any_element()
-      }
+      State::Failed(message) => notice(
+        Icon::Search,
+        t("Search failed", "Recherche impossible"),
+        message.clone(),
+      )
+      .into_any_element(),
+      State::Loaded { results, .. } if results.is_empty() => notice(
+        Icon::Search,
+        t("No results", "Aucun résultat"),
+        t("Try other words.", "Essayez d'autres mots."),
+      )
+      .into_any_element(),
       State::Loaded {
         results,
         continuation,
@@ -298,7 +309,7 @@ impl Render for SearchView {
           continuation.clone().map(|token| {
             Button::new("search-retry")
               .ghost()
-              .label("Réessayer")
+              .label(t("Retry", "Réessayer"))
               .on_click(cx.listener(move |this, _, _, cx| this.load_more(token.clone(), cx)))
               .into_any_element()
           })
@@ -333,7 +344,7 @@ impl Render for SearchView {
               .py_6()
               .gap_6()
               .max_w(px(1200.))
-              .child(page_title("Recherche"))
+              .child(page_title(t("Search", "Recherche")))
               .child(div().max_w(px(640.)).child(Input::new(&self.input)))
               .child(body),
           ),

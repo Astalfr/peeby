@@ -13,6 +13,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Interface language
+
+- English and French interface (2026-11-02, [ADR 0014](decisions/0014-interface-language.md)): `ui::i18n` (`t`, `tf!`, `Lang`), the setting `interface_language` (default `en`) in the gear's Général section, applied at once to every window. Every UI string of `ui` and of the spaces has its English text next to the French one; YouTube's language and region are relabelled as the content language.
+
 ## YouTube chapters
 
 - Chapters of YouTube videos (2026-11-02): `WatchPage::chapters` from the `next` response's player bar markers (the description's, else YouTube's generated ones), given to the player with `set_chapters`. The shared seek bar now splits into one piece per chapter with gaps, the hovered one thicker (Jellyfin's chapters too); the hover title, the chapters menu and Page Up / Page Down work on them. 1 new test on a trimmed fixture (`next_chapters.json`). Verified: clippy, tests, and the seek bar's pieces on a screenshot of `cargo run -p ui --example player` (which now has chapters). Seen in the app, with the user's agreement: `rfscVS0vtbw` plays with its 35 chapters as pieces of the seek bar and the chapters button. The thickening on hover and the hovered piece's growth are eased (150 ms). **Not verified:** the hovered piece growing and its animation, the chapters menu clicked, Page Up / Page Down pressed.

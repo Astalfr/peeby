@@ -11,9 +11,10 @@ use gpui::{AnyElement, App, Context, ElementId, SharedString, WeakEntity, Window
 use gpui_component::popover::PopoverState;
 use gpui_component::{h_flex, v_flex};
 use twitch::helix::Stream;
+use ui::i18n::t;
 use ui::images::Images;
 use ui::picture;
-use ui::theme;
+use ui::{tf, theme};
 
 use super::cards::{self, Avatars};
 use super::{Route, TwitchSpace};
@@ -159,7 +160,10 @@ impl Render for BellPanel {
         .px_2()
         .text_sm()
         .text_color(theme::muted())
-        .child("Aucune chaîne suivie n'est passée en direct depuis l'ouverture de Peeby.")
+        .child(t(
+          "No followed channel has gone live since Peeby opened.",
+          "Aucune chaîne suivie n'est passée en direct depuis l'ouverture de Peeby.",
+        ))
         .into_any_element();
     }
     let now = SystemTime::now();
@@ -214,11 +218,11 @@ impl Render for BellPanel {
               .flex_1()
               .min_w_0()
               .gap_1()
-              .child(
-                div()
-                  .text_sm()
-                  .child(SharedString::from(format!("{} est en direct", entry.name))),
-              )
+              .child(div().text_sm().child(SharedString::from(tf!(
+                "{} is live",
+                "{} est en direct",
+                entry.name
+              ))))
               .child(
                 div()
                   .text_sm()
@@ -234,13 +238,16 @@ impl Render for BellPanel {
   }
 }
 
-/// "à l'instant", "il y a 5 min", "il y a 2 h".
+/// "just now", "5 min ago", "2 h ago".
 fn ago(at: SystemTime, now: SystemTime) -> String {
   let minutes = now.duration_since(at).map_or(0, |d| d.as_secs() / 60);
   match minutes {
-    0 => "à l'instant".into(),
-    1..=59 => format!("il y a {minutes} min"),
-    _ => format!("il y a {} h", minutes / 60),
+    0 => t("just now", "à l'instant").into(),
+    1..=59 => tf!("{minutes} min ago", "il y a {minutes} min"),
+    _ => {
+      let hours = minutes / 60;
+      tf!("{hours} h ago", "il y a {hours} h")
+    }
   }
 }
 
@@ -301,10 +308,10 @@ mod tests {
   }
 
   #[test]
-  fn ages_read_in_french() {
+  fn ages() {
     let t0 = SystemTime::UNIX_EPOCH;
-    assert_eq!(ago(t0, t0 + Duration::from_secs(30)), "à l'instant");
-    assert_eq!(ago(t0, t0 + Duration::from_secs(300)), "il y a 5 min");
-    assert_eq!(ago(t0, t0 + Duration::from_secs(7300)), "il y a 2 h");
+    assert_eq!(ago(t0, t0 + Duration::from_secs(30)), "just now");
+    assert_eq!(ago(t0, t0 + Duration::from_secs(300)), "5 min ago");
+    assert_eq!(ago(t0, t0 + Duration::from_secs(7300)), "2 h ago");
   }
 }

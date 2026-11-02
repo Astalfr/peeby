@@ -13,6 +13,7 @@ use gpui::{
 };
 use gpui_component::IconName;
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::player::PlayerView;
 
 use super::Shell;
@@ -232,7 +233,11 @@ impl Render for MiniPlayer {
                 .child(
                   button("mini-return", Icon::Maximize, 28.)
                     .tooltip(|window, cx| {
-                      gpui_component::tooltip::Tooltip::new("Revenir à la page").build(window, cx)
+                      gpui_component::tooltip::Tooltip::new(t(
+                        "Back to the page",
+                        "Revenir à la page",
+                      ))
+                      .build(window, cx)
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                       this.with_shell(cx, |shell, window, cx| shell.return_from_mini(window, cx));
@@ -241,7 +246,7 @@ impl Render for MiniPlayer {
                 .child(
                   button("mini-close", IconName::Close, 28.)
                     .tooltip(|window, cx| {
-                      gpui_component::tooltip::Tooltip::new("Fermer").build(window, cx)
+                      gpui_component::tooltip::Tooltip::new(t("Close", "Fermer")).build(window, cx)
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                       this.with_shell(cx, |shell, _, cx| shell.dismiss_mini(cx));

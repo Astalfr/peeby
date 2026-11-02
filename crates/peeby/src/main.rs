@@ -54,6 +54,7 @@ fn main() {
     }
   );
   let prefs = settings::Settings::load();
+  ui::i18n::set(prefs.interface_lang());
   let (hl, gl) = (prefs.language.clone(), prefs.region.clone());
   // The Jellyfin session, with its token from the Credential Manager (a blocking call). A first
   // run makes this installation's id, saved once the UI is up.

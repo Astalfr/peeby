@@ -9,6 +9,7 @@ use gpui::{Context, Entity, Subscription, Task, WeakEntity, Window, div, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
 use twitch::helix::{Followed, Helix, Stream};
+use ui::i18n::t;
 use ui::images::Images;
 use ui::runtime;
 
@@ -118,7 +119,9 @@ async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
 impl FollowingView {
   fn filter(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
     let (input, _) = self.filter.get_or_insert_with(|| {
-      let input = cx.new(|cx| InputState::new(window, cx).placeholder("Filtrer les chaînes"));
+      let input = cx.new(|cx| {
+        InputState::new(window, cx).placeholder(t("Filter channels", "Filtrer les chaînes"))
+      });
       let subscription = cx.subscribe(&input, |_, _, event: &InputEvent, cx| {
         if matches!(event, InputEvent::Change) {
           cx.notify();
@@ -178,21 +181,26 @@ impl Render for FollowingView {
           })
           .collect();
         let live = if live.is_empty() {
-          cards::note("Aucune de vos chaînes n'est en direct.").into_any_element()
+          cards::note(t(
+            "None of your channels is live.",
+            "Aucune de vos chaînes n'est en direct.",
+          ))
+          .into_any_element()
         } else {
           cards::wrap(live).into_any_element()
         };
         v_flex()
           .gap_10()
-          .child(cards::section("En direct", live))
+          .child(cards::section(t("Live", "En direct"), live))
           .when(!loaded.offline.is_empty(), |el| {
             let list = if offline.is_empty() {
-              cards::note("Aucune chaîne ne correspond.").into_any_element()
+              cards::note(t("No channel matches.", "Aucune chaîne ne correspond."))
+                .into_any_element()
             } else {
               cards::wrap(offline).into_any_element()
             };
             el.child(cards::section(
-              "Hors ligne",
+              t("Offline", "Hors ligne"),
               v_flex()
                 .gap_4()
                 .child(div().w(px(320.)).child(Input::new(&filter)))
@@ -202,7 +210,7 @@ impl Render for FollowingView {
           .into_any_element()
       }
       (None, Some(error)) => cards::note(error.clone()).into_any_element(),
-      (None, None) => cards::note("Chargement…").into_any_element(),
+      (None, None) => cards::note(t("Loading…", "Chargement…")).into_any_element(),
     };
     v_flex()
       .id("twitch-following")
@@ -214,7 +222,7 @@ impl Render for FollowingView {
         div()
           .text_2xl()
           .font_weight(gpui::FontWeight::BOLD)
-          .child("Suivies"),
+          .child(t("Following", "Suivies")),
       )
       .child(body)
   }

@@ -27,7 +27,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | YouTube lives | Started near their edge, seekable over their DVR window (an hour) in the shared player, chat polled from `live_chat/get_live_chat` | [0011](decisions/0011-youtube-live-dvr.md) |
 | Twitch channel points | Read and spent through raw GQL with the auth-token (balance, rewards, predictions; two clicks per spend); the bonus chest claimed on twitch.tv (integrity check); a `minute-watched` report each minute the live plays | [0012](decisions/0012-twitch-channel-points.md) |
 | Watch progress | On the account, never local: YouTube's stats pings (history, resume position) from a signed WEB `player`, the cards' `startTimeSeconds` to resume; Twitch VODs through GQL `viewingHistory` and `updateUserViewedVideo` | [0013](decisions/0013-watch-progress-on-the-account.md) |
-| UI language | French UI strings; code, comments and docs in English | — |
+| UI language | English (default) or French, chosen in the settings; both texts at each call site (`ui::i18n::t`, `tf!`), no catalogue; code, comments and docs in English | [0014](decisions/0014-interface-language.md) |
 
 ## Index
 
