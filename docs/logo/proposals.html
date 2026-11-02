@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Logo Peeby — propositions</title>
+<style>
+  :root { --bg:#111113; --card:#1b1b1f; --fg:#f4f4f5; --muted:#a1a1aa; --line:#2a2a30; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:28px; margin:0 0 6px; }
+  .lead { color:var(--muted); margin:0 0 32px; max-width:760px; }
+  .concept { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px; margin-bottom:22px;
+             display:grid; grid-template-columns:256px 1fr; gap:28px; align-items:start; }
+  .concept h2 { margin:0 0 4px; font-size:20px; }
+  .concept h2 span { color:var(--muted); font-weight:400; font-size:15px; margin-left:8px; }
+  .concept p { color:var(--muted); margin:0 0 16px; }
+  .label { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 8px; }
+  .row { display:flex; gap:18px; align-items:flex-end; flex-wrap:wrap; }
+  .tile { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  .bar { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:10px; background:#1f1f23; border:1px solid var(--line); }
+  .bar.light { background:#f4f4f5; color:#18181b; }
+  .bar b { font-weight:600; font-size:14px; }
+  .c { position:relative; flex:none; }
+  .c > .s { position:absolute; left:0; top:0; width:512px; height:512px; transform-origin:0 0; }
+  .av { position:absolute; background-image:url(peeb.webp); background-size:565px 562px; }
+  .abs { position:absolute; }
+  svg.abs { overflow:visible; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Logo Peeby : 7 directions</h1>
+  <p class="lead">Chaque concept existe en version <b>fixe</b> (icône Windows, trois couleurs) et en version <b>vivante</b> :
+    dans l'app, l'élément coloré prend l'accent de l'espace ouvert (rouge YouTube, orange Jellyfin tel qu'il est
+    aujourd'hui dans l'app, violet Twitch). La barre du haut montre la taille réelle (22 px).</p>
+  <div id="list"></div>
+</main>
+<script>
+const R = '#ff4e45', B = '#00a4dc', V = '#9146ff', O = '#ff8a3d';
+const TRI = [R, B, V];
+// Crop of the source picture in a 512 canvas: x 70..1130, y 100..1160.
+const K = 512 / 1060, OX = 70 * K, OY = 100 * K;
+
+function av(x, y, w, h, radius, extra = '') {
+  return `<div class="av" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${radius};
+    background-position:${-OX - x}px ${-OY - y}px;${extra}"></div>`;
+}
+function wrap(size, inner) {
+  return `<div class="c" style="width:${size}px;height:${size}px"><div class="s" style="transform:scale(${size / 512})">${inner}</div></div>`;
+}
+// colors: { tri: true } for the fixed icon, else { a: accent }.
+const concepts = [
+  {
+    name: 'Orbite', tag: 'l\'anneau des espaces',
+    text: 'Le portrait rond entouré d\'un anneau en trois arcs, un par espace, comme les stories. Vivant : l\'anneau entier prend la couleur de l\'espace ouvert.',
+    draw(c) {
+      const r = 236, C = 2 * Math.PI * r, gap = 46, seg = C / 3 - gap;
+      const arcs = c.tri
+        ? TRI.map((col, i) => `<circle cx="256" cy="256" r="${r}" fill="none" stroke="${col}" stroke-width="26" stroke-linecap="round"
+            stroke-dasharray="${seg} ${C - seg}" transform="rotate(${-90 + gap / C * 180 + i * 120} 256 256)"/>`).join('')
+        : `<circle cx="256" cy="256" r="${r}" fill="none" stroke="${c.a}" stroke-width="26"/>`;
+      return av(50, 50, 412, 412, '50%') + `<svg class="abs" width="512" height="512">${arcs}</svg>`;
+    },
+  },
+  {
+    name: 'Onglets', tag: 'trois cartes en éventail',
+    text: 'Le portrait sur une carte arrondie, avec derrière elle les trois espaces en éventail, comme des onglets. Vivant : la carte de l\'espace ouvert passe juste derrière le portrait.',
+    draw(c) {
+      const order = c.tri ? [V, B, R] : [...TRI.filter(x => x !== c.a && !(c.a === O && x === B)), c.a];
+      const cards = order.map((col, i) => {
+        const rot = [16, 9, 2][i], dx = [64, 46, 28][i], dy = [-6, 8, 22][i];
+        return `<div class="abs" style="left:${70 + dx}px;top:${70 + dy}px;width:360px;height:360px;border-radius:92px;background:${col};
+          transform:rotate(${rot}deg);box-shadow:0 6px 18px #0006"></div>`;
+      }).join('');
+      return cards + av(50, 96, 360, 360, '92px', 'transform:rotate(-7deg);box-shadow:0 10px 30px #0008;outline:10px solid #fff;outline-offset:-1px');
+    },
+  },
+  {
+    name: 'Prisme', tag: 'décalage chromatique',
+    text: 'Trois disques de couleur décalés à 120° qui dépassent du portrait, façon aberration chromatique d\'écran. Vivant : un seul halo décalé dans la couleur de l\'espace.',
+    draw(c) {
+      const d = 24;
+      const ghosts = (c.tri ? TRI.map((col, i) => [col, -150 + i * 120]) : [[c.a, 35]])
+        .map(([col, ang]) => {
+          const x = Math.cos(ang * Math.PI / 180) * d, y = Math.sin(ang * Math.PI / 180) * d;
+          return `<div class="abs" style="left:${46 + x}px;top:${46 + y}px;width:420px;height:420px;border-radius:50%;background:${col}"></div>`;
+        }).join('');
+      return ghosts + av(46, 46, 420, 420, '50%');
+    },
+  },
+  {
+    name: 'Lecture', tag: 'l\'écran et sa barre',
+    text: 'Une icône d\'app carrée arrondie : le perso est « à l\'écran », avec une barre de lecture et son curseur. La partie lue est en trois couleurs. Vivant : elle prend la couleur de l\'espace.',
+    draw(c) {
+      const played = c.tri
+        ? `<div class="abs" style="left:0;top:0;height:100%;width:100%;border-radius:9px;
+            background:linear-gradient(90deg,${R} 0 33%,${B} 33% 66%,${V} 66%)"></div>`
+        : `<div class="abs" style="left:0;top:0;height:100%;width:100%;border-radius:9px;background:${c.a}"></div>`;
+      return av(16, 16, 480, 480, '118px')
+        + `<div class="abs" style="left:16px;top:16px;width:480px;height:480px;border-radius:118px;
+             background:linear-gradient(180deg,transparent 62%,#000a)"></div>`
+        + `<div class="abs" style="left:62px;top:424px;width:388px;height:18px;border-radius:9px;background:#ffffff59"></div>`
+        + `<div class="abs" style="left:62px;top:424px;width:250px;height:18px">${played}</div>`
+        + `<div class="abs" style="left:290px;top:411px;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 2px 10px #0008"></div>`;
+    },
+  },
+  {
+    name: 'Néon', tag: 'halo lumineux',
+    text: 'Un liseré en dégradé rouge → bleu → violet qui fait le tour, avec sa lueur. Vivant : liseré et lueur dans la couleur de l\'espace, ce qui donne à la barre du haut une vraie ambiance par onglet.',
+    draw(c) {
+      const fill = c.tri ? `conic-gradient(from 200deg,${R},${B},${V},${R})` : c.a;
+      return `<div class="abs" style="left:34px;top:34px;width:444px;height:444px;border-radius:50%;background:${fill};filter:blur(26px);opacity:.9"></div>`
+        + `<div class="abs" style="left:34px;top:34px;width:444px;height:444px;border-radius:50%;background:${fill}"></div>`
+        + av(52, 52, 408, 408, '50%');
+    },
+  },
+  {
+    name: 'Barrette', tag: 'le perso porte le logo',
+    text: 'Pas d\'élément ajouté autour : la barrette en croix dans ses cheveux devient un bouton lecture. Le logo fait partie du personnage. Vivant : la barrette change de couleur avec l\'espace.',
+    draw(c) { return av(16, 16, 480, 480, '50%') + clip(c); },
+  },
+  {
+    name: 'Clin d\'œil', tag: 'barrette + reflets',
+    text: 'La Barrette, et en plus les reflets de ses yeux deviennent de petits boutons lecture. On ne le voit qu\'en grand (paramètres, à propos) : un easter egg.',
+    draw(c) { return av(16, 16, 480, 480, '50%') + eyes() + clip(c); },
+  },
+];
+
+let gid = 0;
+function clip(c) {
+  const id = 'g' + gid++;
+  const fill = c.tri ? `url(#${id})` : c.a;
+  const pts = '-24,-30 -24,30 30,0';
+  return `<svg class="abs" width="512" height="512">
+    <defs><linearGradient id="${id}" x1="-30" y1="30" x2="30" y2="-30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${R}"/><stop offset=".5" stop-color="${B}"/><stop offset="1" stop-color="${V}"/></linearGradient></defs>
+    <g transform="translate(431 214) rotate(-14)">
+      <polygon points="${pts}" fill="#2b1f22" stroke="#2b1f22" stroke-width="26" stroke-linejoin="round"/>
+      <polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="16" stroke-linejoin="round"/>
+      <path d="M-20 -22 L-20 -6" stroke="#fff" stroke-opacity=".75" stroke-width="7" stroke-linecap="round"/>
+    </g></svg>`;
+}
+function eyes() {
+  const tri = (x, y, s, rot) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})">
+      <ellipse cx="0" cy="0" rx="22" ry="15" fill="#1d1430"/>
+      <polygon points="-8,-11 -8,11 11,0" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></g>`;
+  return `<svg class="abs" width="512" height="512">${tri(186, 257, 1, -8)}${tri(325, 296, .95, -6)}</svg>`;
+}
+
+const list = document.getElementById('list');
+for (const k of concepts) {
+  const big = wrap(256, k.draw({ tri: true }));
+  const live = [[R, 'YouTube'], [O, 'Jellyfin'], [V, 'Twitch']]
+    .map(([a, n]) => `<div class="tile">${wrap(96, k.draw({ a }))}${n}</div>`).join('');
+  const small = [64, 32, 22].map(s => `<div class="tile">${wrap(s, k.draw({ tri: true }))}${s} px</div>`).join('');
+  const bar = (cls, a) => `<div class="bar ${cls}">${wrap(22, k.draw(a ? { a } : { tri: true }))}<b>Peeby</b></div>`;
+  list.insertAdjacentHTML('beforeend', `<section class="concept">
+    <div>${big}</div>
+    <div>
+      <h2>${concepts.indexOf(k) + 1}. ${k.name}<span>${k.tag}</span></h2>
+      <p>${k.text}</p>
+      <div class="label">Vivant, par espace</div><div class="row">${live}</div>
+      <div class="label">Petites tailles et barre du haut</div>
+      <div class="row">${small}${bar('', null)}${bar('', V)}${bar('light', R)}</div>
+    </div></section>`);
+}
+</script>
+</body>
+</html>

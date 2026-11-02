@@ -684,7 +684,7 @@ fn user_avatar(user: &Avatar, window: &mut Window, cx: &mut App) -> gpui::AnyEle
   }
 }
 
-/// Peeby's mark: the round logo and the name.
+/// Peeby's mark: the logo and the name.
 fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
   h_flex()
     .gap_2()

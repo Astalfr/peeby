@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Peeby logo</title>
+<!-- The chosen logo ("Onglets", proposals.html #2) alone on a transparent square that fills the
+     window: scripts/render-logo.ps1 screenshots it to make logo.png and peeby.ico. -->
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  .c { position: relative; }
+  .s { position: absolute; left: 0; top: 0; width: 512px; height: 512px; transform-origin: 0 0; }
+  .abs { position: absolute; }
+  .av { position: absolute; background-image: url(peeb.webp); background-size: 565px 562px; }
+</style>
+</head>
+<body>
+<div id="logo" class="c"></div>
+<script>
+  // The three spaces in tab order, back to front: Twitch, Jellyfin, YouTube right behind the portrait.
+  const CARDS = ['#9146ff', '#00a4dc', '#ff4e45'];
+  // Crop of the picture in the 512 canvas: x 70..1130, y 100..1160 of the source.
+  const K = 512 / 1060, OX = 70 * K, OY = 100 * K;
+  // The cards and the portrait span x 27..469, y 39..432 (measured on the render): centered on
+  // them, and scaled until the shadows (x 7..484, y 25..465) almost reach the edges.
+  const FIT = 1.04, CX = 248, CY = 235;
+
+  const cards = CARDS.map((color, i) => {
+    const rot = [16, 9, 2][i], dx = [64, 46, 28][i], dy = [-6, 8, 22][i];
+    return `<div class="abs" style="left:${70 + dx}px;top:${70 + dy}px;width:360px;height:360px;border-radius:92px;
+      background:${color};transform:rotate(${rot}deg);box-shadow:0 6px 18px #0006"></div>`;
+  }).join('');
+  const portrait = `<div class="av" style="left:50px;top:96px;width:360px;height:360px;border-radius:92px;
+    background-position:${-OX - 50}px ${-OY - 96}px;transform:rotate(-7deg);
+    box-shadow:0 10px 30px #0008;outline:10px solid #fff;outline-offset:-1px"></div>`;
+
+  const size = Math.min(innerWidth, innerHeight);
+  const logo = document.getElementById('logo');
+  logo.style.width = logo.style.height = size + 'px';
+  const s = size / 512;
+  logo.innerHTML = `<div class="s" style="transform:scale(${s}) translate(${256 - CX * FIT}px, ${256 - CY * FIT}px) scale(${FIT})">
+    ${cards}${portrait}</div>`;
+</script>
+</body>
+</html>

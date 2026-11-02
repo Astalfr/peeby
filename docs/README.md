@@ -34,7 +34,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 - [roadmap.md](roadmap.md): milestones and status
 - [refactor-plan.md](refactor-plan.md): the move to Peeby, a multi-space app (YouTube, Jellyfin, Twitch), with its checklists
 - [architecture.md](architecture.md): crates, threads, data flow
-- [design.md](design.md): palette, layout, pages and motion
+- [design.md](design.md): palette, layout, pages and motion; the logo, its sources and the proposals: [logo/](logo/README.md)
 - [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
 - [decisions/](decisions/): architecture decision records; the former peeby's are archived in [decisions/peeby/](decisions/peeby/)
 - [player/](player/): mpv options, video surface, playback UX, ASS subtitles (from peeby)

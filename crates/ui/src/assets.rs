@@ -125,7 +125,7 @@ struct LogoCache(HashMap<u32, Option<Arc<RenderImage>>>);
 
 impl Global for LogoCache {}
 
-/// The round Peeby logo (with the red play badge), `size` logical pixels wide. It is
+/// The Peeby logo (the portrait over the spaces' three cards), `size` logical pixels wide. It is
 /// scaled on the CPU to the exact device-pixel size: GPUI samples without mipmaps, so the 256 px
 /// file drawn small would look pixelated. Decoding the small embedded PNG is quick and happens
 /// once per size.
