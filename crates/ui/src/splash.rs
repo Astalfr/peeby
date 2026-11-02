@@ -71,7 +71,7 @@ const CARDS: [(u32, Layer); 3] = [
       start: 0.10,
       fall: 0.32,
       impact: 0.12,
-      rebound: 34.,
+      rebound: 102.,
     },
   ),
   (
@@ -83,7 +83,7 @@ const CARDS: [(u32, Layer); 3] = [
       start: 0.30,
       fall: 0.32,
       impact: 0.12,
-      rebound: 34.,
+      rebound: 102.,
     },
   ),
   (
@@ -95,7 +95,7 @@ const CARDS: [(u32, Layer); 3] = [
       start: 0.50,
       fall: 0.32,
       impact: 0.13,
-      rebound: 34.,
+      rebound: 102.,
     },
   ),
 ];
@@ -106,7 +106,7 @@ const PORTRAIT: Layer = Layer {
   start: 0.75,
   fall: 0.36,
   impact: 0.22,
-  rebound: 46.,
+  rebound: 138.,
 };
 
 // Springs: e^(−DAMP·τ) times a wave, τ the time since the landing.
@@ -122,17 +122,17 @@ const REBOUND_PERIOD: f32 = 0.16;
 const WOBBLE: f32 = 6.;
 const WOBBLE_PULSE: f32 = 22.;
 /// The whole stack's hop after the portrait lands, in canvas units, and how long it lasts.
-const HOP: f32 = 28.;
+const HOP: f32 = 84.;
 const HOP_DELAY: f32 = 0.05;
 const HOP_PERIOD: f32 = 0.22;
 /// Stretch of a falling layer at the end of its fall (height; width loses half of it).
 const STRETCH: f32 = 0.10;
 
 /// When the drawn stack starts fading into `logo.png`, and for how long.
-const SETTLED: f32 = 1.80;
+const SETTLED: f32 = 2.00;
 const CROSSFADE: f32 = 0.15;
 /// When the screen starts fading out (or a click), and for how long.
-const LEAVE: f32 = 2.05;
+const LEAVE: f32 = 2.25;
 const FADE_OUT: f32 = 0.30;
 /// The logo's size at the end of the fade out, easing out from 1.
 const ZOOM: f32 = 1.3;
