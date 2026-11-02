@@ -34,7 +34,8 @@ GPUI (`gpui-pre 0.3.10`, [ADR 0006](../decisions/peeby/0006-gpui-pre-snapshot.md
 - The targets are a ring of 3 BGRA textures with `SHARED_KEYEDMUTEX`, at the element's physical size.
 - Each texture is **registered explicitly** with the patched `gpui-pre-windows`. Image bytes are never trusted as a marker ([ADR 0008](../decisions/peeby/0008-gpu-video-surface.md)).
 - Render with `BLOCK_FOR_TARGET_TIME=0` and pace from the update callback, so the keyed mutex is only held for the GPU submission.
-- Resizes are debounced before recreating the ring.
+- Resizes are debounced before recreating the ring: a size change after 60 ms (`RESIZE_SETTLE`) without one recreates it at once (a page shown again, a layout change); closer ones, such as a resize by the mouse (one size per move), wait until the size has been stable that long, mpv rendering meanwhile at the old size and GPUI stretching the picture. The replaced ring stays alive until the next one is made: the UI's held frame (below) samples it, and a freed texture draws as nothing.
+- `VideoView` keeps showing the last frame of the replaced ring, stretched, until the new ring has its first frame; otherwise every step of a resize (the mini-player's edges, the window's) would flash black. Windows reuses the values of freed shared handles, so the held ring and the new one can share a handle: a handle the other ring still uses is never unregistered (its frames would be drawn as plain black images).
 - Device loss: GPUI side, the patched atlas clears its entries and they are re-registered. mpv side, recreate the device, the render context and the ring.
 
 ### `SwSurface` (fallback)

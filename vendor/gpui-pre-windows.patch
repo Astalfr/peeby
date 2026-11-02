@@ -306,7 +306,7 @@
              menus: RefCell::new(Vec::new()),
 --- a/src/window.rs
 +++ b/src/window.rs
-@@ -32,6 +32,41 @@
+@@ -32,6 +32,46 @@
  use crate::*;
  use gpui::*;
  
@@ -340,6 +340,11 @@
 +                )
 +                .context("unable to set window bounds")
 +                .log_err();
++                // `WM_SIZE` resized the swap chain, which drops its picture: draw now rather
++                // than at the next vsync, or the window shows empty for a frame (flicker).
++                RedrawWindow(Some(HWND(hwnd as *mut _)), None, None, RDW_INVALIDATE | RDW_UPDATENOW)
++                    .ok()
++                    .log_err();
 +            }
 +        })
 +        .detach();

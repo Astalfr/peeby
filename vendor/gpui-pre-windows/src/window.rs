@@ -62,6 +62,11 @@ pub fn set_window_bounds(window: &gpui::Window, cx: &mut gpui::App, bounds: Boun
                 )
                 .context("unable to set window bounds")
                 .log_err();
+                // `WM_SIZE` resized the swap chain, which drops its picture: draw now rather
+                // than at the next vsync, or the window shows empty for a frame (flicker).
+                RedrawWindow(Some(HWND(hwnd as *mut _)), None, None, RDW_INVALIDATE | RDW_UPDATENOW)
+                    .ok()
+                    .log_err();
             }
         })
         .detach();

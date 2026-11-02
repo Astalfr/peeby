@@ -23,12 +23,18 @@ const EXTERNAL_TEXTURE_MAGIC: &[u8; 8] = b"GPUIEXT1";
 /// Called with the video area's size in physical pixels whenever it changes.
 pub type ResizeHandler = Rc<dyn Fn(u32, u32)>;
 
+/// The registered shared textures of the player's ring, with their marker images.
+type Ring = Vec<(u64, Arc<RenderImage>)>;
+
 /// Displays a player's frames, letterboxed by mpv to the element's size.
 pub struct VideoView {
   on_resize: ResizeHandler,
   generation: u64,
-  ring: Vec<(u64, Arc<RenderImage>)>,
+  ring: Ring,
   current_slot: Option<usize>,
+  /// The ring replaced by a resize and its last frame, shown (stretched) until the new ring has
+  /// a frame: else each step of a resize would show black for a frame.
+  held: Option<(Ring, Arc<RenderImage>)>,
   cpu_frame: Option<Arc<RenderImage>>,
   /// Images to release from the atlas at the next render (needs the window).
   stale: Vec<Arc<RenderImage>>,
@@ -67,6 +73,7 @@ impl VideoView {
       generation: 0,
       ring: Vec::new(),
       current_slot: None,
+      held: None,
       cpu_frame: None,
       stale: Vec::new(),
       corner_radii: Corners::default(),
@@ -92,7 +99,19 @@ impl VideoView {
         height,
         handles,
       } => {
-        self.retire_ring();
+        // The ring shown so far is held until the new one has a frame; a ring replaced before
+        // showing any (resizes in a row) goes at once, the held frame staying.
+        match self
+          .current_slot
+          .and_then(|slot| self.ring.get(slot))
+          .map(|(_, i)| i.clone())
+        {
+          Some(image) => {
+            self.release_held();
+            self.held = Some((std::mem::take(&mut self.ring), image));
+          }
+          None => self.retire_ring(),
+        }
         self.generation = generation;
         self.current_slot = None;
         for handle in handles {
@@ -107,6 +126,7 @@ impl VideoView {
         if generation == self.generation && index < self.ring.len() =>
       {
         self.current_slot = Some(index);
+        self.release_held();
       }
       Frame::GpuFrame { .. } => {}
       Frame::Cpu {
@@ -125,14 +145,33 @@ impl VideoView {
   }
 
   fn retire_ring(&mut self) {
-    for (handle, image) in self.ring.drain(..) {
-      gpui_windows::unregister_external_texture(handle);
+    let kept = handles(self.held.as_ref().map(|(ring, _)| ring));
+    let ring = std::mem::take(&mut self.ring);
+    self.retire(ring, &kept);
+  }
+
+  fn release_held(&mut self) {
+    if let Some((ring, _)) = self.held.take() {
+      let kept = handles(Some(&self.ring));
+      self.retire(ring, &kept);
+    }
+  }
+
+  /// Unregisters `ring`'s textures but the handles in `kept`: Windows reuses the value of a
+  /// freed texture's shared handle, so the held ring and the new one can share one, and
+  /// unregistering it would turn the new ring's frames into plain (black) images.
+  fn retire(&mut self, ring: Ring, kept: &[u64]) {
+    for (handle, image) in ring {
+      if !kept.contains(&handle) {
+        gpui_windows::unregister_external_texture(handle);
+      }
       self.stale.push(image);
     }
   }
 
   fn release_all(&mut self, cx: &mut App) {
     self.retire_ring();
+    self.release_held();
     self.stale.extend(self.cpu_frame.take());
     for image in self.stale.drain(..) {
       cx.drop_image(image, None);
@@ -142,9 +181,18 @@ impl VideoView {
   fn frame(&self) -> Option<Arc<RenderImage>> {
     match self.current_slot {
       Some(slot) => self.ring.get(slot).map(|(_, image)| image.clone()),
-      None => self.cpu_frame.clone(),
+      None => match &self.held {
+        Some((_, image)) => Some(image.clone()),
+        None => self.cpu_frame.clone(),
+      },
     }
   }
+}
+
+fn handles(ring: Option<&Ring>) -> Vec<u64> {
+  ring.map_or_else(Vec::new, |ring| {
+    ring.iter().map(|(handle, _)| *handle).collect()
+  })
 }
 
 /// An image whose bytes tell the patched atlas to sample the shared texture `handle`.

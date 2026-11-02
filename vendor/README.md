@@ -18,7 +18,7 @@ It draws **external D3D11 textures** without copying them. Peeby uses this for z
 
 **Cursor:** `platform.rs` exports `hide_cursor_until_mouse_moves()`. GPUI already hides the cursor while typing and shows it again on the next mouse move, but only internally. The player calls this when its controls hide. It only acts when the cursor is over a window of the UI thread.
 
-**Window bounds:** `window.rs` exports `set_window_bounds(window, cx, bounds)`, a `SetWindowPos` without activation or z-order change. GPUI only resizes from the top-left corner; the mini-player resizes from every edge (ADR 0008). The call runs as a foreground task, as GPUI's own `resize` does: `SetWindowPos` sends `WM_SIZE`/`WM_MOVE` synchronously, and from inside an update (an event, or `cx.defer`) the app is still borrowed and the new bounds would be dropped.
+**Window bounds:** `window.rs` exports `set_window_bounds(window, cx, bounds)`, a `SetWindowPos` without activation or z-order change. GPUI only resizes from the top-left corner; the mini-player resizes from every edge (ADR 0008). The call runs as a foreground task, as GPUI's own `resize` does: `SetWindowPos` sends `WM_SIZE`/`WM_MOVE` synchronously, and from inside an update (an event, or `cx.defer`) the app is still borrowed and the new bounds would be dropped. It then draws the window at once (`RedrawWindow` with `RDW_UPDATENOW`): the swap chain's resize drops its picture, and waiting for the next vsync shows the window empty for a frame.
 
 The polychrome sprite shader derives UVs from `GetDimensions` of the bound texture, so no shader change is needed.
 

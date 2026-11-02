@@ -25,7 +25,8 @@ PeebTube additions to `player`:
 - `StartOptions::ytdl` (mpv's `ytdl_hook`, for the yt-dlp fallback);
 - `StartOptions::log_file`;
 - `Player::add_subtitle` (`sub-add`, captions fetched on demand);
-- `Player::property`, read-only, for the player's statistics panel.
+- `Player::property`, read-only, for the player's statistics panel;
+- the GPU ring is recreated at once after a quiet spell, else once a resize settles (60 ms), and the replaced ring lives until the next one (no black video while the mini-player is resized, ADR 0008).
 
 PeebTube additions to `gpui-video`:
 - `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners);

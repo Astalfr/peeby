@@ -18,12 +18,17 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use crate::d3d::{RenderTarget, SharedTexture, VideoDevice};
 use crate::sys::{Mpv, MpvEvent, RenderBackend};
 
 /// Number of shared textures in the GPU ring.
 const RING: usize = 3;
+/// A size change after this long without one recreates the ring at once; closer ones (a resize by
+/// the mouse, one per move) wait until the size has not changed for this long, frames coming
+/// meanwhile (stretched) at the old size.
+const RESIZE_SETTLE: Duration = Duration::from_millis(60);
 /// Position events are sent at most this often (seconds of media time).
 const POSITION_STEP: f64 = 0.25;
 
@@ -227,12 +232,22 @@ impl Shared {
     self.quit.load(Ordering::SeqCst)
   }
 
-  /// Blocks until mpv has a new frame, the target was resized or the player stops.
-  /// Returns `None` on quit, else whether a resize happened.
-  fn wait(&self) -> Option<bool> {
+  /// Blocks until mpv has a new frame, the target was resized, `timeout` passed or the player
+  /// stops. Returns `None` on quit, else whether a resize happened.
+  fn wait(&self, timeout: Option<Duration>) -> Option<bool> {
+    let deadline = timeout.map(|t| Instant::now() + t);
     let mut wake = self.wake.lock().ok()?;
     while !wake.dirty && !self.quitting() {
-      wake = self.cond.wait(wake).ok()?;
+      match deadline {
+        Some(deadline) => {
+          let left = deadline.saturating_duration_since(Instant::now());
+          if left.is_zero() {
+            break;
+          }
+          wake = self.cond.wait_timeout(wake, left).ok()?.0;
+        }
+        None => wake = self.cond.wait(wake).ok()?,
+      }
     }
     wake.dirty = false;
     let resized = std::mem::take(&mut wake.resized);
@@ -574,19 +589,43 @@ fn render_gpu(
 ) {
   let mut target: Option<RenderTarget> = None;
   let mut ring: Vec<SharedTexture> = Vec::new();
+  // The ring before, kept until the next one is made: the UI shows its last frame until the
+  // current ring has one, and a freed texture would draw as nothing.
+  let mut _previous: Vec<SharedTexture> = Vec::new();
   let mut size = (0, 0);
   let mut generation = 0u64;
   let mut next = 0usize;
-  while let Some(resized) = shared.wait() {
-    let flags = mpv.render_update();
-    if flags & sys::RENDER_UPDATE_FRAME == 0 && !resized {
-      continue;
+  // When the size last changed, and whether a ring at the new size is still to make.
+  let mut changed_at: Option<Instant> = None;
+  let mut pending = false;
+  loop {
+    let timeout = changed_at
+      .filter(|_| pending)
+      .map(|at| RESIZE_SETTLE.saturating_sub(at.elapsed()));
+    let Some(resized) = shared.wait(timeout) else {
+      break;
+    };
+    let quiet = changed_at.is_none_or(|at| at.elapsed() >= RESIZE_SETTLE);
+    if resized {
+      changed_at = Some(Instant::now());
+      pending = true;
     }
+    let flags = mpv.render_update();
     let (width, height) = shared.target.lock().map(|t| *t).unwrap_or_default();
     if width == 0 || height == 0 {
       continue;
     }
-    if size != (width, height) || target.is_none() {
+    // At once after a quiet spell (or for the first ring), else once the size settles.
+    let settled = changed_at.is_some_and(|at| at.elapsed() >= RESIZE_SETTLE);
+    let due = target.is_none() || (pending && (quiet || settled));
+    let recreate = due && (target.is_none() || size != (width, height));
+    if due {
+      pending = false;
+    }
+    if flags & sys::RENDER_UPDATE_FRAME == 0 && !recreate {
+      continue;
+    }
+    if recreate {
       let created = device.create_target(width, height).and_then(|t| {
         let slots = (0..RING)
           .map(|_| device.create_shared(width, height))
@@ -596,7 +635,7 @@ fn render_gpu(
       match created {
         Ok((t, slots)) => {
           target = Some(t);
-          ring = slots;
+          _previous = std::mem::replace(&mut ring, slots);
           size = (width, height);
           generation += 1;
           let handles = ring.iter().map(|t| t.handle).collect();
@@ -645,7 +684,7 @@ fn render_gpu(
 }
 
 fn render_software(mpv: &Mpv, shared: &Shared, frames: &async_channel::Sender<Frame>) {
-  while let Some(resized) = shared.wait() {
+  while let Some(resized) = shared.wait(None) {
     let flags = mpv.render_update();
     if flags & sys::RENDER_UPDATE_FRAME == 0 && !resized {
       continue;
