@@ -2,6 +2,8 @@
 //! a VOD. The raw query is used, not a persisted hash: it answers with the web Client-ID and
 //! needs no hash to keep up to date (docs/twitch.md, "Checked live").
 
+use std::collections::HashMap;
+
 use serde_json::{Value, json};
 
 use crate::chat::{ChatLine, EmoteRange};
@@ -583,6 +585,43 @@ pub fn parse_viewing(answer: &Value) -> Result<Viewing> {
     position: as_u32(&video["self"]["viewingHistory"]["position"]),
     length: as_u32(&video["lengthSeconds"]).unwrap_or(0),
   })
+}
+
+/// The request for the viewer's positions in the VODs `ids`, one aliased `video` per VOD (`v0`,
+/// `v1`…). Ids that are not numbers are left out: they go into the query's text.
+pub fn positions_request(ids: &[String]) -> Value {
+  let fields: String = ids
+    .iter()
+    .enumerate()
+    .filter(|(_, id)| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+    .map(|(i, id)| {
+      format!(" v{i}: video(id: \"{id}\") {{ id self {{ viewingHistory {{ position }} }} }}")
+    })
+    .collect();
+  json!({
+    "operationName": "VideoPositions",
+    "query": format!("query VideoPositions {{{fields} }}"),
+  })
+}
+
+/// The positions in [`positions_request`]'s answer, by VOD id: the VODs never watched (or
+/// without an auth-token) are left out.
+pub fn parse_positions(answer: &Value) -> Result<HashMap<String, u32>> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  Ok(
+    answer["data"]
+      .as_object()
+      .into_iter()
+      .flatten()
+      .filter_map(|(_, video)| {
+        let id = video["id"].as_str()?.to_owned();
+        let position = video["self"]["viewingHistory"]["position"].as_u64()?;
+        Some((id, u32::try_from(position).ok().filter(|&p| p > 0)?))
+      })
+      .collect(),
+  )
 }
 
 /// The request saving `position` seconds as `user_id`'s resume position in VOD `id`.

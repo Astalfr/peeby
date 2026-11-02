@@ -141,7 +141,9 @@ Two credentials, for different things. Both are secrets, under the same rules as
   `video(id) { self { viewingHistory { position updatedAt } } }` read it (null signed out);
   `updateUserViewedVideo(input: {userID, videoID, position, videoType: VOD})` writes it, raw, with no integrity
   token (`UpdateUserViewedVideoPayload`, `updatedAt` moved). Helix has nothing like it. Used by
-  `spaces::twitch::progress` (ADR 0013).
+  `spaces::twitch::progress` (ADR 0013). Several VODs in one query: one aliased `video(id)` per
+  VOD, at most 15 (`The number of root field aliases 40 exceeds the root field aliases limit
+  allowed (15)`), checked the same day; a VOD never watched answers `position: null`.
 - **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
   tag, deleted messages, 7TV, badges; BTTV and FFZ dropped (the user's choice: 7TV is enough).
 

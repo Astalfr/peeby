@@ -30,9 +30,12 @@ async fn main() {
   let feed = feed.unwrap_or_else(|e| fail(&e.to_string()));
   for v in &feed.items {
     println!(
-      "{:<12} {:>8}  {}  —  {} · {}",
+      "{:<12} {:>8} {:>4}  {}  —  {} · {}",
       v.id,
       v.duration.as_deref().unwrap_or(""),
+      v.progress
+        .map(|p| format!("{}%", p.percent))
+        .unwrap_or_default(),
       v.title,
       v.channel.as_deref().unwrap_or("?"),
       v.metadata.join(" · ")

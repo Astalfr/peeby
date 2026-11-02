@@ -17,7 +17,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Resume where a video stopped (2026-11-02, [ADR 0013](decisions/0013-watch-progress-on-the-account.md)), kept on the account rather than locally:
   - YouTube: cards carry YouTube's progress (`innertube::Progress`: the red bar, and where a click resumes). The watch page reports to the account like youtube.com's player: a signed WEB `player` request in the background for the stats URLs (`Client::tracking`), a playback ping at the start, then watchtime pings every 30 s, on pause, at the end and when the page goes. Not for lives, nothing signed out.
-  - Twitch VODs: the saved position is read with the playback (`Client::vod_viewing`) and the VOD starts there; it is saved with `updateUserViewedVideo` every 30 s, on pause and when the page goes (auth-token only).
+  - Twitch VODs: the saved position is read with the playback (`Client::vod_viewing`) and the VOD starts there; it is saved with `updateUserViewedVideo` every 30 s, on pause and when the page goes (auth-token only). A channel's VOD cards show it as a progress bar (`Client::vod_positions`, 15 VODs per GQL query; fixture `gql_vod_positions.json`).
   - 8 new tests, 6 fixtures (`history.json`, `playlist_watch_later_progress.json`, `player_web_signed_in.json`, `gql_vod_viewing*.json`, `gql_viewed_video.json`).
   - Checked live outside the app, with the user's agreement: the YouTube pings put a video at the top of the history and set its resume position (seen in the subscriptions feed); the Twitch mutation is accepted and changes `updatedAt`.
   - **Not verified:** in the app (a resume from a card, the pings during a real playback, a VOD resuming and its position seen on twitch.tv).

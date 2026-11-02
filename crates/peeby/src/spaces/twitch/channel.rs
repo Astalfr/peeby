@@ -1,5 +1,8 @@
 //! A channel's page: its header (Helix `users`), its live when on air (GQL `Channel`), then its
-//! past broadcasts (`videos?type=archive`) or its most viewed clips (`clips`), in two tabs.
+//! past broadcasts (`videos?type=archive`, with the account's resume positions as progress bars)
+//! or its most viewed clips (`clips`), in two tabs.
+
+use std::collections::HashMap;
 
 use gpui::prelude::*;
 use gpui::{Context, FontWeight, SharedString, Task, WeakEntity, Window, div, px};
@@ -24,6 +27,8 @@ struct Loaded {
   user: User,
   channel: Option<Channel>,
   videos: Vec<Video>,
+  /// Where the viewer stopped in the VODs, seconds, by id.
+  positions: HashMap<String, u32>,
   clips: Vec<Clip>,
 }
 
@@ -59,6 +64,11 @@ impl ChannelView {
             .await
             .map(|p| p.items)
             .unwrap_or_default();
+          let ids: Vec<String> = videos.iter().map(|v| v.id.clone()).collect();
+          let positions = client.vod_positions(&ids).await.unwrap_or_else(|e| {
+            tracing::warn!("Twitch VOD positions: {e}");
+            HashMap::new()
+          });
           let clips = helix
             .clips(&user.id, None)
             .await
@@ -68,6 +78,7 @@ impl ChannelView {
             user,
             channel,
             videos,
+            positions,
             clips,
           })
         }
@@ -191,7 +202,10 @@ impl Render for ChannelView {
         loaded
           .videos
           .iter()
-          .map(|v| cards::video_card(v, width, &self.nav, window, cx))
+          .map(|v| {
+            let position = loaded.positions.get(&v.id).copied();
+            cards::video_card(v, position, width, &self.nav, window, cx)
+          })
           .collect(),
       )
       .into_any_element(),

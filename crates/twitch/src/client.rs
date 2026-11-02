@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -8,6 +9,10 @@ use crate::gql::{self, PlaybackToken, Target};
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
 use crate::{points, spade};
+
+/// VODs per [`Client::vod_positions`] request: GQL allows 15 aliased root fields in a query
+/// (checked 2026-11-02).
+const POSITIONS_PER_REQUEST: usize = 15;
 
 const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
@@ -92,7 +97,9 @@ impl Client {
     Ok(())
   }
 
-  async fn gql(&self, body: &Value) -> Result<Value> {
+  /// The answer to a GQL request (a `gql::*_request`), with the auth-token when there is one;
+  /// public for the fixtures' capture.
+  pub async fn gql(&self, body: &Value) -> Result<Value> {
     let mut request = self
       .http
       .post("https://gql.twitch.tv/gql")
@@ -143,6 +150,21 @@ impl Client {
   pub async fn vod_viewing(&self, id: &str) -> Result<gql::Viewing> {
     let answer = self.gql(&gql::viewing_request(id)).await?;
     gql::parse_viewing(&answer)
+  }
+
+  /// Where the viewer stopped in each of the VODs `ids`, by id (for the cards' progress bars),
+  /// a request per [`POSITIONS_PER_REQUEST`]; the ones never watched are left out. Without an
+  /// auth-token, nothing.
+  pub async fn vod_positions(&self, ids: &[String]) -> Result<HashMap<String, u32>> {
+    let mut positions = HashMap::new();
+    if self.auth_token.is_none() {
+      return Ok(positions);
+    }
+    for chunk in ids.chunks(POSITIONS_PER_REQUEST) {
+      let answer = self.gql(&gql::positions_request(chunk)).await?;
+      positions.extend(gql::parse_positions(&answer)?);
+    }
+    Ok(positions)
   }
 
   /// Saves `position` seconds as `user_id`'s resume position in VOD `id`, as twitch.tv's player

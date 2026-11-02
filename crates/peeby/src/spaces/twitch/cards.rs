@@ -308,9 +308,16 @@ pub fn date(millis: Option<i64>) -> String {
   format!("{day} {} {year}", MONTHS[(month - 1) as usize])
 }
 
-/// A VOD's grid card, `width` wide; a click plays it.
+/// How far `position` seconds is into a VOD `length` seconds long (0 to 1), for its card.
+fn progress(position: u32, length: u64) -> Option<f32> {
+  (length > 0 && position > 0).then(|| (f64::from(position) / length as f64).min(1.) as f32)
+}
+
+/// A VOD's grid card, `width` wide, with a progress bar at `position` (seconds, where the viewer
+/// stopped); a click plays it.
 pub fn video_card(
   video: &Video,
+  position: Option<u32>,
   width: f32,
   nav: &WeakEntity<TwitchSpace>,
   window: &mut Window,
@@ -332,6 +339,7 @@ pub fn video_card(
     date(video.created_at)
   )])
   .badge(Some(ui::player::format_time(video.duration as f64)))
+  .progress(position.and_then(|p| progress(p, video.duration)))
   .on_click(move |_, cx| {
     nav
       .update(cx, |space, cx| space.open(route.clone(), cx))
@@ -374,7 +382,7 @@ pub fn clip_card(
 
 #[cfg(test)]
 mod tests {
-  use super::{compact, date, grouped};
+  use super::{compact, date, grouped, progress};
 
   #[test]
   fn formats() {
@@ -383,5 +391,14 @@ mod tests {
     assert_eq!(date(Some(1_793_563_851_000)), "1 nov. 2026");
     assert_eq!(date(Some(0)), "1 janv. 1970");
     assert_eq!(date(None), "");
+  }
+
+  #[test]
+  fn vod_progress() {
+    assert_eq!(progress(2940, 29_400), Some(0.1));
+    // Past the end (a VOD cut after it was watched): a full bar.
+    assert_eq!(progress(500, 400), Some(1.));
+    assert_eq!(progress(0, 400), None);
+    assert_eq!(progress(10, 0), None);
   }
 }

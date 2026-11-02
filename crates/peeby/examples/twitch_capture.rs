@@ -9,6 +9,8 @@
 //! codec, height) of a live's master asked for with every codec (AV1, HEVC, H.264) and the saved
 //! `auth-token`, and saves it redacted as `usher_master_codecs.m3u8` when it has HEVC or AV1.
 //! `-- master-scan` lists which of the top 100 lives offer HEVC or AV1 (logins and codecs only).
+//! `-- positions <vod-id>…` prints how many of those VODs have a resume position on the account
+//! (saved `auth-token`) and saves the answer as `gql_vod_positions.json`; it reads, never writes.
 //!
 //! The saved refresh token is spent and its successor saved back, as the app does: do not run it
 //! while Peeby runs, or the app's session ends at its next refresh. Prints counts only.
@@ -27,6 +29,10 @@ const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../twitch/tests/fix
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let args: Vec<String> = std::env::args().collect();
+  if let Some(i) = args.iter().position(|a| a == "positions") {
+    let ids = args[i + 1..].to_vec();
+    return twitch::block_on(capture_positions(ids))?;
+  }
   if let Some(i) = args.iter().position(|a| a == "master") {
     let login = args.get(i + 1).ok_or("master <login>")?.clone();
     return twitch::block_on(capture_master(login))?;
@@ -162,6 +168,26 @@ async fn capture_master(login: String) -> Result<(), Box<dyn std::error::Error>>
     std::fs::write(&path, redact_master(&master.text))?;
     println!("saved {}", path.display());
   }
+  Ok(())
+}
+
+/// The account's resume positions in VODs `ids` (auth-token), saved as they come: the VODs are
+/// public, the answer holds no user id.
+async fn capture_positions(ids: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+  let auth_token = keyring::Entry::new("peeby", "twitch|auth-token")
+    .and_then(|e| e.get_password())
+    .ok();
+  println!(
+    "auth-token: {}",
+    if auth_token.is_some() { "yes" } else { "no" }
+  );
+  let client = twitch::Client::new(None, auth_token)?;
+  let answer = client.gql(&twitch::gql::positions_request(&ids)).await?;
+  let positions = twitch::gql::parse_positions(&answer)?;
+  println!("{} VODs, {} with a position", ids.len(), positions.len());
+  let path = Path::new(FIXTURES).join("gql_vod_positions.json");
+  std::fs::write(&path, serde_json::to_string(&answer)?)?;
+  println!("saved {}", path.display());
   Ok(())
 }
 

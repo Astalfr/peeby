@@ -45,7 +45,9 @@ Progress lives on the account, never in a local store:
 - **Twitch** (`spaces::twitch::progress`): when a VOD opens, `vod_viewing` is requested alongside
   the playback (about 30 ms), and the VOD starts at the saved position unless it is within 30 s of
   the end. The position is saved with `updateUserViewedVideo` every 30 s while playing, on pause,
-  at the end and when the page goes. This needs the auth-token; without it, nothing is read or
+  at the end and when the page goes. A channel's VOD cards draw the same bar as Jellyfin's, from
+  the positions of its VODs read in one aliased query per 15 VODs (`Client::vod_positions`: GQL
+  allows 15 aliased root fields). This needs the auth-token; without it, nothing is read or
   saved.
 - Only the session keeps positions in memory (`history::Resume`): a video played earlier in the
   session resumes from its last reported position even from an older card, or with no card.

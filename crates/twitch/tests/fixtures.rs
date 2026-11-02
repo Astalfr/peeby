@@ -387,3 +387,22 @@ fn vod_position_is_saved() {
   );
   assert!(gql::parse_viewed(&json("gql_invalid_auth_token.json")).is_err());
 }
+
+#[test]
+fn vod_positions() {
+  let positions = gql::parse_positions(&json("gql_vod_positions.json")).unwrap();
+  // The VODs never watched are left out.
+  assert_eq!(
+    positions,
+    [("2917171400".to_owned(), 2940)].into_iter().collect()
+  );
+  // One alias per VOD; an id that is not a number stays out of the query's text.
+  let ids = ["2917171400", "x\") { a }", "2917171402"].map(str::to_owned);
+  let query = gql::positions_request(&ids)["query"]
+    .as_str()
+    .unwrap()
+    .to_owned();
+  assert!(query.contains("v0: video(id: \"2917171400\")"));
+  assert!(query.contains("v2: video(id: \"2917171402\")"));
+  assert!(!query.contains("v1:"));
+}
