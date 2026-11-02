@@ -100,6 +100,17 @@ pub struct Video {
   pub duration: u64,
   /// Thumbnail template (`%{width}x%{height}`); empty or `404_processing` while being processed.
   pub thumbnail_url: String,
+  /// Parts whose audio Twitch removed (copyrighted music), in the order given.
+  pub muted_segments: Vec<MutedSegment>,
+}
+
+/// A part of a VOD whose audio Twitch removed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MutedSegment {
+  /// Start, seconds from the VOD's start.
+  pub offset: u64,
+  /// Length, seconds.
+  pub duration: u64,
 }
 
 /// A clip.
@@ -325,6 +336,18 @@ pub fn parse_videos(answer: &Value) -> Page<Video> {
       view_count: v["view_count"].as_u64().unwrap_or(0),
       duration: parse_duration(v["duration"].as_str().unwrap_or_default()),
       thumbnail_url: text(&v["thumbnail_url"]),
+      // `null` without any.
+      muted_segments: v["muted_segments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+          Some(MutedSegment {
+            offset: m["offset"].as_u64()?,
+            duration: m["duration"].as_u64().filter(|&d| d > 0)?,
+          })
+        })
+        .collect(),
     })
   })
 }

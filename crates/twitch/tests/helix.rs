@@ -121,6 +121,17 @@ fn videos() {
   // The first one is the broadcast still going: its thumbnail is not ready.
   assert!(page.items[0].thumbnail_url.contains("404_processing"));
   assert!(page.items[1].created_at.is_some());
+  // `null` without any; otherwise in the order of the VOD.
+  assert!(page.items[0].muted_segments.is_empty());
+  let muted = &page.items[1].muted_segments;
+  assert_eq!(muted.len(), 10);
+  assert_eq!(
+    muted[1],
+    helix::MutedSegment {
+      offset: 721,
+      duration: 180
+    }
+  );
 }
 
 #[test]

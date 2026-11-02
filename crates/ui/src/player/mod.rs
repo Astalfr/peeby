@@ -32,7 +32,7 @@ use gpui_component::tooltip::Tooltip;
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
 use player::{Chapter, Choice, Event, Player, StartOptions, Track};
-use segments::Segment;
+use segments::{Segment, SegmentKind};
 use tracks::{SUBTITLE_DELAY_STEP, UpNext};
 
 use crate::assets::Icon;
@@ -184,6 +184,8 @@ pub struct PlayerView {
   /// Segments from the source's server; without them, `segments` comes from the chapters.
   given_segments: Vec<Segment>,
   segments: Vec<Segment>,
+  /// The start of the muted segment playing, told once on entering it.
+  muted_at: Option<f64>,
   /// The next item, offered in the "up next" card near the end.
   up_next_title: Option<SharedString>,
   up_next: UpNext,
@@ -288,6 +290,7 @@ impl PlayerView {
       given_chapters: false,
       given_segments: Vec::new(),
       segments: Vec::new(),
+      muted_at: None,
       up_next_title: None,
       up_next: UpNext::Hidden,
       countdown_task: None,
@@ -787,6 +790,7 @@ impl PlayerView {
       Event::Position(seconds) if !self.seek_dragging => {
         self.position = seconds;
         self.update_up_next(cx);
+        self.tell_muted(cx);
       }
       Event::Position(_) => {}
       // A live's duration is only its playlist's window: kept at 0, it turns off the seek
@@ -925,6 +929,15 @@ impl PlayerView {
       volume: self.volume,
       muted: self.muted,
     });
+  }
+
+  /// Entering a muted segment (by playing or seeking) says so, else silence looks like a fault.
+  fn tell_muted(&mut self, cx: &mut Context<Self>) {
+    let start = segments::muted_at(&self.segments, self.position).map(|s| s.start);
+    if start.is_some() && start != self.muted_at {
+      self.show_osd("Son coupé (droits d'auteur)".into(), cx);
+    }
+    self.muted_at = start;
   }
 
   fn show_osd(&mut self, text: SharedString, cx: &mut Context<Self>) {
@@ -1188,6 +1201,7 @@ impl PlayerView {
       let chapter = self
         .chapter_at(seconds)
         .and_then(|i| self.chapters[i].title.clone());
+      let muted = segments::muted_at(&self.segments, seconds).is_some();
       v_flex()
         .absolute()
         .bottom(px(22.))
@@ -1210,7 +1224,15 @@ impl PlayerView {
             } else {
               format_time(seconds)
             }))
-            .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c))),
+            .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c)))
+            .when(muted, |el| {
+              el.child(
+                div()
+                  .text_xs()
+                  .text_color(theme::muted_audio())
+                  .child("Son coupé"),
+              )
+            }),
         )
     });
     // One piece of track per chapter, apart by a gap as on YouTube; the hovered one is
@@ -1223,6 +1245,14 @@ impl PlayerView {
         edges.push(edge);
       }
     }
+    // Muted parts, as fractions of the bar.
+    let muted: Vec<(f64, f64)> = self
+      .segments
+      .iter()
+      .filter(|s| s.kind == SegmentKind::Muted && span > 0.0)
+      .map(|s| ((s.start - start) / span, (s.end - start) / span))
+      .filter(|&(from, to)| to > 0.0 && from < 1.0)
+      .collect();
     let hover = self.seek_hover;
     let pieces = (0..edges.len())
       .map(|i| {
@@ -1238,6 +1268,32 @@ impl PlayerView {
         );
         let height = height + grown;
         let local = |fraction: f64| ((fraction - from) / (to - from)).clamp(0.0, 1.0);
+        // Red over the track, bright where played (as the progress is) and dim ahead. A band
+        // that reaches an end of the piece takes its rounding there, square elsewhere.
+        let band = |a: f64, b: f64, color: gpui::Hsla| {
+          let radius = px(height / 2.);
+          div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left(relative(a as f32))
+            .w(relative((b - a) as f32))
+            .when(a <= 0.0, |el| el.rounded_l(radius).min_w(radius))
+            .when(b >= 1.0, |el| el.rounded_r(radius).min_w(radius))
+            .bg(color)
+        };
+        let played = local(progress);
+        let bands = muted
+          .iter()
+          .map(|&(a, b)| (local(a), local(b)))
+          .filter(|(a, b)| b > a)
+          .flat_map(|(a, b)| {
+            let ahead =
+              (b > played).then(|| band(a.max(played), b, theme::muted_audio().opacity(0.6)));
+            let behind = (played > a).then(|| band(a, b.min(played), theme::muted_audio()));
+            ahead.into_iter().chain(behind)
+          })
+          .collect::<Vec<_>>();
         div()
           .absolute()
           .top_0()
@@ -1260,9 +1316,8 @@ impl PlayerView {
                   .filter(|&f| f > 0.0)
                   .map(|f| fill(f, height, gpui::white().opacity(0.25))),
               )
-              .when(local(progress) > 0.0, |el| {
-                el.child(fill(local(progress), height, primary))
-              }),
+              .when(played > 0.0, |el| el.child(fill(played, height, primary)))
+              .children(bands),
           )
       })
       .collect::<Vec<_>>();

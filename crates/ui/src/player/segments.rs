@@ -27,6 +27,8 @@ pub enum SegmentKind {
   Preview,
   /// An advertisement.
   Commercial,
+  /// Audio removed by the server (Twitch's copyright mutes): marked on the seek bar.
+  Muted,
 }
 
 /// A skippable part of a video.
@@ -98,6 +100,14 @@ pub fn from_chapters(chapters: &[Chapter], duration: f64) -> Vec<Segment> {
     }
   }
   out
+}
+
+/// The muted segment at `seconds`, to its very end.
+pub fn muted_at(segments: &[Segment], seconds: f64) -> Option<Segment> {
+  segments
+    .iter()
+    .find(|s| s.kind == SegmentKind::Muted && s.start <= seconds && seconds < s.end)
+    .copied()
 }
 
 /// The segment playing at `position`, while a skip still makes sense.
@@ -305,6 +315,25 @@ mod tests {
     assert!(is_credits("end credits"));
     assert!(!is_credits("edge"));
     assert!(!is_credits("post-credits"));
+  }
+
+  #[test]
+  fn muted_segment_lasts_to_its_end() {
+    let s = vec![
+      Segment {
+        kind: SegmentKind::Intro,
+        start: 0.0,
+        end: 50.0,
+      },
+      Segment {
+        kind: SegmentKind::Muted,
+        start: 10.0,
+        end: 100.0,
+      },
+    ];
+    assert_eq!(muted_at(&s, 5.0), None);
+    assert_eq!(muted_at(&s, 99.5).map(|s| s.start), Some(10.0));
+    assert_eq!(muted_at(&s, 100.0), None);
   }
 
   #[test]

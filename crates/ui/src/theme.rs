@@ -85,6 +85,10 @@ pub fn muted() -> Hsla {
 pub fn subtle() -> Hsla {
   color(0x71717a)
 }
+/// Parts of a video whose audio was removed, on the seek bar: red whatever the space's accent.
+pub fn muted_audio() -> Hsla {
+  color(0xe5484d)
+}
 /// The accent color of a space and its hover and pressed shades.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Accent {

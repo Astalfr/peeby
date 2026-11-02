@@ -311,6 +311,7 @@ impl PlayerView {
       SegmentKind::Outro => "Passer le générique",
       SegmentKind::Preview => "Passer l'aperçu",
       SegmentKind::Commercial => "Passer la pub",
+      SegmentKind::Muted => "Passer la partie muette",
     };
     Some((label, SkipAction::SeekTo(segment.end)))
   }

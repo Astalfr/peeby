@@ -183,6 +183,7 @@ Checked against the code on 2026-11-01:
 | Quality menu over the master's variants | `Source::qualities` (one `StartOptions` each) | Covered |
 | Clips as direct MP4 | `Source::options` with a plain URL | Covered |
 | VOD storyboard on the seek bar | `ui::player::Previews` | Covered |
+| VOD muted parts (`muted_segments`) red on the seek bar, told on entering, skippable | `set_segments` with `SegmentKind::Muted` | Covered |
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |
 | A watch page with the player and a chat beside it | `ui::chat::watch_layout` (step 9) with `ui::chat::ChatPanel` | Covered |

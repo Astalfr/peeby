@@ -3,14 +3,16 @@
 //!   step 3), one quality each;
 //! - a clip: its direct MP4s, one quality each.
 //!
-//! A VOD's storyboard becomes the seek bar's previews.
+//! A VOD's storyboard becomes the seek bar's previews, its muted parts red on the seek bar.
 
 use std::rc::Rc;
 
 use player::StartOptions;
 use twitch::Proxy;
 use twitch::gql::{ClipPlayback, StoryboardLevel};
+use twitch::helix::MutedSegment;
 use twitch::usher::{Codec, Variant};
+use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{Previews, Quality, Source, Tile};
 
 use crate::settings;
@@ -196,6 +198,26 @@ pub fn previews(levels: Vec<StoryboardLevel>) -> Option<Rc<dyn Previews>> {
   Some(Rc::new(Storyboard(level)) as Rc<dyn Previews>)
 }
 
+/// A VOD's muted parts as the player's segments: sorted, and those that touch merged, so that
+/// skipping one does not land in the next.
+pub fn muted(parts: &[MutedSegment]) -> Vec<Segment> {
+  let mut parts = parts.to_vec();
+  parts.sort_by_key(|p| p.offset);
+  let mut out: Vec<Segment> = Vec::new();
+  for part in parts {
+    let (start, end) = (part.offset as f64, (part.offset + part.duration) as f64);
+    match out.last_mut() {
+      Some(last) if start <= last.end => last.end = last.end.max(end),
+      _ => out.push(Segment {
+        kind: SegmentKind::Muted,
+        start,
+        end,
+      }),
+    }
+  }
+  out
+}
+
 /// What the user reads when a live, a VOD or a clip cannot play.
 pub fn describe(error: &twitch::Error, channel: &str) -> String {
   use twitch::Error;
@@ -219,6 +241,20 @@ pub fn describe(error: &twitch::Error, channel: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn muted_parts_that_touch_are_one() {
+    let part = |offset, duration| MutedSegment { offset, duration };
+    // As in helix_videos.json: three in a row from 8833.
+    let parts = [
+      part(9193, 180),
+      part(721, 180),
+      part(8833, 180),
+      part(9013, 180),
+    ];
+    let spans: Vec<(f64, f64)> = muted(&parts).iter().map(|s| (s.start, s.end)).collect();
+    assert_eq!(spans, vec![(721.0, 901.0), (8833.0, 9373.0)]);
+  }
 
   fn variant(name: &str, codec: Option<Codec>, height: Option<u32>) -> Variant {
     Variant {

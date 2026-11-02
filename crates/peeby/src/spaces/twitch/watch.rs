@@ -3,8 +3,8 @@
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute; the viewer's channel points at the header's right ([`super::points`]);
-//! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar, and
-//!   its chat replayed beside it as the playhead moves ([`super::replay`]);
+//! - a VOD: through the proxy too, seekable, with the storyboard's previews and its muted parts on
+//!   the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
 //!
 //! The layout is `ui::chat::watch_layout`: theater mode gives the whole page to the player and the
@@ -397,7 +397,11 @@ impl WatchView {
               )),
             });
             let title: SharedString = video.title.into();
-            this.player.update(cx, |p, cx| p.set_title(title, cx));
+            let muted = play::muted(&video.muted_segments);
+            this.player.update(cx, |p, cx| {
+              p.set_title(title, cx);
+              p.set_segments(muted, cx);
+            });
           }
           match play {
             Some(Ok(proxy)) => {

@@ -112,6 +112,17 @@ fn main() {
                 start: 5.0,
                 end: 40.0,
               },
+              // Muted audio (Twitch's): red on the seek bar, one at a chapter's start.
+              Segment {
+                kind: SegmentKind::Muted,
+                start: 60.0,
+                end: 80.0,
+              },
+              Segment {
+                kind: SegmentKind::Muted,
+                start: 95.0,
+                end: 110.0,
+              },
               Segment {
                 kind: SegmentKind::Outro,
                 start: 150.0,

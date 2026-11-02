@@ -18,6 +18,7 @@ Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's vi
 | `accent` | `#FF4E45` (YouTube), `#FF8A3D` (Jellyfin) | Primary buttons, progress, selection, play buttons, active item |
 | `accent_hover` | `#FF6B63`, `#FF9F5E` | Hovered accent elements and titles |
 | `accent_soft` | the accent at 14 % | Notice discs, step numbers, selected rows |
+| `muted_audio` | `#E5484D` (any space) | Muted parts of a Twitch VOD on the seek bar: full where played, at 60 % ahead; "Son coupé" in the hover preview |
 
 One accent at a time, the open space's (`theme::set_accent`; the settings page draws each space's part in its own): it marks what can be acted on or what is selected. Everything else stays neutral, so the thumbnails carry the color.
 
