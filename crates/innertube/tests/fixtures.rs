@@ -264,6 +264,21 @@ fn comment_replies() {
 }
 
 #[test]
+fn dubbed_video_plays_original_audio() {
+  let path = format!(
+    "{}/tests/fixtures/hls_master_dubbed.m3u8",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let master = std::fs::read_to_string(path).unwrap();
+  let ladder = hls::ladder(&master);
+  assert!(!ladder.is_empty());
+  for variant in &ladder {
+    let audio = variant.audio_url.as_deref().unwrap();
+    assert!(audio.contains("acont%3Doriginal"), "{}", variant.label());
+  }
+}
+
+#[test]
 fn quality_ladder() {
   let path = format!(
     "{}/tests/fixtures/hls_master.m3u8",

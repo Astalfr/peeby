@@ -101,14 +101,38 @@ pub fn playlist_length(media: &str) -> f64 {
     .sum()
 }
 
-/// URI of the audio rendition of `group`.
+/// URI of the audio rendition of `group`. A dubbed video lists one rendition per language, dubs
+/// first and none marked `DEFAULT=YES`: take the original track (`acont=original` in the URI's
+/// `xtags`), then the default one, then the first.
 fn audio_rendition(master: &str, group: &str) -> Option<String> {
   master
     .lines()
     .filter_map(|line| line.strip_prefix("#EXT-X-MEDIA:"))
     .filter(|attrs| attribute(attrs, "TYPE").as_deref() == Some("AUDIO"))
-    .find(|attrs| attribute(attrs, "GROUP-ID").as_deref() == Some(group))
-    .and_then(|attrs| attribute(attrs, "URI"))
+    .filter(|attrs| attribute(attrs, "GROUP-ID").as_deref() == Some(group))
+    .filter_map(|attrs| Some((attribute(attrs, "URI")?, attrs)))
+    // `min_by_key` keeps the first of equal ranks.
+    .min_by_key(|(uri, attrs)| {
+      std::cmp::Reverse((
+        audio_content(uri) == Some("original"),
+        attribute(attrs, "DEFAULT").as_deref() == Some("YES"),
+      ))
+    })
+    .map(|(uri, _)| uri)
+}
+
+/// `acont` of the `xtags` in a rendition's URI (`xtags%3Dacont%3Ddubbed:lang%3Dfr`): `original`,
+/// `dubbed`, `dubbed-auto`, `descriptive`…
+fn audio_content(uri: &str) -> Option<&str> {
+  let start = uri
+    .find("acont%3D")
+    .map(|i| i + "acont%3D".len())
+    .or_else(|| uri.find("acont=").map(|i| i + "acont=".len()))?;
+  let rest = &uri[start..];
+  let end = rest
+    .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    .unwrap_or(rest.len());
+  Some(&rest[..end])
 }
 
 /// Value of `name` in an HLS attribute list (`A=1,B="x,y"`). The name must start the list or
