@@ -266,7 +266,8 @@ fn cache_name(key: &str) -> String {
 const MAX_FRAMES: usize = 300;
 
 /// Decodes an image, scaled to fill `size` (device pixels) when given. Animated GIFs and WebPs keep
-/// their frames and delays: an `img` with an id plays them (GPUI's own animation).
+/// their frames and delays: the chat panel plays them (`chat::panel`), an `img` with an id too
+/// (GPUI's own animation, only while the window is active).
 pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>> {
   if let Some(frames) = animation(bytes) {
     let frames: Vec<image::Frame> = frames

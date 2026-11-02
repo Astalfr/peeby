@@ -15,6 +15,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Animated chat emotes keep playing when Peeby's window loses the focus (2026-11-02): the chat panel picks and paints the frames itself, GPUI's `img` stopping when the window is inactive. 1 new test. Verified in the app with VS Code focused.
+
 - VOD chat replay (2026-11-02): a VOD's chat beside it, "Rediffusion du chat", each message shown when the playhead reaches it, started over on a seek, with the live chat's emotes (Twitch, 7TV) and badges. GQL comments by offset only: the cursor fails Twitch's integrity check. 7 new tests, 1 fixture (`gql_vod_comments.json`). Verified in the app on a busy public VOD. **Not verified:** a seek in the app.
 
 - Channel points (2026-11-02, [ADR 0012](decisions/0012-twitch-channel-points.md); the bonus is claimed on twitch.tv until the user decides), with the web auth-token:

@@ -3,12 +3,14 @@
 //! until "Reprendre le défilement", so that what is read does not move.
 
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyElement, Context, ElementId, FollowMode, FontWeight, ImageSource, ListAlignment,
-  ListState, ObjectFit, SharedString, Window, div, img, list, px,
+  Anchor, AnyElement, App, Bounds, Context, Corners, FollowMode, FontWeight, ImageSource,
+  ListAlignment, ListState, ObjectFit, Pixels, RenderImage, SharedString, Window, canvas, div, img,
+  list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
@@ -31,6 +33,65 @@ const BADGE_SIZE: f32 = 18.;
 /// Width an emote is drawn at, [`EMOTE_HEIGHT`] high.
 fn emote_width(emote: &Emote) -> f32 {
   EMOTE_HEIGHT * emote.aspect.max(0.1)
+}
+
+/// An emote's image, its frame picked from the time when it is animated: GPUI's `img` plays
+/// frames only while the window is active, and the chat goes on beside a video watched from
+/// another window. Not animated with reduced motion.
+fn emote_image(render: Arc<RenderImage>) -> gpui::Canvas<()> {
+  canvas(
+    |_, _, _| {},
+    move |bounds: Bounds<Pixels>, (), window: &mut Window, cx: &mut App| {
+      let animated = render.frame_count() > 1 && !cx.reduce_motion();
+      let frame = if animated {
+        window.request_animation_frame();
+        frame_at(&render, clock())
+      } else {
+        0
+      };
+      let fitted = ObjectFit::Contain.get_bounds(bounds, render.size(frame));
+      // A frame that cannot be drawn leaves the emote's place empty.
+      window
+        .paint_image(
+          bounds,
+          fitted,
+          Corners::default(),
+          render.clone(),
+          frame,
+          false,
+        )
+        .ok();
+    },
+  )
+}
+
+/// Time since the first animated emote: copies of an emote play in step, as on Twitch.
+fn clock() -> Duration {
+  static START: OnceLock<Instant> = OnceLock::new();
+  START.get_or_init(Instant::now).elapsed()
+}
+
+/// The frame of `image` shown `elapsed` into its loop. Delays of 10 ms or less count as 100 ms,
+/// as browsers do (GIFs that say 0 mean "as fast as possible").
+fn frame_at(image: &RenderImage, elapsed: Duration) -> usize {
+  let delays: Vec<u128> = (0..image.frame_count())
+    .map(|i| {
+      let delay = Duration::from(image.delay(i)).as_millis();
+      if delay <= 10 { 100 } else { delay }
+    })
+    .collect();
+  let total: u128 = delays.iter().sum();
+  if total == 0 {
+    return 0;
+  }
+  let mut at = elapsed.as_millis() % total;
+  for (index, delay) in delays.iter().enumerate() {
+    if at < *delay {
+      return index;
+    }
+    at -= delay;
+  }
+  0
 }
 
 /// Height kept above and below the visible messages, laid out ahead of a scroll.
@@ -258,7 +319,7 @@ impl ChatPanel {
               }
               match fragments.get(look) {
                 Some(Fragment::Emote(over)) if over.overlay => {
-                  overlays.push((look, over));
+                  overlays.push(over);
                   look += 1;
                   next = look;
                 }
@@ -273,21 +334,16 @@ impl ChatPanel {
             .h(px(EMOTE_HEIGHT))
             .flex_none()
             .when(message.deleted, |el| el.opacity(0.35));
-          for (at, layer) in std::iter::once((index, emote)).chain(overlays) {
+          for layer in std::iter::once(emote).chain(overlays) {
             let layer_width = emote_width(layer);
             if let Some(render) = image(&layer.picture, layer_width, EMOTE_HEIGHT) {
               drawn = drawn.child(
-                img(ImageSource::Render(render))
-                  // An id lets GPUI play an animated image's frames.
-                  .id(("emote", at))
+                emote_image(render)
                   .absolute()
                   .bottom_0()
                   .left(px((width - layer_width) / 2.))
                   .w(px(layer_width))
-                  .h(px(EMOTE_HEIGHT))
-                  // Else the image's own ratio wins over the height.
-                  .aspect_ratio(layer_width / EMOTE_HEIGHT)
-                  .object_fit(ObjectFit::Contain),
+                  .h(px(EMOTE_HEIGHT)),
               );
             }
           }
@@ -299,12 +355,7 @@ impl ChatPanel {
       index += 1;
     }
 
-    // Its id keeps the emotes' animation state apart from other messages'.
-    let item = div()
-      .id(ElementId::Name(message.id.clone()))
-      .w_full()
-      .px_3()
-      .py(px(3.));
+    let item = div().w_full().px_3().py(px(3.));
     match &message.kind {
       MessageKind::Notice(text) => item
         .child(
@@ -450,5 +501,37 @@ impl Render for ChatPanel {
           })
           .children(resume),
       )
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn animation(delays_ms: &[u32]) -> RenderImage {
+    let frames: Vec<image::Frame> = delays_ms
+      .iter()
+      .map(|&ms| {
+        image::Frame::from_parts(
+          image::RgbaImage::new(1, 1),
+          0,
+          0,
+          image::Delay::from_numer_denom_ms(ms, 1),
+        )
+      })
+      .collect();
+    RenderImage::new(frames)
+  }
+
+  #[test]
+  fn frames_follow_the_clock_and_loop() {
+    let image = animation(&[50, 100, 50]);
+    let at = |ms| frame_at(&image, Duration::from_millis(ms));
+    assert_eq!((at(0), at(49), at(50), at(149), at(150)), (0, 0, 1, 1, 2));
+    // 200 ms a loop.
+    assert_eq!((at(200), at(260)), (0, 1));
+    // A delay of 0 counts as 100 ms.
+    let fast = animation(&[0, 0]);
+    assert_eq!(frame_at(&fast, Duration::from_millis(150)), 1);
   }
 }

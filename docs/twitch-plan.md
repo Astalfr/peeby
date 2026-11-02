@@ -549,8 +549,10 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 - BTTV and FFZ: dropped, the user's choice (2026-11-01): 7TV is enough
 - [x] Animated emotes and zero-width overlays: `ui::images::decode` keeps the frames and delays of animated
       GIFs and WebPs (at most 300; `image`'s `gif` feature added, agreed), the store counts every frame in
-      its budget, and the panel gives each emote image an id so that GPUI plays it (only while the window
-      is active, not with reduced motion). `Emote::overlay` draws an emote over the one before it (blank
+      its budget, and the panel plays them (not with reduced motion). It picks each frame from a clock
+      and paints it itself (`paint_image` in a `canvas`, 2026-11-02): GPUI's `img` stops animating
+      when the window loses the focus, and the chat runs beside a video watched from another window;
+      copies of an emote play in step, delays of 10 ms or less count as 100 ms as in browsers. `Emote::overlay` draws an emote over the one before it (blank
       text between allowed), else as an ordinary one: 7TV's zero-width emotes. 7TV emotes now ask for the
       animated WebP; Twitch's `default` URLs were already animated GIFs. 2 tests (a GIF built in memory);
       a real 7TV animated WebP decoded to its 55 frames (checked once, not kept as a fixture: third-party
