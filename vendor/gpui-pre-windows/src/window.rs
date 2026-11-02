@@ -32,6 +32,41 @@ use crate::direct_manipulation::DirectManipulationHandler;
 use crate::*;
 use gpui::*;
 
+/// PEEBY PATCH: moves and resizes `window` to `bounds` (logical pixels, screen coordinates)
+/// without activating it or changing its z-order. GPUI can only resize from the top-left
+/// corner. Runs as a task, as [`WindowsWindow::resize`] does: `SetWindowPos` sends `WM_SIZE`/
+/// `WM_MOVE` right away, and from inside an update (an event, or `cx.defer`) their handlers
+/// would find the app still borrowed and drop the new bounds.
+pub fn set_window_bounds(window: &gpui::Window, cx: &mut gpui::App, bounds: Bounds<Pixels>) {
+    let Ok(handle) = rwh::HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let rwh::RawWindowHandle::Win32(handle) = handle.as_raw() else {
+        return;
+    };
+    let hwnd = handle.hwnd.get();
+    let bounds = bounds.to_device_pixels(window.scale_factor());
+    // SAFETY: `hwnd` came from the window's own handle; a window closed since then makes
+    // `SetWindowPos` fail with an error, which is logged.
+    cx.foreground_executor()
+        .spawn(async move {
+            unsafe {
+                SetWindowPos(
+                    HWND(hwnd as *mut _),
+                    None,
+                    bounds.origin.x.0,
+                    bounds.origin.y.0,
+                    bounds.size.width.0,
+                    bounds.size.height.0,
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                )
+                .context("unable to set window bounds")
+                .log_err();
+            }
+        })
+        .detach();
+}
+
 pub(crate) struct WindowsWindow(pub Rc<WindowsWindowInner>);
 
 impl std::ops::Deref for WindowsWindow {

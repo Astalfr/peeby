@@ -1,14 +1,15 @@
 //! The mini-player: a window of its own, above every other window and outside the main one, as
 //! in Chrome's picture-in-picture (ADR 0008). It shows the video of the space that was left
 //! while it played, without restarting it: the same player and video surface move here. On
-//! hover: a strip at the top to move the window, buttons to go back to the page and to close
-//! (which pauses), play/pause in the middle, and a grip in the corner to resize it at 16:9.
+//! hover: buttons to go back to the page and to close (which pauses), and play/pause in the
+//! middle. Dragging the video moves the window; its edges and corners resize it at 16:9, the
+//! opposite side staying in place.
 
 use gpui::prelude::*;
 use gpui::{
-  AnyWindowHandle, App, Bounds, Context, Corners, DispatchPhase, Entity, EntityId, MouseButton,
-  MouseMoveEvent, MouseUpEvent, Pixels, Point, Subscription, WeakEntity, Window,
-  WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowHandle, WindowKind,
+  AnyWindowHandle, App, Bounds, Context, Corners, CursorStyle, DispatchPhase, Entity, EntityId,
+  MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Subscription,
+  WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
   WindowOptions, canvas, div, linear_color_stop, linear_gradient, point, px, size,
 };
 use gpui_component::IconName;
@@ -21,16 +22,80 @@ use super::space::SpaceHandle;
 
 /// Width of a new mini-player, logical pixels.
 const WIDTH: f32 = 400.;
-/// Smallest width the grip resizes to.
+/// Smallest width the edges resize to.
 const MIN_WIDTH: f32 = 240.;
 /// Gap between the window and the screen's edges.
 const MARGIN: f32 = 24.;
+/// Thickness of the resizing edges, and size of the corners.
+const EDGE: f32 = 6.;
+const CORNER: f32 = 12.;
+/// The resizing edges and corners: id, edge (see [`Gesture::edge`]) and cursor.
+const EDGES: [(&str, (i8, i8), CursorStyle); 8] = [
+  ("mini-edge-left", (-1, 0), CursorStyle::ResizeLeftRight),
+  ("mini-edge-right", (1, 0), CursorStyle::ResizeLeftRight),
+  ("mini-edge-top", (0, -1), CursorStyle::ResizeUpDown),
+  ("mini-edge-bottom", (0, 1), CursorStyle::ResizeUpDown),
+  (
+    "mini-corner-tl",
+    (-1, -1),
+    CursorStyle::ResizeUpLeftDownRight,
+  ),
+  ("mini-corner-br", (1, 1), CursorStyle::ResizeUpLeftDownRight),
+  (
+    "mini-corner-tr",
+    (1, -1),
+    CursorStyle::ResizeUpRightDownLeft,
+  ),
+  (
+    "mini-corner-bl",
+    (-1, 1),
+    CursorStyle::ResizeUpRightDownLeft,
+  ),
+];
 
-/// A resize in progress: where the mouse went down and the window's width then.
+/// A move or a resize in progress: where the mouse went down (screen coordinates: the window
+/// moves under it), the window's bounds then, and the edge held, as the direction each side
+/// goes: `(-1, 0)` the left edge, `(1, 1)` the bottom right corner, `(0, 0)` a move. Points and
+/// bounds are in device pixels (held in `Pixels`): the scale changes when the window goes to a
+/// screen with another one, and logical points from before and after would not match.
 #[derive(Clone, Copy)]
-struct Resize {
+struct Gesture {
   from: Point<Pixels>,
-  width: f32,
+  start: Bounds<Pixels>,
+  edge: (i8, i8),
+}
+
+impl Gesture {
+  /// The window's bounds with the mouse at `to`, from `min_width` to `max_width` wide.
+  fn bounds(&self, to: Point<Pixels>, min_width: f32, max_width: f32) -> Bounds<Pixels> {
+    let (dx, dy) = (f32::from(to.x - self.from.x), f32::from(to.y - self.from.y));
+    let start = self.start;
+    if self.edge == (0, 0) {
+      return Bounds::new(start.origin + point(px(dx), px(dy)), start.size);
+    }
+    let (sx, sy) = (f32::from(self.edge.0), f32::from(self.edge.1));
+    let from_x = sx * dx;
+    let from_y = sy * dy * 16. / 9.;
+    // A corner follows the axis the mouse went further along.
+    let grow = if from_x.abs() >= from_y.abs() {
+      from_x
+    } else {
+      from_y
+    };
+    let width = (f32::from(start.size.width) + grow).clamp(min_width, max_width.max(min_width));
+    let new_size = size(px(width), px(width * 9. / 16.));
+    // The side opposite the edge stays; along an axis no edge holds, the middle does.
+    let place = |edge: i8, low: Pixels, high: Pixels, len: Pixels| match edge {
+      -1 => high - len,
+      1 => low,
+      _ => (low + high - len) / 2.,
+    };
+    let origin = point(
+      place(self.edge.0, start.left(), start.right(), new_size.width),
+      place(self.edge.1, start.top(), start.bottom(), new_size.height),
+    );
+    Bounds::new(origin, new_size)
+  }
 }
 
 /// The mini-player's view.
@@ -39,7 +104,7 @@ pub struct MiniPlayer {
   shell: WeakEntity<Shell>,
   /// The main window, where the shell lives.
   main: AnyWindowHandle,
-  resize: Option<Resize>,
+  gesture: Option<Gesture>,
   /// Redraws the buttons when the player shown pauses or plays.
   observed: Option<(EntityId, Subscription)>,
 }
@@ -84,7 +149,7 @@ pub fn open(
       space,
       shell,
       main,
-      resize: None,
+      gesture: None,
       observed: None,
     })
   })
@@ -110,9 +175,26 @@ impl MiniPlayer {
       .ok();
   }
 
-  /// Follows the grip's drag over the whole screen (the window captures the mouse) until the
-  /// button is released. Registered at each paint while the drag lasts.
-  fn listen_to_resize(view: WeakEntity<Self>, window: &mut Window) {
+  /// Starts moving (`(0, 0)`) or resizing from `edge` with the mouse down at `event`.
+  fn begin(
+    &mut self,
+    edge: (i8, i8),
+    event: &MouseDownEvent,
+    window: &Window,
+    cx: &mut Context<Self>,
+  ) {
+    let (bounds, scale) = (window.bounds(), window.scale_factor());
+    self.gesture = Some(Gesture {
+      from: (bounds.origin + event.position) * scale,
+      start: Bounds::new(bounds.origin * scale, bounds.size.map(|v| v * scale)),
+      edge,
+    });
+    cx.notify();
+  }
+
+  /// Follows a move or resize over the whole screen (the window captures the mouse) until the
+  /// button is released. Registered at each paint while it lasts.
+  fn listen_to_gesture(view: WeakEntity<Self>, window: &mut Window) {
     let moved = view.clone();
     window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
       if phase != DispatchPhase::Capture {
@@ -120,13 +202,19 @@ impl MiniPlayer {
       }
       moved
         .update(cx, |this, cx| {
-          let Some(resize) = this.resize else { return };
+          let Some(gesture) = this.gesture else { return };
           if event.pressed_button != Some(MouseButton::Left) {
-            this.resize = None;
+            this.gesture = None;
             return cx.notify();
           }
-          let width = (resize.width + f32::from(event.position.x - resize.from.x)).max(MIN_WIDTH);
-          window.resize(size(px(width), px(width * 9. / 16.)));
+          let scale = window.scale_factor();
+          let max_width = window.display(cx).map_or(f32::MAX, |d| {
+            f32::from(d.visible_bounds().size.width) * scale
+          });
+          let to = (window.bounds().origin + event.position) * scale;
+          let b = gesture.bounds(to, MIN_WIDTH * scale, max_width);
+          let logical = Bounds::new(b.origin / scale, b.size.map(|v| v / scale));
+          ui::set_window_bounds(window, cx, logical);
         })
         .ok();
     });
@@ -134,13 +222,42 @@ impl MiniPlayer {
       if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
         view
           .update(cx, |this, cx| {
-            this.resize = None;
+            this.gesture = None;
             cx.notify();
           })
           .ok();
       }
     });
   }
+}
+
+/// An invisible strip along an edge (or a square in a corner) that resizes the window.
+fn edge(
+  id: &'static str,
+  edge: (i8, i8),
+  cursor: CursorStyle,
+  cx: &mut Context<MiniPlayer>,
+) -> gpui::Stateful<gpui::Div> {
+  let corner = edge.0 != 0 && edge.1 != 0;
+  let thickness = px(if corner { CORNER } else { EDGE });
+  let mut el = div().id(id).occlude().absolute().cursor(cursor);
+  el = match edge.0 {
+    -1 => el.left_0().w(thickness),
+    1 => el.right_0().w(thickness),
+    _ => el.left(px(CORNER)).right(px(CORNER)),
+  };
+  el = match edge.1 {
+    -1 => el.top_0().h(thickness),
+    1 => el.bottom_0().h(thickness),
+    _ => el.top(px(CORNER)).bottom(px(CORNER)),
+  };
+  el.on_mouse_down(
+    MouseButton::Left,
+    cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+      cx.stop_propagation();
+      this.begin(edge, event, window, cx);
+    }),
+  )
 }
 
 /// A round button over the video.
@@ -179,9 +296,13 @@ impl Render for MiniPlayer {
       video.update(cx, |video, _| video.set_corner_radii(Corners::default()));
     }
     let paused = player.as_ref().is_some_and(|p| p.read(cx).is_paused());
-    let show = window.is_window_hovered() || paused || self.resize.is_some();
-    let resizing = self.resize.is_some();
+    let show = window.is_window_hovered() || paused || self.gesture.is_some();
+    let dragging = self.gesture.is_some();
     let view = cx.weak_entity();
+    let edges: Vec<_> = EDGES
+      .iter()
+      .map(|&(id, side, cursor)| edge(id, side, cursor, cx))
+      .collect();
 
     div()
       .id("mini-player")
@@ -191,13 +312,21 @@ impl Render for MiniPlayer {
       // Redraws when the mouse comes and goes; whether the controls show is the window's hover
       // (the element's would turn off over the buttons, which occlude it, and flicker).
       .on_hover(cx.listener(|_, _, _, cx| cx.notify()))
+      // Dragging the video (anything the buttons and edges leave) moves the window. Done here
+      // rather than as a caption area: the window keeps the mouse, and so its hover.
+      .on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|this, event: &MouseDownEvent, window, cx| {
+          this.begin((0, 0), event, window, cx)
+        }),
+      )
       .children(video.map(|video| div().absolute().inset_0().child(video)))
-      // Window listeners can only be added while painting: a canvas does it during a resize.
-      .when(resizing, |el| {
+      // Window listeners can only be added while painting: a canvas does it during a gesture.
+      .when(dragging, |el| {
         el.child(
           canvas(
             |_, _, _| {},
-            move |_, _, window, _| Self::listen_to_resize(view.clone(), window),
+            move |_, _, window, _| Self::listen_to_gesture(view.clone(), window),
           )
           .absolute()
           .size_0(),
@@ -205,8 +334,7 @@ impl Render for MiniPlayer {
       })
       .when(show, |el| {
         el.child(
-          // Strip at the top: moves the window (a double click does not maximize it, the
-          // window has no maximize box), with the buttons on its right.
+          // Shade at the top, behind the buttons.
           div()
             .absolute()
             .top_0()
@@ -218,13 +346,6 @@ impl Render for MiniPlayer {
               linear_color_stop(gpui::black().opacity(0.6), 0.0),
               linear_color_stop(gpui::black().opacity(0.0), 1.0),
             ))
-            .child(
-              div()
-                .id("mini-drag")
-                .absolute()
-                .inset_0()
-                .window_control_area(WindowControlArea::Drag),
-            )
             .child(
               gpui_component::h_flex()
                 .occlude()
@@ -278,37 +399,66 @@ impl Render for MiniPlayer {
               })),
             ),
         )
-        .child(
-          // Grip in the bottom right corner: resizes, keeping 16:9.
-          div()
-            .id("mini-grip")
-            .occlude()
-            .absolute()
-            .right_0()
-            .bottom_0()
-            .size(px(18.))
-            .cursor_nwse_resize()
-            .child(
-              div()
-                .absolute()
-                .right(px(4.))
-                .bottom(px(4.))
-                .size(px(8.))
-                .border_r_2()
-                .border_b_2()
-                .border_color(gpui::white().opacity(0.8)),
-            )
-            .on_mouse_down(
-              MouseButton::Left,
-              cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
-                this.resize = Some(Resize {
-                  from: event.position,
-                  width: f32::from(window.bounds().size.width),
-                });
-                cx.notify();
-              }),
-            ),
-        )
       })
+      // Edges and corners, over everything (the buttons keep a margin from them).
+      .children(edges)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn gesture(edge: (i8, i8)) -> Gesture {
+    Gesture {
+      from: point(px(1000.), px(500.)),
+      start: Bounds::new(point(px(900.), px(400.)), size(px(400.), px(225.))),
+      edge,
+    }
+  }
+
+  fn at(g: &Gesture, dx: f32, dy: f32) -> Bounds<Pixels> {
+    g.bounds(g.from + point(px(dx), px(dy)), MIN_WIDTH, 1920.)
+  }
+
+  #[test]
+  fn a_move_keeps_the_size() {
+    let b = at(&gesture((0, 0)), -50., 30.);
+    assert_eq!(
+      b,
+      Bounds::new(point(px(850.), px(430.)), size(px(400.), px(225.)))
+    );
+  }
+
+  #[test]
+  fn the_top_left_corner_keeps_the_bottom_right_in_place() {
+    let b = at(&gesture((-1, -1)), -160., -10.);
+    assert_eq!(b.size, size(px(560.), px(315.)));
+    assert_eq!((b.right(), b.bottom()), (px(1300.), px(625.)));
+  }
+
+  #[test]
+  fn the_left_edge_keeps_the_right_side_and_the_vertical_middle() {
+    let b = at(&gesture((-1, 0)), -80., 0.);
+    assert_eq!(b.size, size(px(480.), px(270.)));
+    assert_eq!(b.right(), px(1300.));
+    assert_eq!(b.center().y, px(512.5));
+  }
+
+  #[test]
+  fn the_bottom_edge_follows_the_height() {
+    let b = at(&gesture((0, 1)), 0., 90.);
+    assert_eq!(b.size, size(px(560.), px(315.)));
+    assert_eq!(b.top(), px(400.));
+  }
+
+  #[test]
+  fn sizes_are_clamped_and_the_anchor_holds() {
+    let small = at(&gesture((-1, 0)), 1000., 0.);
+    assert_eq!(small.size.width, px(MIN_WIDTH));
+    assert_eq!(small.right(), px(1300.));
+    let large = at(&gesture((1, 1)), 5000., 0.);
+    assert_eq!(large.size.width, px(1920.));
+    assert_eq!(large.origin, point(px(900.), px(400.)));
   }
 }

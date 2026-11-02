@@ -13,6 +13,9 @@ use player::Frame;
 
 /// Hides the mouse cursor until it moves, e.g. when the player's controls hide (patched GPUI).
 pub use gpui_windows::hide_cursor_until_mouse_moves;
+/// Moves and resizes a window, without activating it (patched GPUI: `Window::resize` keeps the
+/// top-left corner).
+pub use gpui_windows::set_window_bounds;
 
 /// Magic understood by the patched GPUI atlas (vendor/gpui-pre-windows), followed by the handle.
 const EXTERNAL_TEXTURE_MAGIC: &[u8; 8] = b"GPUIEXT1";

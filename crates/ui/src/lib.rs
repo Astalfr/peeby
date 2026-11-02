@@ -17,3 +17,6 @@ pub mod splash;
 pub mod text;
 pub mod theme;
 pub mod widgets;
+
+/// Moves and resizes a window without activating it (patched GPUI), for the mini-player.
+pub use gpui_video::set_window_bounds;

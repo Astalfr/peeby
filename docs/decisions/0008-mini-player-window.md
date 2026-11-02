@@ -22,10 +22,14 @@ an external D3D11 texture drawn by the patched GPUI.
 - It holds no player: it asks its space for the current one at each render, so a queue moving to its next
   video carries on in it. A `NowPlaying` global (in `ui::player`) keeps one sound at a time: a player that
   starts pauses the previous one, and the mini-player closes if its player is no longer the one playing.
-- On hover: a strip at the top moves the window (`WindowControlArea::Drag`), play/pause in the middle, a grip
-  in the corner resizes it at 16:9 (`Window::resize`, which keeps the top left corner). Whether the controls
-  show is the window's hover state, not an element's: the buttons occlude the element and its hover would
-  flicker.
+- Dragging the video moves the window, and its edges and corners (invisible, 6 px; 12 px corners) resize it
+  at 16:9, the opposite side staying in place (the middle, along the axis no edge holds). Both follow the mouse
+  in screen coordinates and set the bounds with `gpui_windows::set_window_bounds` (a small addition to the
+  patched GPUI, ADR 0001), run as a task: from inside an update, even a `cx.defer`, the app is still borrowed
+  when `SetWindowPos` sends `WM_SIZE`. The move is not a caption area
+  (`WindowControlArea::Drag`): crossing between caption and client areas resets the window's hover.
+- On hover: play/pause in the middle, the two buttons at the top right. Whether the controls show is the
+  window's hover state, not an element's: the buttons occlude the element and its hover would flicker.
 
 ## Consequences
 
@@ -34,8 +38,9 @@ an external D3D11 texture drawn by the patched GPUI.
 - A bounds given to a new window must come with its `display_id`, or Windows moves it to the primary screen
   at a default size (CLAUDE.md, Gotchas).
 - Closing the window from its own button is deferred (`cx.defer`): a window cannot be updated from inside
-  its own event.
-- The grip resizes from the bottom right only, the window's origin staying in place; a resize from any edge
-  would need a GPUI call to set a window's position, which `gpui-pre` 0.3.10 lacks.
+  its own event. Moving or resizing it needs more: a task (see above).
+- `gpui-pre` 0.3.10 cannot set a window's position (`Window::resize` keeps the top left corner and
+  `start_window_resize` does nothing on Windows), hence `set_window_bounds`. No Aero snap for the mini-player,
+  which a picture-in-picture window does not need.
 - Jellyfin's player, which hid the whole shell in peeby, plays in the content panel like YouTube's (agreed with
   the user on 2026-11-01): the tabs and the mini-player stay reachable, and F still gives fullscreen.

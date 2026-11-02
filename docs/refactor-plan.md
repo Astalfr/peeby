@@ -136,8 +136,8 @@ Principles:
   the mini-player opening on a tab switch with the video playing, "Revenir à la page" (back to YouTube, the
   video playing in the page), "×" (paused, app still open), closing the main window with the mini-player open
   (the app quits), the gear's page, the bell's panel with its YouTube section. **Not verified:** moving the
-  mini-player by its strip and resizing it with its grip (posted messages carry no real button state, so the
-  grip's drag ends at once), its controls showing on a real hover (posted moves get an immediate
+  mini-player by dragging its video and resizing it from its edges and corners (posted messages carry no real button state, so the
+  drag ends at once), its controls showing on a real hover (posted moves get an immediate
   `WM_MOUSELEAVE`; the controls were checked with a test build that always shows them); a notification clicked from
   another tab (it posts `notification/record_interactions`, a write to the account), a queue moving to its next
   video while in the mini-player, and the "one sound at a time" rule (needs a second space that plays)

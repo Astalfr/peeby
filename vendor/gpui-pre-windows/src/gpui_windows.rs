@@ -43,5 +43,7 @@ pub use platform::WindowsPlatform;
 pub use directx_atlas::{register_external_texture, unregister_external_texture};
 // PEEBY PATCH: hide the cursor while the video player's controls are hidden.
 pub use platform::hide_cursor_until_mouse_moves;
+// PEEBY PATCH: move and resize a window from any edge (the mini-player).
+pub use window::set_window_bounds;
 
 pub(crate) use windows::Win32::Foundation::HWND;

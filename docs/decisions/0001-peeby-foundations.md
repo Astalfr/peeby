@@ -29,7 +29,11 @@ PeebTube additions to `player`:
 
 PeebTube additions to `gpui-video`:
 - `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners);
-- `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window.
+- `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window;
+- re-exports `set_window_bounds` from the patched GPUI.
+
+PeebTube additions to the GPUI patch (`vendor/gpui-pre-windows`):
+- `set_window_bounds` (`window.rs`): moves and resizes a window without activating it, for the mini-player's edges (ADR 0008).
 
 Additions to `jellyfin-api` (copied at step 5 of the refactor, ADR 0009):
 - live tests read their credentials from the environment (no `dotenvy`);
