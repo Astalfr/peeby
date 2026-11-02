@@ -241,8 +241,10 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   (ADR 0012).
 - **Points for watching**:
   - The web player reports time watched by POSTing base64 `minute-watched` events (`channel_id`,
-    `broadcast_id`, `user_id`, `player`, `live`) to a `spade_url`. That URL comes from twitch.tv's
-    `settings.*.js` **[src]**.
+    `broadcast_id`, `user_id`, `player: "site"`, `location: "channel"`, `live`). Without `location`,
+    spade still answers 204 but credits no points **[src: twitch-miner-go PR #42]**. They go to a
+    `spade_url`, from twitch.tv's `settings.*.js` **[src]**, the same on the home page and on a
+    channel's page (2026-11-02).
   - Without these events, Twitch credited nothing: the user played a live in Peeby for 20 minutes
     (2026-11-02), and the balance did not move. That spade is the missing piece is **[likely]**
     until the balance grows with it.
@@ -346,6 +348,7 @@ A probe run by the user, anonymously, on a live channel:
 - Rate-limit threads: https://discuss.dev.twitch.com/t/request-limit-not-sufficient-for-helix-api/64433,
   https://discuss.dev.twitch.com/t/error-429-limitation-helix-api/25216
 - ttv-lol-pro, usher v2: https://newreleases.io/project/github/younesaassila/ttv-lol-pro/release/v2.5.1
+- twitch-miner-go, the spade payload's `location` and `player`: https://github.com/Guliveer/twitch-miner-go/pull/42
 - Twitch-Channel-Points-Miner-v2 (GQL operations, claim, spade, PubSub topics):
   https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2 (`constants.py`, `classes/Twitch.py`,
   `classes/WebSocketsPool.py`, `classes/entities/Stream.py`)

@@ -187,6 +187,7 @@ fn a_minute_watched_is_base64_json_in_a_form() {
   assert_eq!(p["user_id"], "100000001");
   assert_eq!(p["channel"], "coachlim");
   assert_eq!(p["player"], "site");
+  assert_eq!(p["location"], "channel");
   assert_eq!(p["live"], true);
 }
 

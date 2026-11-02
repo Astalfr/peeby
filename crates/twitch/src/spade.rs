@@ -63,6 +63,9 @@ pub fn body(event: &MinuteWatched) -> String {
     "properties": {
       "channel_id": event.channel_id,
       "broadcast_id": event.broadcast_id,
+      // Without `location` (and `player`), spade still answers 204 but no points are credited
+      // (twitch-miner-go, PR #42).
+      "location": "channel",
       "player": "site",
       "user_id": event.user_id,
       "live": true,
