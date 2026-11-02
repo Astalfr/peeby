@@ -246,8 +246,8 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     `spade_url`, from twitch.tv's `settings.*.js` **[src]**, the same on the home page and on a
     channel's page (2026-11-02).
   - Without these events, Twitch credited nothing: the user played a live in Peeby for 20 minutes
-    (2026-11-02), and the balance did not move. That spade is the missing piece is **[likely]**
-    until the balance grows with it.
+    (2026-11-02), and the balance did not move. With the reports (and `location`), it grew by 10
+    points (the user, same day).
   - On 2026-11-02, the page linked `https://assets.twitch.tv/config/settings.<hash>.js`, whose
     `spade_url` was `https://spade.twitch.tv/track` (fixtures `twitch_page_settings.html`,
     `twitch_settings.js`, trimmed). The body is `data=<base64 of the JSON list>`, form-encoded.
@@ -330,8 +330,7 @@ A probe run by the user, anonymously, on a live channel:
 - Muxed audio.
 - WebView2 for Client-Integrity.
 - GQL's recommendation queries.
-- A real reward redeemed or a real bet placed (only made-up ids were sent); points earned with the spade
-  report; PubSub.
+- A real reward redeemed or a real bet placed (only made-up ids were sent); PubSub.
 
 ## Sources
 

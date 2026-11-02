@@ -25,9 +25,9 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   client's identity to get past an integrity check is circumventing an anti-bot measure: Peeby
   does not do it.
 - **Points for watching**: the user played a live in Peeby for 20 minutes (2026-11-02), and the
-  balance did not move. Twitch very likely credits time watched from the web player's
-  `minute-watched` events (spade), not from the stream being fetched **[likely]**: one run, and other
-  causes (the `embed` token, session headers) are not ruled out. Point farmers send those events for lives nobody
+  balance did not move. Twitch credits time watched from the web player's `minute-watched` events
+  (spade), not from the stream being fetched: with them (and `location: "channel"`), the balance
+  grew by 10 points (the user, 2026-11-02). Point farmers send those events for lives nobody
   watches. Peeby sends them only for the live on screen, while it plays.
 
 ## Decision
@@ -65,6 +65,6 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   - **The bonus claim**: the user claims it on twitch.tv's own page, which the button opens. Making
     integrity tokens for Peeby's own calls (a hidden WebView2, another client's identity) would be
     the same bypass, so it is not an option.
-  - **Points for watching**: check that the balance now grows (about 10 points every 5 minutes
-    [mem]) and that a bonus chest shows after about 15 minutes.
+  - **Points for watching**: done, the balance grows. Still to see: a bonus chest after about
+    15 minutes, and the button that opens twitch.tv's chat for it.
 - Revisit if Twitch requires persisted queries, or an integrity token for the spends.
