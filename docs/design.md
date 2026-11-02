@@ -9,10 +9,8 @@ Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's vi
 | `base` | `#0B0B0C` + 5 % of the accent | Window chrome without Mica |
 | Mica veil | `base` at 55 % | Over Mica, so the chrome stays dark |
 | `background` | `#121214` + 5 % of the accent | Content panel, pages |
-
-The backgrounds (`base`, the Mica veil, `background`) take 5 % of the open space's accent, so each space has its own faint hue; surfaces and borders stay neutral, and so does the opening animation's background (`neutral_background`), which belongs to no space.
-| `surface` | `#1C1C1F` | Cards, settings rows, description, inputs |
-| `surface_hover` | `#27272B` | Hovered surfaces, skeletons |
+| `surface` | `#1C1C1F` + 5 % of the accent | Cards, settings rows, description, inputs |
+| `surface_hover` | `#27272B` + 5 % of the accent | Hovered surfaces, skeletons |
 | `border` | `#2F2F34` | Borders, separators |
 | `foreground` | `#F2F2F3` | Text |
 | `muted` | `#A1A1AA` | Secondary text |
@@ -21,6 +19,8 @@ The backgrounds (`base`, the Mica veil, `background`) take 5 % of the open space
 | `accent_hover` | `#FF6B63`, `#33B6E3` | Hovered accent elements and titles |
 | `accent_soft` | the accent at 14 % | Notice discs, step numbers, selected rows |
 | `muted_audio` | `#E5484D` (any space) | Muted parts of a Twitch VOD on the seek bar: full where played, at 60 % ahead; "Son coupé" in the hover preview |
+
+The backgrounds and surfaces (`base`, the Mica veil, `background`, `surface`, `surface_hover`) take 5 % of the open space's accent, so each space has its own faint hue and hovered rows match it; borders stay neutral, and so does the opening animation's background (`neutral_background`), which belongs to no space.
 
 One accent at a time, the open space's (`theme::set_accent`; the settings page draws each space's part in its own): it marks what can be acted on or what is selected. Everything else stays neutral, so the thumbnails carry the color.
 

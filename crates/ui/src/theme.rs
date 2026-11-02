@@ -80,11 +80,11 @@ pub fn neutral_background() -> Hsla {
 }
 /// Cards, popovers, inputs.
 pub fn surface() -> Hsla {
-  color(0x1c1c1f)
+  accent_tinted(0x1c1c1f, 1.)
 }
 /// Hovered surfaces.
 pub fn surface_hover() -> Hsla {
-  color(0x27272b)
+  accent_tinted(0x27272b, 1.)
 }
 /// Borders and separators.
 pub fn border() -> Hsla {
