@@ -134,7 +134,13 @@ Two credentials, for different things. Both are secrets, under the same rules as
       (`data.name`), files under `https:` + `data.host.url` (1x is 32 px high; WebP, AVIF, GIF, PNG;
       `static_name` is the still first frame of an animated one), zero-width as entry flag 1 (emote flag
       256); a Twitch user without 7TV answers 404 `{"error_code":12000}`;
-    - BTTV `https://api.betterttv.net/3/cached/users/twitch/{id}` and `/3/cached/emotes/global` **[mem]**;
+    - BTTV `https://api.betterttv.net/3/cached/users/twitch/{id}` and `/3/cached/emotes/global`, checked on
+      2026-11-02: anonymous; the global set is an array of `{id, code, imageType, animated, modifier}`, a
+      channel's answer has `channelEmotes` and `sharedEmotes` (those carry the uploader's `user`); entries
+      give `width`/`height` only when not 28 px square; `modifier` entries (`w!`, `h!`…) change the emote after
+      them and are no image; files `https://cdn.betterttv.net/emote/{id}/{1x|2x|3x}.webp` (animated ones
+      animate, no still variant); overlays are a fixed list of global codes (`cvMask`, `cvHazmat`, `TopHat`…);
+      a Twitch user without BTTV answers 404 `{"message":"user not found"}`;
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
 - **VOD resume position**, checked on 2026-11-02 with the auth-token: `currentUser { viewedVideos(first: N) }` and
@@ -145,7 +151,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
   VOD, at most 15 (`The number of root field aliases 40 exceeds the root field aliases limit
   allowed (15)`), checked the same day; a VOD never watched answers `position: null`.
 - **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
-  tag, deleted messages, 7TV, badges; BTTV and FFZ dropped (the user's choice: 7TV is enough).
+  tag, deleted messages, 7TV, badges; FFZ dropped (the user's choice). BTTV added on 2026-11-02 (the user
+  asked: its global `D:` is common in chats).
 
 ## Helix
 

@@ -195,6 +195,16 @@ impl Client {
     crate::seventv::global(&self.http).await
   }
 
+  /// The BTTV emotes of the channel whose Twitch user id is `user_id`; empty without a BTTV account.
+  pub async fn bttv_channel(&self, user_id: &str) -> Result<Vec<crate::bttv::Emote>> {
+    crate::bttv::channel(&self.http, user_id).await
+  }
+
+  /// BTTV's global emotes.
+  pub async fn bttv_global(&self) -> Result<Vec<crate::bttv::Emote>> {
+    crate::bttv::global(&self.http).await
+  }
+
   /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
   /// [`Error::NotLoggedIn`] when it is refused or there is none.
   pub async fn current_user(&self) -> Result<String> {

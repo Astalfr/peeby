@@ -550,7 +550,7 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       gives each author the badges of their `badges` tag that exist. Verified in the app on hasanabi's chat:
       subscriber and global badges before the names. **Not verified**: a channel without its own badges
       in the app
-- BTTV and FFZ: dropped, the user's choice (2026-11-01): 7TV is enough
+- FFZ: dropped, the user's choice (2026-11-01). BTTV, first dropped too, was added on 2026-11-02 (see below)
 - [x] Animated emotes and zero-width overlays: `ui::images::decode` keeps the frames and delays of animated
       GIFs and WebPs (at most 300; `image`'s `gif` feature added, agreed), the store counts every frame in
       its budget, and the panel plays them (not with reduced motion). It picks each frame from a clock
@@ -575,6 +575,12 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       chat". 7TV emotes and badges as the live's (the VOD's `owner.id`). 5 tests. Verified in the app on
       a busy public VOD (Twitch and 7TV emotes, badges, the chat following playback). **Not verified**:
       a seek in the app, a VOD whose chat is unavailable
+- [x] BTTV emotes (2026-11-02, the user asked: BTTV's global `D:` stayed text): `twitch::bttv` parses the
+      global set and a channel's own and shared emotes (404 without a BTTV account: no emotes), skipping
+      modifiers (`w!`, `h!`…) and marking the global hats and masks as overlays. The chat source loads
+      them with the 7TV sets, BTTV global, 7TV global, BTTV channel, 7TV channel, each winning over the
+      ones before; the replay gets them too. 3 tests on 3 saved responses (and the chat's word test extended) (forsen's set, trimmed, without
+      the uploaders). **Not verified**: in the app
 - Exit: met: the chat with Twitch and 7TV emotes (animated, overlays), badges, next to the player
 - Dependencies: `tokio-tungstenite` with `native-tls`, `futures-util` (its stream and sink), tokio's
   `time` (the reconnection delay), agreed

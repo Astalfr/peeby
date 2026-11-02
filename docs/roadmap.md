@@ -36,6 +36,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- BTTV emotes in the chat (2026-11-02): `twitch::bttv` (global set and a channel's own and shared emotes, modifiers skipped, the hat and mask overlays), loaded with the 7TV sets, live and VOD chat; order BTTV global, 7TV global, BTTV channel, 7TV channel, each winning over the ones before. Asked by the user for the global `D:`. 3 new tests on 3 saved responses, the chat's word test extended. **Not verified:** in the app.
 - Chat hover (2026-11-02): a hovered message is tinted; a hovered emote opens a hover card with it at 112 px (overlays included) and its code. Lint and tests pass; the panel example runs (slowest frame 14 ms). **Not verified:** the hover itself, in the example or the app; on a busy live the messages scroll under a still cursor (pausing the scroll while hovered, as Twitch does, would be the follow-up).
 - Animated chat emotes keep playing when Peeby's window loses the focus (2026-11-02): the chat panel picks and paints the frames itself, GPUI's `img` stopping when the window is inactive. 1 new test. Verified in the app with VS Code focused.
 

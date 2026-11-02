@@ -99,7 +99,7 @@ and prepare for it without building it (refactor plan, step 9). The research, wi
     prefetch segments (low latency, on by default) a live starts about 2.6 s behind its capture instead
     of about 7 s;
   - a public client has no app token, so the whole space needs the user's sign-in (their choice);
-  - the chat is read anonymously over IRC, with Twitch and 7TV emotes (BTTV and FFZ dropped by the user)
+  - the chat is read anonymously over IRC, with Twitch, 7TV and BTTV emotes (FFZ dropped by the user; BTTV added on 2026-11-02)
     and Helix badges; the chat model and panel are generic, in `ui::chat`, for YouTube lives later;
   - HEVC is Twitch's codec for the source above 1080p (1440p60 on the channels that send it, with
     H.264 below), decoded by the GPU here; AV1 was offered by no channel tried. A codec the GPU does

@@ -1,0 +1,40 @@
+{
+  "id": "555943515393e61c772ee968",
+  "bots": [],
+  "channelEmotes": [
+    {
+      "id": "5f3eb452b2efd65d77e867ed",
+      "code": "forsenBlunder",
+      "imageType": "png",
+      "animated": false
+    },
+    {
+      "id": "5f593428aa6fe06bfb601eb1",
+      "code": "forsenBucket",
+      "imageType": "png",
+      "animated": false
+    }
+  ],
+  "sharedEmotes": [
+    {
+      "id": "5590b223b344e2c42a9e28e3",
+      "code": "EZ",
+      "imageType": "png",
+      "animated": false
+    },
+    {
+      "id": "55b6f480e66682f576dd94f5",
+      "code": "Clap",
+      "imageType": "gif",
+      "animated": true
+    },
+    {
+      "id": "58493695987aab42df852e0f",
+      "code": "AYAYA",
+      "imageType": "png",
+      "animated": false,
+      "width": 28,
+      "height": 27
+    }
+  ]
+}

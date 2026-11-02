@@ -2,9 +2,10 @@
 //! `ui::chat`'s and given to the panel in one batch per wake-up. No UI of its own: the watch page
 //! owns the panel and the task, and dropping the task closes the connection.
 //!
-//! Once the room's id arrives, the channel's extras load ([`Extras`]): 7TV emotes, which replace
-//! the words they name (the global set and the channel's, its alias winning; animated ones play,
-//! zero-width ones are drawn over the emote before them), and the chat badges from Helix (global, then the channel's over them). Both are
+//! Once the room's id arrives, the channel's extras load ([`Extras`]): 7TV and BTTV emotes, which
+//! replace the words they name (BTTV's global set, 7TV's, then the channel's BTTV and 7TV sets,
+//! each winning over the ones before; animated ones play, zero-width ones are drawn over the emote
+//! before them), and the chat badges from Helix (global, then the channel's over them). Both are
 //! kept for the session ([`ChatSets`]). Messages that arrived before keep their words and no badges.
 
 use std::cell::RefCell;
@@ -15,7 +16,7 @@ use std::rc::Rc;
 use gpui::{App, Entity, Global, Hsla, SharedString, Task};
 use twitch::chat::{ChatLine, Event, Piece, RoomState, Status, Update, emote_url};
 use twitch::helix::{self, Helix};
-use twitch::seventv;
+use twitch::{bttv, seventv};
 use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatPanel, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
   split_text,
@@ -27,8 +28,8 @@ use ui::{runtime, tf};
 /// Updates given to the panel at most at once, so that a burst does not stall a frame.
 const BATCH: usize = 200;
 
-/// 7TV emotes by the word they replace.
-type Words = HashMap<String, Rc<seventv::Emote>>;
+/// 7TV and BTTV emotes by the word they replace.
+type Words = HashMap<String, Emote>;
 /// Badges by set and version.
 type Badges = HashMap<(String, String), Rc<helix::Badge>>;
 
@@ -44,6 +45,7 @@ pub(super) struct Extras {
 #[derive(Default)]
 struct ChatSets {
   seventv: HashMap<String, Rc<Vec<seventv::Emote>>>,
+  bttv: HashMap<String, Rc<Vec<bttv::Emote>>>,
   badges: HashMap<String, Rc<Vec<helix::Badge>>>,
 }
 
@@ -89,8 +91,8 @@ pub fn start(
   })
 }
 
-/// Loads (or takes from the session's cache) the global and `room_id`'s 7TV emotes and badges
-/// into `target`.
+/// Loads (or takes from the session's cache) the global and `room_id`'s 7TV and BTTV emotes and
+/// badges into `target`.
 pub(super) fn load_extras(
   room_id: String,
   client: twitch::Client,
@@ -98,26 +100,42 @@ pub(super) fn load_extras(
   target: Rc<RefCell<Rc<Extras>>>,
   cx: &mut App,
 ) {
-  let emotes = [
-    set(
-      String::new(),
-      |s| &mut s.seventv,
-      {
-        let client = client.clone();
-        move || async move { client.seventv_global().await }
-      },
-      cx,
-    ),
-    set(
-      room_id.clone(),
-      |s| &mut s.seventv,
-      {
-        let id = room_id.clone();
-        move || async move { client.seventv_channel(&id).await }
-      },
-      cx,
-    ),
-  ];
+  let bttv_global = set(
+    String::new(),
+    |s| &mut s.bttv,
+    {
+      let client = client.clone();
+      move || async move { client.bttv_global().await }
+    },
+    cx,
+  );
+  let seventv_global = set(
+    String::new(),
+    |s| &mut s.seventv,
+    {
+      let client = client.clone();
+      move || async move { client.seventv_global().await }
+    },
+    cx,
+  );
+  let bttv_channel = set(
+    room_id.clone(),
+    |s| &mut s.bttv,
+    {
+      let (client, id) = (client.clone(), room_id.clone());
+      move || async move { client.bttv_channel(&id).await }
+    },
+    cx,
+  );
+  let seventv_channel = set(
+    room_id.clone(),
+    |s| &mut s.seventv,
+    {
+      let id = room_id.clone();
+      move || async move { client.seventv_channel(&id).await }
+    },
+    cx,
+  );
   let badges = [
     set(
       String::new(),
@@ -137,13 +155,19 @@ pub(super) fn load_extras(
   ];
   cx.spawn(async move |_| {
     let mut extras = Extras::default();
-    // The global sets first, so that the channel's win.
-    for set in emotes {
-      for emote in set.await.iter().flat_map(|set| set.iter()) {
-        extras
-          .words
-          .insert(emote.name.clone(), Rc::new(emote.clone()));
-      }
+    // The global sets first, so that the channel's win, and 7TV after BTTV in each.
+    let words = &mut extras.words;
+    for emote in bttv_global.await.iter().flat_map(|set| set.iter()) {
+      words.insert(emote.name.clone(), bttv_emote(emote));
+    }
+    for emote in seventv_global.await.iter().flat_map(|set| set.iter()) {
+      words.insert(emote.name.clone(), seventv_emote(emote));
+    }
+    for emote in bttv_channel.await.iter().flat_map(|set| set.iter()) {
+      words.insert(emote.name.clone(), bttv_emote(emote));
+    }
+    for emote in seventv_channel.await.iter().flat_map(|set| set.iter()) {
+      words.insert(emote.name.clone(), seventv_emote(emote));
     }
     for set in badges {
       for badge in set.await.iter().flat_map(|set| set.iter()) {
@@ -233,7 +257,7 @@ pub(super) fn message(
     .pieces()
     .into_iter()
     .flat_map(|piece| match piece {
-      Piece::Text(text) => with_seventv(&text, &extras.words),
+      Piece::Text(text) => with_words(&text, &extras.words),
       Piece::Emote { id, name } => vec![Fragment::Emote(Emote {
         name: name.into(),
         picture: Picture::sized(move |_, height| emote_url(&id, scale(height))),
@@ -277,8 +301,8 @@ fn badge_of(badge: &Rc<helix::Badge>) -> Badge {
   }
 }
 
-/// `text` as fragments, its words that name a 7TV emote as that emote.
-fn with_seventv(text: &str, words: &Words) -> Vec<Fragment> {
+/// `text` as fragments, its words that name a 7TV or BTTV emote as that emote.
+fn with_words(text: &str, words: &Words) -> Vec<Fragment> {
   if words.is_empty() {
     return split_text(text);
   }
@@ -289,7 +313,7 @@ fn with_seventv(text: &str, words: &Words) -> Vec<Fragment> {
     match words.get(bare) {
       Some(emote) => {
         fragments.extend(split_text(&std::mem::take(&mut plain)));
-        fragments.push(seventv_fragment(emote));
+        fragments.push(Fragment::Emote(emote.clone()));
         plain.push_str(&word[bare.len()..]);
       }
       None => plain.push_str(word),
@@ -299,14 +323,24 @@ fn with_seventv(text: &str, words: &Words) -> Vec<Fragment> {
   fragments
 }
 
-fn seventv_fragment(emote: &Rc<seventv::Emote>) -> Fragment {
-  let picture_emote = emote.clone();
-  Fragment::Emote(Emote {
+fn seventv_emote(emote: &seventv::Emote) -> Emote {
+  let urls = emote.clone();
+  Emote {
     name: emote.name.clone().into(),
-    picture: Picture::sized(move |width, _| picture_emote.url(width, false).unwrap_or_default()),
+    picture: Picture::sized(move |width, _| urls.url(width, false).unwrap_or_default()),
     aspect: emote.width as f32 / emote.height.max(1) as f32,
     overlay: emote.zero_width,
-  })
+  }
+}
+
+fn bttv_emote(emote: &bttv::Emote) -> Emote {
+  let urls = emote.clone();
+  Emote {
+    name: emote.name.clone().into(),
+    picture: Picture::sized(move |_, height| urls.url(scale(height))),
+    aspect: emote.width as f32 / emote.height.max(1) as f32,
+    overlay: emote.zero_width,
+  }
 }
 
 /// The emote scale (1, 2 or 3) for `height` device pixels.
@@ -390,16 +424,20 @@ mod tests {
   }
 
   #[test]
-  fn seventv_words_become_emotes_and_keep_their_spaces() {
+  fn seventv_and_bttv_words_become_emotes_and_keep_their_spaces() {
     let set = r#"{"emotes":[{"name":"Pog","flags":0,"data":{"id":"a","animated":false,"host":{
       "url":"//cdn.7tv.app/emote/a","files":[{"name":"1x.webp","static_name":"1x.webp",
       "width":64,"height":32,"format":"WEBP"}]}}}]}"#;
-    let words: Words = seventv::parse_global(set)
-      .expect("a set")
-      .into_iter()
-      .map(|e| (e.name.clone(), Rc::new(e)))
-      .collect();
-    let fragments = with_seventv("so Pog @viewer Pogs Pog", &words);
+    let bttv = r#"[{"id":"b","code":"D:","animated":false},{"id":"c","code":"Pog"}]"#;
+    let mut words: Words = Words::new();
+    for emote in bttv::parse_global(bttv).expect("a set") {
+      words.insert(emote.name.clone(), bttv_emote(&emote));
+    }
+    // 7TV after BTTV: its Pog wins.
+    for emote in seventv::parse_global(set).expect("a set") {
+      words.insert(emote.name.clone(), seventv_emote(&emote));
+    }
+    let fragments = with_words("so Pog @viewer Pogs Pog D:", &words);
     let shown: Vec<String> = fragments
       .iter()
       .map(|f| match f {
@@ -417,10 +455,12 @@ mod tests {
         "t: ",
         "m:@viewer",
         "t: Pogs ",
-        "e:Pog:2"
+        "e:Pog:2",
+        "t: ",
+        "e:D::1"
       ]
     );
-    assert!(with_seventv("", &words).is_empty());
+    assert!(with_words("", &words).is_empty());
   }
 
   #[test]
