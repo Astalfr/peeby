@@ -2,10 +2,15 @@
 //! (Windows 11), applied to gpui-component's theme so its widgets follow. See docs/design.md.
 
 use std::cell::Cell;
+use std::panic::Location;
 use std::time::Duration;
 
-use gpui::{App, Hsla, Pixels, Rgba, WindowAppearance, WindowBackgroundAppearance, px, rgb};
-use gpui_component::{Theme, ThemeMode};
+use gpui::{
+  AnyElement, App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId,
+  IntoElement, LayoutId, Pixels, Rgba, Window, WindowAppearance, WindowBackgroundAppearance, px,
+  rgb,
+};
+use gpui_component::{Theme, ThemeMode, ThemeTokens};
 
 /// Fast transitions: hover, fades of small elements.
 pub const FAST: Duration = Duration::from_millis(150);
@@ -187,9 +192,6 @@ pub fn apply(cx: &mut App) {
     t.foreground = foreground();
     t.border = border();
     t.input = border();
-    t.ring = accent();
-    t.caret = accent();
-    t.selection = accent().opacity(0.3);
     t.muted = surface();
     t.muted_foreground = muted();
     t.popover = surface();
@@ -197,20 +199,15 @@ pub fn apply(cx: &mut App) {
     t.overlay = color_alpha(0x000000, 0.6);
     t.skeleton = surface_hover();
     t.window_border = border();
+    accent_colors(t);
 
     t.accent = surface_hover();
     t.accent_foreground = foreground();
-    t.primary = accent();
-    t.primary_hover = accent_hover();
-    t.primary_active = accent_active();
     t.primary_foreground = on_accent();
     t.secondary = surface();
     t.secondary_hover = surface_hover();
     t.secondary_active = border();
     t.secondary_foreground = foreground();
-    t.button_primary = accent();
-    t.button_primary_hover = accent_hover();
-    t.button_primary_active = accent_active();
     t.button_primary_foreground = on_accent();
     t.button = surface();
     t.button_hover = surface_hover();
@@ -221,19 +218,12 @@ pub fn apply(cx: &mut App) {
     t.button_secondary_active = border();
     t.button_secondary_foreground = foreground();
 
-    t.link = accent();
-    t.link_hover = accent_hover();
-    t.link_active = accent_active();
-    t.progress_bar = accent();
-    t.slider_bar = accent();
     t.slider_thumb = foreground();
     t.switch = color(0x3a3a40);
     t.switch_thumb = foreground();
 
     t.colors.list = background();
     t.list_hover = surface_hover();
-    t.list_active = accent_soft();
-    t.list_active_border = accent();
     t.tab = gpui::transparent_black();
     t.tab_bar = gpui::transparent_black();
     t.tab_active = surface_hover();
@@ -245,7 +235,6 @@ pub fn apply(cx: &mut App) {
     t.sidebar_foreground = foreground();
     t.sidebar_accent = surface_hover();
     t.sidebar_accent_foreground = foreground();
-    t.sidebar_primary = accent();
     t.sidebar_primary_foreground = on_accent();
     t.title_bar = gpui::transparent_black();
     t.title_bar_border = gpui::transparent_black();
@@ -257,6 +246,127 @@ pub fn apply(cx: &mut App) {
     t.scrollbar_thumb = color_alpha(0xf2f2f3, 0.22);
     t.scrollbar_thumb_hover = color_alpha(0xf2f2f3, 0.4);
   });
+}
+
+/// The parts of gpui-component's theme in the accent.
+fn accent_colors(t: &mut Theme) {
+  t.ring = accent();
+  t.caret = accent();
+  t.selection = accent().opacity(0.3);
+  t.primary = accent();
+  t.primary_hover = accent_hover();
+  t.primary_active = accent_active();
+  t.button_primary = accent();
+  t.button_primary_hover = accent_hover();
+  t.button_primary_active = accent_active();
+  t.link = accent();
+  t.link_hover = accent_hover();
+  t.link_active = accent_active();
+  t.progress_bar = accent();
+  t.slider_bar = accent();
+  t.list_active = accent_soft();
+  t.list_active_border = accent();
+  t.sidebar_primary = accent();
+}
+
+/// Runs `f` with `accent` as the accent, then puts the current one back: for elements built in
+/// another space's accent (see [`tinted`]). The theme's colors and tokens (what gpui-component's
+/// widgets read) are swapped in place and restored as they were; `Theme::update` would refresh
+/// every window, and nothing observes the theme, so a swap in the middle of a frame redraws
+/// nothing.
+pub fn with_accent<R>(accent: Accent, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
+  let previous = ACCENT.replace(accent);
+  if previous == accent {
+    return f(cx);
+  }
+  let theme = Theme::global_mut(cx);
+  let saved = (theme.colors, theme.tokens);
+  accent_colors(theme);
+  // Tokens without gradients for this part only: Peeby's theme sets solid colors.
+  theme.tokens = ThemeTokens::from(&theme.colors);
+  let result = f(cx);
+  ACCENT.set(previous);
+  let theme = Theme::global_mut(cx);
+  (theme.colors, theme.tokens) = saved;
+  result
+}
+
+/// `child` drawn in `accent` rather than the open space's: gpui-component's widgets read the
+/// theme while they lay out and paint, so the accent is swapped around each phase. Build `child`
+/// inside [`with_accent`] for the colors read while building it.
+pub fn tinted(accent: Accent, child: impl IntoElement) -> Tinted {
+  Tinted {
+    accent,
+    child: child.into_any_element(),
+  }
+}
+
+/// See [`tinted`].
+pub struct Tinted {
+  accent: Accent,
+  child: AnyElement,
+}
+
+impl IntoElement for Tinted {
+  type Element = Self;
+
+  fn into_element(self) -> Self {
+    self
+  }
+}
+
+impl Element for Tinted {
+  type RequestLayoutState = ();
+  type PrepaintState = ();
+
+  fn id(&self) -> Option<ElementId> {
+    None
+  }
+
+  fn source_location(&self) -> Option<&'static Location<'static>> {
+    None
+  }
+
+  fn request_layout(
+    &mut self,
+    _: Option<&GlobalElementId>,
+    _: Option<&InspectorElementId>,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> (LayoutId, ()) {
+    let child = &mut self.child;
+    (
+      with_accent(self.accent, cx, |cx| child.request_layout(window, cx)),
+      (),
+    )
+  }
+
+  fn prepaint(
+    &mut self,
+    _: Option<&GlobalElementId>,
+    _: Option<&InspectorElementId>,
+    _: Bounds<Pixels>,
+    _: &mut (),
+    window: &mut Window,
+    cx: &mut App,
+  ) {
+    let child = &mut self.child;
+    with_accent(self.accent, cx, |cx| child.prepaint(window, cx));
+  }
+
+  fn paint(
+    &mut self,
+    _: Option<&GlobalElementId>,
+    _: Option<&InspectorElementId>,
+    _: Bounds<Pixels>,
+    _: &mut (),
+    _: &mut (),
+    window: &mut Window,
+    cx: &mut App,
+  ) {
+    let child = &mut self.child;
+    with_accent(self.accent, cx, |cx| child.paint(window, cx));
+  }
 }
 
 /// Segoe UI Variable (Windows 11), else Segoe UI.

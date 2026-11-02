@@ -1,14 +1,16 @@
 //! The settings page behind the gear: the app's own settings (general, player, storage,
-//! about) and, between them, each space's part under its name. Every change applies at once and
-//! is saved to `settings.toml`; most apply to the next video or the next visit of a page.
+//! about) and, between them, each space's part under its name, in its accent: the open space's
+//! first and unfolded, the others folded. Every change applies at once and is saved to
+//! `settings.toml`; most apply to the next video or the next visit of a page.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, FontWeight, Subscription, Window, div, px};
 use gpui_component::button::Button;
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_component::{Disableable, Icon, IconName, Sizable, h_flex, v_flex};
 use ui::form::{chips, format_size, row, section, toggle};
 use ui::player::format_step;
+use ui::theme::Accent;
 use ui::widgets::page_title;
 use ui::{images, theme};
 
@@ -16,14 +18,23 @@ use crate::settings::{Player, Settings};
 use crate::shell::space::SpaceHandle;
 
 pub struct SettingsView {
+  /// The open space first, then the others in the sidebar's order.
   spaces: Vec<SpaceHandle>,
+  /// Whether each space's part is unfolded.
+  unfolded: Vec<bool>,
   cache_size: Option<u64>,
   clearing: bool,
   _subscriptions: Vec<Subscription>,
 }
 
 impl SettingsView {
-  pub fn new(spaces: Vec<SpaceHandle>, cx: &mut Context<Self>) -> Self {
+  /// The page with `spaces`, `active` the one open behind it.
+  pub fn new(mut spaces: Vec<SpaceHandle>, active: usize, cx: &mut Context<Self>) -> Self {
+    if active < spaces.len() {
+      let open = spaces.remove(active);
+      spaces.insert(0, open);
+    }
+    let unfolded = (0..spaces.len()).map(|i| i == 0).collect();
     let mut subscriptions = vec![cx.observe_global::<Settings>(|_, cx| cx.notify())];
     // A space's part changes with it (sign-in, the libraries arriving).
     for space in &spaces {
@@ -37,6 +48,7 @@ impl SettingsView {
     }
     let mut view = Self {
       spaces,
+      unfolded,
       cache_size: None,
       clearing: false,
       _subscriptions: subscriptions,
@@ -163,22 +175,48 @@ fn player_section(p: &Player) -> AnyElement {
   .into_any_element()
 }
 
-/// A space's part, under its name in its accent.
-fn space_part(name: gpui::SharedString, accent: gpui::Hsla, part: AnyElement) -> AnyElement {
-  v_flex()
-    .gap_4()
-    .child(
-      h_flex()
-        .gap_2()
-        .items_center()
-        .child(div().w(px(3.)).h(px(20.)).rounded_full().bg(accent))
-        .child(div().text_xl().font_weight(FontWeight::BOLD).child(name)),
-    )
-    .child(part)
-    .into_any_element()
-}
-
 impl SettingsView {
+  /// Space `index`'s part, under its name in its accent; a click on the name folds or unfolds it.
+  fn space_part(
+    &self,
+    index: usize,
+    name: gpui::SharedString,
+    accent: Accent,
+    part: AnyElement,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let unfolded = self.unfolded.get(index).copied().unwrap_or(false);
+    let header = h_flex()
+      .id(gpui::SharedString::from(format!("settings-space-{index}")))
+      .gap_2()
+      .items_center()
+      .cursor_pointer()
+      .text_color(theme::foreground())
+      .hover(|el| el.text_color(accent.hover))
+      .on_click(cx.listener(move |this, _, _, cx| {
+        if let Some(unfolded) = this.unfolded.get_mut(index) {
+          *unfolded = !*unfolded;
+          cx.notify();
+        }
+      }))
+      .child(div().w(px(3.)).h(px(20.)).rounded_full().bg(accent.base))
+      .child(div().text_xl().font_weight(FontWeight::BOLD).child(name))
+      .child(
+        Icon::new(if unfolded {
+          IconName::ChevronDown
+        } else {
+          IconName::ChevronRight
+        })
+        .small()
+        .text_color(theme::muted()),
+      );
+    v_flex()
+      .gap_4()
+      .child(header)
+      .when(unfolded, |el| el.child(theme::tinted(accent, part)))
+      .into_any_element()
+  }
+
   fn storage_section(&self, cx: &mut Context<Self>) -> AnyElement {
     let size = match self.cache_size {
       Some(bytes) => format!("{} sur le disque.", format_size(bytes)),
@@ -238,10 +276,12 @@ impl Render for SettingsView {
       .spaces
       .clone()
       .iter()
-      .filter_map(|space| {
+      .enumerate()
+      .filter_map(|(index, space)| {
         let info = space.info(cx);
-        let part = space.settings(window, cx)?;
-        Some(space_part(info.name, info.accent.base, part))
+        // Built in its accent too, for the colors read while building it.
+        let part = theme::with_accent(info.accent, cx, |cx| space.settings(window, cx))?;
+        Some(self.space_part(index, info.name, info.accent, part, cx))
       })
       .collect();
     v_flex()

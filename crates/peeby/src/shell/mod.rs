@@ -219,7 +219,10 @@ impl Shell {
     }
     self.leave_page(window, cx);
     let spaces = self.spaces.clone();
-    self.settings = Some(cx.new(|cx| SettingsView::new(spaces, cx)).into());
+    self.settings = Some(
+      cx.new(|cx| SettingsView::new(spaces, self.active, cx))
+        .into(),
+    );
     cx.notify();
   }
 
