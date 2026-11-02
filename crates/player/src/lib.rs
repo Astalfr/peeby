@@ -86,6 +86,49 @@ pub struct StartOptions {
   pub ytdl: Option<Ytdl>,
   /// Write mpv's log to this file (`log-file`), for troubleshooting.
   pub log_file: Option<PathBuf>,
+  /// Audio output, an [`AudioDevice::name`] (`audio-device`); `None` follows Windows' default.
+  pub audio_device: Option<String>,
+}
+
+/// An audio output mpv can play to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AudioDevice {
+  /// mpv's name for it, e.g. `wasapi/{0.0.0.00000000}.{…}`.
+  pub name: String,
+  /// What Windows calls it, e.g. `Speakers (Realtek(R) Audio)`.
+  pub description: String,
+}
+
+/// The audio outputs of this PC (WASAPI endpoints), from an mpv made only to ask (a few tens of
+/// milliseconds: call it off the UI thread). `libmpv_path` as [`StartOptions::libmpv_path`].
+pub fn audio_devices(libmpv_path: Option<PathBuf>) -> Result<Vec<AudioDevice>, String> {
+  let dll = libmpv_path.unwrap_or_else(default_libmpv_path);
+  let api = load_api(&dll)?;
+  let options = [
+    ("vo", "null"),
+    ("terminal", "no"),
+    ("idle", "yes"),
+    ("video", "no"),
+  ];
+  let mpv = Mpv::new(api, &options, RenderBackend::None)?;
+  // A node list: read item by item through its sub-properties.
+  let count = mpv
+    .property("audio-device-list/count")
+    .and_then(|n| n.parse::<usize>().ok())
+    .unwrap_or(0);
+  let devices = (0..count)
+    .filter_map(|i| {
+      let name = mpv.property(&format!("audio-device-list/{i}/name"))?;
+      let description = mpv
+        .property(&format!("audio-device-list/{i}/description"))
+        .unwrap_or_else(|| name.clone());
+      // `auto` is the caller's "default" entry; other drivers (OpenAL, SDL) repeat WASAPI's.
+      name
+        .starts_with("wasapi/")
+        .then_some(AudioDevice { name, description })
+    })
+    .collect();
+  Ok(devices)
 }
 
 /// yt-dlp settings for mpv's `ytdl_hook`.
@@ -443,6 +486,12 @@ impl Player {
     self.set("volume", &format!("{:.0}", percent.clamp(0.0, 100.0)));
   }
 
+  /// Plays to another audio output ([`AudioDevice::name`]; `None`: Windows' default). mpv
+  /// reopens its audio output, a short silence.
+  pub fn set_audio_device(&self, device: Option<&str>) {
+    self.set("audio-device", device.unwrap_or("auto"));
+  }
+
   /// Subtitle delay in seconds.
   pub fn set_subtitle_delay(&self, seconds: f64) {
     self.set("sub-delay", &format!("{seconds:.3}"));
@@ -564,6 +613,9 @@ fn mpv_options(options: &StartOptions, backend: Backend) -> Vec<(&'static str, S
       }
     }
     None => opts.push(("ytdl", "no".into())),
+  }
+  if let Some(device) = &options.audio_device {
+    opts.push(("audio-device", device.clone()));
   }
   if let Some(path) = &options.log_file {
     opts.push(("log-file", path.display().to_string()));

@@ -1,7 +1,8 @@
 //! The window's root: a top bar shared by every space (menu button, back, logo, the spaces as
-//! tabs, search, notifications, settings), the sidebar with the open space's entries, and the
-//! space's current page in the content panel. Switching tabs while a video plays moves it to
-//! the mini-player, a window of its own above the others (docs/design.md, ADR 0008).
+//! tabs, search, audio output, notifications, settings), the sidebar with the open space's
+//! entries, and the space's current page in the content panel. Switching tabs while a video
+//! plays moves it to the mini-player, a window of its own above the others (docs/design.md,
+//! ADR 0008).
 
 mod mini_player;
 mod settings_page;
@@ -15,13 +16,14 @@ use gpui::{
   SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::popover::Popover;
+use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Selectable, TitleBar, h_flex, v_flex};
+use player::AudioDevice;
 use ui::assets::{self, Icon};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::player::{NowPlaying, PlayerView, now_playing};
+use ui::player::{AudioOutput, NowPlaying, PlayerView, now_playing};
 use ui::splash::Splash;
 use ui::{motion, tf, theme};
 
@@ -32,6 +34,8 @@ use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
+/// Width of the audio output menu.
+const AUDIO_MENU_WIDTH: f32 = 320.;
 
 /// The mini-player window and the space whose video it shows.
 struct Mini {
@@ -54,6 +58,10 @@ pub struct Shell {
   card_hidden: Option<Instant>,
   /// Shows the card of the entry under the pointer after [`CARD_DELAY`].
   card_delay: Task<()>,
+  /// The audio outputs, as last listed (the menu opens on them while it lists them again);
+  /// `None` before the first list.
+  audio_devices: Option<Vec<AudioDevice>>,
+  audio_listing: Task<()>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -129,6 +137,8 @@ impl Shell {
       card: None,
       card_hidden: None,
       card_delay: Task::ready(()),
+      audio_devices: None,
+      audio_listing: Task::ready(()),
       _subscriptions: subscriptions,
     }
   }
@@ -317,6 +327,28 @@ impl Shell {
     cx.notify();
   }
 
+  /// Lists the audio outputs again (the menu opened: a headset may have been plugged in).
+  fn list_audio_devices(&mut self, cx: &mut Context<Self>) {
+    let listing = cx
+      .background_executor()
+      .spawn(async { player::audio_devices(None) });
+    self.audio_listing = cx.spawn(async move |this, cx| {
+      let devices = match listing.await {
+        Ok(devices) => devices,
+        Err(e) => {
+          tracing::warn!("cannot list the audio outputs: {e}");
+          Vec::new()
+        }
+      };
+      this
+        .update(cx, |this, cx| {
+          this.audio_devices = Some(devices);
+          cx.notify();
+        })
+        .ok();
+    });
+  }
+
   // --- Top bar ------------------------------------------------------------------------------
 
   fn top_bar(&self, window: &mut Window, cx: &mut Context<Self>) -> TitleBar {
@@ -374,6 +406,7 @@ impl Shell {
                 })
                 .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
             )
+            .child(self.audio_output(cx))
             .child(self.bell(cx))
             .child(
               Button::new("settings")
@@ -521,6 +554,108 @@ impl Shell {
           }),
       )
       .children(badge)
+  }
+
+  /// The audio output menu: Windows' default, then each output; the pick moves every player
+  /// and is kept for the next runs.
+  fn audio_output(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let shell = cx.weak_entity();
+    let trigger = Button::new("audio-output-button")
+      .ghost()
+      .icon(Icon::Speaker)
+      .tooltip(t("Audio output", "Sortie audio"));
+    Popover::new("audio-output")
+      .anchor(Anchor::TopRight)
+      .trigger(trigger)
+      .on_open_change({
+        let shell = shell.clone();
+        move |open, _, cx| {
+          if *open {
+            shell
+              .update(cx, |shell, cx| shell.list_audio_devices(cx))
+              .ok();
+          }
+        }
+      })
+      .content(move |_, _, cx| {
+        let devices = shell
+          .upgrade()
+          .and_then(|shell| shell.read(cx).audio_devices.clone());
+        let current = Settings::get(cx).player.audio_device.clone();
+        let row = |id: SharedString,
+                   device: Option<String>,
+                   label: SharedString,
+                   cx: &mut Context<PopoverState>| {
+          let selected = device == current;
+          h_flex()
+            .id(id)
+            .w_full()
+            .px_2()
+            .py_1p5()
+            .gap_3()
+            .items_center()
+            .rounded(theme::RADIUS)
+            .cursor_pointer()
+            .text_sm()
+            .hover(|s| s.bg(theme::surface_hover()))
+            .when(selected, |el| el.text_color(theme::accent()))
+            .on_click(cx.listener(move |state, _, window, cx| {
+              state.dismiss(window, cx);
+              if !selected {
+                choose_audio_device(device.clone(), cx);
+              }
+            }))
+            .child(div().flex_1().min_w_0().truncate().child(label))
+            .when(selected, |el| {
+              el.child(
+                gpui_component::Icon::new(Icon::Check)
+                  .size(px(14.))
+                  .flex_none(),
+              )
+            })
+        };
+        let default = row(
+          "audio-device-default".into(),
+          None,
+          t("Windows default", "Par défaut de Windows").into(),
+          cx,
+        );
+        let rows: Vec<_> = devices
+          .iter()
+          .flatten()
+          .enumerate()
+          .map(|(index, device)| {
+            row(
+              SharedString::from(format!("audio-device-{index}")),
+              Some(device.name.clone()),
+              device.description.clone().into(),
+              cx,
+            )
+          })
+          .collect();
+        v_flex()
+          .w(px(AUDIO_MENU_WIDTH))
+          .gap_1()
+          .child(
+            div()
+              .px_2()
+              .pb_1()
+              .font_weight(FontWeight::SEMIBOLD)
+              .child(t("Audio output", "Sortie audio")),
+          )
+          .child(default)
+          .children(rows)
+          .when(devices.is_none(), |el| {
+            el.child(
+              div()
+                .px_2()
+                .py_1p5()
+                .text_sm()
+                .text_color(theme::muted())
+                .child(t("Looking for outputs…", "Recherche des sorties…")),
+            )
+          })
+      })
   }
 
   // --- Sidebar ------------------------------------------------------------------------------
@@ -929,4 +1064,10 @@ impl Render for Shell {
       )
       .children(splash)
   }
+}
+
+/// Plays to `device` (`None`: Windows' default) from now on, in every player.
+fn choose_audio_device(device: Option<String>, cx: &mut App) {
+  Settings::update(cx, |s| s.player.audio_device = device.clone());
+  cx.set_global(AudioOutput(device));
 }

@@ -95,6 +95,7 @@ fn main() {
       theme::apply(cx);
       // Images and stream resolution need no session: an anonymous client of their own, so
       // a cookie import only replaces the app's client.
+      cx.set_global(ui::player::AudioOutput(prefs.player.audio_device.clone()));
       cx.set_global(prefs);
       settings::Settings::update(cx, |s| s.jellyfin.device_id = device_id);
       match innertube::Client::new(None, None, &hl, &gl) {

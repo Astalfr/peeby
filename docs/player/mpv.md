@@ -26,10 +26,15 @@ These are starting points, to be tuned. The reason for each option is recorded h
 | `sub-files` | added with `change-list sub-files append <url>` | External subtitles (Jellyfin `DeliveryUrl`), after the embedded tracks |
 | `sub-fonts-dir` | `%LOCALAPPDATA%\peeby\cache\fonts\<item>` | Fonts downloaded for external .ass |
 | `audio-channels` | `auto-safe` | Downmix to the Windows speaker layout. No passthrough |
+| `audio-device` | `auto`, or the output picked in the top bar (`wasapi/{…}`, `[player] audio_device`) | Changed at runtime on every player when the user picks another output (mpv reopens its audio output). An output that is gone falls back to mpv's default |
 | `keep-open` | `yes` | Stay paused on the last frame instead of unloading. End of file is detected with `eof-reached`, since `END_FILE` does not fire |
 | `input-default-bindings` | `no` | Keys are handled by the UI |
 | `start` | from `PlaybackPositionTicks` | Resume |
 | `aid` / `sid` | mapped from Jellyfin indexes | See [subtitles-ass.md](subtitles-ass.md#track-index-mapping) |
+
+## Audio outputs
+
+`player::audio_devices` lists the outputs with an mpv made only to ask (`vo=null`, `video=no`, no render context): it reads `audio-device-list/count` and each `audio-device-list/N/name|description` (sub-properties of a node list, no JSON to parse) and keeps the `wasapi/` ones; `auto` is shown by the caller as "Windows default". It takes about 0.15 s (DLL load included), so it runs in the background, each time the top bar's menu opens (a headset plugged in since shows up), the previous list on screen meanwhile. `ui::player::AudioOutput` is the global the players start with and observe; the shell sets it from `[player] audio_device` and on each pick.
 
 ## Security
 

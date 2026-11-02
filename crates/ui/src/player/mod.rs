@@ -103,6 +103,18 @@ pub fn now_playing(cx: &App) -> Option<Entity<PlayerView>> {
   cx.try_global::<NowPlaying>()?.0.as_ref()?.upgrade()
 }
 
+/// The audio output every player plays to ([`player::AudioDevice::name`]; `None`: Windows'
+/// default), a global the app sets from its settings: changing it moves the players playing.
+#[derive(Default)]
+pub struct AudioOutput(pub Option<String>);
+
+impl Global for AudioOutput {}
+
+/// The audio output the players play to.
+pub fn audio_output(cx: &App) -> Option<String> {
+  cx.try_global::<AudioOutput>()?.0.clone()
+}
+
 /// Where the player sits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layout {
@@ -280,6 +292,11 @@ impl PlayerView {
       })
       .detach();
     }
+    cx.observe_global::<AudioOutput>(|this: &mut Self, cx| {
+      let device = audio_output(cx);
+      this.with_player(|p| p.set_audio_device(device.as_deref()));
+    })
+    .detach();
     Self {
       focus: cx.focus_handle(),
       theater,
@@ -708,6 +725,10 @@ impl PlayerView {
 
   /// Starts mpv with prepared options (e.g. the yt-dlp fallback).
   pub fn start_with(&mut self, options: StartOptions, clicked: Instant, cx: &mut Context<Self>) {
+    let options = StartOptions {
+      audio_device: options.audio_device.or_else(|| audio_output(cx)),
+      ..options
+    };
     let (event_tx, event_rx) = async_channel::unbounded();
     let (frame_tx, frame_rx) = async_channel::unbounded();
     // libmpv and D3D11 setup block for a moment: off the UI thread.

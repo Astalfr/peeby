@@ -122,6 +122,9 @@ pub struct Player {
   pub seek_step_large: u32,
   /// GPU decoding and rendering; off forces software (troubleshooting).
   pub hardware_acceleration: bool,
+  /// Audio output (`player::AudioDevice::name`), picked from the top bar; `None` follows
+  /// Windows' default.
+  pub audio_device: Option<String>,
 }
 
 impl Default for Player {
@@ -133,6 +136,7 @@ impl Default for Player {
       seek_step: 10,
       seek_step_large: 60,
       hardware_acceleration: true,
+      audio_device: None,
     }
   }
 }

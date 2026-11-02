@@ -63,6 +63,8 @@ pub enum RenderBackend {
   Software,
   /// `MPV_RENDER_API_TYPE_D3D11` on this `ID3D11Device*` (mpv adds its own reference).
   D3d11 { device: *mut c_void },
+  /// No render context (`vo=null`): an mpv only queried, e.g. for its audio devices.
+  None,
 }
 
 pub const FORMAT_NONE: c_int = 0;
@@ -243,6 +245,7 @@ impl Mpv {
     )?;
 
     let (api_type, mut d3d11_init) = match backend {
+      RenderBackend::None => return Ok(mpv),
       RenderBackend::Software => (
         cstr("sw"),
         D3d11InitParams {
