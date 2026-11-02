@@ -5,7 +5,9 @@
 //! `cargo run -p ui --example player` · `PEEBY_START=150` starts in the credits ("up next") ·
 //! `PEEBY_DISPLAY=secondary` opens it on another screen · `PEEBY_SIZE=640x360` sets the window's
 //! size (panels larger than the player scroll) · `PEEBY_LIVE=1` plays it as a live (badge,
-//! uptime and viewers, no seeking) with a notice counting down for 8 s, as during a removed ad.
+//! uptime and viewers, no seeking) with a notice counting down for 8 s, as during a removed ad ·
+//! `PEEBY_LIVE=dvr` as a DVR live (YouTube's): the seek bar over its last 2 minutes, the badge
+//! greyed with the delay when started behind the edge (`PEEBY_START=60`).
 
 // The example reports the player's events on the console on purpose.
 #![allow(clippy::print_stderr)]
@@ -28,7 +30,9 @@ fn main() {
     .ok()
     .and_then(|s| s.parse::<f64>().ok())
     .unwrap_or(0.0);
-  let live = std::env::var("PEEBY_LIVE").as_deref() == Ok("1");
+  let live_mode = std::env::var("PEEBY_LIVE").ok();
+  let dvr = live_mode.as_deref() == Some("dvr");
+  let live = dvr || live_mode.as_deref() == Some("1");
   application()
     .with_assets(assets::Assets)
     .run(move |cx: &mut App| {
@@ -104,6 +108,7 @@ fn main() {
           view.start(
             Source {
               live,
+              dvr_window: dvr.then_some(120.0),
               ..source(start)
             },
             Instant::now(),
@@ -111,7 +116,7 @@ fn main() {
           );
           view
         });
-        if live {
+        if live && !dvr {
           // The notice the Twitch space shows while an ad is removed and no backup covers it.
           let notice = player.downgrade();
           cx.spawn(async move |cx| {

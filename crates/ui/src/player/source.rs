@@ -27,9 +27,19 @@ pub struct Source {
   pub subtitle_names: Vec<String>,
   /// A live stream: no seek bar, no seeking, a live badge instead of the times, and a quality
   /// change joins the live edge. mpv still reports a duration (the playlist's window): it is
-  /// ignored.
+  /// ignored. `options.start_seconds` is where the live edge is in a new mpv's timeline (0 when
+  /// mpv starts there by itself, as on Twitch; YouTube's lives start at their window's
+  /// beginning, so [`LIVE_DELAY`] before its end).
   pub live: bool,
+  /// A live whose recent past can be watched (YouTube's DVR): how far back, seconds. The seek
+  /// bar covers that window up to the live edge (mpv's growing duration), a pause keeps the
+  /// position, and the live badge brings back to the edge.
+  pub dvr_window: Option<f64>,
 }
+
+/// How far behind its edge a live plays, seconds: mpv waits for segments closer than about two
+/// of YouTube's (5 s each).
+pub const LIVE_DELAY: f64 = 15.0;
 
 /// What the live badge shows next to it ([`super::PlayerView::set_live_info`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

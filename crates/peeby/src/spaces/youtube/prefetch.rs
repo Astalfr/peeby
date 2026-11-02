@@ -14,6 +14,9 @@ use ui::runtime;
 const HOVER_DELAY: Duration = Duration::from_millis(300);
 /// Under the 6 h validity of the URLs, with margin for a long video.
 const FRESH_FOR: Duration = Duration::from_secs(4 * 3600);
+/// A live's window grows while it is younger than its DVR length: past this, a prefetched live
+/// would start too far behind its edge.
+const LIVE_FRESH_FOR: Duration = Duration::from_secs(10);
 /// Resolved streams kept; the oldest go first.
 const CAPACITY: usize = 64;
 
@@ -81,8 +84,19 @@ pub fn take(video_id: &str, cx: &mut App) -> Option<Stream> {
   let Handle(streams) = cx.try_global::<Handle>().cloned()?;
   streams.update(cx, |streams, _| {
     let (at, stream) = streams.ready.remove(video_id)?;
-    (at.elapsed() < FRESH_FOR).then_some(stream)
+    fresh(at, &stream).then_some(stream)
   })
+}
+
+/// Whether a stream resolved `at` can still be played. A live's window may have grown since
+/// (until it reaches its DVR length): it would start that much behind its edge.
+fn fresh(at: Instant, stream: &Stream) -> bool {
+  let fresh_for = if stream.live.is_some() {
+    LIVE_FRESH_FOR
+  } else {
+    FRESH_FOR
+  };
+  at.elapsed() < fresh_for
 }
 
 impl Streams {
@@ -90,7 +104,7 @@ impl Streams {
     let fresh = self
       .ready
       .get(&id)
-      .is_some_and(|(at, _)| at.elapsed() < FRESH_FOR);
+      .is_some_and(|(at, stream)| fresh(*at, stream));
     if fresh || !self.pending.insert(id.clone()) {
       return;
     }

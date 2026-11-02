@@ -40,7 +40,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
   ("Clic droit", "Raccourcis clavier, statistiques"),
 ];
 
-/// Rows of [`SHORTCUTS`] that move the playhead, left out for a live.
+/// Rows of [`SHORTCUTS`] that move the playhead, left out for a live without its past.
 const SEEK_KEYS: &[&str] = &["← / → · J / L", "Page préc. / Page suiv.", "0 – 9", "Début"];
 
 /// `10 s`, `1 min`, `1 min 30 s`.
@@ -413,7 +413,7 @@ impl PlayerView {
     let theme = cx.theme();
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
     let embedded = self.layout == Layout::Embedded;
-    let live = self.is_live();
+    let can_seek = self.can_seek();
     let seek = format!(
       "Reculer ou avancer de {} (Maj : {})",
       format_step(self.prefs.seek_step),
@@ -466,9 +466,9 @@ impl PlayerView {
           .children(
             SHORTCUTS
               .iter()
-              // Theater mode exists in the embedded layout only; a live does not seek.
+              // Theater mode exists in the embedded layout only; a live without DVR does not seek.
               .filter(|(keys, _)| embedded || *keys != "T")
-              .filter(|(keys, _)| !live || !SEEK_KEYS.contains(keys))
+              .filter(|(keys, _)| can_seek || !SEEK_KEYS.contains(keys))
               .map(|(keys, action)| {
                 let action: SharedString = if action.is_empty() {
                   seek.clone().into()

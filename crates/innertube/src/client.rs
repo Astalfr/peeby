@@ -7,13 +7,14 @@ use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
-  Channel, CommentPage, Feed, LikeStatus, NotificationPage, Playlist, PlaylistChoice,
+  Channel, CommentPage, Feed, LikeStatus, LiveChatPage, NotificationPage, Playlist, PlaylistChoice,
   PlaylistSummary, SearchPage, Stream, Votes, WatchPage,
 };
 use crate::parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_storyboard,
-  parse_subscriptions, parse_unseen_count, parse_watch, tracking_param,
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
+  parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
+  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_unseen_count,
+  parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -365,6 +366,19 @@ impl Client {
     Ok(parse_watch(video_id, &response))
   }
 
+  /// The page of a live's chat after `continuation` ([`WatchPage::live_chat`], then each page's
+  /// own). Signed in when cookies are set, so the rotated ones are kept.
+  pub async fn live_chat(&self, continuation: &str) -> Result<LiveChatPage> {
+    let response = self
+      .web(
+        "live_chat/get_live_chat",
+        json!({ "continuation": continuation }),
+        true,
+      )
+      .await?;
+    Ok(parse_live_chat(&response))
+  }
+
   /// Best HLS stream up to `max_height` pixels. Takes about 0.2 s; the URLs stay valid for
   /// 6 hours. Retries once with a fresh visitorData on `LOGIN_REQUIRED`.
   pub async fn stream(&self, video_id: &str, max_height: u32) -> Result<Stream> {
@@ -630,6 +644,14 @@ impl Client {
         endpoint: "hls master",
         detail: "no variant".into(),
       })?;
+    // A live's playlists are windows: mpv's timeline starts at their first segment, so playback
+    // must start near their end (mpv started at 0 waits for the audio rendition, ~10 s).
+    let live = if player["videoDetails"]["isLive"] == true {
+      let length = self.media_playlist_length(&variant.url).await?;
+      parse_live(&player, length)
+    } else {
+      None
+    };
     Ok(Stream {
       video_url: variant.url,
       audio_url: variant.audio_url,
@@ -639,7 +661,25 @@ impl Client {
       captions: parse_captions(&player),
       storyboard: parse_storyboard(&player),
       qualities,
+      live,
     })
+  }
+
+  /// Seconds the media playlist at `url` covers ([`hls::playlist_length`]).
+  async fn media_playlist_length(&self, url: &str) -> Result<f64> {
+    let response = self
+      .http
+      .get(url)
+      .header("User-Agent", VISIONOS_USER_AGENT)
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "hls media",
+      });
+    }
+    Ok(hls::playlist_length(&response.text().await?))
   }
 }
 

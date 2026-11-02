@@ -216,7 +216,8 @@ impl PlayerView {
 
   /// Shows, counts down or hides the "up next" card as the position moves.
   pub(super) fn update_up_next(&mut self, cx: &mut Context<Self>) {
-    if self.up_next_title.is_none() || self.duration <= 0.0 {
+    // A DVR live's duration is its edge, not an end.
+    if self.up_next_title.is_none() || self.duration <= 0.0 || self.is_live() {
       return;
     }
     let at = self.up_next_at();
@@ -320,8 +321,8 @@ impl PlayerView {
     )
   }
 
-  /// Whether the video was watched to its credits: past where "up next" shows.
+  /// Whether the video was watched to its credits: past where "up next" shows (never a live).
   pub fn finished(&self) -> bool {
-    self.duration > 0.0 && self.position >= self.up_next_at() - 1.0
+    !self.is_live() && self.duration > 0.0 && self.position >= self.up_next_at() - 1.0
   }
 }

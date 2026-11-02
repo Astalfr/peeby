@@ -5,9 +5,9 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  Error, LikeStatus, NotificationLevel, SearchResult, hls, hls_manifest_url, parse_feed,
-  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_watch,
+  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, NotificationLevel,
+  SearchResult, hls, hls_manifest_url, parse_feed, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_watch,
 };
 use serde_json::Value;
 
@@ -439,6 +439,100 @@ fn unseen_notifications_count() {
     Some(0)
   );
   assert_eq!(innertube::parse_unseen_count(&fixture("next.json")), None);
+}
+
+#[test]
+fn live_player_and_media_playlist() {
+  // Lofi Girl's live, captured 2026-11-02; its media playlist trimmed to 8 segments.
+  let player = fixture("player_visionos_live.json");
+  assert!(hls_manifest_url(&player).is_ok());
+  let path = format!(
+    "{}/tests/fixtures/hls_live_media.m3u8",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let media = std::fs::read_to_string(path).unwrap();
+  let length = hls::playlist_length(&media);
+  assert!((length - 40.0).abs() < 1e-9);
+  let live = innertube::parse_live(&player, length).unwrap();
+  assert_eq!(live.length, length);
+  // DVR: an hour back (`playlist_duration/3600`), whatever the window covers now.
+  assert_eq!(live.dvr_window, Some(3600.0));
+  // A full window measures a little less: the measure wins.
+  let full = innertube::parse_live(&player, 3599.9).unwrap();
+  assert_eq!(full.dvr_window, Some(3599.9));
+  // A live's storyboard is another kind (`playerLiveStoryboardSpecRenderer`): no seek previews.
+  assert!(innertube::parse_storyboard(&player).is_none());
+  // A video is not a live.
+  assert!(innertube::parse_live(&fixture("player_visionos.json"), 0.0).is_none());
+}
+
+#[test]
+fn live_watch_page_has_its_chat() {
+  // A live's `next` (captured 2026-11-02): its chat's first token; a video has none.
+  let page = parse_watch("bygxS5WGoKE", &fixture("next_live.json"));
+  assert!(
+    page
+      .live_chat
+      .as_deref()
+      .is_some_and(|t| t.starts_with("0ofMyAO"))
+  );
+  assert!(!page.title.is_empty());
+  assert_eq!(
+    parse_watch("dQw4w9WgXcQ", &fixture("next.json")).live_chat,
+    None
+  );
+}
+
+#[test]
+fn live_chat_page() {
+  // `live_chat/get_live_chat` of the same live: 30 actions kept, chatters renamed.
+  let page = innertube::parse_live_chat(&fixture("live_chat.json"));
+  assert_eq!(page.actions.len(), 30);
+  assert!(page.continuation.is_some());
+  assert_eq!(page.poll_after, std::time::Duration::from_millis(10_000));
+  let messages: Vec<&ChatMessage> = page
+    .actions
+    .iter()
+    .filter_map(|a| match a {
+      ChatAction::Message(m) => Some(m),
+      ChatAction::Remove(_) => None,
+    })
+    .collect();
+  assert_eq!(messages.len(), 28);
+  assert_eq!(
+    page.actions[17],
+    ChatAction::Remove("ChwKGkNNcXFwdGpNNTVjREZRbDFxd0lkT2k4MFhR".into())
+  );
+
+  let first = messages[0];
+  assert_eq!(first.author, "@viewer1");
+  assert_eq!(first.author_id.as_deref(), Some("UCviewer1xxxxxxxxxxxxxxx"));
+  assert_eq!(first.runs, [ChatRun::Text("Parkour!!!".into())]);
+  assert_eq!(first.timestamp_usec, Some(1_793_563_401_559_297));
+
+  // A Unicode emoji: its character, and Noto's image.
+  let ChatRun::Emoji { name, url, custom } = &messages[1].runs[1] else {
+    panic!("an emoji");
+  };
+  assert_eq!(name, "\u{1f998}");
+  assert!(!custom);
+  assert!(url.as_deref().is_some_and(|u| u.starts_with("https://")));
+
+  // The moderator, also verified.
+  let kinds: Vec<ChatBadgeKind> = messages[2].badges.iter().map(|b| b.kind).collect();
+  assert_eq!(kinds, [ChatBadgeKind::Verified, ChatBadgeKind::Moderator]);
+  assert_eq!(messages[2].badges[1].label, "Modérateur");
+  assert!(messages[2].badges.iter().all(|b| b.image.is_none()));
+
+  // A member: the channel's badge image, and the channel's own emojis.
+  let member = messages.iter().find(|m| m.author == "@viewer5").unwrap();
+  assert_eq!(member.badges[0].kind, ChatBadgeKind::Member);
+  assert_eq!(member.badges[0].label, "Nouveau membre");
+  assert!(member.badges[0].image.is_some());
+  assert!(member.runs.iter().any(|r| matches!(
+    r,
+    ChatRun::Emoji { name, custom: true, url: Some(_) } if name == ":face-blue-smiling:"
+  )));
 }
 
 #[test]

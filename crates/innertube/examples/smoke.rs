@@ -10,6 +10,7 @@ use innertube::{Client, Cookies};
 
 const VIDEO: &str = "dQw4w9WgXcQ";
 const CHANNEL: &str = "UCuAXFkgsw1L7xaCfnd5JJOw";
+const LIVE_QUERY: &str = "lofi hip hop radio";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -182,6 +183,56 @@ async fn main() {
       .await
       .map(|v| format!("{} likes · {} dislikes", v.likes, v.dislikes)),
   );
+  // A live found by search (24/7 radios are always on): its window and its chat.
+  let live = client.search(LIVE_QUERY).await.ok().and_then(|page| {
+    page.results.into_iter().find_map(|r| match r {
+      innertube::SearchResult::Video(v) if v.live => Some(v.id),
+      _ => None,
+    })
+  });
+  match live {
+    None => check(
+      "live",
+      Err(innertube::Error::Parse {
+        endpoint: "search",
+        detail: format!("no live found for {LIVE_QUERY:?}"),
+      }),
+    ),
+    Some(id) => {
+      check(
+        "live stream",
+        client.stream(&id, 1080).await.map(|s| match s.live {
+          Some(live) => format!(
+            "window {:.0} s · DVR {:?}",
+            live.length,
+            live.dvr_window.map(|w| w.round())
+          ),
+          None => "not a live".into(),
+        }),
+      );
+      let chat_token = client.watch(&id).await.map(|w| w.live_chat);
+      match chat_token {
+        Ok(Some(token)) => check(
+          "live chat",
+          client.live_chat(&token).await.map(|p| {
+            format!(
+              "{} actions · next in {} ms",
+              p.actions.len(),
+              p.poll_after.as_millis()
+            )
+          }),
+        ),
+        Ok(None) => check(
+          "live chat",
+          Err(innertube::Error::Parse {
+            endpoint: "next",
+            detail: "no live chat".into(),
+          }),
+        ),
+        Err(e) => check("live chat", Err(e)),
+      }
+    }
+  }
   if failures > 0 {
     std::process::exit(1);
   }

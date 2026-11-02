@@ -128,6 +128,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - mpv list options go through `change-list … append` (`http-header-fields`, `audio-files`, `ytdl-raw-options`,
   `script-opts`): a comma in a value would split it otherwise.
 - YouTube HLS variants are video only: pass the `AUDIO` group's rendition as `audio-files`, with the VISIONOS User-Agent.
+- A YouTube live's playlists are windows whose first segment is mpv's 0: start it with a positive `start` near the
+  window's end (`Live::length − LIVE_DELAY`); 0 or a negative `start` stalls about 10 s on the audio rendition (ADR 0011).
 - Caption tracks: `baseUrl&fmt=vtt` works; machine translations (`&tlang=`) answer HTTP 429 for VISIONOS sessions.
 - Per-frame video images: each `RenderImage` is a new atlas entry, so release the previous one with `Window::drop_image`.
 - vendor/gpui-pre-windows is a patched copy (external D3D11 textures, see vendor/README.md). Never edit it without

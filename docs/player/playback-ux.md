@@ -111,12 +111,38 @@ A source with `Source::live` (Twitch, [twitch-plan.md](../twitch-plan.md) step 4
   is no "up next", and `finished()` stays false.
 - **Quality change.** Changing quality restarts at the live edge rather than at the current position.
 - **End.** The end of the stream (`PlayerEvent::Ended`) is left to the page: the channel went offline.
+- **Where the edge is.** `Source::options.start_seconds` is the live edge in a new mpv's timeline, used
+  when mpv restarts (resume after a pause, quality change). Twitch's is 0: mpv starts there by itself.
+  YouTube's playlists are windows (an hour of 5 s segments) whose first segment is mpv's 0: started at 0,
+  mpv waits about 10 s for the audio rendition, so a YouTube live starts `LIVE_DELAY` (15 s) before the
+  window's end ([ADR 0011](../decisions/0011-youtube-live-dvr.md)).
+
+### DVR lives (YouTube)
+
+A live with `Source::dvr_window` (YouTube with `isLiveDvrEnabled`) keeps its past, as on youtube.com:
+- **Seek bar.** It covers the window up to the edge: mpv's duration is the edge and grows with the live,
+  the window's start is `duration − dvr_window` (or 0 while the window still grows from the broadcast's
+  start). Hovering it shows how far behind the edge a point is (`-5:23`). The ±10 s buttons, the seeking
+  keys and their help lines come back. A seek never goes closer than `LIVE_DELAY` to the edge.
+- **The badge.** "EN DIRECT" on the accent at the edge (less than `LIVE_DELAY` + 10 s behind); behind it,
+  greyed, followed by how far behind (`-2:04`). A click on it goes back to the edge (a seek, mpv keeps
+  reloading the playlist; about 2 s).
+- **Pause** keeps the position, as on youtube.com (Twitch's live resumes at its edge).
+- **Quality change** keeps the distance to the edge: the new mpv's timeline starts at the window's
+  current first segment, so it starts at `min(duration, dvr_window) − behind`.
+- **No "up next"**, `finished()` stays false, and there are no seek previews (a live's storyboard is
+  another kind, not parsed).
+
+Measured on a live (Lofi Girl, 1 h window, 2026-11-02, `spike-yt-play`): playback 0.59 s after load at
+`length − 30`; 2 minutes back, playing again in about 1.5 s; back to the edge in about 2 s.
 
 `PlayerView::set_notice(Option<SharedString>)` puts the page's message over the picture, in place of
 "Chargement…". It is generic: Twitch uses it while an ad is removed and no backup stream covers it, with
 the countdown it updates itself.
 
-`cargo run -p ui --example player` with `PEEBY_LIVE=1` shows the live controls and a notice counting down.
+`cargo run -p ui --example player` with `PEEBY_LIVE=1` shows the live controls and a notice counting down;
+`PEEBY_LIVE=dvr` shows a DVR live's (its generated source reports what it has read as its duration, so it
+stays at its edge).
 
 ## Icons
 

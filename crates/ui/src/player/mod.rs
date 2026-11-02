@@ -13,7 +13,7 @@ mod stats;
 mod tracks;
 
 pub use overlays::format_step;
-pub use source::{LiveInfo, Previews, Quality, Source, Subtitle, Tile};
+pub use source::{LIVE_DELAY, LiveInfo, Previews, Quality, Source, Subtitle, Tile};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -28,6 +28,7 @@ use gpui::{
   linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use gpui_video::VideoView;
 use player::{Chapter, Choice, Event, Player, StartOptions, Track};
@@ -339,6 +340,55 @@ impl PlayerView {
     self.source.as_ref().is_some_and(|s| s.live)
   }
 
+  /// How far back the live can be watched, if it keeps its past ([`Source::dvr_window`]).
+  fn dvr_window(&self) -> Option<f64> {
+    self
+      .source
+      .as_ref()
+      .filter(|s| s.live)
+      .and_then(|s| s.dvr_window)
+  }
+
+  /// Whether the timeline can be sought: a video, or a live with its past.
+  fn can_seek(&self) -> bool {
+    !self.is_live() || self.dvr_window().is_some()
+  }
+
+  /// What the seek bar covers, in mpv's timeline: the whole video, or a DVR live's window up to
+  /// its edge (mpv's duration grows with the live while the oldest segments drop out).
+  fn seek_range(&self) -> (f64, f64) {
+    let end = self.duration.max(0.0);
+    match self.dvr_window() {
+      Some(window) => ((end - window).max(0.0), end),
+      None => (0.0, end),
+    }
+  }
+
+  /// How far behind the live edge a DVR live plays, seconds.
+  fn behind_live(&self) -> f64 {
+    (self.duration - self.position).max(0.0)
+  }
+
+  /// Whether a DVR live plays at its edge (the playhead trails mpv's duration, which grows by a
+  /// whole segment at a time).
+  fn at_live_edge(&self) -> bool {
+    self.behind_live() < LIVE_DELAY + 10.0
+  }
+
+  /// Back to a DVR live's edge: a seek, mpv keeps reloading the playlist.
+  fn go_live(&mut self, cx: &mut Context<Self>) {
+    self.seek_to(self.duration - LIVE_DELAY, cx);
+    self.show_osd("Retour au direct".into(), cx);
+  }
+
+  /// Where the live edge is in a new mpv's timeline ([`Source::live`]).
+  fn live_start(&self) -> f64 {
+    self
+      .source
+      .as_ref()
+      .map_or(0.0, |s| s.options.start_seconds)
+  }
+
   /// Viewers and start time shown next to the live badge; the uptime ticks every second.
   pub fn set_live_info(&mut self, info: Option<LiveInfo>, cx: &mut Context<Self>) {
     let ticking = info.as_ref().is_some_and(|i| i.started_at.is_some());
@@ -431,13 +481,14 @@ impl PlayerView {
   }
 
   /// Plays or pauses. A live paused for a while resumes at its live edge, as Twitch's player:
-  /// mpv restarts on the current quality (about 0.7 s, the last frame staying on screen).
+  /// mpv restarts on the current quality (about 0.7 s, the last frame staying on screen). A DVR
+  /// live resumes where it was paused, as YouTube's.
   pub fn toggle_pause(&mut self, cx: &mut Context<Self>) {
     let stale = self.paused
       && self
         .paused_since
         .is_some_and(|t| t.elapsed() > LIVE_RESUME_AFTER);
-    if self.is_live() && stale && self.player.is_some() {
+    if self.is_live() && self.dvr_window().is_none() && stale && self.player.is_some() {
       self.resume_live(cx);
     } else {
       self.with_player(Player::toggle_pause);
@@ -460,7 +511,7 @@ impl PlayerView {
     self.player = None;
     self.captions_added.clear();
     let options = StartOptions {
-      start_seconds: 0.0,
+      start_seconds: self.live_start(),
       ..options
     };
     self.start_with(options, Instant::now(), cx);
@@ -538,8 +589,9 @@ impl PlayerView {
     self.start_with(options, clicked, cx);
   }
 
-  /// Plays another quality from the current position (a live: from its live edge): mpv
-  /// restarts on the new variant (about 0.7 s), and the subtitle track is added again.
+  /// Plays another quality from the current position (a live: from its live edge; a DVR live:
+  /// as far behind it): mpv restarts on the new variant (about 0.7 s), and the subtitle track is
+  /// added again.
   fn select_quality(&mut self, index: usize, cx: &mut Context<Self>) {
     self.menu = None;
     if self.quality == Some(index) {
@@ -552,8 +604,19 @@ impl PlayerView {
     else {
       return;
     };
+    let start_seconds = match self.dvr_window() {
+      // The new mpv's timeline starts at the window's current first segment: the broadcast's
+      // start while the window grows, `window` before the edge once it slides.
+      // At least 1 s: 0 gives mpv no `start`, and a YouTube live then waits on its audio.
+      Some(window) => {
+        let length = self.duration.min(window);
+        (length - self.behind_live().max(LIVE_DELAY)).max(1.0)
+      }
+      None if self.is_live() => self.live_start(),
+      None => self.position,
+    };
     let options = StartOptions {
-      start_seconds: if self.is_live() { 0.0 } else { self.position },
+      start_seconds,
       ..quality.options
     };
     tracing::info!("quality {}", quality.label);
@@ -717,8 +780,8 @@ impl PlayerView {
       }
       Event::Position(_) => {}
       // A live's duration is only its playlist's window: kept at 0, it turns off the seek
-      // bar's math, "up next" and `finished`.
-      Event::Duration(_) if self.is_live() => {}
+      // bar's math, "up next" and `finished`. A DVR live's is its edge, for the seek bar.
+      Event::Duration(_) if !self.can_seek() => {}
       Event::Duration(seconds) => {
         self.duration = seconds;
         self.refresh_segments();
@@ -770,7 +833,12 @@ impl PlayerView {
   }
 
   fn seek_to(&mut self, seconds: f64, cx: &mut Context<Self>) {
-    let target = seconds.clamp(0.0, self.duration.max(0.0));
+    let (start, mut end) = self.seek_range();
+    // Closer to a live's edge, mpv would wait for segments that do not exist yet.
+    if self.dvr_window().is_some() {
+      end = (end - LIVE_DELAY).max(start);
+    }
+    let target = seconds.clamp(start, end);
     self.position = target;
     self.with_player(|p| p.seek_to(target));
     cx.emit(PlayerEvent::Seeked);
@@ -805,7 +873,7 @@ impl PlayerView {
   fn seek_at(&mut self, x: Pixels, cx: &mut Context<Self>) {
     if let Some(fraction) = self.seek_fraction(x) {
       self.seek_hover = Some(fraction);
-      self.seek_to(fraction * self.duration, cx);
+      self.seek_to(self.seek_time(fraction), cx);
     }
   }
 
@@ -908,12 +976,12 @@ impl PlayerView {
     }
     let page_layout = self.layout.is_page();
     let key = keystroke.key.as_str();
-    // A live has nowhere to seek to: those keys go on to the page.
+    // A live without its past has nowhere to seek to: those keys go on to the page.
     let seek_key = matches!(
       key,
       "left" | "j" | "right" | "l" | "pageup" | "pagedown" | "home"
     ) || (key.len() == 1 && key.bytes().all(|b| b.is_ascii_digit()));
-    if seek_key && self.is_live() {
+    if seek_key && !self.can_seek() {
       return;
     }
     match key {
@@ -922,10 +990,10 @@ impl PlayerView {
       "right" | "l" => self.seek_by(self.seek_step(shift), cx),
       "pageup" => self.add_chapter(-1, cx),
       "pagedown" => self.add_chapter(1, cx),
-      "home" => self.seek_to(0.0, cx),
+      "home" => self.seek_to(self.seek_range().0, cx),
       key @ ("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9") if !shift => {
         let tenth = key.parse::<f64>().unwrap_or(0.0);
-        self.seek_to(self.duration * tenth / 10.0, cx);
+        self.seek_to(self.seek_time(tenth / 10.0), cx);
       }
       "up" => self.set_volume(self.volume + VOLUME_STEP, cx),
       "down" => self.set_volume(self.volume - VOLUME_STEP, cx),
@@ -1005,8 +1073,15 @@ impl PlayerView {
   fn seek_fraction(&self, x: Pixels) -> Option<f64> {
     let bounds = self.seek_bounds.get();
     let width = f32::from(bounds.size.width);
-    (width > 0.0 && self.duration > 0.0)
+    let (start, end) = self.seek_range();
+    (width > 0.0 && end > start)
       .then(|| (f32::from(x - bounds.origin.x) / width).clamp(0.0, 1.0) as f64)
+  }
+
+  /// The time at `fraction` of the seek bar.
+  fn seek_time(&self, fraction: f64) -> f64 {
+    let (start, end) = self.seek_range();
+    start + fraction * (end - start)
   }
 
   // --- Rendering ----------------------------------------------------------------------------
@@ -1054,11 +1129,13 @@ impl PlayerView {
 
   fn render_seek_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let primary = cx.theme().primary;
-    let progress = if self.duration > 0.0 {
-      (self.position / self.duration).clamp(0.0, 1.0)
+    let (start, end) = self.seek_range();
+    let progress = if end > start {
+      ((self.position - start) / (end - start)).clamp(0.0, 1.0)
     } else {
       0.0
     };
+    let dvr = self.dvr_window().is_some();
     let height = if self.seek_hover.is_some() { 6. } else { 4. };
     let radius = px(height / 2.);
     let fill = |fraction: f64, color: gpui::Hsla| {
@@ -1075,7 +1152,7 @@ impl PlayerView {
     let bounds_cell = self.seek_bounds.clone();
     let (dragging, view) = (self.seek_dragging, cx.weak_entity());
     let preview = self.seek_hover.map(|fraction| {
-      let seconds = fraction * self.duration;
+      let seconds = self.seek_time(fraction);
       let bar_width = f32::from(self.seek_bounds.get().size.width);
       let thumbnail = self.render_storyboard_frame(seconds, cx);
       let width = if thumbnail.is_some() {
@@ -1103,7 +1180,12 @@ impl PlayerView {
             .rounded_md()
             .bg(gpui::black().opacity(0.8))
             .text_color(gpui::white())
-            .child(div().text_sm().child(format_time(seconds)))
+            .child(div().text_sm().child(if dvr {
+              // A live's past is told by how far behind the edge it is, as YouTube does.
+              format!("-{}", format_time(end - seconds))
+            } else {
+              format_time(seconds)
+            }))
             .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c))),
         )
     });
@@ -1348,6 +1430,7 @@ impl PlayerView {
     let has_qualities = self.source.as_ref().is_some_and(|s| s.qualities.len() > 1);
     let embedded = self.layout == Layout::Embedded;
     let live = self.is_live();
+    let can_seek = self.can_seek();
     let step = self.prefs.seek_step;
     let mut layers = Vec::new();
 
@@ -1413,7 +1496,7 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
         )
       })
-      .when(!live, |row| {
+      .when(can_seek, |row| {
         row
           .child(
             self
@@ -1518,7 +1601,7 @@ impl PlayerView {
           .on_click(|_, window, _| window.toggle_fullscreen()),
       );
 
-    let seek_bar = (!live).then(|| self.render_seek_bar(cx));
+    let seek_bar = can_seek.then(|| self.render_seek_bar(cx));
     layers.push(
       v_flex()
         .id("bottom-bar")
@@ -1560,26 +1643,47 @@ impl PlayerView {
       0 | 1 => format!("{n} spectateur"),
       n => format!("{} spectateurs", group_thousands(n)),
     });
+    let dvr = self.dvr_window().is_some();
+    let behind = (dvr && !self.at_live_edge()).then(|| self.behind_live());
+    let badge = h_flex()
+      .id("live-badge")
+      .gap_1()
+      .items_center()
+      .px_2()
+      .py(px(2.))
+      .rounded_sm()
+      .bg(if behind.is_some() {
+        gpui::white().opacity(0.2)
+      } else {
+        primary
+      })
+      .text_xs()
+      .font_weight(FontWeight::BOLD)
+      .text_color(gpui::white())
+      .child(div().size(px(6.)).rounded_full().bg(if behind.is_some() {
+        gpui::white().opacity(0.5)
+      } else {
+        gpui::white()
+      }))
+      .child("EN DIRECT")
+      .when(dvr, |badge| {
+        badge
+          .cursor_pointer()
+          .hover(|s| s.bg(primary))
+          .tooltip(|window, cx| Tooltip::new("Revenir au direct").build(window, cx))
+          .on_click(cx.listener(|this, _, _, cx| {
+            this.go_live(cx);
+            this.show_controls(cx);
+          }))
+      });
     h_flex()
       .pl_2()
       .gap_2()
       .items_center()
       .text_sm()
       .text_color(gpui::white().opacity(0.9))
-      .child(
-        h_flex()
-          .gap_1()
-          .items_center()
-          .px_2()
-          .py(px(2.))
-          .rounded_sm()
-          .bg(primary)
-          .text_xs()
-          .font_weight(FontWeight::BOLD)
-          .text_color(gpui::white())
-          .child(div().size(px(6.)).rounded_full().bg(gpui::white()))
-          .child("EN DIRECT"),
-      )
+      .child(badge)
+      .children(behind.map(|b| format!("-{}", format_time(b))))
       .children(uptime)
       .children(viewers.map(|v| div().text_color(gpui::white().opacity(0.75)).child(v)))
   }

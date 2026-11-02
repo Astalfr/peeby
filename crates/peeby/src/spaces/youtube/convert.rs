@@ -7,7 +7,7 @@ use innertube::{Client, Storyboard, Stream, Thumbnail};
 use player::StartOptions;
 use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
-use ui::player::{Previews, Quality, Source, Subtitle, Tile};
+use ui::player::{LIVE_DELAY, Previews, Quality, Source, Subtitle, Tile};
 
 use crate::settings;
 
@@ -76,7 +76,9 @@ fn hls_options(
 }
 
 /// A resolved stream as the player's source: its quality ladder, captions fetched on demand
-/// and the storyboard for the seek bar; `player` gives the hardware acceleration setting.
+/// and the storyboard for the seek bar; `player` gives the hardware acceleration setting. A live
+/// starts [`LIVE_DELAY`] before the end of its window (mpv's timeline starts at the window's
+/// first segment) and, with DVR, can be sought back over its window.
 pub fn source(stream: Stream, player: &settings::Player) -> Source {
   let qualities = stream
     .qualities
@@ -86,13 +88,19 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
       options: hls_options(&v.url, v.audio_url.as_deref(), stream.user_agent, player),
     })
     .collect();
+  let mut options = hls_options(
+    &stream.video_url,
+    stream.audio_url.as_deref(),
+    stream.user_agent,
+    player,
+  );
+  if let Some(live) = stream.live {
+    // Never 0, which gives mpv no `start` at all: it would wait on the audio rendition again
+    // (a live opened in its first seconds, its window shorter than the delay).
+    options.start_seconds = (live.length - LIVE_DELAY).max(1.0);
+  }
   Source {
-    options: hls_options(
-      &stream.video_url,
-      stream.audio_url.as_deref(),
-      stream.user_agent,
-      player,
-    ),
+    options,
     qualities,
     quality: stream
       .qualities
@@ -111,6 +119,8 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
     previews: stream
       .storyboard
       .map(|board| Rc::new(StoryboardPreviews(board)) as Rc<dyn Previews>),
+    live: stream.live.is_some(),
+    dvr_window: stream.live.and_then(|live| live.dvr_window),
     ..Default::default()
   }
 }

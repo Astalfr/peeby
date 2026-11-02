@@ -92,6 +92,23 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 - Verified by driving the app: the playlists page (15 playlists), "Watch later" (17 videos), "Tout lire" (playback after 1.7 s), N, then the end of a video playing the next one (1.3 s, prefetched), the same in fullscreen (it stays fullscreen, Escape still works), playing from row 4, shuffle, back to the playlist page.
 - **Not verified:** reaching the end of a loaded page during playback (the queue loads the next one first; only its request was checked live), repeat at the end of a playlist.
 
+## YouTube lives
+
+- Done (2026-11-02): lives start at their edge in about 0.6 s (they waited about 10 s at the start of their
+  window), can be sought back over their DVR window (an hour) with the seek bar, ±10 s and the keys, pause in
+  place, and come back to the edge with the "EN DIRECT" badge, greyed with the delay while behind
+  ([ADR 0011](decisions/0011-youtube-live-dvr.md)). Their chat shows in a column, as on Twitch: polled from
+  `live_chat/get_live_chat`, messages paced as they were sent, moderators and owner in YouTube's colors,
+  members' badges, the channel's emojis. Cards of lives show an "EN DIRECT" tag on the thumbnail
+  (grid, list and compact). 3 new tests on 4 new fixtures (live player and media playlist, live `next`, a
+  chat page with renamed chatters). `smoke` checks a live's window and chat. Verified in the app: a live's first frame about 1 s after
+  the click (stream 0.31 s, then mpv's seek to `length − 15` and first frame 0.68 s later, from the mpv log),
+  its chat filling, and after three ← keys the greyed badge with `-0:41`, the seek bar and the ±10 s buttons
+  (screenshots). **Not verified:** the badge's click back to the edge and the seek bar's drag in the app, a
+  quality change in a live, a live without DVR, a live opened in its first seconds, Super Chats and
+  memberships (none in the saved responses); the comments of a live page do not load more on scroll (its
+  layout scrolls on its own).
+
 ## Visual refresh
 
 - Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.

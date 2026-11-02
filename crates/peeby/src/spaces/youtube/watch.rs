@@ -9,6 +9,9 @@
 //! Playing a playlist, the page shows its [`Queue`] above the related videos. When the video
 //! ends (or on Next/Previous), the queue picks a video and the app replaces this page with that
 //! video's page, which shares the same queue.
+//!
+//! A live happening now has its chat ([`chat`]) in a column on the page's height, as on Twitch
+//! (`ui::chat::watch_layout`); the related videos then go under the details.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -16,7 +19,7 @@ use std::time::Instant;
 use gpui::prelude::*;
 use gpui::{
   AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
-  WeakEntity, Window, div, px, relative,
+  Task, WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
@@ -31,9 +34,10 @@ use crate::spaces::youtube::cards::{compact_card, playlist_row};
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
 use crate::spaces::youtube::{Route, YouTubeSpace};
-use crate::spaces::youtube::{bell, prefetch, save, tools};
+use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
+use ui::chat::{ChatPanel, watch_layout};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::{PlayerEvent, PlayerView, Prefs};
@@ -101,6 +105,8 @@ pub struct WatchView {
   queue_scroll: ScrollHandle,
   /// Row of the queue panel to scroll to the top, once the panel has been laid out.
   queue_scroll_to: Option<usize>,
+  /// A live's chat, and the task polling it.
+  chat: Option<(Entity<ChatPanel>, Task<()>)>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -199,6 +205,7 @@ impl WatchView {
       queue,
       queue_scroll,
       queue_scroll_to,
+      chat: None,
       _subscriptions: subscriptions,
     };
     view.sync_queue_controls(cx);
@@ -417,6 +424,16 @@ impl WatchView {
     .detach();
   }
 
+  /// Follows the live's chat from `continuation`.
+  fn start_chat(&mut self, continuation: String, cx: &mut Context<Self>) {
+    if self.chat.is_some() {
+      return;
+    }
+    let panel = cx.new(ChatPanel::new);
+    let task = chat::start(self.client.clone(), continuation, &panel, cx);
+    self.chat = Some((panel, task));
+  }
+
   fn load_page(&self, cx: &mut Context<Self>) {
     let (client, id) = (self.client.clone(), self.video_id.clone());
     let fetch = runtime::spawn(cx, async move { client.watch(&id).await });
@@ -431,6 +448,9 @@ impl WatchView {
                 .player
                 .update(cx, |player, cx| player.set_title(title, cx));
               this.like_status = page.like_status;
+              if let Some(continuation) = page.live_chat.clone() {
+                this.start_chat(continuation, cx);
+              }
               this.page = Some(page);
               this.load_comments(cx);
             }
@@ -1080,6 +1100,25 @@ impl Render for WatchView {
     let comments = self.comments(window, cx);
     let queue = self.queue_panel(window, cx);
     let theater = Settings::get(cx).theater;
+    if let Some((panel, _)) = &self.chat {
+      let below = v_flex()
+        .gap_5()
+        .child(details)
+        .child(comments)
+        .children(queue)
+        .child(
+          v_flex()
+            .max_w(px(RELATED_WIDTH * 2.))
+            .gap_2()
+            .children(related),
+        );
+      return watch_layout(
+        self.player.clone().into_any_element(),
+        below.into_any_element(),
+        Some(panel.clone().into_any_element()),
+        theater,
+      );
+    }
     let player = if theater {
       // Across the whole page on black, 16:9 but short enough to leave the title in view;
       // mpv letterboxes the picture inside.

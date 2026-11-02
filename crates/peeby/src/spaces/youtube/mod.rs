@@ -5,6 +5,7 @@ pub mod account;
 pub mod bell;
 pub mod cards;
 pub mod channels;
+pub mod chat;
 pub mod convert;
 pub mod feed;
 pub mod inbox;

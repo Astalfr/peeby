@@ -92,6 +92,87 @@ pub struct WatchPage {
   pub like_params: LikeParams,
   /// The channel's notification bell, when the user is subscribed to it.
   pub notifications: Option<ChannelNotifications>,
+  /// Token of a live's chat ([`crate::Client::live_chat`]); `None` for a video or a finished
+  /// live's replay.
+  pub live_chat: Option<String>,
+}
+
+/// What happened in a live's chat since the previous page.
+#[derive(Clone, Debug, Default)]
+pub struct LiveChatPage {
+  /// In the order they happened.
+  pub actions: Vec<ChatAction>,
+  /// Token of the next page; `None` once the chat is over.
+  pub continuation: Option<String>,
+  /// When to ask for the next page, as YouTube says (`timeoutMs`).
+  pub poll_after: std::time::Duration,
+}
+
+/// One change of a live's chat.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ChatAction {
+  /// A new message.
+  Message(ChatMessage),
+  /// A message removed by a moderator, by id.
+  Remove(String),
+}
+
+/// A message of a live's chat.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatMessage {
+  /// YouTube's id, for [`ChatAction::Remove`].
+  pub id: String,
+  /// The author's handle as shown, e.g. `@name`.
+  pub author: String,
+  /// The author's channel id (`UC…`).
+  pub author_id: Option<String>,
+  /// The author's badges, in YouTube's order.
+  pub badges: Vec<ChatBadge>,
+  /// The text, as words and emojis.
+  pub runs: Vec<ChatRun>,
+  /// When it was sent, microseconds since the Unix epoch.
+  pub timestamp_usec: Option<u64>,
+}
+
+/// A badge before an author's name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatBadge {
+  /// What it is.
+  pub kind: ChatBadgeKind,
+  /// Its localized tooltip, e.g. `Modérateur`, `Nouveau membre`.
+  pub label: String,
+  /// A channel member's badge image (the channel's own); `None` for YouTube's icons.
+  pub image: Option<String>,
+}
+
+/// The kinds of badges.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChatBadgeKind {
+  /// The channel itself.
+  Owner,
+  /// A moderator of the chat.
+  Moderator,
+  /// A verified channel.
+  Verified,
+  /// A member of the channel (paying subscriber), with the channel's badge.
+  Member,
+}
+
+/// A piece of a chat message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ChatRun {
+  /// Words.
+  Text(String),
+  /// An emoji: a Unicode one (`custom` false, `name` the character itself) or one of the
+  /// channel's (`name` its shortcut, e.g. `:face-blue-smiling:`).
+  Emoji {
+    /// The character, or the shortcut of a channel's emoji.
+    name: String,
+    /// Its image, the largest given.
+    url: Option<String>,
+    /// One of the channel's emojis.
+    custom: bool,
+  },
 }
 
 /// A user's rating of a video, as `likeStatusEntity` gives it.
@@ -204,7 +285,7 @@ impl std::fmt::Debug for Caption {
 }
 
 /// A playable stream: an HLS video variant and its separate audio rendition.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Stream {
   /// Video media playlist URL. Contains the user's IP: never log it.
   pub video_url: String,
@@ -222,6 +303,20 @@ pub struct Stream {
   pub captions: Vec<Caption>,
   /// Preview thumbnails for the seek bar, when YouTube has them (not for lives).
   pub storyboard: Option<Storyboard>,
+  /// A live broadcast happening now: its playlists are windows ending at the live edge.
+  pub live: Option<Live>,
+}
+
+/// What a live's playlists cover.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Live {
+  /// Seconds the chosen variant's media playlist covered when the stream was resolved: mpv's
+  /// timeline starts at its first segment, so the live edge was this far in.
+  pub length: f64,
+  /// How far back the broadcast can be watched (YouTube's DVR: the `playlist_duration` of its
+  /// playlists, an hour or more), seconds; `None` when the live keeps no past. The window grows
+  /// from the broadcast's start up to it, then slides.
+  pub dvr_window: Option<f64>,
 }
 
 impl std::fmt::Debug for Stream {
@@ -231,6 +326,7 @@ impl std::fmt::Debug for Stream {
       .field("resolution", &self.resolution)
       .field("codecs", &self.codecs)
       .field("audio", &self.audio_url.is_some())
+      .field("live", &self.live)
       .finish_non_exhaustive()
   }
 }

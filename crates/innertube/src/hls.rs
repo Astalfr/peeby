@@ -1,5 +1,6 @@
 //! Choosing a variant in YouTube's HLS master playlists. Variants are video only; each names
-//! its audio rendition (`EXT-X-MEDIA` of `TYPE=AUDIO`) through its `AUDIO` group.
+//! its audio rendition (`EXT-X-MEDIA` of `TYPE=AUDIO`) through its `AUDIO` group. A live's media
+//! playlist is a window of its last segments ([`playlist_length`]).
 
 /// A video variant of the master playlist.
 #[derive(Clone, PartialEq, Eq)]
@@ -88,6 +89,16 @@ pub fn ladder(master: &str) -> Vec<Variant> {
   }
   best.sort_by(|(a, _), (b, _)| b.cmp(a));
   best.into_iter().map(|(_, variant)| variant).collect()
+}
+
+/// Seconds a media playlist covers: the sum of its segments' `EXTINF` durations. For a live, the
+/// end of the window is its live edge.
+pub fn playlist_length(media: &str) -> f64 {
+  media
+    .lines()
+    .filter_map(|line| line.strip_prefix("#EXTINF:"))
+    .filter_map(|rest| rest.split(',').next()?.trim().parse::<f64>().ok())
+    .sum()
 }
 
 /// URI of the audio rendition of `group`.

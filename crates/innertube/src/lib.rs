@@ -37,13 +37,15 @@ pub use auth::Cookies;
 pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
 pub use error::Error;
 pub use models::{
-  Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
-  Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
+  Caption, Channel, ChannelNotifications, ChatAction, ChatBadge, ChatBadgeKind, ChatMessage,
+  ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, Live, LiveChatPage, Notification,
+  NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
   PlaylistSummary, SearchPage, SearchResult, Storyboard, StoryboardFrame, Stream, Thumbnail,
   VideoItem, Votes, WatchPage,
 };
 pub use parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_notifications, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_storyboard,
-  parse_subscriptions, parse_unseen_count, parse_watch,
+  parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
+  parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
+  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_unseen_count,
+  parse_watch,
 };

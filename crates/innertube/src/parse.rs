@@ -22,8 +22,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::models::{
-  Caption, Channel, ChannelNotifications, Comment, CommentPage, Feed, LikeParams, LikeStatus,
-  Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
+  Caption, Channel, ChannelNotifications, ChatAction, ChatBadge, ChatBadgeKind, ChatMessage,
+  ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, Live, LiveChatPage, Notification,
+  NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
   PlaylistSummary, SearchPage, SearchResult, Storyboard, Thumbnail, VideoItem, WatchPage,
 };
 
@@ -80,6 +81,13 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
 
   let (like_status, like_params) = parse_like_buttons(&primary["videoActions"]);
 
+  // A finished live keeps a chat replay: not a chat to follow.
+  let chat = &results["conversationBar"]["liveChatRenderer"];
+  let live_chat = (chat["isReplay"] != true)
+    .then(|| chat["continuations"][0]["reloadContinuationData"]["continuation"].as_str())
+    .flatten()
+    .map(str::to_owned);
+
   WatchPage {
     id: video_id.to_owned(),
     title: text(&primary["title"]),
@@ -103,7 +111,105 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     like_status,
     like_params,
     notifications: parse_notification_bell(&secondary["subscribeButton"]),
+    live_chat,
   }
+}
+
+/// Parses a page of a live's chat (`live_chat/get_live_chat`). Text messages and removals are
+/// kept; other items (engagement notices, banners, placeholders…) are skipped. The next page's
+/// token and delay come from whichever continuation YouTube gives (invalidation, timed or
+/// reload).
+pub fn parse_live_chat(response: &Value) -> LiveChatPage {
+  let chat = &response["continuationContents"]["liveChatContinuation"];
+  let next = chat["continuations"][0]
+    .as_object()
+    .and_then(|c| c.values().find(|v| v["continuation"].is_string()));
+  let actions = chat["actions"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|action| {
+      if let Some(id) = action["removeChatItemAction"]["targetItemId"].as_str() {
+        return Some(ChatAction::Remove(id.to_owned()));
+      }
+      let item = &action["addChatItemAction"]["item"];
+      parse_chat_message(&item["liveChatTextMessageRenderer"]).map(ChatAction::Message)
+    })
+    .collect();
+  LiveChatPage {
+    actions,
+    continuation: next
+      .and_then(|n| n["continuation"].as_str())
+      .map(str::to_owned),
+    poll_after: std::time::Duration::from_millis(
+      next.and_then(|n| n["timeoutMs"].as_u64()).unwrap_or(5000),
+    ),
+  }
+}
+
+/// One `liveChatTextMessageRenderer`; `None` when malformed.
+fn parse_chat_message(r: &Value) -> Option<ChatMessage> {
+  let id = r["id"].as_str()?.to_owned();
+  let runs: Vec<ChatRun> = r["message"]["runs"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|run| {
+      if let Some(text) = run["text"].as_str() {
+        return Some(ChatRun::Text(text.to_owned()));
+      }
+      let emoji = &run["emoji"];
+      let custom = emoji["isCustomEmoji"] == true;
+      let name = if custom {
+        emoji["shortcuts"][0].as_str()
+      } else {
+        emoji["emojiId"].as_str()
+      }?;
+      Some(ChatRun::Emoji {
+        name: name.to_owned(),
+        url: thumbnails(&emoji["image"]["thumbnails"])
+          .into_iter()
+          .max_by_key(|t| t.width)
+          .map(|t| t.url),
+        custom,
+      })
+    })
+    .collect();
+  if runs.is_empty() {
+    return None;
+  }
+  let badges = r["authorBadges"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|b| {
+      let badge = &b["liveChatAuthorBadgeRenderer"];
+      let image = thumbnails(&badge["customThumbnail"]["thumbnails"])
+        .into_iter()
+        .max_by_key(|t| t.width)
+        .map(|t| t.url);
+      let kind = match badge["icon"]["iconType"].as_str() {
+        Some("OWNER") => ChatBadgeKind::Owner,
+        Some("MODERATOR") => ChatBadgeKind::Moderator,
+        Some("VERIFIED") => ChatBadgeKind::Verified,
+        _ if image.is_some() => ChatBadgeKind::Member,
+        _ => return None,
+      };
+      Some(ChatBadge {
+        kind,
+        label: badge["tooltip"].as_str().unwrap_or_default().to_owned(),
+        image,
+      })
+    })
+    .collect();
+  Some(ChatMessage {
+    id,
+    author: text(&r["authorName"]),
+    author_id: r["authorExternalChannelId"].as_str().map(str::to_owned),
+    badges,
+    runs,
+    timestamp_usec: r["timestampUsec"].as_str().and_then(|t| t.parse().ok()),
+  })
 }
 
 /// The notification bell of a subscribe button: `None` signed out or not subscribed (the
@@ -225,6 +331,33 @@ pub fn parse_storyboard(player: &Value) -> Option<Storyboard> {
       (board.width > 0 && board.count > 0 && board.columns > 0 && board.rows > 0).then_some(board)
     })
     .max_by_key(|b| b.width)
+}
+
+/// Whether a player response is a live happening now (`videoDetails.isLive`), and how far back it
+/// can be watched: with `isLiveDvrEnabled`, the `playlist_duration` of its HLS manifest URL (else
+/// the window it has now). `length` is what its media playlist covers ([`Live::length`]); a full
+/// window measures a little less than `playlist_duration` (3599.9 s for 3600), and that measure
+/// wins, so that nothing starts or seeks into segments already gone.
+pub fn parse_live(player: &Value, length: f64) -> Option<Live> {
+  /// Two of YouTube's live segments.
+  const FULL_WINDOW_SLACK: f64 = 10.0;
+  let details = &player["videoDetails"];
+  if details["isLive"] != true {
+    return None;
+  }
+  let dvr_window = (details["isLiveDvrEnabled"] == true).then(|| {
+    let announced = player["streamingData"]["hlsManifestUrl"]
+      .as_str()
+      .and_then(|url| url.split_once("/playlist_duration/"))
+      .and_then(|(_, rest)| rest.split('/').next()?.parse::<f64>().ok())
+      .unwrap_or(length);
+    if announced - length <= FULL_WINDOW_SLACK {
+      length
+    } else {
+      announced
+    }
+  });
+  Some(Live { length, dvr_window })
 }
 
 /// Parses the subscribed channels list (`FEchannels`: all channels in one response).
