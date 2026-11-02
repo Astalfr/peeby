@@ -27,6 +27,7 @@ PeebTube additions to `player`:
 - `Player::add_subtitle` (`sub-add`, captions fetched on demand);
 - `Player::property`, read-only, for the player's statistics panel;
 - `StartOptions::audio_device`, `Player::set_audio_device` and `audio_devices` (an mpv without render context, `sys::RenderBackend::None`), for the top bar's audio output menu;
+- `play_wav` (`sys::play_wav`: Windows' `PlaySoundW` from winmm.dll, loaded at runtime like libmpv), for the opening animation's sound;
 - the GPU ring is recreated at once after a quiet spell, else once a resize settles (60 ms), and the replaced ring lives until the next one (no black video while the mini-player is resized, ADR 0008).
 
 PeebTube additions to `gpui-video`:

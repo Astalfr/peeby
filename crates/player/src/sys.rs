@@ -459,3 +459,34 @@ fn cstr(s: &str) -> CString {
   // Interior NULs cannot occur in the option names and URLs the spike passes; replace them anyway.
   CString::new(s.replace('\0', "")).unwrap_or_default()
 }
+
+/// `PlaySoundW` flags (mmsystem.h): the sound is a WAV in memory, and nothing plays if it cannot be.
+const SND_NODEFAULT: u32 = 0x0002;
+const SND_MEMORY: u32 = 0x0004;
+
+/// Plays a WAV held in memory on Windows' default output with `PlaySoundW`, from winmm.dll
+/// loaded at runtime like libmpv, and returns once it has played.
+pub fn play_wav(wav: &[u8]) -> Result<(), String> {
+  use libloading::os::windows::{LOAD_LIBRARY_SEARCH_SYSTEM32, Library};
+  type PlaySoundW = unsafe extern "system" fn(*const c_void, *mut c_void, u32) -> i32;
+  // SAFETY: winmm is a system DLL, taken from System32 only; its initializers have no
+  // preconditions.
+  let lib = unsafe { Library::load_with_flags("winmm.dll", LOAD_LIBRARY_SEARCH_SYSTEM32) }
+    .map_err(|e| format!("winmm.dll: {e}"))?;
+  // SAFETY: the type matches `PlaySoundW` in mmsystem.h.
+  let play =
+    unsafe { lib.get::<PlaySoundW>(b"PlaySoundW ") }.map_err(|e| format!("PlaySoundW: {e}"))?;
+  // SAFETY: with `SND_MEMORY` the first argument points to the WAV's bytes, which outlive the call:
+  // without `SND_ASYNC` it returns once the sound has played. No module handle is needed.
+  let played = unsafe {
+    play(
+      wav.as_ptr().cast(),
+      ptr::null_mut(),
+      SND_MEMORY | SND_NODEFAULT,
+    )
+  };
+  if played == 0 {
+    return Err("PlaySoundW failed".into());
+  }
+  Ok(())
+}

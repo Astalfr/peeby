@@ -131,6 +131,21 @@ pub fn audio_devices(libmpv_path: Option<PathBuf>) -> Result<Vec<AudioDevice>, S
   Ok(devices)
 }
 
+/// Plays a short WAV in a thread of its own, on Windows' default output at Windows' volume (no
+/// player is involved). Failures are only logged.
+pub fn play_wav(wav: &'static [u8]) {
+  let spawned = std::thread::Builder::new()
+    .name("sound".into())
+    .spawn(move || {
+      if let Err(e) = sys::play_wav(wav) {
+        tracing::warn!("sound: {e}");
+      }
+    });
+  if let Err(e) = spawned {
+    tracing::warn!("sound thread: {e}");
+  }
+}
+
 /// yt-dlp settings for mpv's `ytdl_hook`.
 #[derive(Clone, Debug, Default)]
 pub struct Ytdl {

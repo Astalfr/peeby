@@ -1,8 +1,8 @@
 //! The opening animation (docs/design.md, "Motion"): the logo's three cards fall one after the
 //! other, spinning into their angles, then the portrait's card lands on them. Every landing
 //! squashes the stack and bounces it, the portrait's hardest, and "Peeby" springs up under it.
-//! The settled stack fades into the real logo, then the whole screen fades out while the logo
-//! zooms in.
+//! Once the stack is still, the portrait jumps alone, with a sound, and lands back with a bounce. The settled
+//! stack fades into the real logo, then the whole screen fades out while the logo zooms in.
 //!
 //! Everything is a function of the time since the first frame, so one render draws any moment.
 //! Only SVGs turn in GPUI (`Transformation`), so the cards are a one-color mask
@@ -23,6 +23,9 @@ use gpui::{
 use crate::{assets, images, theme};
 
 const PORTRAIT_PNG: &[u8] = include_bytes!("../assets/logo-portrait.png");
+/// Played as the portrait jumps (`JUMP_START`): phoebe_chuppi.wav at 20 % of its level, since
+/// `PlaySoundW` has no volume.
+const JUMP_WAV: &[u8] = include_bytes!("../assets/splash-jump.wav");
 
 /// The logo's side on screen, in logical pixels.
 const SIZE: f32 = 220.;
@@ -52,6 +55,8 @@ struct Layer {
   impact: f32,
   /// How high it bounces back after landing, in canvas units.
   rebound: f32,
+  /// Whether it jumps alone once the stack is still (`JUMP_START`).
+  jumps: bool,
 }
 
 impl Layer {
@@ -72,6 +77,7 @@ const CARDS: [(u32, Layer); 3] = [
       fall: 0.32,
       impact: 0.12,
       rebound: 102.,
+      jumps: false,
     },
   ),
   (
@@ -84,6 +90,7 @@ const CARDS: [(u32, Layer); 3] = [
       fall: 0.32,
       impact: 0.12,
       rebound: 102.,
+      jumps: false,
     },
   ),
   (
@@ -96,6 +103,7 @@ const CARDS: [(u32, Layer); 3] = [
       fall: 0.32,
       impact: 0.13,
       rebound: 102.,
+      jumps: false,
     },
   ),
 ];
@@ -107,6 +115,7 @@ const PORTRAIT: Layer = Layer {
   fall: 0.36,
   impact: 0.22,
   rebound: 138.,
+  jumps: true,
 };
 
 // Springs: e^(−DAMP·τ) times a wave, τ the time since the landing.
@@ -127,12 +136,20 @@ const HOP_DELAY: f32 = 0.05;
 const HOP_PERIOD: f32 = 0.22;
 /// Stretch of a falling layer at the end of its fall (height; width loses half of it).
 const STRETCH: f32 = 0.10;
+/// The portrait's jump once the stack is still: when, how high in canvas units, how long in the
+/// air, its tilt at the top in degrees, and its landing's squash and rebound.
+const JUMP_START: f32 = 1.90;
+const JUMP: f32 = 150.;
+const JUMP_TIME: f32 = 0.50;
+const JUMP_TILT: f32 = -6.;
+const JUMP_IMPACT: f32 = 0.15;
+const JUMP_REBOUND: f32 = 50.;
 
 /// When the drawn stack starts fading into `logo.png`, and for how long.
-const SETTLED: f32 = 2.00;
+const SETTLED: f32 = 3.05;
 const CROSSFADE: f32 = 0.15;
 /// When the screen starts fading out (or a click), and for how long.
-const LEAVE: f32 = 2.25;
+const LEAVE: f32 = 3.30;
 const FADE_OUT: f32 = 0.30;
 /// The logo's size at the end of the fade out, easing out from 1.
 const ZOOM: f32 = 1.3;
@@ -155,6 +172,8 @@ pub struct Splash {
   portrait: Decoded,
   /// `logo.png`, likewise, at its largest (zoomed) size.
   logo: Decoded,
+  /// Whether the jump's sound has been played.
+  sounded: bool,
 }
 
 /// A picture decoded for a device-pixel size, kept while that size holds.
@@ -184,6 +203,7 @@ impl Splash {
       skipped: None,
       portrait: Decoded::default(),
       logo: Decoded::default(),
+      sounded: false,
     }
   }
 
@@ -223,6 +243,11 @@ impl Splash {
     }
     if !matches!(self.clock, Clock::Frozen(_)) {
       window.request_animation_frame();
+      // Not once the fade out has started: a click before the jump skips it.
+      if !self.sounded && t >= JUMP_START && t < leave {
+        self.sounded = true;
+        player::play_wav(JUMP_WAV);
+      }
     }
     let leaving = ((t - leave) / FADE_OUT).clamp(0., 1.);
     let opacity = 1. - leaving;
@@ -399,15 +424,9 @@ impl Stack {
       .iter()
       .map(|(_, layer)| layer)
       .chain([&PORTRAIT])
-      .map(|layer| {
-        let since = t - layer.landing();
-        if since < 0. {
-          0.
-        } else {
-          layer.impact * (-SQUASH_DAMP * since).exp() * (SQUASH_PULSE * since).cos()
-        }
-      })
-      .sum();
+      .map(|layer| squash(t - layer.landing(), layer.impact))
+      .sum::<f32>()
+      + squash(t - JUMP_START - JUMP_TIME, JUMP_IMPACT);
     let since = t - PORTRAIT.landing() - HOP_DELAY;
     let hop = if since < 0. {
       0.
@@ -415,6 +434,15 @@ impl Stack {
       -HOP * bounce(since, REBOUND_DAMP, HOP_PERIOD)
     };
     Self { squash, hop }
+  }
+}
+
+/// A landing's squash `since` it, `impact` at first.
+fn squash(since: f32, impact: f32) -> f32 {
+  if since < 0. {
+    0.
+  } else {
+    impact * (-SQUASH_DAMP * since).exp() * (SQUASH_PULSE * since).cos()
   }
 }
 
@@ -429,7 +457,7 @@ struct Pose {
   offset: (f32, f32),
   /// Angle, in degrees.
   angle: f32,
-  /// Stretched while it falls (its own center), else the stack's squash (around the floor).
+  /// Stretched while in the air (its own center), else the stack's squash (around the floor).
   falling: Option<(f32, f32)>,
   stack: (f32, f32),
 }
@@ -452,6 +480,9 @@ impl Pose {
         stack: (1., 1.),
       });
     }
+    if layer.jumps && t >= JUMP_START {
+      return Some(Self::jump(layer, t - JUMP_START, stack));
+    }
     let landed = since - layer.fall;
     let wobble = if layer.spin == 0. {
       0.
@@ -467,6 +498,30 @@ impl Pose {
       falling: None,
       stack: (1. + SQUASH_WIDEN * stack.squash, 1. - stack.squash),
     })
+  }
+
+  /// A jumping layer `since` its take-off: up and down like a thrown ball, stretched when fastest.
+  fn jump(layer: &Layer, since: f32, stack: &Stack) -> Self {
+    if since < JUMP_TIME {
+      let u = since / JUMP_TIME;
+      let stretch = STRETCH * (1. - 2. * u).powi(2);
+      return Self {
+        offset: (0., -JUMP * 4. * u * (1. - u) + stack.hop),
+        angle: layer.angle + JUMP_TILT * (PI * u).sin(),
+        falling: Some((1. - stretch / 2., 1. + stretch)),
+        stack: (1., 1.),
+      };
+    }
+    let landed = since - JUMP_TIME;
+    Self {
+      offset: (
+        0.,
+        -JUMP_REBOUND * bounce(landed, REBOUND_DAMP, REBOUND_PERIOD) + stack.hop,
+      ),
+      angle: layer.angle,
+      falling: None,
+      stack: (1. + SQUASH_WIDEN * stack.squash, 1. - stack.squash),
+    }
   }
 
   /// The point the layer scales around and its scale.
@@ -512,7 +567,9 @@ mod tests {
       .chain([PORTRAIT.landing()])
       .collect();
     assert!(landings.windows(2).all(|w| w[0] < w[1]));
-    assert!(landings[3] < SETTLED && SETTLED + CROSSFADE <= LEAVE);
+    assert!(
+      landings[3] < JUMP_START && JUMP_START + JUMP_TIME < SETTLED && SETTLED + CROSSFADE <= LEAVE
+    );
     assert_eq!(Stack::at(0.).squash, 0.);
   }
 }
