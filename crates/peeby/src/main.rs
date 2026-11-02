@@ -130,6 +130,8 @@ fn main() {
         }),
         ..TitleBar::window_options()
       };
+      // The opening animation, unless something opens right away (a video, a live).
+      let splash = initial_videos.is_empty() && twitch_page.is_none();
       let opened = cx.open_window(options, |window, cx| {
         let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, window, cx));
         let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, window, cx));
@@ -138,7 +140,7 @@ fn main() {
           let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx));
           spaces.push(Rc::new(twitch));
         }
-        let shell = cx.new(|cx| Shell::new(spaces, window, cx));
+        let shell = cx.new(|cx| Shell::new(spaces, splash, window, cx));
         cx.new(|cx| Root::new(shell, window, cx))
       });
       let main = match opened {

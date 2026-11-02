@@ -9,8 +9,8 @@ pub mod space;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, ObjectFit, SharedString,
-  Subscription, Window, WindowHandle, div, img, px,
+  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, ObjectFit,
+  SharedString, Subscription, Window, WindowHandle, div, img, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
@@ -19,6 +19,7 @@ use gpui_component::{Disableable, Selectable, TitleBar, h_flex, v_flex};
 use ui::assets::{self, Icon};
 use ui::images::Images;
 use ui::player::{NowPlaying, PlayerView, now_playing};
+use ui::splash::Splash;
 use ui::theme;
 
 use crate::settings::Settings;
@@ -42,12 +43,20 @@ pub struct Shell {
   /// The settings page (gear), shown instead of the space's page while open.
   settings: Option<AnyView>,
   mini: Option<Mini>,
+  /// The opening animation over the window, until it ends.
+  splash: Option<Splash>,
   _subscriptions: Vec<Subscription>,
 }
 
 impl Shell {
-  /// The shell over `spaces`, the first one open.
-  pub fn new(spaces: Vec<SpaceHandle>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+  /// The shell over `spaces`, the first one open, with the opening animation when `splash` (and
+  /// GPUI's `reduce_motion` is off).
+  pub fn new(
+    spaces: Vec<SpaceHandle>,
+    splash: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
     let mut subscriptions = Vec::new();
     for (index, space) in spaces.iter().enumerate() {
       let shell = cx.weak_entity();
@@ -101,6 +110,7 @@ impl Shell {
       active: 0,
       settings: None,
       mini: None,
+      splash: (splash && !cx.reduce_motion()).then(Splash::new),
       _subscriptions: subscriptions,
     }
   }
@@ -695,7 +705,30 @@ fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
 
 impl Render for Shell {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // Over everything while it plays; a click skips it.
+    let splash = self.splash.as_mut().and_then(|s| s.render(window, cx));
+    if splash.is_none() {
+      self.splash = None;
+    }
+    let splash = splash.map(|frame| {
+      div()
+        .id("splash")
+        .absolute()
+        .inset_0()
+        .occlude()
+        .on_mouse_down(
+          MouseButton::Left,
+          cx.listener(|this, _, _, cx| {
+            if let Some(splash) = &mut this.splash {
+              splash.skip();
+            }
+            cx.notify();
+          }),
+        )
+        .child(frame)
+    });
     let root = v_flex()
+      .relative()
       .size_full()
       .bg(theme::chrome(cx))
       .text_color(theme::foreground());
@@ -705,27 +738,30 @@ impl Render for Shell {
       .or_else(|| self.space().map(|s| s.view()));
     // Fullscreen belongs to the player: no top bar, no sidebar.
     if window.is_fullscreen() {
-      return root.children(page);
+      return root.children(page).children(splash);
     }
-    root.child(self.top_bar(window, cx)).child(
-      h_flex()
-        .flex_1()
-        .min_h_0()
-        .items_start()
-        .child(self.sidebar(window, cx))
-        .child(
-          div()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .rounded_tl(theme::RADIUS_LG)
-            .border_t_1()
-            .border_l_1()
-            .border_color(theme::border())
-            .bg(theme::background())
-            .overflow_hidden()
-            .children(page),
-        ),
-    )
+    root
+      .child(self.top_bar(window, cx))
+      .child(
+        h_flex()
+          .flex_1()
+          .min_h_0()
+          .items_start()
+          .child(self.sidebar(window, cx))
+          .child(
+            div()
+              .flex_1()
+              .min_w_0()
+              .h_full()
+              .rounded_tl(theme::RADIUS_LG)
+              .border_t_1()
+              .border_l_1()
+              .border_color(theme::border())
+              .bg(theme::background())
+              .overflow_hidden()
+              .children(page),
+          ),
+      )
+      .children(splash)
   }
 }

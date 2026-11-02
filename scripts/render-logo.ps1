@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Renders the Peeby logo (docs/logo/onglets.html) into crates/ui/assets/logo.png and
+  Renders the Peeby logo (docs/logo/onglets.html) into crates/ui/assets/logo.png,
+  crates/ui/assets/logo-portrait.png (the portrait's card alone, for the opening animation) and
   crates/peeby/assets/peeby.ico.
 
 .DESCRIPTION
@@ -14,6 +15,7 @@ Add-Type -AssemblyName System.Drawing
 $Root = Split-Path -Parent $PSScriptRoot
 $Page = Join-Path $Root 'docs\logo\onglets.html'
 $Png  = Join-Path $Root 'crates\ui\assets\logo.png'
+$PortraitPng = Join-Path $Root 'crates\ui\assets\logo-portrait.png'
 $Ico  = Join-Path $Root 'crates\peeby\assets\peeby.ico'
 $IcoSizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
 
@@ -26,15 +28,21 @@ if (-not $Edge) { throw 'Microsoft Edge not found' }
 $Work = Join-Path ([IO.Path]::GetTempPath()) "peeby-logo-$PID"
 New-Item -ItemType Directory -Force $Work | Out-Null
 try {
-  $Shot = Join-Path $Work 'logo-1024.png'
   $Url = ([Uri](Resolve-Path $Page).Path).AbsoluteUri
-  Start-Process -FilePath $Edge -Wait -NoNewWindow -ArgumentList @(
-    '--headless=new', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files',
-    '--force-device-scale-factor=1', '--default-background-color=00000000',
-    "--user-data-dir=$Work\profile", '--virtual-time-budget=3000',
-    '--window-size=1024,1024', "--screenshot=$Shot", $Url
-  )
-  if (-not (Test-Path $Shot)) { throw 'Edge did not save the screenshot' }
+  # The page with $Query, 1024 px square on a transparent background: the screenshot's path.
+  function Shoot([string]$Name, [string]$Query) {
+    $shot = Join-Path $Work "$Name.png"
+    Start-Process -FilePath $Edge -Wait -NoNewWindow -ArgumentList @(
+      '--headless=new', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files',
+      '--force-device-scale-factor=1', '--default-background-color=00000000',
+      "--user-data-dir=$Work\profile", '--virtual-time-budget=3000',
+      '--window-size=1024,1024', "--screenshot=$shot", "$Url$Query"
+    )
+    if (-not (Test-Path $shot)) { throw "Edge did not save the screenshot of $Name" }
+    return $shot
+  }
+  $Shot = Shoot 'logo' '?size=1024'
+  $PortraitShot = Shoot 'portrait' '?size=1024&layer=portrait'
 
   $Source = [System.Drawing.Bitmap]::new($Shot)
   # The drawing must fit with a margin: the border pixels are transparent.
@@ -71,6 +79,9 @@ try {
   }
 
   [IO.File]::WriteAllBytes($Png, (PngBytes (Scale $Source 256)))
+  $Portrait = [System.Drawing.Bitmap]::new($PortraitShot)
+  [IO.File]::WriteAllBytes($PortraitPng, (PngBytes (Scale $Portrait 512)))
+  $Portrait.Dispose()
 
   # ICO: header, one 16-byte entry per size, then the PNGs.
   $images = foreach ($size in $IcoSizes) { , (PngBytes (Scale $Source $size)) }
@@ -89,7 +100,7 @@ try {
   $w.Flush()
   [IO.File]::WriteAllBytes($Ico, $file.ToArray())
   $Source.Dispose()
-  Write-Host "Wrote $Png and $Ico"
+  Write-Host "Wrote $Png, $PortraitPng and $Ico"
 } finally {
   Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 }

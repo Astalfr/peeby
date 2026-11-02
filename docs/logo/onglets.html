@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <title>Peeby logo</title>
 <!-- The chosen logo ("Onglets", proposals.html #2) alone on a transparent square that fills the
-     window: scripts/render-logo.ps1 screenshots it to make logo.png and peeby.ico. -->
+     window: scripts/render-logo.ps1 screenshots it to make logo.png and peeby.ico. With
+     `?layer=portrait`, only the portrait's card, in place: the opening animation (ui::splash) draws
+     the colored cards itself and drops this layer on them. -->
 <style>
   html, body { margin: 0; background: transparent; overflow: hidden; }
   .c { position: relative; }
@@ -20,9 +22,9 @@
   const CARDS = ['#9146ff', '#00a4dc', '#ff4e45'];
   // Crop of the picture in the 512 canvas: x 70..1130, y 100..1160 of the source.
   const K = 512 / 1060, OX = 70 * K, OY = 100 * K;
-  // The cards and the portrait span x 27..469, y 39..432 (measured on the render): centered on
-  // them, and scaled until the shadows (x 7..484, y 25..465) almost reach the edges.
-  const FIT = 1.04, CX = 248, CY = 235;
+  // Centered on the cards and the portrait (measured on the render), and scaled until their
+  // shadows almost reach the edges. ui::splash uses the same values.
+  const FIT = 0.95, CX = 271, CY = 257;
 
   const cards = CARDS.map((color, i) => {
     const rot = [16, 9, 2][i], dx = [64, 46, 28][i], dy = [-6, 8, 22][i];
@@ -33,12 +35,14 @@
     background-position:${-OX - 50}px ${-OY - 96}px;transform:rotate(-7deg);
     box-shadow:0 10px 30px #0008;outline:10px solid #fff;outline-offset:-1px"></div>`;
 
-  const size = Math.min(innerWidth, innerHeight);
+  const layer = new URLSearchParams(location.search).get('layer');
+  // `?size=` in pixels: headless Edge's viewport is smaller than its window (and screenshot).
+  const size = Number(new URLSearchParams(location.search).get('size')) || Math.min(innerWidth, innerHeight);
   const logo = document.getElementById('logo');
   logo.style.width = logo.style.height = size + 'px';
   const s = size / 512;
   logo.innerHTML = `<div class="s" style="transform:scale(${s}) translate(${256 - CX * FIT}px, ${256 - CY * FIT}px) scale(${FIT})">
-    ${cards}${portrait}</div>`;
+    ${layer === 'portrait' ? '' : cards}${portrait}</div>`;
 </script>
 </body>
 </html>

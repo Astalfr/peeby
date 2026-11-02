@@ -186,8 +186,14 @@ pub fn color_svg(bytes: &'static [u8], size: f32, window: &Window, cx: &mut App)
   }
 }
 
+/// The logo's card, a rounded square that the opening animation tints and turns ([`crate::splash`]).
+pub const LOGO_CARD: &str = "logo/card.svg";
+
+/// Shapes of the logo, drawn as one-color masks.
+const LOGO: &[(&str, &[u8])] = &[(LOGO_CARD, include_bytes!("../assets/logo/card.svg"))];
+
 fn files() -> impl Iterator<Item = &'static (&'static str, &'static [u8])> {
-  OWN.iter().chain(COMPONENT)
+  OWN.iter().chain(COMPONENT).chain(LOGO)
 }
 
 /// Asset source for [`gpui::Application::with_assets`].

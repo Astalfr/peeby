@@ -71,7 +71,7 @@ One accent at a time, the open space's (`theme::set_accent`; the settings page d
 
 ## Motion
 
-Discreet and short; nothing loops except skeletons and spinners.
+Discreet and short; nothing loops except skeletons and spinners. The one exception is the opening animation, which is deliberately bouncy.
 
 | What | How | Duration |
 |---|---|---|
@@ -84,7 +84,10 @@ Discreet and short; nothing loops except skeletons and spinners.
 | Loading | gpui-component skeletons shaped like the content (grid cards, title and channel, related cards), a spinner at the end of a list | — |
 | Busy button, list end | `ui::loader`: a faint ring with a round-capped arc turning inside it, stretching to 270° then shrinking to 12° as it turns (Material style), drawn on a canvas from a shared clock | 1.4 s per stretch, 2 s per turn |
 | Skeleton to content | `motion::crossfade` on the feeds, Jellyfin's home and title pages | 300 ms |
+| Opening | `ui::splash` over the whole window, on the background: the logo's cards fall one by one from above the window (violet, blue, red, 200 ms apart), spinning into their angles, then the portrait's card. Each landing squashes the stack against its floor and springs it back, the portrait's hardest; landed layers rebound and the cards wobble; the whole stack hops after the portrait. "Peeby" springs up under the logo. The drawn stack cross-fades into `logo.png` once still, then everything fades out. A click skips to the fade. Not shown when Peeby opens a video or a Twitch link from the command line, or when GPUI's `reduce_motion` is set (Peeby does not read Windows' animation setting into it yet). The app loads behind it | 2.35 s |
 
 `ui::motion` comes from peeby. GPUI only animates elements as they appear (`with_animation`); for state changes such as hover, `motion::tween` keeps a value per element id and eases it toward its target, requesting frames until it arrives. Ids must be unique per list (`card-…`, `related-…`): two elements with one id share GPUI's element state, so their hover flags overwrite each other on every frame and the card jumps up and down. Feeds therefore drop the videos YouTube repeats (the subscriptions feed repeats several per page).
+
+The opening animation is a function of the time since its first frame (the clock starts on the first render, so a slow start skips nothing): one render draws any moment, and `cargo run -p ui --example splash --release` replays it in a loop (`PEEBY_SPLASH_AT=<s>` holds a moment). Its timings and springs are constants at the top of `crates/ui/src/splash.rs`. Only SVGs turn in GPUI (`Transformation`, applied at paint time to a sprite rasterized once at the element's size), so the cards are one mask (`ui/assets/logo/card.svg`) tinted per card, and the portrait's card, already turned, is a picture (`logo-portrait.png`) that moves and stretches. Their places come from docs/logo/onglets.html (`FIT`, `CENTER`), so the settled stack matches `logo.png`; a test checks that every layer is at rest when the cross-fade starts.
 
 GPUI takes a single `on_hover` listener per element (a second one is a debug assertion): on cards, the hover flag and the stream prefetch share it, so the prefetch keeps playback within the 1–2 s budget.
