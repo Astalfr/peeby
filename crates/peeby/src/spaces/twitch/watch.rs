@@ -3,7 +3,8 @@
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute; the viewer's channel points at the header's right ([`super::points`]);
-//! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar;
+//! - a VOD: through the proxy too, seekable, with the storyboard's previews on the seek bar, and
+//!   its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
 //!
 //! The layout is `ui::chat::watch_layout`: theater mode gives the whole page to the player and the
@@ -25,7 +26,7 @@ use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, theme};
 
 use super::points::PointsView;
-use super::{Route, TwitchSpace, cards, chat, play};
+use super::{Route, TwitchSpace, cards, chat, play, replay};
 use crate::settings::{Player, Settings};
 
 /// How often the decoding of an AV1 or HEVC quality is checked.
@@ -64,7 +65,7 @@ pub struct WatchView {
   player: Entity<PlayerView>,
   /// Serves mpv's playlists (a live, a VOD); dropping it (with the page) stops it.
   proxy: Option<Proxy>,
-  /// A live's chat.
+  /// A live's chat, or a VOD's replayed.
   chat: Option<Entity<ChatPanel>>,
   /// A live's channel points (shows nothing without the auth-token).
   points: Option<Entity<PointsView>>,
@@ -144,7 +145,19 @@ impl WatchView {
         view.points = Some(cx.new(|cx| PointsView::new(login_, client, player, cx)));
         view.start_live(login, cx)
       }
-      Kind::Vod(id) => view.start_vod(id, cx),
+      Kind::Vod(id) => {
+        let panel = cx.new(|cx| ChatPanel::new(cx).titled("Rediffusion du chat"));
+        view._tasks.push(replay::start(
+          id.clone(),
+          view.client.clone(),
+          view.helix.clone(),
+          &panel,
+          view.player.downgrade(),
+          cx,
+        ));
+        view.chat = Some(panel);
+        view.start_vod(id, cx)
+      }
       Kind::Clip(slug) => view.start_clip(slug, cx),
     }
     view

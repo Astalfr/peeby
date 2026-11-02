@@ -45,6 +45,7 @@ pub struct ChatPanel {
   list: ListState,
   modes: Vec<SharedString>,
   status: Option<SharedString>,
+  title: SharedString,
 }
 
 impl ChatPanel {
@@ -61,7 +62,14 @@ impl ChatPanel {
       list,
       modes: Vec::new(),
       status: Some("Connexion au chat…".into()),
+      title: "Chat du live".into(),
     }
+  }
+
+  /// The panel with another title than "Chat du live" (a replay).
+  pub fn titled(mut self, title: impl Into<SharedString>) -> Self {
+    self.title = title.into();
+    self
   }
 
   /// Applies a batch of events: give it everything that arrived since the last frame, so that
@@ -353,7 +361,7 @@ impl Render for ChatPanel {
           .flex_1()
           .text_sm()
           .font_weight(FontWeight::SEMIBOLD)
-          .child("Chat du live"),
+          .child(self.title.clone()),
       )
       .when(!modes.is_empty(), |el| {
         el.child(

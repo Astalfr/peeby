@@ -1,0 +1,296 @@
+{
+  "data": {
+    "video": {
+      "owner": {
+        "id": "41719107"
+      },
+      "comments": {
+        "edges": [
+          {
+            "node": {
+              "id": "65296a7e-b4a1-4ab8-97e3-38111fbf0194",
+              "contentOffsetSeconds": 581,
+              "createdAt": "2026-10-29T17:49:16.951Z",
+              "commenter": {
+                "id": "1000001",
+                "login": "viewer1___",
+                "displayName": "viewer1___"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "des matinales? ",
+                    "emote": null
+                  },
+                  {
+                    "text": "rooAww",
+                    "emote": {
+                      "emoteID": "emotesv2_2c145b5216c94fe4bbfb6204243e4bc7"
+                    }
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "",
+                    "version": ""
+                  },
+                  {
+                    "setID": "flameborn-sigil",
+                    "version": "1"
+                  }
+                ],
+                "userColor": "#FF0000"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "1581cf38-1577-4a68-9f05-e290ddeaec6b",
+              "contentOffsetSeconds": 582,
+              "createdAt": "2026-10-29T17:49:18.698Z",
+              "commenter": {
+                "id": "1000002",
+                "login": "viewer2_",
+                "displayName": "viewer2_"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "@viewer8 Eyh, coucou toi ! ",
+                    "emote": null
+                  },
+                  {
+                    "text": "zrtLove",
+                    "emote": {
+                      "emoteID": "emotesv2_961a96f34cf0426aaacfddcb2c4e22fc"
+                    }
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "",
+                    "version": ""
+                  },
+                  {
+                    "setID": "zevent-2026",
+                    "version": "1"
+                  }
+                ],
+                "userColor": "#FF0000"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "96a4ceb4-0920-4e1b-8b79-14b502f5e1f8",
+              "contentOffsetSeconds": 590,
+              "createdAt": "2026-10-29T17:49:26.319Z",
+              "commenter": {
+                "id": "1000003",
+                "login": "viewer3______",
+                "displayName": "viewer3______"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "viewer3______ subscribed at Tier 1. They've subscribed for 46 months! ",
+                    "emote": null
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "",
+                    "version": ""
+                  },
+                  {
+                    "setID": "final-fantasy-xiv-fan-festival-2026-eu---moogle-chat",
+                    "version": "1"
+                  }
+                ],
+                "userColor": "#3B3C58"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "35b517ae-aea8-4fb9-9ec7-ff2a460d41b5",
+              "contentOffsetSeconds": 590,
+              "createdAt": "2026-10-29T17:49:26.682Z",
+              "commenter": {
+                "id": "1000004",
+                "login": "viewer4_",
+                "displayName": "viewer4_"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "force",
+                    "emote": null
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "",
+                    "version": ""
+                  }
+                ],
+                "userColor": "#8A2BE2"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "1ec16ebc-b38c-4268-8898-263fb5c1d6f4",
+              "contentOffsetSeconds": 609,
+              "createdAt": "2026-10-29T17:49:45.554Z",
+              "commenter": {
+                "id": "1000005",
+                "login": "viewer5___",
+                "displayName": "viewer5___"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "viewer5___ subscribed with Prime. They've subscribed for 14 months, currently on a 12 month streak! ",
+                    "emote": null
+                  },
+                  {
+                    "text": "GriddyGoose",
+                    "emote": {
+                      "emoteID": "emotesv2_c7aefc45412147b284273098a518c94b"
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "emote": null
+                  },
+                  {
+                    "text": "GriddyGoose",
+                    "emote": {
+                      "emoteID": "emotesv2_c7aefc45412147b284273098a518c94b"
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "emote": null
+                  },
+                  {
+                    "text": "GriddyGoose",
+                    "emote": {
+                      "emoteID": "emotesv2_c7aefc45412147b284273098a518c94b"
+                    }
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "",
+                    "version": ""
+                  },
+                  {
+                    "setID": "flameborn-sigil",
+                    "version": "1"
+                  }
+                ],
+                "userColor": "#FF0000"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "8426e4d7-ba66-439d-90a0-a9100e99f22b",
+              "contentOffsetSeconds": 661,
+              "createdAt": "2026-10-29T17:50:37.29Z",
+              "commenter": {
+                "id": "1000006",
+                "login": "viewer6___________",
+                "displayName": "viewer6___________"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "Bon gaming le Z à tout à l'heure pour les annonces ",
+                    "emote": null
+                  },
+                  {
+                    "text": "PrideLaugh",
+                    "emote": {
+                      "emoteID": "302303593"
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "emote": null
+                  },
+                  {
+                    "text": "PrideLaugh",
+                    "emote": {
+                      "emoteID": "302303593"
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "emote": null
+                  },
+                  {
+                    "text": "PrideLaugh",
+                    "emote": {
+                      "emoteID": "302303593"
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "emote": null
+                  },
+                  {
+                    "text": "zrtLL",
+                    "emote": {
+                      "emoteID": "emotesv2_ffd4220af0f1409ca7b85a78106b0fe3"
+                    }
+                  }
+                ],
+                "userBadges": [
+                  {
+                    "setID": "witch-hat",
+                    "version": "1"
+                  }
+                ],
+                "userColor": "#C04417"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "8cb6e3a0-bd1d-4c5d-bc3c-cd8231b342cb",
+              "contentOffsetSeconds": 673,
+              "createdAt": "2026-10-29T17:50:48.954Z",
+              "commenter": {
+                "id": "1000007",
+                "login": "viewer7_",
+                "displayName": "viewer7_"
+              },
+              "message": {
+                "fragments": [
+                  {
+                    "text": "Moi dans mon train y'avait un golden retriever A-DO-RABLE, meilleur voyage. CHIENG ",
+                    "emote": null
+                  },
+                  {
+                    "text": "<3",
+                    "emote": {
+                      "emoteID": "555555584"
+                    }
+                  }
+                ],
+                "userBadges": [],
+                "userColor": "#1E90FF"
+              }
+            }
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": true
+        }
+      }
+    }
+  }
+}

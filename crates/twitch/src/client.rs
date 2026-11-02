@@ -138,6 +138,12 @@ impl Client {
     Ok(gql::parse_storyboard(&response.text().await?, &url))
   }
 
+  /// A page of VOD `id`'s chat from about `offset` seconds.
+  pub async fn vod_comments(&self, id: &str, offset: u32) -> Result<gql::Comments> {
+    let answer = self.gql(&gql::comments_request(id, offset)).await?;
+    gql::parse_comments(&answer)
+  }
+
   /// The 7TV emotes of the channel whose Twitch user id is `user_id`; empty without a 7TV account.
   pub async fn seventv_channel(&self, user_id: &str) -> Result<Vec<crate::seventv::Emote>> {
     crate::seventv::channel(&self.http, user_id).await

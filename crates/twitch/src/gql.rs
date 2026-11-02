@@ -4,6 +4,7 @@
 
 use serde_json::{Value, json};
 
+use crate::chat::{ChatLine, EmoteRange};
 use crate::error::{Error, Result};
 
 /// Client-ID of twitch.tv's own web player, used until [`client_id_from_page`] reads the current
@@ -419,4 +420,123 @@ pub fn parse_storyboard(text: &str, url: &str) -> Vec<StoryboardLevel> {
     .unwrap_or_default();
   levels.sort_by_key(|l| std::cmp::Reverse(l.width));
   levels
+}
+
+/// A VOD's chat replay around an offset, a page at a time.
+const COMMENTS_QUERY: &str = "query VideoComments($id: ID!, $offset: Int) { video(id: $id) { \
+  owner { id } comments(contentOffsetSeconds: $offset) { edges { node { id contentOffsetSeconds \
+  createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } \
+  userBadges { setID version } userColor } } } pageInfo { hasNextPage } } } }";
+
+/// A page of a VOD's chat: about 60 messages from a little before the offset asked for (a few
+/// seconds on a busy chat, up to half a minute on a quiet one), oldest first.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Comments {
+  /// The VOD's channel id (its 7TV emotes and badges).
+  pub channel_id: Option<String>,
+  /// The messages, each with its offset in the VOD.
+  pub comments: Vec<Comment>,
+  /// Whether messages follow the page's last one.
+  pub more: bool,
+}
+
+/// A message of a VOD's chat.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comment {
+  /// Seconds from the VOD's start.
+  pub offset: u32,
+  /// The message, as the live chat's (its emotes by `char` range).
+  pub line: ChatLine,
+}
+
+/// The request for `id`'s chat from about `offset` seconds. Only the offset pages: the `after`
+/// cursor fails Twitch's integrity check (2026-11-02), so it is never sent.
+pub fn comments_request(id: &str, offset: u32) -> Value {
+  json!({
+    "operationName": "VideoComments",
+    "query": COMMENTS_QUERY,
+    "variables": { "id": id, "offset": offset },
+  })
+}
+
+/// Reads a page of comments; `video: null` is [`Error::NotFound`], `comments: null` an empty last
+/// page (past the end). A node without its author or text is skipped.
+pub fn parse_comments(answer: &Value) -> Result<Comments> {
+  let video = &answer["data"]["video"];
+  if video.is_null() {
+    return Err(gql_error(answer).unwrap_or(Error::NotFound));
+  }
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let page = &video["comments"];
+  let comments = page["edges"]
+    .as_array()
+    .map(|edges| edges.iter().filter_map(|e| comment(&e["node"])).collect())
+    .unwrap_or_default();
+  Ok(Comments {
+    channel_id: video["owner"]["id"].as_str().map(str::to_owned),
+    comments,
+    more: page["pageInfo"]["hasNextPage"].as_bool().unwrap_or(false),
+  })
+}
+
+fn comment(node: &Value) -> Option<Comment> {
+  let author = &node["commenter"];
+  let login = author["login"].as_str()?;
+  let message = &node["message"];
+  let mut line = ChatLine {
+    id: node["id"].as_str()?.to_owned(),
+    user_id: author["id"].as_str().unwrap_or_default().to_owned(),
+    login: login.to_owned(),
+    display_name: author["displayName"]
+      .as_str()
+      .filter(|n| !n.is_empty())
+      .unwrap_or(login)
+      .to_owned(),
+    color: message["userColor"]
+      .as_str()
+      .filter(|c| !c.is_empty())
+      .map(str::to_owned),
+    badges: message["userBadges"]
+      .as_array()
+      .map(|badges| {
+        badges
+          .iter()
+          .filter_map(|b| {
+            let set = b["setID"].as_str().filter(|s| !s.is_empty())?;
+            Some((set.to_owned(), b["version"].as_str()?.to_owned()))
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+    sent: node["createdAt"]
+      .as_str()
+      .and_then(crate::time::epoch_millis),
+    ..ChatLine::default()
+  };
+  // The fragments' texts end to end, the emotes' ranges counted in `char`s.
+  let mut at = 0;
+  for fragment in message["fragments"].as_array()? {
+    let Some(text) = fragment["text"].as_str() else {
+      continue;
+    };
+    let len = text.chars().count();
+    if let Some(id) = fragment["emote"]["emoteID"].as_str() {
+      line.emotes.push(EmoteRange {
+        id: id.to_owned(),
+        start: at,
+        end: at + len,
+      });
+    }
+    line.text.push_str(text);
+    at += len;
+  }
+  Some(Comment {
+    offset: node["contentOffsetSeconds"]
+      .as_u64()
+      .and_then(|s| u32::try_from(s).ok())
+      .unwrap_or(0),
+    line,
+  })
 }

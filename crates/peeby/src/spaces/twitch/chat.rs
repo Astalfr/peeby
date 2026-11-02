@@ -33,7 +33,7 @@ type Badges = HashMap<(String, String), Rc<helix::Badge>>;
 
 /// What a channel adds to its messages.
 #[derive(Default)]
-struct Extras {
+pub(super) struct Extras {
   words: Words,
   badges: Badges,
 }
@@ -90,7 +90,7 @@ pub fn start(
 
 /// Loads (or takes from the session's cache) the global and `room_id`'s 7TV emotes and badges
 /// into `target`.
-fn load_extras(
+pub(super) fn load_extras(
   room_id: String,
   client: twitch::Client,
   helix: Helix,
@@ -216,7 +216,11 @@ fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEv
 }
 
 /// A user's message, or a notice with `notice`'s text.
-fn message(line: &ChatLine, notice: Option<SharedString>, extras: &Extras) -> ChatMessage {
+pub(super) fn message(
+  line: &ChatLine,
+  notice: Option<SharedString>,
+  extras: &Extras,
+) -> ChatMessage {
   let fragments = line
     .pieces()
     .into_iter()

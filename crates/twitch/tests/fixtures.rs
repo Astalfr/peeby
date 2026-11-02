@@ -269,6 +269,66 @@ fn vod_storyboard() {
 }
 
 #[test]
+fn vod_comments() {
+  // zerator's VOD around 10 min (2026-11-02, anonymous), chatters renamed, trimmed to 7.
+  let page = gql::parse_comments(&json("gql_vod_comments.json")).unwrap();
+  assert_eq!(page.channel_id.as_deref(), Some("41719107"));
+  assert!(page.more);
+  let offsets: Vec<u32> = page.comments.iter().map(|c| c.offset).collect();
+  assert_eq!(offsets, [581, 582, 590, 590, 609, 661, 673]);
+  let first = &page.comments[0].line;
+  assert_eq!(first.text, "des matinales? rooAww");
+  assert_eq!(first.color.as_deref(), Some("#FF0000"));
+  // The empty badge Twitch sends first is dropped.
+  assert_eq!(first.badges, [("flameborn-sigil".into(), "1".into())]);
+  assert!(first.sent.is_some());
+  let pieces = first.pieces();
+  assert_eq!(
+    pieces.last(),
+    Some(&twitch::chat::Piece::Emote {
+      id: "emotesv2_2c145b5216c94fe4bbfb6204243e4bc7".into(),
+      name: "rooAww".into(),
+    })
+  );
+  // Ranges count `char`s: the accents before the emotes do not shift them.
+  let accents = &page.comments[5].line;
+  let names: Vec<String> = accents
+    .pieces()
+    .into_iter()
+    .filter_map(|p| match p {
+      twitch::chat::Piece::Emote { name, .. } => Some(name),
+      twitch::chat::Piece::Text(_) => None,
+    })
+    .collect();
+  assert_eq!(names, ["PrideLaugh", "PrideLaugh", "PrideLaugh", "zrtLL"]);
+  let no_badges = &page.comments[6].line;
+  assert!(no_badges.badges.is_empty());
+  assert!(no_badges.text.ends_with("CHIENG <3"));
+}
+
+#[test]
+fn vod_comments_past_the_end_or_refused() {
+  let end =
+    serde_json::json!({ "data": { "video": { "owner": { "id": "1" }, "comments": null } } });
+  let page = gql::parse_comments(&end).unwrap();
+  assert!(page.comments.is_empty() && !page.more);
+  let missing = serde_json::json!({ "data": { "video": null } });
+  assert!(matches!(
+    gql::parse_comments(&missing),
+    Err(Error::NotFound)
+  ));
+  // What the `after` cursor answers.
+  let cursor = serde_json::json!({
+    "errors": [{ "message": "failed integrity check", "path": ["video", "comments"] }],
+    "data": { "video": { "comments": null } },
+  });
+  assert!(matches!(
+    gql::parse_comments(&cursor),
+    Err(Error::IntegrityRequired)
+  ));
+}
+
+#[test]
 fn a_master_asked_with_every_codec_has_its_source_in_hevc_only() {
   // squeezie, with the user's auth-token and `supported_codecs=av1,h265,h264` (2026-11-01).
   let variants = usher::variants(&text("usher_master_codecs.m3u8"));

@@ -557,7 +557,18 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       art). The example blinks some emotes and draws rings over others: 120 frames a second at 20 messages
       a second. **Not verified**: the motion in the app (screenshots are still), a zero-width 7TV emote in
       the app
-- [ ] VODs: no chat replay at first (GQL comments, later)
+- [x] VODs: the chat replayed (2026-11-02). GQL's `video.comments(contentOffsetSeconds:)`, raw
+      query, anonymous (`gql::comments_request`, `parse_comments`: each comment as a `ChatLine`, its
+      fragments' emotes as `char` ranges, Twitch's empty badge dropped; `gql_vod_comments.json`, 2 tests).
+      The `after` cursor fails the integrity check, so pages go by offset only: a page holds about 50
+      messages from a little before the offset (5 s on a busy chat, ~100 s on a quiet one), the next
+      is asked from the last offset fetched and the overlap dropped by id; a second fuller than a page
+      loses its tail. `spaces::twitch::replay` reads the playhead every 250 ms, shows the messages due,
+      asks the next page 15 s ahead, and starts over on a seek (back more than 1.5 s, forward more than
+      10 s), showing the page's messages before the new position; the panel is titled "Rediffusion du
+      chat". 7TV emotes and badges as the live's (the VOD's `owner.id`). 5 tests. Verified in the app on
+      a busy public VOD (Twitch and 7TV emotes, badges, the chat following playback). **Not verified**:
+      a seek in the app, a VOD whose chat is unavailable
 - Exit: met: the chat with Twitch and 7TV emotes (animated, overlays), badges, next to the player
 - Dependencies: `tokio-tungstenite` with `native-tls`, `futures-util` (its stream and sink), tokio's
   `time` (the reconnection delay), agreed
