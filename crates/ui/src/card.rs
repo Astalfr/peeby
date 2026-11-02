@@ -650,15 +650,16 @@ pub fn poster_height(width: f32, aspect: f32) -> f32 {
   width / aspect + POSTER_TEXT
 }
 
-/// How far an item was watched (0 to 1): a rounded bar inset from a picture's bottom edge.
+/// How far an item was watched (0 to 1): a rounded bar near a picture's bottom edge, under the
+/// bottom right badge (which starts 8 px up).
 pub fn progress_bar(progress: f32) -> impl IntoElement {
-  const HEIGHT: f32 = 6.;
+  const HEIGHT: f32 = 4.;
   let radius = px(HEIGHT / 2.);
   div()
     .absolute()
     .left(px(10.))
     .right(px(10.))
-    .bottom(px(10.))
+    .bottom(px(2.))
     .h(px(HEIGHT))
     .rounded(radius)
     .bg(gpui::black().opacity(0.55))
