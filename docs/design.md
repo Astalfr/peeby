@@ -1,22 +1,24 @@
 # Design
 
-Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent at a time, discreet motion), the accent being the open space's: YouTube's red, Jellyfin's amber ([ADR 0006](decisions/0006-peeby-visual-system.md), [ADR 0007](decisions/0007-multi-space-app.md)). The values live in `crates/ui/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
+Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's visual system as it is (Fluent shapes, Mica chrome, a single accent at a time, discreet motion), the accent being the open space's: YouTube's red, Jellyfin's blue ([ADR 0006](decisions/0006-peeby-visual-system.md), [ADR 0007](decisions/0007-multi-space-app.md)). The values live in `crates/ui/src/theme.rs`. Pages use `theme::…` instead of hard-coded colors, and gpui-component widgets get the same palette through `theme::apply`. Peeby's own description is `D:\DEV\peeby\docs\design.md`.
 
 ## Palette
 
 | Token | Value | Use |
 |---|---|---|
-| `base` | `#0B0B0C` | Window chrome without Mica |
-| Mica veil | `#0B0B0C` at 55 % | Over Mica, so the chrome stays dark |
-| `background` | `#121214` | Content panel, pages |
+| `base` | `#0B0B0C` + 3.5 % of the accent | Window chrome without Mica |
+| Mica veil | `base` at 55 % | Over Mica, so the chrome stays dark |
+| `background` | `#121214` + 3.5 % of the accent | Content panel, pages |
+
+The backgrounds (`base`, the Mica veil, `background`) take 3.5 % of the open space's accent, so each space has its own faint hue; surfaces and borders stay neutral.
 | `surface` | `#1C1C1F` | Cards, settings rows, description, inputs |
 | `surface_hover` | `#27272B` | Hovered surfaces, skeletons |
 | `border` | `#2F2F34` | Borders, separators |
 | `foreground` | `#F2F2F3` | Text |
 | `muted` | `#A1A1AA` | Secondary text |
 | `subtle` | `#71717A` | Section labels, fine print |
-| `accent` | `#FF4E45` (YouTube), `#FF8A3D` (Jellyfin) | Primary buttons, progress, selection, play buttons, active item |
-| `accent_hover` | `#FF6B63`, `#FF9F5E` | Hovered accent elements and titles |
+| `accent` | `#FF4E45` (YouTube), `#00A4DC` (Jellyfin) | Primary buttons, progress, selection, play buttons, active item |
+| `accent_hover` | `#FF6B63`, `#33B6E3` | Hovered accent elements and titles |
 | `accent_soft` | the accent at 14 % | Notice discs, step numbers, selected rows |
 | `muted_audio` | `#E5484D` (any space) | Muted parts of a Twitch VOD on the seek bar: full where played, at 60 % ahead; "Son coupé" in the hover preview |
 
@@ -26,7 +28,7 @@ One accent at a time, the open space's (`theme::set_accent`; the settings page d
 
 - **Logo** ("Onglets", [logo/](logo/README.md)): the mascot's portrait on a rounded card tilted left with a white edge, over three cards fanned out behind it like tabs, one per space in tab order (Twitch violet `#9146ff` at the back, Jellyfin blue `#00a4dc`, YouTube red `#ff4e45` right behind the portrait). It is fixed: the open space does not change it. `assets/logo.png` (512 px, rendered by `scripts/render-logo.ps1`) is drawn in the top bar, scaled on the CPU to the exact device-pixel size (`assets::logo`, GPUI has no mipmaps); `assets/peeby.ico` (16 to 256 px) is embedded in the exe by `build.rs` (`embed-resource`), and GPUI takes the window and taskbar icon from it (resource ID 1).
 - **Top bar** (44 px, a window drag area whose controls are occluded), the same in every space: a menu button (burger) that folds the sidebar, the back button, Peeby's mark (the 22 px logo and the name), then the **spaces as tabs** (34 px high: the service's logo in its own colors, 18 px (`SpaceInfo::icon`, a colored SVG drawn by `ui::assets::color_svg`), and the name; the open tab has a light background, a semibold name and a 2 px line in its accent underneath). On the right: search (opens the open space's search page, tooltip "Rechercher dans YouTube" or "… Jellyfin"; disabled when the space has none, e.g. Jellyfin signed out), the notifications bell and the settings gear, before the window buttons. A video opens from the command line (`peeby <url-or-id>`); there is no URL field.
-- **Accent per space**: YouTube red `#FF4E45`, Jellyfin amber `#FF8A3D` (hover `#FF9F5E`, pressed `#E8752A`, peeby's), later Twitch violet. The whole app takes the open space's accent.
+- **Accent per space**: YouTube red `#FF4E45`, Jellyfin blue `#00A4DC` (hover `#33B6E3`, pressed `#0090C2`, the blue of its icon), later Twitch violet. The whole app takes the open space's accent.
 - **Notifications** (bell): one 440 px panel, "Notifications", then a section per space that has some, titled with the space's name in its accent; the badge adds up the unread counts. Without any: "Aucune notification…".
 - **Mini-player** (ADR 0008): a borderless 400×225 window above every other one, at the bottom right of the screen, with the video alone. Dragging the video moves it; its edges and corners resize it at 16:9 (240 px wide at least, the screen's width at most) with the matching resize cursors. On hover: a dark shade at the top with two round 28 px buttons on its right ("Revenir à la page", "Fermer"), and a 48 px play/pause button in the middle.
 - **Sidebar** (232 px): the open space's entries only. YouTube: Accueil, Abonnements, À regarder plus tard (that playlist's page, as a sidebar page) and Playlists (the account is in the settings). Jellyfin: Accueil, then its video libraries (film, tv or folder icon) under a "BIBLIOTHÈQUES" heading (a thin line when folded); pinned at the bottom above a separator, the user (a 24 px avatar, or their initial on a disc in the accent, the name and the server's host on a muted second line; it opens the settings) and "Se déconnecter". Signed out, Jellyfin's sidebar is empty. The subscribed channels are not listed there (hundreds of them), but on their own page. Entries are 40 px, muted until hovered; the entry of the page at the bottom of the stack has a light background and a 3×16 px pill in the accent on its left edge, so Abonnements stays lit on the channels and channel pages opened from it. Folded (burger button, saved as `sidebar_collapsed` in `settings.toml`), it is 56 px wide: each entry shows its icon alone, centered, with its label as a tooltip, and keeps its pill.

@@ -92,12 +92,12 @@ pub struct JellyfinSpace {
 }
 
 impl JellyfinSpace {
-  /// Peeby's amber.
+  /// Jellyfin's blue, the end of its icon's gradient.
   pub fn accent() -> Accent {
     Accent {
-      base: rgb(0xff8a3d).into(),
-      hover: rgb(0xff9f5e).into(),
-      active: rgb(0xe8752a).into(),
+      base: rgb(0x00a4dc).into(),
+      hover: rgb(0x33b6e3).into(),
+      active: rgb(0x0090c2).into(),
     }
   }
 

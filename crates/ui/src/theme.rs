@@ -53,13 +53,26 @@ fn color_alpha(hex: u32, alpha: f32) -> Hsla {
   c.into()
 }
 
+/// Share of the space's accent mixed into the backgrounds, so each space has its own hue.
+const BACKGROUND_TINT: f32 = 0.050;
+
+/// `hex` with a touch of the accent of the open space.
+fn accent_tinted(hex: u32, alpha: f32) -> Hsla {
+  let mut c = rgb(hex).blend(Rgba {
+    a: BACKGROUND_TINT,
+    ..accent().into()
+  });
+  c.a = alpha;
+  c.into()
+}
+
 /// Window background behind the sidebar and the title bar, when there is no Mica.
 pub fn base() -> Hsla {
-  color(0x0b0b0c)
+  accent_tinted(0x0b0b0c, 1.)
 }
 /// Content panel and page background.
 pub fn background() -> Hsla {
-  color(0x121214)
+  accent_tinted(0x121214, 1.)
 }
 /// Cards, popovers, inputs.
 pub fn surface() -> Hsla {
@@ -147,7 +160,7 @@ pub fn accent_soft() -> Hsla {
 }
 /// Veil over Mica so it stays dark.
 fn mica_tint() -> Hsla {
-  color_alpha(0x0b0b0c, 0.55)
+  accent_tinted(0x0b0b0c, 0.55)
 }
 
 /// Whether the window uses Mica: only on a dark system theme, since Mica follows it and a
