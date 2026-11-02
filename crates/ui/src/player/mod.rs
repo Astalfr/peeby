@@ -757,8 +757,12 @@ impl PlayerView {
     }
     self.player = Some(player);
     self.status = None;
-    // After a quality change: the subtitle track goes to the new mpv.
-    self.apply_caption();
+    // After a quality change: the subtitle track goes to the new mpv. Only for subtitles added
+    // on demand: a file's own tracks were picked by the source's `sid` (Jellyfin), which
+    // `apply_caption` would turn off.
+    if self.on_demand_subtitles() {
+      self.apply_caption();
+    }
     self.show_controls(cx);
   }
 
