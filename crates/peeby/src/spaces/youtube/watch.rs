@@ -636,8 +636,8 @@ impl WatchView {
   }
 
   /// The like and dislike buttons side by side on a pill, with the Return YouTube Dislike
-  /// counts once known: the ratio bar under them and the attribution RYD requires, a link to
-  /// its site. The counts follow the user's clicks.
+  /// counts once known: the ratio bar under them and, right of both, the attribution RYD
+  /// requires. The counts follow the user's clicks.
   fn rating_bar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let initial = self
       .page
@@ -744,23 +744,31 @@ impl WatchView {
             .bg(theme::accent()),
         )
     });
+    // The attribution RYD requires: an "i" right of the pill, its tooltip naming the source, a
+    // click opening its site.
     let attribution = votes.map(|_| {
       div()
         .id("ryd")
-        .text_xs()
+        .flex_none()
+        .p_1()
+        .rounded_full()
         .text_color(theme::subtle())
         .cursor_pointer()
-        .hover(|s| s.text_color(theme::muted()))
+        .hover(|s| s.text_color(theme::foreground()))
+        .tooltip(|window, cx| {
+          Tooltip::new(t(
+            "Dislikes from Return YouTube Dislike (returnyoutubedislike.com)",
+            "Dislikes fournis par Return YouTube Dislike (returnyoutubedislike.com)",
+          ))
+          .build(window, cx)
+        })
         .on_click(|_, _, cx| cx.open_url("https://returnyoutubedislike.com"))
-        .child(t(
-          "Dislikes: Return YouTube Dislike",
-          "Dislikes : Return YouTube Dislike",
-        ))
+        .child(gpui_component::Icon::new(Icon::Info).size(px(16.)))
     });
     // The ratio bar takes the pill's width: both sit in a column as wide as the pill.
-    v_flex()
+    h_flex()
       .items_center()
-      .gap_1p5()
+      .gap_1()
       .child(v_flex().gap_1p5().child(pill).children(ratio))
       .children(attribution)
   }
