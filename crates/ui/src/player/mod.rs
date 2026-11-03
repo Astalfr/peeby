@@ -247,6 +247,8 @@ pub struct PlayerView {
   failed: bool,
   position: f64,
   duration: f64,
+  /// How far the file is loaded, on the position's timeline: drawn ahead of the playhead.
+  cached: f64,
   paused: bool,
   /// When playback was paused, for a live's resume ([`LIVE_RESUME_AFTER`]).
   paused_since: Option<Instant>,
@@ -365,6 +367,7 @@ impl PlayerView {
       failed: false,
       position: 0.0,
       duration: 0.0,
+      cached: 0.0,
       paused: false,
       paused_since: None,
       started: false,
@@ -882,6 +885,8 @@ impl PlayerView {
         cx,
       )
     }));
+    // A new mpv starts with an empty cache.
+    self.cached = 0.0;
     player.set_volume(self.volume);
     if self.muted {
       player.set_muted(true);
@@ -922,6 +927,7 @@ impl PlayerView {
         self.tell_muted(cx);
       }
       Event::Position(_) => {}
+      Event::Cached(seconds) => self.cached = seconds,
       // A live's duration is only its playlist's window: kept at 0, it turns off the seek
       // bar's math, "up next" and `finished`. A DVR live's is its edge, for the seek bar.
       Event::Duration(_) if !self.can_seek() => {}
@@ -1384,6 +1390,11 @@ impl PlayerView {
     } else {
       0.0
     };
+    let cached = if end > start {
+      ((self.cached - start) / (end - start)).clamp(0.0, 1.0)
+    } else {
+      0.0
+    };
     let dvr = self.dvr_window().is_some();
     // The track thickens on hover, eased rather than at once.
     let height = motion::tween(
@@ -1562,6 +1573,10 @@ impl PlayerView {
               .h(px(height))
               .rounded(px(height / 2.))
               .bg(gpui::white().opacity(0.25))
+              // What is loaded ahead of the playhead, under the hover's fill.
+              .when(local(cached) > played, |el| {
+                el.child(fill(local(cached), height, gpui::white().opacity(0.25)))
+              })
               .children(
                 hover
                   .map(local)

@@ -248,6 +248,9 @@ pub enum Event {
   Position(f64),
   /// Duration, seconds.
   Duration(f64),
+  /// How far the file is loaded ahead (`demuxer-cache-time`), seconds on the position's
+  /// timeline.
+  Cached(f64),
   /// Paused or playing.
   Paused(bool),
   /// Waiting for the network.
@@ -368,6 +371,7 @@ impl Player {
     for (name, format) in [
       ("time-pos", sys::FORMAT_DOUBLE),
       ("duration", sys::FORMAT_DOUBLE),
+      ("demuxer-cache-time", sys::FORMAT_DOUBLE),
       ("pause", sys::FORMAT_FLAG),
       ("paused-for-cache", sys::FORMAT_FLAG),
       ("track-list", sys::FORMAT_NONE),
@@ -799,6 +803,7 @@ fn render_software(mpv: &Mpv, shared: &Shared, frames: &async_channel::Sender<Fr
 fn event_loop(mpv: &Mpv, shared: &Shared, events: &async_channel::Sender<Event>) {
   let send = |event: Event| events.try_send(event).is_ok();
   let mut last_position = f64::NEG_INFINITY;
+  let mut last_cached = f64::NEG_INFINITY;
   while !shared.quitting() {
     let ok = match mpv.next_event(-1.0) {
       MpvEvent::Shutdown => return,
@@ -812,6 +817,14 @@ fn event_loop(mpv: &Mpv, shared: &Shared, events: &async_channel::Sender<Event>)
         }
       }
       MpvEvent::Double(name, Some(value)) if name == "duration" => send(Event::Duration(value)),
+      MpvEvent::Double(name, Some(value)) if name == "demuxer-cache-time" => {
+        if (value - last_cached).abs() >= POSITION_STEP {
+          last_cached = value;
+          send(Event::Cached(value))
+        } else {
+          true
+        }
+      }
       MpvEvent::Flag(name, Some(value)) if name == "pause" => send(Event::Paused(value)),
       MpvEvent::Flag(name, Some(value)) if name == "paused-for-cache" => {
         send(Event::Buffering(value))

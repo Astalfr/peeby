@@ -263,7 +263,11 @@ impl Spike {
         eprintln!("ended with error: {e}");
         s.error = Some(e);
       }
-      Event::Ended(None) | Event::EndReached | Event::Chapters(_) | Event::Muted(_) => {}
+      Event::Ended(None)
+      | Event::EndReached
+      | Event::Chapters(_)
+      | Event::Muted(_)
+      | Event::Cached(_) => {}
     }
   }
 
