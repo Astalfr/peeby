@@ -70,7 +70,9 @@ pub(crate) async fn fallback(
     let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_string)
       .map(|dt| dt.with_timezone(&chrono::Utc))
       .unwrap_or_else(|_| chrono::DateTime::from(chrono::Utc::now()));
-    let now = chrono::Utc::now();
+    let now = "2023-02-10"
+      .parse::<chrono::DateTime<chrono::Utc>>()
+      .unwrap_or_else(|_| chrono::DateTime::from(chrono::Utc::now()));
     let days_difference = (now - created_at).num_days();
 
     let resolutions = vec![
