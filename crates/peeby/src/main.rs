@@ -3,6 +3,7 @@
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod desktop;
 mod settings;
 mod shell;
 mod spaces;
@@ -12,7 +13,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext, Bounds, DisplayId, TitlebarOptions, WindowBounds, WindowOptions, px, size,
+  App, AppContext, Bounds, DisplayId, Entity, TitlebarOptions, WeakEntity, Window, WindowBounds,
+  WindowOptions, px, size,
 };
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
@@ -37,19 +39,26 @@ fn main() {
   if let Some(code) = web_sign_in::child_from_args() {
     std::process::exit(code);
   }
+  // One Peeby at a time (ADR 0020): two would rewrite the same cookie jar and spend the same
+  // Twitch refresh token. A next launch hands its arguments to the first one and ends.
+  let args: Vec<String> = std::env::args().skip(1).collect();
+  let listener = match desktop::sys::claim(&args.join(
+    "
+",
+  )) {
+    Some(desktop::sys::Instance::Running) => return,
+    Some(desktop::sys::Instance::First(listener)) => Some(listener),
+    None => None,
+  };
+  // Started with Windows: straight to the notification area.
+  let background = args.iter().any(|arg| arg == desktop::BACKGROUND);
 
   // `peeby <url-or-id>…` opens those videos, the last one on top ("back" goes through the
   // others).
-  let initial_videos: Vec<String> = std::env::args()
-    .skip(1)
-    .filter(|arg| !arg.contains("twitch.tv/"))
-    .filter_map(|arg| spaces::youtube::video_id(&arg).map(str::to_owned))
-    .collect();
+  let initial_videos = youtube_videos(&args);
   // `peeby twitch.tv/<login>` (a live), `twitch.tv/videos/<id>` or a clip's link opens it in the
   // Twitch tab.
-  let twitch_page = std::env::args()
-    .skip(1)
-    .find_map(|arg| spaces::twitch::Route::from_url(&arg));
+  let twitch_page = twitch_route(&args);
 
   // Small local file, read before the UI starts.
   let cookies = settings::load_cookies();
@@ -104,6 +113,7 @@ fn main() {
       cx.set_global(ui::player::AudioOutput(prefs.player.audio_device.clone()));
       cx.set_global(prefs);
       settings::Settings::update(cx, |s| s.jellyfin.device_id = device_id);
+      desktop::init(cx);
       match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
           images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);
@@ -132,6 +142,8 @@ fn main() {
         display_id: display,
         window_min_size: Some(size(px(960.), px(600.))),
         window_background: theme::window_background(cx),
+        show: !background,
+        focus: !background,
         // GPUI caps an unfocused window at 30 fps by default: video plays while you work elsewhere.
         inactive_frame_interval: None,
         titlebar: Some(TitlebarOptions {
@@ -141,16 +153,23 @@ fn main() {
         ..TitleBar::window_options()
       };
       // The opening animation, unless something opens right away (a video, a live).
-      let splash = initial_videos.is_empty() && twitch_page.is_none();
+      let splash = initial_videos.is_empty() && twitch_page.is_none() && !background;
+      let mut launches = None;
       let opened = cx.open_window(options, |window, cx| {
         let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, cx));
         let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, cx));
-        let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube), Rc::new(jellyfin)];
-        if let Some(auth) = twitch_auth {
-          let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx));
-          spaces.push(Rc::new(twitch));
+        let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
+        let twitch = twitch_auth
+          .map(|auth| cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx)));
+        if let Some(twitch) = &twitch {
+          spaces.push(Rc::new(twitch.clone()));
         }
+        launches = Some(Launches {
+          youtube: youtube.downgrade(),
+          twitch: twitch.as_ref().map(Entity::downgrade),
+        });
         let shell = cx.new(|cx| Shell::new(spaces, splash, window, cx));
+        desktop::attach(window, shell.downgrade(), cx);
         cx.new(|cx| Root::new(shell, window, cx))
       });
       let main = match opened {
@@ -168,8 +187,58 @@ fn main() {
         }
       })
       .detach();
-      cx.activate(true);
+      if let (Some(listener), Some(launches)) = (listener, launches) {
+        desktop::listen(
+          listener,
+          move |args, window, cx| launches.open(&args, window, cx),
+          cx,
+        );
+      }
+      if !background {
+        cx.activate(true);
+      }
     });
+}
+
+/// The YouTube videos among a launch's arguments (`peeby <url-or-id>…`), the last one on top
+/// ("back" goes through the others).
+fn youtube_videos(args: &[String]) -> Vec<String> {
+  args
+    .iter()
+    .filter(|arg| !arg.contains("twitch.tv/"))
+    .filter_map(|arg| spaces::youtube::video_id(arg).map(str::to_owned))
+    .collect()
+}
+
+/// The Twitch page among a launch's arguments: a live, a VOD or a clip.
+fn twitch_route(args: &[String]) -> Option<spaces::twitch::Route> {
+  args
+    .iter()
+    .find_map(|arg| spaces::twitch::Route::from_url(arg))
+}
+
+/// The spaces that open what a next launch was given (ADR 0020).
+struct Launches {
+  youtube: WeakEntity<YouTubeSpace>,
+  twitch: Option<WeakEntity<TwitchSpace>>,
+}
+
+impl Launches {
+  fn open(&self, args: &[String], window: &mut Window, cx: &mut App) {
+    for id in youtube_videos(args) {
+      self
+        .youtube
+        .update(cx, |space, cx| {
+          space.open_from_notification(spaces::youtube::Route::Watch(id), window, cx)
+        })
+        .ok();
+    }
+    if let (Some(route), Some(twitch)) = (twitch_route(args), &self.twitch) {
+      twitch
+        .update(cx, |space, cx| space.open_from_notification(route, cx))
+        .ok();
+    }
+  }
 }
 
 /// The display the window opens on: `PEEBY_DISPLAY=2` for the second one (in Windows' order),

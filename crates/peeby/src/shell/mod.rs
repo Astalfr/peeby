@@ -32,6 +32,7 @@ use ui::{motion, tf, theme};
 use crate::settings::Settings;
 use mini_player::MiniPlayer;
 use settings_page::SettingsView;
+pub use settings_page::delivery_row;
 use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle, TabId};
 
 /// Width of the notifications panel.
@@ -384,6 +385,20 @@ impl Shell {
     }
   }
 
+  /// The window goes to the notification area (ADR 0020): the video of the page shown pauses;
+  /// the mini-player's, still on screen, goes on.
+  pub(crate) fn go_background(&mut self, cx: &mut Context<Self>) {
+    let Some(tab) = self.active else {
+      return;
+    };
+    if self.mini.as_ref().is_some_and(|m| m.tab == tab) {
+      return;
+    }
+    if let Some(player) = self.spaces[tab.space].player(tab.id, cx) {
+      player.read(cx).pause();
+    }
+  }
+
   /// The mini-player's "×": the video pauses and the window closes.
   pub(crate) fn dismiss_mini(&mut self, cx: &mut Context<Self>) {
     if let Some(player) = self.mini_player(cx) {
@@ -396,6 +411,8 @@ impl Shell {
   /// The mini-player's "back to the page": its tab shows in the main window.
   pub(crate) fn return_from_mini(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(tab) = self.mini.as_ref().map(|m| m.tab) {
+      // The main window may be hidden in the notification area.
+      crate::desktop::reveal_main(cx);
       window.activate_window();
       self.activate(tab.id, window, cx);
       // The tab is on the settings page: back to the page under it.

@@ -677,6 +677,8 @@ pub struct Notification {
   pub video_id: Option<String>,
   /// The video is a Short (`reelWatchEndpoint`).
   pub short: bool,
+  /// What it announces.
+  pub kind: NotificationKind,
   /// The channel's avatar.
   pub avatar: Vec<Thumbnail>,
   /// The video's thumbnail.
@@ -684,6 +686,19 @@ pub struct Notification {
   /// What [`crate::Client::mark_notification_read`] sends: the notification's
   /// `recordNotificationInteractionsEndpoint`, as a click on it records it.
   pub read_token: Option<String>,
+}
+
+/// What a [`Notification`] announces, from the label YouTube tags its click with
+/// (`ni-push-u-sub`, `ni-push-lbss`), the same in every language.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum NotificationKind {
+  /// A subscribed channel uploaded a video or a Short.
+  Upload,
+  /// A subscribed channel went live.
+  Live,
+  /// Anything else (a reply, a mention, a recommendation…).
+  #[default]
+  Other,
 }
 
 /// A titled group of notifications ("Important", "Autres notifications").

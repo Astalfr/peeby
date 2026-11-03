@@ -44,9 +44,10 @@ pub use error::Error;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
-  LiveChatPage, Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, ShortsPage, Storyboard,
-  StoryboardFrame, Stream, TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
+  LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
+  SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, TextLink, Thumbnail, Tracking,
+  VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,

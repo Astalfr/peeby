@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 anyhow = "1"
+# Toast clicks and tray events arrive on other threads (ADR 0020).
+async-channel = "2"
 dirs = "6"
 gpui = { package = "gpui-pre", version = "=0.3.10" }
 gpui-component = "=0.8.1"
@@ -17,10 +19,14 @@ innertube = { workspace = true }
 jellyfin-api = { workspace = true }
 keyring = "4"
 player = { workspace = true }
+# The main window's HWND, to hide it in the notification area (ADR 0020).
+raw-window-handle = "0.6"
 serde = { version = "1", features = ["derive"] }
 # The sign-in window (ADR 0017), a separate process: its event loop cannot share GPUI's.
 tao = "0.37"
 toml = "1"
+# The icon in the notification area and its menu (ADR 0020). Its default features are Linux only.
+tray-icon = { version = "0.26", default-features = false }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 twitch = { workspace = true }
@@ -28,6 +34,21 @@ ui = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 # Its default features are Linux only (WebKitGTK, X11).
 wry = { version = "0.57", default-features = false }
+# Toasts (WinRT), the window's visibility and the single instance (ADR 0020): the version GPUI's
+# Windows platform uses, so nothing more is built.
+windows = { version = "0.62", features = [
+  "Data_Xml_Dom",
+  "Foundation",
+  "UI_Notifications",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
+  "Win32_UI_WindowsAndMessaging",
+] }
+# The `Run` key (start with Windows) and the toasts' app id.
+windows-registry = "0.6"
 
 [dev-dependencies]
 serde_json = "1"

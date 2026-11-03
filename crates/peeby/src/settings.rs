@@ -85,6 +85,45 @@ pub struct Settings {
   pub jellyfin: Jellyfin,
   /// The Twitch space.
   pub twitch: Twitch,
+  /// Where each kind of notification shows.
+  pub notifications: Notifications,
+  /// Closing the window keeps Peeby running in the notification area; its icon's menu quits.
+  pub close_to_tray: bool,
+  /// Peeby starts with Windows, in the notification area (the `Run` key holds it, ADR 0020).
+  pub start_with_windows: bool,
+}
+
+/// `[notifications]`: where each kind shows (ADR 0020).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Notifications {
+  /// A followed Twitch channel went live.
+  pub twitch_live: Delivery,
+  /// A followed Twitch live changed category.
+  pub twitch_category: Delivery,
+  /// A YouTube channel the bell follows uploaded a video (a Short included).
+  pub youtube_video: Delivery,
+  /// A YouTube channel the bell follows went live.
+  pub youtube_live: Delivery,
+}
+
+/// Where a kind of notification shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Delivery {
+  /// In Peeby's bell.
+  pub in_app: bool,
+  /// As a Windows notification.
+  pub windows: bool,
+}
+
+impl Default for Delivery {
+  fn default() -> Self {
+    Self {
+      in_app: true,
+      windows: true,
+    }
+  }
 }
 
 /// `[twitch]`: the Twitch space. Its tokens are not here: the Helix refresh token and the web
@@ -273,6 +312,9 @@ impl Default for Settings {
       player: Player::default(),
       jellyfin: Jellyfin::default(),
       twitch: Twitch::default(),
+      notifications: Notifications::default(),
+      close_to_tray: true,
+      start_with_windows: false,
     }
   }
 }
@@ -403,6 +445,8 @@ mod tests {
     assert_eq!(settings.player.seek_step, 10);
     assert!(settings.player.hardware_acceleration);
     assert_eq!(settings.jellyfin.server_url, None);
+    assert!(settings.close_to_tray && !settings.start_with_windows);
+    assert!(settings.notifications.twitch_category.windows);
     let again: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
     assert_eq!(settings, again);
   }

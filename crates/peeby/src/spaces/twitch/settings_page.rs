@@ -1,7 +1,7 @@
 //! Twitch's part of the settings page (behind the gear): the account, signed in with the web
 //! `auth-token` (read from twitch.tv's sign-in in a WebView, ADR 0017, or pasted by hand with the
 //! tutorial of docs/twitch.md, checked before it is saved), the followed channels' Helix
-//! connection, then playback.
+//! connection, the notifications, then playback.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, Entity, SharedString, WeakEntity, Window, div, px};
@@ -14,6 +14,7 @@ use ui::{runtime, tf, theme};
 
 use super::{TwitchSpace, play, session};
 use crate::settings::Settings;
+use crate::shell::delivery_row;
 use crate::web_sign_in::{self, Outcome, Pending, Service};
 
 /// The tutorial's steps (docs/twitch.md, "The auth-token tutorial").
@@ -417,6 +418,39 @@ impl SettingsView {
   }
 }
 
+/// Where the followed channels' lives and category changes show.
+fn notifications_section(cx: &gpui::App) -> AnyElement {
+  section(
+    t("Notifications", "Notifications"),
+    vec![
+      delivery_row(
+        "twitch-notify-live",
+        t("A followed channel goes live", "Une chaîne suivie passe en direct"),
+        t(
+          "In Peeby's bell, and as a Windows notification with the channel's picture. Needs            the followed channels' connection.",
+          "Dans la cloche de Peeby, et en notification Windows avec l'image de la chaîne.            Demande la connexion des chaînes suivies.",
+        ),
+        |n| &mut n.twitch_live,
+        cx,
+      ),
+      delivery_row(
+        "twitch-notify-category",
+        t(
+          "A followed live changes category",
+          "Un live suivi change de catégorie",
+        ),
+        t(
+          "Another game or category than at the last check (every two minutes).",
+          "Un autre jeu ou une autre catégorie qu'au dernier relevé (toutes les deux minutes).",
+        ),
+        |n| &mut n.twitch_category,
+        cx,
+      ),
+    ],
+  )
+  .into_any_element()
+}
+
 fn playback_section(max_height: u32, low_latency: bool) -> AnyElement {
   let qualities = play::QUALITIES
     .iter()
@@ -465,6 +499,7 @@ impl Render for SettingsView {
     let sections = vec![
       self.account_section(cx),
       self.followed_section(cx),
+      notifications_section(cx),
       playback_section(max_height, low_latency),
     ];
     v_flex().gap_8().children(sections)

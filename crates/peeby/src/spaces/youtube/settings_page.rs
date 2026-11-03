@@ -1,11 +1,13 @@
 //! YouTube's part of the settings page: the account (cookie import), the start page, YouTube's
-//! content language and region (not the interface's), and the default quality.
+//! content language and region (not the interface's), the default quality, and where the
+//! notifications show.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Entity, Window};
 use gpui_component::v_flex;
 
 use crate::settings::{LANGUAGES, QUALITIES, Settings, StartPage};
+use crate::shell::delivery_row;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::account::AccountView;
 use ui::form::{OnClick, choices, row, section};
@@ -86,6 +88,31 @@ pub fn part(
           choices("quality", qualities),
         )
         .into_any_element(),
+      ],
+    ))
+    .child(section(
+      t("Notifications", "Notifications"),
+      vec![
+        delivery_row(
+          "youtube-notify-video",
+          t("New video", "Nouvelle vidéo"),
+          t(
+            "What YouTube sends for the channels whose bell is on (All or Personalized),              Shorts included. Signed in; checked every three minutes.",
+            "Ce qu'envoie YouTube pour les chaînes dont la cloche est activée (Toutes ou              Personnalisées), Shorts compris. Connecté ; relevé toutes les trois minutes.",
+          ),
+          |n| &mut n.youtube_video,
+          cx,
+        ),
+        delivery_row(
+          "youtube-notify-live",
+          t("Live started", "Live commencé"),
+          t(
+            "A channel whose bell is on goes live, as YouTube announces it.",
+            "Une chaîne dont la cloche est activée passe en direct, comme YouTube l'annonce.",
+          ),
+          |n| &mut n.youtube_live,
+          cx,
+        ),
       ],
     ))
     .into_any_element()

@@ -329,6 +329,63 @@ pub fn bgra_image(width: u32, height: u32, mut pixels: Vec<u8>) -> Option<Arc<Re
   Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
 }
 
+/// A PNG copy of the image at `url` on disk, `size`×`size` pixels (cropped to fill), for what
+/// reads a file rather than bytes (Windows' notifications take neither a URL nor WebP). Kept in
+/// the disk cache, so "Clear" removes it too; `None` when the image cannot be had.
+pub fn local_png(
+  url: &str,
+  size: u32,
+  cx: &gpui::App,
+) -> impl Future<Output = Option<PathBuf>> + use<> {
+  let store = cx.try_global::<Images>().map(|images| images.0.read(cx));
+  let fetcher = store.map(|store| store.fetcher_for(url));
+  let dir = disk_cache_dir();
+  let url = url.to_owned();
+  let task = fetcher.zip(dir).map(|(fetcher, dir)| {
+    runtime::spawn(cx, async move {
+      let png = dir.join(format!(
+        "{}-{size}.png",
+        cache_name(&url).trim_end_matches(".img")
+      ));
+      let cached = dir.join(cache_name(&url));
+      let (done, cached) = tokio::task::spawn_blocking({
+        let png = png.clone();
+        move || (png.is_file(), std::fs::read(cached).ok())
+      })
+      .await
+      .ok()?;
+      if done {
+        return Some(png);
+      }
+      let bytes = match cached {
+        Some(bytes) => bytes,
+        None => fetcher
+          .fetch(&url)
+          .await
+          .map_err(|e| tracing::debug!("image: {e}"))
+          .ok()?,
+      };
+      // Decoding, scaling and encoding are CPU work: off the network runtime's two threads.
+      tokio::task::spawn_blocking(move || {
+        let image = image::load_from_memory(&bytes)
+          .map_err(|e| tracing::debug!("image: {e}"))
+          .ok()?
+          .resize_to_fill(size, size, image::imageops::FilterType::Lanczos3);
+        std::fs::create_dir_all(&dir).ok()?;
+        image
+          .save_with_format(&png, image::ImageFormat::Png)
+          .map_err(|e| tracing::warn!("cannot save {}: {e}", png.display()))
+          .ok()?;
+        Some(png)
+      })
+      .await
+      .ok()
+      .flatten()
+    })
+  });
+  async move { task?.await.flatten() }
+}
+
 /// Folder of the image disk cache.
 pub fn disk_cache_dir() -> Option<PathBuf> {
   dirs::cache_dir().map(|d| d.join("peeby").join("images"))

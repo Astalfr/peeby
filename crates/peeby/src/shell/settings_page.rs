@@ -15,7 +15,8 @@ use ui::theme::Accent;
 use ui::widgets::page_title;
 use ui::{images, tf, theme};
 
-use crate::settings::{Player, Settings};
+use crate::desktop;
+use crate::settings::{Delivery, Notifications, Player, Settings};
 use crate::shell::space::SpaceHandle;
 
 pub struct SettingsView {
@@ -132,7 +133,63 @@ fn general_section(settings: &Settings) -> AnyElement {
         }),
       )
       .into_any_element(),
+      row(
+        t("Keep running in the background", "Rester en arrière-plan"),
+        t(
+          "Closing the window keeps Peeby in the notification area, for the notifications;            its icon's menu quits. Off, closing the window quits.",
+          "Fermer la fenêtre garde Peeby dans la zone de notification, pour les notifications ;            le menu de son icône le ferme. Désactivé, fermer la fenêtre quitte Peeby.",
+        ),
+        toggle("close-to-tray", settings.close_to_tray, |v, cx| {
+          Settings::update(cx, |s| s.close_to_tray = v)
+        }),
+      )
+      .into_any_element(),
+      row(
+        t("Start with Windows", "Démarrer avec Windows"),
+        t(
+          "Peeby starts in the notification area when you sign in to Windows.",
+          "Peeby démarre dans la zone de notification à l'ouverture de session Windows.",
+        ),
+        toggle(
+          "start-with-windows",
+          settings.start_with_windows,
+          desktop::set_start_with_windows,
+        ),
+      )
+      .into_any_element(),
     ],
+  )
+  .into_any_element()
+}
+
+/// The row of a kind of notification, for a space's part: two switches, Peeby's bell and
+/// Windows' notifications; `kind` picks the kind's setting.
+pub fn delivery_row(
+  id: &str,
+  title: &str,
+  description: &str,
+  kind: fn(&mut Notifications) -> &mut Delivery,
+  cx: &gpui::App,
+) -> AnyElement {
+  let delivery = *kind(&mut Settings::get(cx).notifications.clone());
+  let switch = |suffix: &str, label: &'static str, on: bool, set: fn(&mut Delivery, bool)| {
+    h_flex()
+      .gap_2()
+      .items_center()
+      .child(div().text_sm().text_color(theme::muted()).child(label))
+      .child(toggle(&format!("{id}-{suffix}"), on, move |v, cx| {
+        Settings::update(cx, |s| set(kind(&mut s.notifications), v))
+      }))
+  };
+  row(
+    title,
+    description,
+    h_flex()
+      .gap_5()
+      .child(switch("app", "Peeby", delivery.in_app, |d, v| d.in_app = v))
+      .child(switch("windows", "Windows", delivery.windows, |d, v| {
+        d.windows = v
+      })),
   )
   .into_any_element()
 }

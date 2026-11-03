@@ -438,8 +438,12 @@ impl TwitchSpace {
           let result = fetch.await;
           let alive = this.update(cx, |this, cx| match result {
             Some(Ok((live, avatars))) => {
+              let deliveries = [bell::Change::Live, bell::Change::Category]
+                .map(|change| (change, change.delivery(cx)));
               if let State::SignedIn(signed) = &mut this.state {
-                signed.bell.update(&live, SystemTime::now());
+                let in_bell = |change| deliveries.iter().any(|(c, d)| *c == change && d.in_app);
+                let events = signed.bell.update(&live, SystemTime::now(), in_bell);
+                bell::toasts(events, &avatars, cx.weak_entity(), cx);
                 signed.live = live.into_iter().take(SIDEBAR_LIVE).collect();
                 signed.avatars = avatars;
               }

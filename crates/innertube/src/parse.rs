@@ -27,9 +27,9 @@ use std::collections::HashMap;
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
-  LiveChatPage, Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, ShortsPage, Storyboard,
-  TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
+  LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
+  SearchResult, ShortsPage, Storyboard, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -592,6 +592,7 @@ fn parse_notification(n: &Value) -> Option<Notification> {
     read: n["read"].as_bool().unwrap_or(true),
     video_id: video_id.map(str::to_owned),
     short: reel.is_some(),
+    kind: notification_kind(endpoint["clickTrackingParams"].as_str().unwrap_or_default()),
     avatar: thumbnails(&n["thumbnail"]["thumbnails"]),
     thumbnails: thumbnails(&n["videoThumbnail"]["thumbnails"]),
     read_token: n["recordClickEndpoint"]["recordNotificationInteractionsEndpoint"]
@@ -599,6 +600,46 @@ fn parse_notification(n: &Value) -> Option<Notification> {
       .as_str()
       .map(str::to_owned),
   })
+}
+
+/// What a notification announces, from its click's tracking params: base64 bytes holding a
+/// label, `ni-push-u-sub` for an upload (a Short included), `ni-push-lbss` for a live
+/// (checked 2026-11-03 against the inbox in French; the label is not translated).
+fn notification_kind(tracking: &str) -> NotificationKind {
+  let bytes = base64_decode(tracking);
+  let has = |label: &[u8]| bytes.windows(label.len()).any(|w| w == label);
+  if has(b"ni-push-lbss") {
+    NotificationKind::Live
+  } else if has(b"ni-push-u-sub") {
+    NotificationKind::Upload
+  } else {
+    NotificationKind::Other
+  }
+}
+
+/// Decodes base64, standard or URL-safe, padded or not; stops at the first byte outside it.
+fn base64_decode(text: &str) -> Vec<u8> {
+  let value = |c: u8| match c {
+    b'A'..=b'Z' => Some(c - b'A'),
+    b'a'..=b'z' => Some(c - b'a' + 26),
+    b'0'..=b'9' => Some(c - b'0' + 52),
+    b'+' | b'-' => Some(62),
+    b'/' | b'_' => Some(63),
+    _ => None,
+  };
+  let mut out = Vec::with_capacity(text.len() * 3 / 4);
+  let (mut buffer, mut bits) = (0u32, 0u32);
+  for sextet in text.bytes().map_while(value) {
+    buffer = (buffer << 6) | u32::from(sextet);
+    bits += 6;
+    if bits >= 8 {
+      bits -= 8;
+      // The byte is the 8 bits above the `bits` left over.
+      out.push((buffer >> bits) as u8);
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  out
 }
 
 /// The unseen count of a `notification/get_unseen_count` response.
@@ -1226,6 +1267,25 @@ fn non_empty(s: String) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn base64_both_alphabets() {
+    assert_eq!(base64_decode("Zm9vYmFy"), b"foobar");
+    assert_eq!(base64_decode("Zm9vYg=="), b"foob");
+    assert_eq!(base64_decode("Zm9vYg"), b"foob");
+    assert_eq!(base64_decode("-_8"), [0xfb, 0xff]);
+    assert_eq!(base64_decode("+/8="), [0xfb, 0xff]);
+  }
+
+  #[test]
+  fn notification_kinds_from_their_label() {
+    // `ni-push-lbss` / `ni-push-u-sub` inside the tracking params' bytes.
+    let live = "CDAQmlAYDCITCJfTl6md7JcDFTg4BgAd4NEVTTIMbmktcHVzaC1sYnNzygEEj1qcMQ==";
+    let upload = "CH4QmlAYACITCJfTl6md7JcDFTg4BgAd4NEVTTINbmktcHVzaC11LXN1YsoBBI9anDE=";
+    assert_eq!(notification_kind(live), NotificationKind::Live);
+    assert_eq!(notification_kind(upload), NotificationKind::Upload);
+    assert_eq!(notification_kind(""), NotificationKind::Other);
+  }
 
   #[test]
   fn links_open_web_pages_only() {

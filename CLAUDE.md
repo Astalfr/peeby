@@ -8,7 +8,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 
 ## Commands
 - Build: `cargo build` · run: `cargo run -p peeby` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top);
-  `PEEBY_DISPLAY=secondary` (or `=2`) opens the window on another screen: use it for test runs
+  `PEEBY_DISPLAY=secondary` (or `=2`) opens the window on another screen: use it for test runs.
+  Peeby is a single instance (ADR 0020): while it runs, a launch only hands it its arguments and
+  ends, so quit it first (notification area icon → Quit); `-- --background` starts it hidden
 - Test runs never open a console window on the user's screen: debug builds, examples and spikes are console
   apps, so start them with `Start-Process -NoNewWindow` (redirect their output to files), or `cargo run` in
   the current shell; helper scripts follow the same rule
@@ -61,7 +63,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Indent with 2 spaces in every file type (.editorconfig, rustfmt.toml).
 - No `unwrap()`/`expect()` outside tests unless the invariant is explained in a comment next to it.
 - Errors: `thiserror` in library crates, `anyhow` in the `peeby` binary.
-- `unsafe` only in FFI modules (`player::sys`, `player::d3d`, `gpui-video`), each block with a `// SAFETY:` comment.
+- `unsafe` only in FFI modules (`player::sys`, `player::d3d`, `gpui-video`, `peeby::desktop::sys`), each block with a `// SAFETY:` comment.
 - Every `#[allow(...)]` carries a comment saying why.
 - Log with `tracing`. Cookies never appear in logs; stream URLs only at debug level, never in error messages.
 - Nothing blocking on the GPUI UI thread: network and disk I/O run in the background.
@@ -93,6 +95,11 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   never in a URL or a log; its images go through `images::route` with the `Authorization` header. Playing anything
   writes to the user's account (reports: last played date, play count, resume position, watched flag): ask the
   user before a playback test.
+- Notifications (ADR 0020): a space decides what to announce and checks its kinds' `[notifications]`
+  delivery (bell, Windows); `desktop::toast` only shows. Toast images are local PNGs
+  (`ui::images::local_png`). Closing the window hides it in the notification area and pauses the
+  page's video. Reading YouTube's inbox clears its unseen count on youtube.com: read it only when
+  the count grows.
 - Watch progress lives on the account (ADR 0013): playing a YouTube video signed in writes its history and resume
   position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`. Ask the user before a playback test.
 

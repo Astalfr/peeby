@@ -5,7 +5,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget,
+  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
   NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url, parse_feed,
   parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
   parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
@@ -532,6 +532,14 @@ fn notifications_inbox() {
   assert!(others[0].read);
   // A Short opens through `reelWatchEndpoint`.
   assert!(others[1].short && others[1].video_id.is_some());
+  // Every one announces an upload, a Short's too.
+  assert!(
+    page
+      .sections
+      .iter()
+      .flat_map(|s| &s.items)
+      .all(|n| n.kind == NotificationKind::Upload)
+  );
 }
 
 #[test]
@@ -541,6 +549,11 @@ fn notifications_next_page_is_one_untitled_section() {
   assert_eq!(page.sections[0].title, "");
   assert_eq!(page.sections[0].items.len(), 2);
   assert!(page.continuation.is_some());
+  // `… est en direct : …`, then an upload, told apart by their tracking label.
+  let items = &page.sections[0].items;
+  assert!(items[0].message.contains("en direct"));
+  assert_eq!(items[0].kind, NotificationKind::Live);
+  assert_eq!(items[1].kind, NotificationKind::Upload);
 }
 
 #[test]

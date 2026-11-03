@@ -2,12 +2,20 @@
 //! of notifications as youtube.com's bell does ("Important", then the others), each opening
 //! its video.
 //!
-//! The unseen count is read at startup, on every session change and then every 30 minutes
-//! (the delay YouTube's answer gives). The list is loaded each time the panel opens, its next
-//! page when the end of the list comes near. A click marks the notification read, at once here
-//! and on YouTube.
+//! Peeby's bell counts the notifications not seen in Peeby: YouTube's unseen count at startup
+//! and on every session change, then the new ones. The count is read every [`POLL`]; when it
+//! grows, the list's first page tells what arrived since the session started (a notification's
+//! id is its time, in microseconds), shown as Windows notifications for the kinds that ask for
+//! them (`[notifications]`, ADR 0020). Reading the list sees the notifications on youtube.com
+//! too (its badge clears a few seconds later, checked 2026-11-03): it is read only when the
+//! count grows.
+//!
+//! The list is loaded each time the panel opens, without the kinds left out of the bell, its
+//! next page when the end of the list comes near. A click marks the notification read, at once
+//! here and on YouTube.
 
-use std::time::Duration;
+use std::collections::HashSet;
+use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
@@ -17,20 +25,31 @@ use gpui::{
 use gpui_component::popover::PopoverState;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::{h_flex, v_flex};
-use innertube::{Error, NotificationPage, NotificationSection};
+use innertube::{
+  Error, Notification, NotificationKind, NotificationPage, NotificationSection, Thumbnail,
+};
 
+use crate::desktop::toast::{self, Toast};
+use crate::settings::{Delivery, Settings};
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::save::Session;
 use crate::spaces::youtube::{Route, YouTubeSpace};
 use ui::card::WIDE;
 use ui::i18n::t;
-use ui::images::Images;
+use ui::images::{self, Images};
 use ui::picture::image_fill;
 use ui::widgets::{loading_more, near_scroll_end};
 use ui::{runtime, tf, theme};
 
 /// How often the unseen count is read again.
-const POLL: Duration = Duration::from_secs(30 * 60);
+const POLL: Duration = Duration::from_secs(3 * 60);
+/// Notifications a little older than the session still count as new: YouTube dates them from
+/// the upload, a moment before they reach the inbox.
+const SLACK: Duration = Duration::from_secs(60);
+/// Beyond this many Windows notifications from one reading, a single one sums them up.
+const MAX_TOASTS: usize = 3;
+/// The avatar's size in a Windows notification, pixels.
+const TOAST_AVATAR: u32 = 96;
 const AVATAR: f32 = 40.;
 const THUMB_WIDTH: f32 = 86.;
 
@@ -40,6 +59,153 @@ const THUMB_WIDTH: f32 = 86.;
 pub struct Inbox {
   unseen: u32,
   generation: u64,
+  /// The ids of the session's notifications already counted or shown in the panel: never
+  /// announced (again).
+  seen: HashSet<String>,
+}
+
+/// Where notifications of `kind` show; `None` for the kinds Peeby has no setting for (they
+/// show in the bell, never in Windows').
+fn delivery(kind: NotificationKind, cx: &App) -> Option<Delivery> {
+  let notifications = &Settings::get(cx).notifications;
+  match kind {
+    NotificationKind::Upload => Some(notifications.youtube_video),
+    NotificationKind::Live => Some(notifications.youtube_live),
+    NotificationKind::Other => None,
+  }
+}
+
+fn in_bell(kind: NotificationKind, cx: &App) -> bool {
+  delivery(kind, cx).is_none_or(|d| d.in_app)
+}
+
+/// What the polling of a session remembers.
+struct Poll {
+  /// The last unseen count; `None` before the first.
+  count: Option<u32>,
+  /// Older notifications were there before the session: not new.
+  since_micros: u64,
+}
+
+impl Poll {
+  fn new(start: SystemTime) -> Self {
+    let since = start
+      .checked_sub(SLACK)
+      .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+      .unwrap_or_default();
+    Self {
+      count: None,
+      since_micros: u64::try_from(since.as_micros()).unwrap_or(u64::MAX),
+    }
+  }
+
+  /// The notifications of `page` that arrived since the session started and are not in
+  /// `seen` yet (they are now), newest first.
+  fn fresh(&self, page: &NotificationPage, seen: &mut HashSet<String>) -> Vec<Notification> {
+    let mut fresh: Vec<Notification> = page
+      .sections
+      .iter()
+      .flat_map(|s| &s.items)
+      // An id that is not a time is never new: nothing tells when it came.
+      .filter(|n| n.id.parse::<u64>().is_ok_and(|at| at >= self.since_micros))
+      .filter(|n| seen.insert(n.id.clone()))
+      .cloned()
+      .collect();
+    fresh.sort_by_key(|n| std::cmp::Reverse(n.id.parse::<u64>().unwrap_or_default()));
+    fresh
+  }
+}
+
+/// Marks a notification read on YouTube, as a click on it on youtube.com; `token` is its
+/// [`Notification::read_token`].
+fn mark_read(token: String, cx: &mut App) {
+  let Some(client) = cx.try_global::<Session>().map(|s| s.0.clone()) else {
+    return;
+  };
+  let task = runtime::spawn(
+    cx,
+    async move { client.mark_notification_read(&token).await },
+  );
+  cx.background_executor()
+    .spawn(async move {
+      if let Some(Err(e)) = task.await {
+        tracing::warn!("mark notification read: {e}");
+      }
+    })
+    .detach();
+}
+
+/// Shows the uploads and lives of `fresh` as Windows notifications, for the kinds that ask
+/// for them: each with the channel's avatar, a click opening the video and marking it read;
+/// beyond [`MAX_TOASTS`], one for them all.
+fn toasts(fresh: &[Notification], nav: &WeakEntity<YouTubeSpace>, cx: &mut App) {
+  let fresh: Vec<&Notification> = fresh
+    .iter()
+    .filter(|n| n.video_id.is_some() && delivery(n.kind, cx).is_some_and(|d| d.windows))
+    .collect();
+  if fresh.len() > MAX_TOASTS {
+    let toast = Toast {
+      title: tf!(
+        "{} new YouTube notifications",
+        "{} nouvelles notifications YouTube",
+        fresh.len()
+      ),
+      body: fresh
+        .iter()
+        .take(MAX_TOASTS)
+        .map(|n| n.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n"),
+      image: None,
+    };
+    // The window shows: the bell has them.
+    toast::show(toast, |_, _| {}, cx);
+    return;
+  }
+  for n in fresh {
+    let image = largest(&n.avatar).map(|url| images::local_png(url, TOAST_AVATAR, cx));
+    let title = match n.kind {
+      NotificationKind::Live => t("Live now", "En direct"),
+      _ => t("New video", "Nouvelle vidéo"),
+    };
+    let (body, video_id, token) = (n.message.clone(), n.video_id.clone(), n.read_token.clone());
+    let nav = nav.clone();
+    cx.spawn(async move |cx| {
+      let image = match image {
+        Some(image) => image.await,
+        None => None,
+      };
+      cx.update(|cx| {
+        let toast = Toast {
+          title: title.to_owned(),
+          body,
+          image,
+        };
+        toast::show(
+          toast,
+          move |window, cx| {
+            if let Some(token) = token {
+              mark_read(token, cx);
+            }
+            if let Some(id) = video_id {
+              nav
+                .update(cx, |space, cx| {
+                  space.open_from_notification(Route::Watch(id), window, cx)
+                })
+                .ok();
+            }
+          },
+          cx,
+        )
+      });
+    })
+    .detach();
+  }
+}
+
+/// The URL of the largest of `sizes`.
+fn largest(sizes: &[Thumbnail]) -> Option<&str> {
+  sizes.iter().max_by_key(|t| t.width).map(|t| t.url.as_str())
 }
 
 #[derive(Clone)]
@@ -57,13 +223,15 @@ pub fn inbox(cx: &mut App) -> Entity<Inbox> {
   inbox
 }
 
-/// Starts reading the unseen count of the current session (`save::Session`), every
-/// [`POLL`]. Called at startup and on every session change.
-pub fn reset(cx: &mut App) {
+/// Starts reading the notifications of the current session (`save::Session`), every
+/// [`POLL`]; `nav` opens a Windows notification's video. Called at startup and on every
+/// session change.
+pub fn reset(nav: WeakEntity<YouTubeSpace>, cx: &mut App) {
   let inbox = inbox(cx);
   let generation = inbox.update(cx, |inbox, cx| {
     inbox.unseen = 0;
     inbox.generation += 1;
+    inbox.seen.clear();
     cx.notify();
     inbox.generation
   });
@@ -73,31 +241,55 @@ pub fn reset(cx: &mut App) {
   if !client.signed_in() {
     return;
   }
+  let current = move |cx: &App| inbox_generation(cx) == Some(generation);
   cx.spawn(async move |cx| {
+    let mut poll = Poll::new(SystemTime::now());
     loop {
       let fetch = cx.update(|cx| {
         let client = client.clone();
         runtime::spawn(cx, async move { client.unseen_notifications().await })
       });
-      let result = fetch.await;
-      let current = cx.update(|cx| {
-        inbox.update(cx, |inbox, cx| {
-          if inbox.generation != generation {
-            return false;
-          }
-          match result {
-            Some(Ok(unseen)) => {
-              inbox.unseen = unseen;
-              cx.notify();
-            }
-            Some(Err(e)) => tracing::warn!("unseen notifications: {e}"),
-            None => {}
-          }
-          true
-        })
-      });
-      if !current {
+      let count = match fetch.await {
+        Some(Ok(count)) => Some(count),
+        Some(Err(e)) => {
+          tracing::warn!("unseen notifications: {e}");
+          None
+        }
+        None => return,
+      };
+      if !cx.update(|cx| current(cx)) {
         return;
+      }
+      match (poll.count, count) {
+        // YouTube's count of before the session.
+        (None, Some(count)) => {
+          poll.count = Some(count);
+          cx.update(|cx| add_unseen(count, cx));
+        }
+        (Some(last), Some(count)) if count > last => {
+          let fetch = cx.update(|cx| {
+            let client = client.clone();
+            runtime::spawn(cx, async move { client.notifications().await })
+          });
+          match fetch.await {
+            Some(Ok(page)) => {
+              // Reading the list sees them on YouTube: its count starts over.
+              poll.count = Some(0);
+              cx.update(|cx| {
+                if current(cx) {
+                  let fresh = seen(cx, |seen| poll.fresh(&page, seen));
+                  let shown = fresh.iter().filter(|n| in_bell(n.kind, cx)).count();
+                  add_unseen(u32::try_from(shown).unwrap_or(u32::MAX), cx);
+                  toasts(&fresh, &nav, cx);
+                }
+              });
+            }
+            Some(Err(e)) => tracing::warn!("notifications: {e}"),
+            None => return,
+          }
+        }
+        (_, Some(count)) => poll.count = Some(count),
+        (_, None) => {}
       }
       cx.background_executor().timer(POLL).await;
     }
@@ -105,8 +297,29 @@ pub fn reset(cx: &mut App) {
   .detach();
 }
 
-/// The bell of the title bar: the unseen count on a red badge, the inbox on click. Signed
-/// out, nothing.
+/// Runs `f` on the session's [`Inbox::seen`].
+fn seen<T>(cx: &mut App, f: impl FnOnce(&mut HashSet<String>) -> T) -> T {
+  let inbox = inbox(cx);
+  inbox.update(cx, |inbox, _| f(&mut inbox.seen))
+}
+
+fn inbox_generation(cx: &App) -> Option<u64> {
+  cx.try_global::<InboxHandle>()
+    .map(|h| h.0.read(cx).generation)
+}
+
+fn add_unseen(count: u32, cx: &mut App) {
+  if count == 0 {
+    return;
+  }
+  if let Some(InboxHandle(inbox)) = cx.try_global::<InboxHandle>().cloned() {
+    inbox.update(cx, |inbox, cx| {
+      inbox.unseen = inbox.unseen.saturating_add(count);
+      cx.notify();
+    });
+  }
+}
+
 /// Unread notifications; `None` signed out, when YouTube has no inbox to show.
 pub fn unseen(cx: &App) -> Option<usize> {
   let signed_in = cx.try_global::<Session>().is_some_and(|s| s.0.signed_in());
@@ -205,7 +418,21 @@ impl InboxPanel {
         .update(cx, |this, cx| {
           this.loading_more = false;
           match result {
-            Some(Ok(page)) => this.append(page),
+            Some(Ok(mut page)) => {
+              // Seen here: not to be announced later.
+              let ids = page
+                .sections
+                .iter()
+                .flat_map(|s| &s.items)
+                .map(|n| n.id.clone());
+              seen(cx, |seen| seen.extend(ids));
+              // The kinds the settings leave out of the bell.
+              for section in &mut page.sections {
+                section.items.retain(|n| in_bell(n.kind, cx));
+              }
+              page.sections.retain(|s| !s.items.is_empty());
+              this.append(page)
+            }
             Some(Err(e)) => {
               tracing::warn!("notifications: {e}");
               if more {
@@ -261,21 +488,8 @@ impl InboxPanel {
     };
     if !notification.read {
       notification.read = true;
-      if let (Some(token), Some(client)) = (
-        notification.read_token.clone(),
-        cx.try_global::<Session>().map(|s| s.0.clone()),
-      ) {
-        let task = runtime::spawn(
-          cx,
-          async move { client.mark_notification_read(&token).await },
-        );
-        cx.background_executor()
-          .spawn(async move {
-            if let Some(Err(e)) = task.await {
-              tracing::warn!("mark notification read: {e}");
-            }
-          })
-          .detach();
+      if let Some(token) = notification.read_token.clone() {
+        mark_read(token, cx);
       }
     }
     self
@@ -444,5 +658,57 @@ impl Render for InboxPanel {
     };
     // The shell's panel draws the title and the space's name above.
     body
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn notification(id: &str) -> Notification {
+    Notification {
+      id: id.into(),
+      message: String::new(),
+      sent: String::new(),
+      read: false,
+      video_id: Some(format!("v{id}")),
+      short: false,
+      kind: NotificationKind::Upload,
+      avatar: Vec::new(),
+      thumbnails: Vec::new(),
+      read_token: None,
+    }
+  }
+
+  fn page(ids: &[&str]) -> NotificationPage {
+    NotificationPage {
+      sections: vec![NotificationSection {
+        title: String::new(),
+        items: ids.iter().map(|id| notification(id)).collect(),
+      }],
+      continuation: None,
+    }
+  }
+
+  #[test]
+  fn fresh_notifications_arrived_since_the_session_once() {
+    // The session started at 1 000 s; ids are microseconds.
+    let poll = Poll::new(SystemTime::UNIX_EPOCH + Duration::from_secs(1000));
+    let mut seen = HashSet::new();
+    let ids = |fresh: Vec<Notification>| fresh.into_iter().map(|n| n.id).collect::<Vec<_>>();
+    // Before the session (beyond the slack), and an id that is no time: not new.
+    let first = page(&["1000500000", "900000000", "950000000", "notatime"]);
+    assert_eq!(
+      ids(poll.fresh(&first, &mut seen)),
+      ["1000500000", "950000000"]
+    );
+    // Counted once (or seen in the panel); the newest first.
+    seen.insert("1300000000".to_owned());
+    let second = page(&["1000500000", "1200000000", "1100000000", "1300000000"]);
+    assert_eq!(
+      ids(poll.fresh(&second, &mut seen)),
+      ["1200000000", "1100000000"]
+    );
+    assert!(poll.fresh(&second, &mut seen).is_empty());
   }
 }

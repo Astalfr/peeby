@@ -192,7 +192,7 @@ impl YouTubeSpace {
     bell::reset(cx);
     let unseen = inbox::inbox(cx);
     cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
-    inbox::reset(cx);
+    inbox::reset(cx.weak_entity(), cx);
     let mut tabs = Tabs::default();
     let pages = std::iter::once(Route::start(cx))
       .chain(initial_videos.into_iter().map(Route::Watch))
@@ -233,7 +233,7 @@ impl YouTubeSpace {
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
     bell::reset(cx);
-    inbox::reset(cx);
+    inbox::reset(cx.weak_entity(), cx);
     self.client = client;
     // Every page holds the old client: each tab starts over, rebuilt when it shows.
     let start = Route::start(cx);
