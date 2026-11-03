@@ -670,6 +670,15 @@ fn base64_decode(text: &str) -> Vec<u8> {
   out
 }
 
+/// The title of an oEmbed response (`/oembed?url=…`): the video's own, never translated into
+/// the request's language as InnerTube's titles are.
+pub fn parse_oembed_title(response: &Value) -> Option<String> {
+  response["title"]
+    .as_str()
+    .filter(|title| !title.is_empty())
+    .map(str::to_owned)
+}
+
 /// The unseen count of a `notification/get_unseen_count` response.
 pub fn parse_unseen_count(response: &Value) -> Option<u32> {
   find_key(response, "updateNotificationsUnseenCountAction")?["unseenCount"]

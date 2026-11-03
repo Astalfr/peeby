@@ -92,6 +92,8 @@ pub fn load_watch_later(cx: &mut App) {
   if !client.signed_in() {
     return;
   }
+  // Only the ids are kept: no original titles to look up.
+  let client = client.with_original_titles(false);
   let task = runtime::spawn(cx, async move {
     let playlist = client.playlist(WATCH_LATER).await?;
     let mut ids: HashSet<String> = playlist.videos.into_iter().map(|v| v.id).collect();

@@ -1,5 +1,8 @@
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -8,14 +11,15 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
   Channel, CommentPage, Feed, LikeStatus, LiveChatPage, NotificationPage, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, ShortsPage, Stream, Tracking, Votes, WatchPage, Watchtime,
+  PlaylistSummary, SearchPage, SearchResult, ShortsPage, Stream, Tracking, VideoItem, Votes,
+  WatchPage, Watchtime,
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
-  parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
-  parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard,
-  parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch,
-  tracking_param,
+  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
+  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
+  parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -31,6 +35,13 @@ const VISIONOS_CLIENT_VERSION: &str = "1.02";
 /// Safari UA of the VISIONOS client; HLS playlists and segments are fetched with it too.
 pub const VISIONOS_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
 
+/// Original titles looked up at once: a playlist's first page holds 100 videos.
+const TITLE_BATCH: usize = 32;
+/// Original titles kept; the cache starts over beyond.
+const TITLES_KEPT: usize = 5000;
+/// An oEmbed lookup that takes longer keeps the translated title.
+const TITLE_TIMEOUT: Duration = Duration::from_secs(3);
+
 #[derive(Default)]
 struct State {
   /// visitorData of the WEB session (`X-Goog-Visitor-Id`), from the first response or ytcfg.
@@ -39,6 +50,8 @@ struct State {
   /// `LOGIN_REQUIRED` without one, and one tied to the signed-in session does not help.
   resolver_visitor: Option<String>,
   web_version: Option<String>,
+  /// Original titles by video id; `None` when oEmbed has none (embedding disabled, private).
+  titles: HashMap<String, Option<String>>,
 }
 
 /// Session cookies and the file the rotated values are written back to.
@@ -53,6 +66,8 @@ pub struct Client {
   http: reqwest::Client,
   session: Option<Arc<Session>>,
   language: Arc<(String, String)>,
+  /// Titles in the videos' own language ([`Client::with_original_titles`]).
+  original_titles: bool,
   state: Arc<Mutex<State>>,
 }
 
@@ -79,8 +94,18 @@ impl Client {
         })
       }),
       language: Arc::new((hl.to_owned(), gl.to_owned())),
+      original_titles: false,
       state: Arc::default(),
     })
+  }
+
+  /// With `on`, the videos of feeds, searches, playlists and watch pages keep the title of
+  /// their own language: YouTube translates titles into `hl` (the creator's translations or
+  /// its automatic ones) and no InnerTube response carries the original, so each video costs
+  /// one anonymous oEmbed request, cached. Applies to this client and its later clones.
+  pub fn with_original_titles(mut self, on: bool) -> Self {
+    self.original_titles = on;
+    self
   }
 
   /// Whether requests carry session cookies.
@@ -94,7 +119,7 @@ impl Client {
     let response = self
       .web("browse", json!({ "browseId": "FEwhat_to_watch" }), true)
       .await?;
-    self.feed(&response)
+    self.feed(&response).await
   }
 
   /// Latest videos of the subscribed channels. Needs cookies.
@@ -103,7 +128,9 @@ impl Client {
     let response = self
       .web("browse", json!({ "browseId": "FEsubscriptions" }), true)
       .await?;
-    self.checked(parse_subscriptions(&response))
+    self
+      .untranslated(self.checked(parse_subscriptions(&response))?)
+      .await
   }
 
   /// Next page of the subscriptions feed.
@@ -111,7 +138,9 @@ impl Client {
     let response = self
       .web("browse", json!({ "continuation": token }), true)
       .await?;
-    self.checked(parse_subscriptions(&response))
+    self
+      .untranslated(self.checked(parse_subscriptions(&response))?)
+      .await
   }
 
   /// The account's watch history, most recent first (its next pages through
@@ -122,7 +151,7 @@ impl Client {
     let response = self
       .web("browse", json!({ "browseId": "FEhistory" }), true)
       .await?;
-    self.feed(&response)
+    self.feed(&response).await
   }
 
   /// All subscribed channels, in YouTube's order. Needs cookies.
@@ -162,7 +191,9 @@ impl Client {
       .web("browse", json!({ "browseId": format!("VL{id}") }), true)
       .await?;
     self.check_session(&response)?;
-    Ok(parse_playlist(id, &response))
+    let mut playlist = parse_playlist(id, &response);
+    self.untranslate(playlist.videos.iter_mut()).await;
+    Ok(playlist)
   }
 
   /// The next videos of a playlist, from [`Playlist::continuation`] or a previous page.
@@ -171,7 +202,7 @@ impl Client {
       .web("browse", json!({ "continuation": token }), true)
       .await?;
     self.check_session(&response)?;
-    Ok(parse_playlist_page(&response))
+    self.untranslated(parse_playlist_page(&response)).await
   }
 
   /// The playlists `video_id` can be saved to, and whether each one holds it already. Needs
@@ -225,7 +256,7 @@ impl Client {
     // Protobuf selecting the "Videos" tab, as the web client sends it.
     let body = json!({ "browseId": channel_id, "params": "EgZ2aWRlb3PyBgQKAjoA" });
     let response = self.web("browse", body, true).await?;
-    self.feed(&response)
+    self.feed(&response).await
   }
 
   /// A page of comments or of replies. `token` comes from
@@ -381,7 +412,7 @@ impl Client {
   pub async fn search(&self, query: &str) -> Result<SearchPage> {
     let response = self.web("search", json!({ "query": query }), true).await?;
     self.check_session(&response)?;
-    Ok(parse_search(&response))
+    Ok(self.untranslated_search(parse_search(&response)).await)
   }
 
   /// The next page of a search, from [`SearchPage::continuation`].
@@ -390,7 +421,7 @@ impl Client {
       .web("search", json!({ "continuation": token }), true)
       .await?;
     self.check_session(&response)?;
-    Ok(parse_search(&response))
+    Ok(self.untranslated_search(parse_search(&response)).await)
   }
 
   /// Next page of a feed.
@@ -398,7 +429,7 @@ impl Client {
     let response = self
       .web("browse", json!({ "continuation": token }), true)
       .await?;
-    self.feed(&response)
+    self.feed(&response).await
   }
 
   /// The Shorts feed: its first Short and the token of the next ones ([`Client::shorts_more`]).
@@ -434,7 +465,15 @@ impl Client {
     let response = self
       .web("next", json!({ "videoId": video_id }), true)
       .await?;
-    Ok(parse_watch(video_id, &response))
+    let mut page = parse_watch(video_id, &response);
+    let WatchPage {
+      id, title, related, ..
+    } = &mut page;
+    let titles = std::iter::once((id.as_str(), title))
+      .chain(related.iter_mut().map(|v| (v.id.as_str(), &mut v.title)))
+      .collect();
+    self.untranslate_titles(titles).await;
+    Ok(page)
   }
 
   /// The page of a live's chat after `continuation` ([`WatchPage::live_chat`], then each page's
@@ -597,8 +636,23 @@ impl Client {
     }
   }
 
-  fn feed(&self, response: &Value) -> Result<Feed> {
-    self.checked(parse_feed(response))
+  async fn feed(&self, response: &Value) -> Result<Feed> {
+    self.untranslated(self.checked(parse_feed(response))?).await
+  }
+
+  /// `feed` with its original titles, when asked for.
+  async fn untranslated(&self, mut feed: Feed) -> Result<Feed> {
+    self.untranslate(feed.items.iter_mut()).await;
+    Ok(feed)
+  }
+
+  async fn untranslated_search(&self, mut page: SearchPage) -> SearchPage {
+    let videos = page.results.iter_mut().filter_map(|result| match result {
+      SearchResult::Video(video) => Some(video),
+      SearchResult::Channel(_) => None,
+    });
+    self.untranslate(videos).await;
+    page
   }
 
   /// With cookies, a feed served as signed out means the session is gone.
@@ -683,6 +737,71 @@ impl Client {
       });
     }
     Ok(response.json().await?)
+  }
+
+  /// Puts back the original title of `videos`, when asked for ([`Client::with_original_titles`]).
+  async fn untranslate(&self, videos: impl Iterator<Item = &mut VideoItem>) {
+    let titles = videos.map(|v| (v.id.as_str(), &mut v.title)).collect();
+    self.untranslate_titles(titles).await;
+  }
+
+  /// Replaces each title by its video's original one (by id). A failed lookup keeps the title
+  /// as it is, and is tried again next time.
+  async fn untranslate_titles(&self, titles: Vec<(&str, &mut String)>) {
+    if !self.original_titles || titles.is_empty() {
+      return;
+    }
+    let missing: Vec<String> = {
+      let state = self.state();
+      let mut seen = HashSet::new();
+      titles
+        .iter()
+        .map(|(id, _)| *id)
+        .filter(|id| !state.titles.contains_key(*id) && seen.insert(*id))
+        .map(str::to_owned)
+        .collect()
+    };
+    for batch in missing.chunks(TITLE_BATCH) {
+      let found = join_all(batch.iter().map(|id| self.original_title(id)).collect()).await;
+      let mut state = self.state();
+      if state.titles.len() + batch.len() > TITLES_KEPT {
+        state.titles.clear();
+      }
+      for (id, title) in batch.iter().zip(found) {
+        match title {
+          Ok(title) => {
+            state.titles.insert(id.clone(), title);
+          }
+          Err(e) => tracing::debug!("original title of {id}: {e}"),
+        }
+      }
+    }
+    let state = self.state();
+    for (id, title) in titles {
+      if let Some(Some(original)) = state.titles.get(id) {
+        title.clone_from(original);
+      }
+    }
+  }
+
+  /// A video's original title from oEmbed, anonymous: `None` when oEmbed refuses the video
+  /// (401 when embedding is disabled, 403 private, 400 or 404 unknown). Other failures (429
+  /// included) are errors, so the lookup is tried again later.
+  async fn original_title(&self, video_id: &str) -> Result<Option<String>> {
+    // The id is 11 characters of `A-Za-z0-9-_`: only the watch URL's `?` and `=` need escaping.
+    let url = format!("{ORIGIN}/oembed?url={ORIGIN}/watch%3Fv%3D{video_id}&format=json");
+    let response = self.http.get(url).timeout(TITLE_TIMEOUT).send().await?;
+    let status = response.status();
+    if matches!(status.as_u16(), 400 | 401 | 403 | 404) {
+      return Ok(None);
+    }
+    if !status.is_success() {
+      return Err(Error::Status {
+        status: status.as_u16(),
+        endpoint: "oembed",
+      });
+    }
+    Ok(parse_oembed_title(&response.json().await?))
   }
 
   /// visitorData for VISIONOS. Signed out, the session's one is anonymous and reused.
@@ -803,6 +922,31 @@ impl Client {
     }
     Ok(hls::playlist_length(&response.text().await?))
   }
+}
+
+/// Runs `futures` concurrently and returns their outputs in order.
+async fn join_all<F: Future>(futures: Vec<F>) -> Vec<F::Output> {
+  let mut futures: Vec<_> = futures.into_iter().map(Box::pin).collect();
+  let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+  std::future::poll_fn(|cx| {
+    let mut pending = false;
+    for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+      // A finished future is never polled again.
+      if output.is_none() {
+        match future.as_mut().poll(cx) {
+          Poll::Ready(value) => *output = Some(value),
+          Poll::Pending => pending = true,
+        }
+      }
+    }
+    if pending {
+      Poll::Pending
+    } else {
+      Poll::Ready(())
+    }
+  })
+  .await;
+  outputs.into_iter().flatten().collect()
 }
 
 /// A poisoned lock only means a panic elsewhere; the value stays usable.

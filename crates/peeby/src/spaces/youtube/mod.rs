@@ -212,10 +212,13 @@ impl YouTubeSpace {
   /// back on the start page.
   pub fn set_session(&mut self, cookies: Option<Cookies>, cx: &mut Context<Self>) {
     let Settings {
-      language, region, ..
+      language,
+      region,
+      original_titles,
+      ..
     } = Settings::get(cx).clone();
     let client = match Client::new(cookies, settings::cookies_path(), &language, &region) {
-      Ok(client) => client,
+      Ok(client) => client.with_original_titles(original_titles),
       Err(e) => return tracing::error!("cannot create the HTTP client: {e}"),
     };
     tracing::info!(
@@ -246,7 +249,7 @@ impl YouTubeSpace {
     cx.notify();
   }
 
-  /// Rebuilds the clients after a language change: the session from the cookie file, and the
+  /// Rebuilds the clients after a language or title change: the session from the cookie file, and the
   /// anonymous one of the stream prefetch (caption names follow the language).
   pub fn reload_session(&mut self, cx: &mut Context<Self>) {
     let Settings {

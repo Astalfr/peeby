@@ -92,7 +92,7 @@ fn main() {
     }
   };
   let client = match innertube::Client::new(cookies, settings::cookies_path(), &hl, &gl) {
-    Ok(client) => client,
+    Ok(client) => client.with_original_titles(prefs.original_titles),
     Err(e) => {
       tracing::error!("cannot create the HTTP client: {e}");
       return;

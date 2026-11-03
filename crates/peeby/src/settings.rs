@@ -84,6 +84,8 @@ pub struct Settings {
   pub region: String,
   /// Highest quality picked when a video starts, as a height in pixels.
   pub max_height: u32,
+  /// YouTube's titles in the videos' own language, not translated into `language`.
+  pub original_titles: bool,
   /// Player volume, 0–100, kept when `player.remember_volume` is on.
   pub volume: f64,
   /// Player muted.
@@ -365,6 +367,7 @@ impl Default for Settings {
       language: "fr".into(),
       region: "FR".into(),
       max_height: 1080,
+      original_titles: true,
       volume: 100.0,
       muted: false,
       subscriptions_layout: FeedLayout::Grid,

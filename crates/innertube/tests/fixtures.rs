@@ -7,8 +7,8 @@
 use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
   NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url, parse_feed,
-  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
+  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
+  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -937,4 +937,17 @@ fn shorts_feed_seed_and_sequence() {
   let next = parse_shorts_sequence(&fixture("reel_sequence.json"));
   assert_eq!(next.ids, ["7N3EdefgZMY", "nfqebsbIpmE", "BfmZ2c44tS0"]);
   assert!(next.continuation.is_some());
+}
+
+#[test]
+fn oembed_title_is_the_original() {
+  // Captured 2026-11-03: the same video is "Bats Haaland, Gagne 100 000 $" in fr/FR feeds.
+  assert_eq!(
+    parse_oembed_title(&fixture("oembed.json")).as_deref(),
+    Some("Beat Haaland, Win $100,000")
+  );
+  assert_eq!(
+    parse_oembed_title(&serde_json::json!({ "title": "" })),
+    None
+  );
 }

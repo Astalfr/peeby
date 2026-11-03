@@ -1,6 +1,6 @@
 //! YouTube's part of the settings page: the account (cookie import), the start page, YouTube's
-//! content language and region (not the interface's), the default quality, and where the
-//! notifications show.
+//! content language and region (not the interface's), the original titles, the default quality,
+//! and where the notifications show.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Entity, Window};
@@ -10,7 +10,7 @@ use crate::settings::{LANGUAGES, QUALITIES, Settings, StartPage};
 use crate::shell::delivery_row;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::account::AccountView;
-use ui::form::{OnClick, choices, row, section};
+use ui::form::{OnClick, choices, row, section, toggle};
 use ui::i18n::t;
 
 /// The part: `account` then the start page, the content language and the quality.
@@ -21,6 +21,7 @@ pub fn part(
 ) -> AnyElement {
   let settings = Settings::get(cx).clone();
   let nav = cx.weak_entity();
+  let reload = nav.clone();
   let languages = LANGUAGES.iter().map(|&(language, region, label)| {
     let selected = settings.language == language && settings.region == region;
     let nav = nav.clone();
@@ -75,6 +76,19 @@ pub fn part(
              recommandations. La langue de l'interface se règle dans Général.",
           ),
           choices("language", languages),
+        )
+        .into_any_element(),
+        row(
+          t("Original titles", "Titres originaux"),
+          t(
+            "Titles in the video's own language, as its channel wrote them, instead of the ones              YouTube translates into the content language. Each video takes one more request.",
+            "Titres dans la langue de la vidéo, tels que sa chaîne les a écrits, plutôt que              ceux que YouTube traduit dans la langue du contenu. Chaque vidéo demande une              requête de plus.",
+          ),
+          toggle("original-titles", settings.original_titles, move |on, cx| {
+            Settings::update(cx, |s| s.original_titles = on);
+            // New clients; the start page is reloaded with the titles.
+            reload.update(cx, |app, cx| app.reload_session(cx)).ok();
+          }),
         )
         .into_any_element(),
         row(
