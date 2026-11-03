@@ -528,13 +528,15 @@ impl Shell {
         .child(div().occlude().child(menu))
         .child(div().occlude().child(back))
         .child(mark(window, cx))
-        // The bar's empty part, right of "+", still drags the window.
+        // The bar's empty part, right of "+", still drags the window: a flex row, so the occluding
+        // wrapper is as wide as the tabs (a block child would stretch over the whole part).
         .child(
-          div()
+          h_flex()
             .flex_1()
             .min_w_0()
+            .h_full()
             .ml_4()
-            .child(div().occlude().child(self.tabs(window, cx))),
+            .child(div().occlude().min_w_0().child(self.tabs(window, cx))),
         )
         .child(
           h_flex()
