@@ -1,5 +1,5 @@
-//! Win32 calls of the desktop integration (ADR 0020): the main window's visibility and the
-//! single instance's pipe. The only `unsafe` of the `peeby` crate, each block with its
+//! Win32 calls of the desktop integration (ADR 0020): the main window's visibility, the
+//! single instance's pipe, and the double click and screen of the notification area's icon. The only `unsafe` of the `peeby` crate, each block with its
 //! `// SAFETY:`.
 
 use std::fs::File;
@@ -7,12 +7,15 @@ use std::io::{Read, Write};
 use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::time::Duration;
 
-use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HWND};
+use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HWND, POINT};
+use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
 use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
   ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
   PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
 use windows::Win32::UI::WindowsAndMessaging::{IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, ShowWindow};
 use windows::core::{HSTRING, PCWSTR};
 
@@ -43,6 +46,24 @@ pub fn show(hwnd: isize) {
     };
     let _ = ShowWindow(hwnd, command);
   }
+}
+
+/// The longest time between the two clicks of a double click (the user's mouse setting).
+pub fn double_click_time() -> Duration {
+  // SAFETY: no arguments; it only reads a setting.
+  Duration::from_millis(unsafe { GetDoubleClickTime() }.into())
+}
+
+/// The screen at the physical point `(x, y)`, or the nearest one: its handle (GPUI's
+/// `DisplayId`) and its scale factor (1 at 96 dpi).
+pub fn monitor_at(x: i32, y: i32) -> (u64, f32) {
+  // SAFETY: any point is accepted; `MONITOR_DEFAULTTONEAREST` always returns a screen.
+  let monitor = unsafe { MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST) };
+  let (mut dpi_x, mut dpi_y) = (96, 96);
+  // SAFETY: `monitor` comes from `MonitorFromPoint`, the outputs are local; on failure they
+  // keep 96.
+  let _ = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+  (monitor.0 as u64, dpi_x as f32 / 96.)
 }
 
 /// This process and the other launches of Peeby.

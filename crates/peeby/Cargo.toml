@@ -34,17 +34,21 @@ ui = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 # Its default features are Linux only (WebKitGTK, X11).
 wry = { version = "0.57", default-features = false }
-# Toasts (WinRT), the window's visibility and the single instance (ADR 0020): the version GPUI's
-# Windows platform uses, so nothing more is built.
+# Toasts (WinRT), the window's visibility, the single instance and the place of the list of
+# lives (ADR 0020): the version GPUI's Windows platform uses, and features the dependencies
+# already build, so nothing more is built.
 windows = { version = "0.62", features = [
   "Data_Xml_Dom",
   "Foundation",
   "UI_Notifications",
   "Win32_Foundation",
+  "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
   "Win32_System_Pipes",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
 # The `Run` key (start with Windows) and the toasts' app id.

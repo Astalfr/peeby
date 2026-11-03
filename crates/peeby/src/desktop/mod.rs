@@ -104,6 +104,14 @@ fn hide_main(cx: &mut App) {
   }
 }
 
+/// The spaces of the main window's shell.
+fn spaces(cx: &App) -> Vec<crate::shell::space::SpaceHandle> {
+  cx.try_global::<MainWindow>()
+    .and_then(|main| main.shell.upgrade())
+    .map(|shell| shell.read(cx).spaces().to_vec())
+    .unwrap_or_default()
+}
+
 /// Shows the main window again if it was hidden in the notification area. GPUI's
 /// `activate_window` brings a window to the front but never shows a hidden one: call this first.
 pub fn reveal_main(cx: &App) {

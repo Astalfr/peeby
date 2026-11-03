@@ -11,6 +11,7 @@ pub mod convert;
 pub mod feed;
 pub mod history;
 pub mod inbox;
+pub mod lives;
 pub mod playlists;
 pub mod prefetch;
 pub mod queue;
@@ -39,7 +40,7 @@ use ui::{runtime, theme};
 
 use crate::settings;
 use crate::settings::{Settings, StartPage};
-use crate::shell::space::{MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs};
+use crate::shell::space::{Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs};
 use account::AccountView;
 use channels::ChannelsView;
 use feed::{FeedView, Source};
@@ -179,6 +180,8 @@ pub struct YouTubeSpace {
   tabs: Tabs<Route>,
   /// The account part of the settings page, made the first time they open.
   account: Option<Entity<AccountView>>,
+  /// The subscribed channels on air, for the notification area's list.
+  live: lives::Live,
 }
 
 impl YouTubeSpace {
@@ -205,6 +208,7 @@ impl YouTubeSpace {
       client,
       tabs,
       account: None,
+      live: lives::Live::default(),
     }
   }
 
@@ -241,6 +245,7 @@ impl YouTubeSpace {
     subscribe::reset(cx);
     inbox::reset(cx.weak_entity(), cx);
     self.client = client;
+    self.live = lives::Live::default();
     // Every page holds the old client: each tab starts over, rebuilt when it shows.
     let start = Route::start(cx);
     for tab in self.tabs.iter_mut() {
@@ -615,6 +620,18 @@ impl Space for YouTubeSpace {
   ) -> Option<AnyElement> {
     inbox::unseen(cx)?;
     Some(inbox::panel(cx.weak_entity(), popover, window, cx))
+  }
+
+  fn lives(&self, _cx: &App) -> Option<Lives> {
+    Some(self.live.lives(self.client.signed_in()))
+  }
+
+  fn refresh_lives(&mut self, cx: &mut Context<Self>) {
+    self.live.refresh(&self.client, cx);
+  }
+
+  fn open_live(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    self.open_from_notification(Route::Watch(id.to_owned()), window, cx);
   }
 }
 

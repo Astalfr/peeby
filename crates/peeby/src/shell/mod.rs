@@ -5,6 +5,7 @@
 //! Switching tabs or opening the settings while a video plays moves it to the mini-player, a
 //! window of its own above the others (docs/design.md, ADR 0008, ADR 0015, ADR 0019).
 
+pub mod lives;
 mod mini_player;
 mod settings_page;
 pub mod space;
@@ -227,6 +228,11 @@ impl Shell {
         })
         .ok();
     });
+  }
+
+  /// The spaces, in the tabs' order of services.
+  pub fn spaces(&self) -> &[SpaceHandle] {
+    &self.spaces
   }
 
   /// The tab shown and its space.

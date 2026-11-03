@@ -62,10 +62,21 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   `Peeby.Peeby` is registered under `HKCU\Software\Classes\AppUserModelId` with the name and
   the icon (written to `%LOCALAPPDATA%\peeby\peeby.ico`).
 - **Notification area** (`desktop::tray`, `tray-icon` 0.26): Peeby's icon (resource 1); a left
-  click shows the window, its menu has "Open Peeby" and "Quit". Its hidden window gets its
+  click opens the list of lives, a double click shows the window, its menu has "Open Peeby" and
+  "Quit". Its hidden window gets its
   messages from GPUI's loop on the same thread. `close_to_tray` (on by default) makes the "×"
   hide the main window (`on_window_should_close`, `ShowWindow(SW_HIDE)`); off, or without the
   icon, it quits as before.
+- **List of lives** (`shell::lives`, 2026-11-03, the layout of the Gumbo extension for Twitch):
+  a `PopUp` window above the icon (on the icon's screen, `sys::monitor_at` giving its
+  `DisplayId` and scale) with a tab per space whose `Space::lives` is `Some` (the shell still
+  knows no service): Twitch's followed channels on air from the sidebar's reading (every one of
+  its page, the sidebar keeps showing 12), YouTube's from the top of the subscriptions feed (live
+  badge, no duration), read when the list opens and at most once a minute, never in the
+  background. A row opens its live in the space's last tab, in the main window shown. Windows
+  sends a double click as click, double click, release: a click waits for the double click's
+  time (`GetDoubleClickTime`) before opening the list, and a double click cancels it. The list
+  closes when it loses the focus; the click on the icon that took it does not open it again.
 - **Nothing plays where nobody looks** (ADR 0019): hiding the window pauses the video of the
   page shown (`Shell::go_background`); a mini-player stays on screen and goes on. Twitch's
   `minute-watched` follows the player, so it stops with it.

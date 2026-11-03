@@ -1,19 +1,36 @@
-//! Peeby's icon in the notification area (ADR 0020): a click shows the window, its menu opens
-//! it or quits. The icon's hidden window gets its messages from GPUI's loop (same thread); its
-//! events go through a channel to the UI thread.
+//! Peeby's icon in the notification area (ADR 0020): a click opens the list of lives
+//! (`shell::lives`), a double click shows the window, its menu opens it or quits. The icon's
+//! hidden window gets its messages from GPUI's loop (same thread); its events go through a
+//! channel to the UI thread.
+
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use gpui::{App, Global};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem};
-use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{
+  Icon, MouseButton, MouseButtonState, Rect, TrayIcon, TrayIconBuilder, TrayIconEvent,
+};
 use ui::i18n::t;
+
+use super::sys;
+use crate::shell::lives::{self, Anchor};
 
 /// The icon of peeby.exe's resources (peeby.rc).
 const ICON_RESOURCE: u16 = 1;
+
+/// A click this soon after the list closed is the one that closed it (it took the focus from
+/// the list): it does not open it again.
+const CLOSED_BY_CLICK: Duration = Duration::from_millis(800);
 
 /// What the icon asks for.
 enum Request {
   Show,
   Quit,
+  /// A left click, released at that instant, on the icon there.
+  Click(Instant, Anchor),
+  DoubleClick,
 }
 
 /// The icon and its menu items, held for as long as the app runs (dropping it removes it).
@@ -70,21 +87,57 @@ pub fn init(cx: &mut App) -> bool {
     sender.try_send(request).ok();
   }));
   TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
-    if let TrayIconEvent::Click {
-      button: MouseButton::Left,
-      button_state: MouseButtonState::Up,
-      ..
-    } = event
-    {
-      requests.try_send(Request::Show).ok();
-    }
+    let request = match event {
+      TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        rect,
+        ..
+      } => Request::Click(Instant::now(), anchor(rect)),
+      TrayIconEvent::DoubleClick {
+        button: MouseButton::Left,
+        ..
+      } => Request::DoubleClick,
+      _ => return,
+    };
+    requests.try_send(request).ok();
   }));
   cx.spawn(async move |cx| {
+    // Windows sends a double click as a click, the double click, then a release: a click opens
+    // the list only once the double click's time has passed without another. Every click and
+    // double click bumps the count, which cancels the click waiting.
+    let clicks = Rc::new(Cell::new(0_u64));
+    let wait = sys::double_click_time();
+    // The release that ends a double click is no click of its own.
+    let mut after_double = false;
     while let Ok(request) = received.recv().await {
-      cx.update(|cx| match request {
-        Request::Show => super::show_main(cx, None),
-        Request::Quit => cx.quit(),
-      });
+      match request {
+        Request::Click(at, anchor) => {
+          if std::mem::take(&mut after_double) {
+            continue;
+          }
+          let click = clicks.get() + 1;
+          clicks.set(click);
+          let clicks = clicks.clone();
+          cx.spawn(async move |cx| {
+            cx.background_executor().timer(wait).await;
+            if clicks.get() == click {
+              cx.update(|cx| toggle(at, anchor, cx));
+            }
+          })
+          .detach();
+        }
+        Request::DoubleClick => {
+          after_double = true;
+          clicks.set(clicks.get() + 1);
+          cx.update(|cx| {
+            lives::close(cx);
+            super::show_main(cx, None);
+          });
+        }
+        Request::Show => cx.update(|cx| super::show_main(cx, None)),
+        Request::Quit => cx.update(|cx| cx.quit()),
+      }
     }
   })
   .detach();
@@ -95,6 +148,28 @@ pub fn init(cx: &mut App) -> bool {
     quit,
   });
   true
+}
+
+/// Opens the list of lives, or closes it, after a click on the icon at `clicked`.
+fn toggle(clicked: Instant, anchor: Anchor, cx: &mut App) {
+  if lives::is_open(cx) {
+    return lives::close(cx);
+  }
+  let closed_by_click = lives::closed_at(cx)
+    .is_some_and(|closed| clicked.saturating_duration_since(closed) < CLOSED_BY_CLICK);
+  if !closed_by_click {
+    lives::open(&super::spaces(cx), anchor, cx);
+  }
+}
+
+/// The icon's rectangle, physical pixels.
+fn anchor(rect: Rect) -> Anchor {
+  Anchor {
+    x: rect.position.x as i32,
+    y: rect.position.y as i32,
+    width: i32::try_from(rect.size.width).unwrap_or(0),
+    height: i32::try_from(rect.size.height).unwrap_or(0),
+  }
 }
 
 /// The menu in the interface's language, after it changed.

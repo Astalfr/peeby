@@ -46,7 +46,7 @@ use ui::{runtime, theme};
 
 use crate::settings::Settings;
 use crate::shell::space::{
-  Avatar, HoverCard, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
+  Avatar, HoverCard, LiveEntry, Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
 };
 use browse::{BrowseView, CategoryView};
 use cards::Avatars;
@@ -184,8 +184,9 @@ struct Signed {
   helix: Helix,
   login: String,
   user_id: String,
-  /// The followed channels on air, for the sidebar, with their avatars (and the user's).
-  live: Vec<Stream>,
+  /// The followed channels on air (the sidebar shows the first ones, the notification area's
+  /// list every one), with their avatars (and the user's); `None` before the first reading.
+  live: Option<Vec<Stream>>,
   avatars: Avatars,
   /// Who went live since Peeby opened.
   bell: bell::Bell,
@@ -445,7 +446,7 @@ impl TwitchSpace {
                 let in_bell = |change| deliveries.iter().any(|(c, d)| *c == change && d.in_app);
                 let events = signed.bell.update(&live, SystemTime::now(), in_bell);
                 bell::toasts(events, &avatars, cx.weak_entity(), cx);
-                signed.live = live.into_iter().take(SIDEBAR_LIVE).collect();
+                signed.live = Some(live);
                 signed.avatars = avatars;
               }
               cx.notify();
@@ -465,7 +466,7 @@ impl TwitchSpace {
       helix,
       login: validation.login,
       user_id: validation.user_id,
-      live: Vec::new(),
+      live: None,
       avatars: Avatars::new(),
       bell: bell::Bell::default(),
       _validate: validate,
@@ -851,8 +852,8 @@ impl Space for TwitchSpace {
         ..MenuEntry::new("browse", t("Browse", "Parcourir"), Icon::Grid)
       },
     ];
-    let live = signed.map_or(&[][..], |s| &s.live[..]);
-    for (i, stream) in live.iter().enumerate() {
+    let live = signed.and_then(|s| s.live.as_deref()).unwrap_or_default();
+    for (i, stream) in live.iter().take(SIDEBAR_LIVE).enumerate() {
       let initial: SharedString = stream
         .user_name
         .chars()
@@ -982,6 +983,51 @@ impl Space for TwitchSpace {
       window,
       cx,
     ))
+  }
+
+  fn lives(&self, _cx: &App) -> Option<Lives> {
+    let signed = match &self.state {
+      State::Restoring => return Some(Lives::Loading),
+      State::SignedOut => {
+        return Some(Lives::Unavailable(
+          t(
+            "Connect Twitch to Peeby (Following page) to see the followed channels on air.",
+            "Connectez Twitch à Peeby (page Suivies) pour voir les chaînes suivies en direct.",
+          )
+          .into(),
+        ));
+      }
+      State::SignedIn(signed) => signed,
+    };
+    let Some(live) = &signed.live else {
+      return Some(Lives::Loading);
+    };
+    let entries = live
+      .iter()
+      .map(|stream| LiveEntry {
+        id: stream.user_login.clone().into(),
+        channel: stream.user_name.clone().into(),
+        title: stream.title.replace(['\n', '\r'], " ").into(),
+        detail: (!stream.game_name.is_empty()).then(|| stream.game_name.clone().into()),
+        viewers: Some(cards::compact_viewers(stream.viewer_count).into()),
+        since: stream
+          .started_at
+          .and_then(|ms| u64::try_from(ms).ok())
+          .map(|ms| SystemTime::UNIX_EPOCH + Duration::from_millis(ms)),
+        avatar: Avatar::of(
+          &stream.user_name,
+          signed
+            .avatars
+            .get(&stream.user_id)
+            .map(|url| cards::template(url)),
+        ),
+      })
+      .collect();
+    Some(Lives::On(entries))
+  }
+
+  fn open_live(&mut self, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
+    self.open_from_notification(Route::Watch(id.to_owned()), cx);
   }
 
   fn settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {

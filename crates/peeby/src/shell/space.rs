@@ -7,6 +7,7 @@
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 use gpui::prelude::*;
 use gpui::{
@@ -39,6 +40,22 @@ pub struct Avatar {
   pub picture: Option<Picture>,
   /// The first letter of their name.
   pub initial: SharedString,
+}
+
+impl Avatar {
+  /// `picture` over the initial of `name`.
+  pub fn of(name: &str, picture: Option<Picture>) -> Self {
+    let initial = name
+      .chars()
+      .next()
+      .unwrap_or('?')
+      .to_uppercase()
+      .to_string();
+    Self {
+      picture,
+      initial: initial.into(),
+    }
+  }
 }
 
 /// What an entry shows on hover, under a larger avatar and the entry's label: e.g. a live's title
@@ -92,6 +109,35 @@ impl MenuEntry {
       hover: None,
     }
   }
+}
+
+/// A followed channel on air, in the list of lives the notification area's icon opens.
+#[derive(Clone)]
+pub struct LiveEntry {
+  /// Passed back to [`Space::open_live`].
+  pub id: SharedString,
+  /// The channel's name.
+  pub channel: SharedString,
+  /// The broadcast's title, on one line.
+  pub title: SharedString,
+  /// A muted line, e.g. the category.
+  pub detail: Option<SharedString>,
+  /// The audience as the row shows it, e.g. `1,2 k spectateurs`.
+  pub viewers: Option<SharedString>,
+  /// When it started, for its uptime.
+  pub since: Option<SystemTime>,
+  pub avatar: Avatar,
+}
+
+/// A space's lives, for the notification area's list.
+#[derive(Clone)]
+pub enum Lives {
+  /// Read for the first time.
+  Loading,
+  /// Unavailable until the user does something in Peeby (sign in): what to do.
+  Unavailable(SharedString),
+  /// On air now, in the order to show them.
+  On(Vec<LiveEntry>),
 }
 
 /// A tab, unique for the app's run.
@@ -653,6 +699,19 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
   ) -> Option<AnyElement> {
     None
   }
+
+  /// The followed channels on air, for the notification area's list; `None` when the service
+  /// has no lives.
+  fn lives(&self, _cx: &App) -> Option<Lives> {
+    None
+  }
+
+  /// The list of lives opens: the space may read them again (it notifies when they change).
+  fn refresh_lives(&mut self, _cx: &mut Context<Self>) {}
+
+  /// Opens the live `id` (a [`LiveEntry::id`]) in the tab of the space last shown, in the main
+  /// window.
+  fn open_live(&mut self, _id: &str, _window: &mut Window, _cx: &mut Context<Self>) {}
 }
 
 /// What the shell does with a space's [`SpaceEvent`]s.
@@ -709,6 +768,12 @@ pub trait AnySpace {
   ) -> Option<AnyElement>;
   /// See [`Space::settings`].
   fn settings(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
+  /// See [`Space::lives`].
+  fn lives(&self, cx: &App) -> Option<Lives>;
+  /// See [`Space::refresh_lives`].
+  fn refresh_lives(&self, cx: &mut App);
+  /// See [`Space::open_live`].
+  fn open_live(&self, id: &str, window: &mut Window, cx: &mut App);
   /// Calls `on_change` whenever the space changes (a page opened or replaced).
   fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription;
   /// Calls `on_event` with what the space asks of the shell.
@@ -807,6 +872,18 @@ impl<T: Space> AnySpace for Entity<T> {
 
   fn settings(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
     self.update(cx, |space, cx| space.settings(window, cx))
+  }
+
+  fn lives(&self, cx: &App) -> Option<Lives> {
+    self.read(cx).lives(cx)
+  }
+
+  fn refresh_lives(&self, cx: &mut App) {
+    self.update(cx, |space, cx| space.refresh_lives(cx));
+  }
+
+  fn open_live(&self, id: &str, window: &mut Window, cx: &mut App) {
+    self.update(cx, |space, cx| space.open_live(id, window, cx));
   }
 
   fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription {
