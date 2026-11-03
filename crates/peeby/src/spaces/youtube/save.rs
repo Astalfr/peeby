@@ -406,7 +406,8 @@ pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
         .trigger(
           Button::new(ElementId::Name(format!("{key}-button").into()))
             .ghost()
-            .small()
+            // 1.5× the small button's 14 px icon: a `Size::Size` button draws its icon at 75 %.
+            .with_size(px(28.))
             .icon(Icon::More)
             .tooltip(ui::i18n::t("More actions", "Plus d'actions")),
         )
