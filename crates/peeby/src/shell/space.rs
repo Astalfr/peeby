@@ -1,8 +1,8 @@
 //! What the shell asks of a space (YouTube, Jellyfin, Twitch), and a handle that hides the
-//! space's type. A space is a GPUI entity: one per service, holding its session, and a stack of
-//! pages per tab ([`Tabs`]) of that service the user opened (ADR 0015). It renders the page on
-//! top of the tab shown; the shell draws the top bar with every tab, the sidebar from the space's
-//! entries, and the mini-player.
+//! space's type. A space is a GPUI entity: one per service, holding its session, and a history
+//! of pages per tab ([`Tabs`]) of that service the user opened (ADR 0015, ADR 0019). It renders
+//! the page shown in the tab shown; the shell draws the top bar with every tab, the sidebar from
+//! the space's entries, the settings page when a tab's history is on it, and the mini-player.
 
 use std::ops::Deref;
 use std::rc::Rc;
@@ -15,6 +15,7 @@ use gpui::{
 };
 use gpui_component::popover::PopoverState;
 use ui::assets::Icon;
+use ui::i18n::t;
 use ui::picture::Picture;
 use ui::player::PlayerView;
 use ui::theme::Accent;
@@ -154,11 +155,20 @@ pub fn middle_click(
   }
 }
 
-/// A page of a tab: its route (the space's) and its view.
+/// The most entries a tab's history keeps; the oldest go first.
+const MAX_ENTRIES: usize = 50;
+/// How many pages behind the one shown keep their view (their scroll, their search, a paused
+/// player); older ones keep their route and title, and are built again when they show.
+const KEPT_BEHIND: usize = 10;
+const _: () = assert!(KEPT_BEHIND < MAX_ENTRIES);
+
+/// A page of a tab's history: its route (the space's), its view while built, its title.
 pub struct Page<R> {
   pub route: R,
-  pub view: AnyView,
-  /// The tab's label while this page is on top (a video's title, once known).
+  /// `None` until the page shows (a tab opened in the background, a page left with "back" or
+  /// too far behind): the space builds it from `route` at its next render.
+  pub view: Option<AnyView>,
+  /// The tab's label while this page shows (a video's title, once known).
   pub title: Option<SharedString>,
 }
 
@@ -166,44 +176,241 @@ impl<R> Page<R> {
   pub fn new(route: R, view: impl Into<AnyView>) -> Self {
     Self {
       route,
-      view: view.into(),
+      view: Some(view.into()),
+      title: None,
+    }
+  }
+
+  /// A page built when it shows.
+  pub fn unbuilt(route: R) -> Self {
+    Self {
+      route,
+      view: None,
       title: None,
     }
   }
 }
 
-/// A tab of a space: its stack of pages, bottom first.
+/// An entry of a tab's history: one of the space's pages, or the settings page (the shell's,
+/// shown over the page before it).
+enum Entry<R> {
+  Page(Page<R>),
+  Settings,
+}
+
+impl<R> Entry<R> {
+  fn page(&self) -> Option<&Page<R>> {
+    match self {
+      Self::Page(page) => Some(page),
+      Self::Settings => None,
+    }
+  }
+
+  fn page_mut(&mut self) -> Option<&mut Page<R>> {
+    match self {
+      Self::Page(page) => Some(page),
+      Self::Settings => None,
+    }
+  }
+}
+
+/// A tab of a space: its history, as in a browser. Opening a page drops the entries after the
+/// one shown and adds it; "back" and "forward" move along the entries.
 pub struct Tab<R> {
   pub id: TabId,
-  pub stack: Vec<Page<R>>,
-  /// Pages to open, in order, the next time the tab shows: a tab opened in the background builds
-  /// nothing (a watch page would start playing, and report it to the account), and a session
-  /// change rebuilds every tab this way. Not empty only while `stack` is.
-  pub pending: Vec<R>,
-  /// Label of the last pending page until it has a title of its own (the link's text).
-  label: Option<SharedString>,
+  entries: Vec<Entry<R>>,
+  /// The entry shown; 0 while `entries` is empty.
+  current: usize,
 }
 
 impl<R> Tab<R> {
-  /// The route at the bottom of the stack (the sidebar entry lit), built or pending.
-  pub fn root(&self) -> Option<&R> {
+  fn current_entry(&self) -> Option<&Entry<R>> {
+    self.entries.get(self.current)
+  }
+
+  /// The page shown; `None` while the settings show.
+  pub fn current(&self) -> Option<&Page<R>> {
+    self.current_entry()?.page()
+  }
+
+  fn current_mut(&mut self) -> Option<&mut Page<R>> {
+    self.entries.get_mut(self.current)?.page_mut()
+  }
+
+  /// The page shown, or the one the settings show over: whose player the mini-player shows,
+  /// and which a new page covers.
+  pub fn page(&self) -> Option<&Page<R>> {
+    self.behind().next()
+  }
+
+  /// The pages from the one shown (or the one the settings show over) back to the first.
+  pub fn behind(&self) -> impl Iterator<Item = &Page<R>> {
+    let end = (self.current + 1).min(self.entries.len());
+    self.entries[..end].iter().rev().filter_map(Entry::page)
+  }
+
+  /// Every page of the history, e.g. to make some of them again.
+  pub fn pages_mut(&mut self) -> impl Iterator<Item = &mut Page<R>> {
+    self.entries.iter_mut().filter_map(Entry::page_mut)
+  }
+
+  /// Whether the entry shown is the settings page.
+  pub fn settings_shown(&self) -> bool {
+    matches!(self.current_entry(), Some(Entry::Settings))
+  }
+
+  /// Where the entry shown is in the history (a page's animation key).
+  pub fn position(&self) -> usize {
+    self.current
+  }
+
+  /// The route of the section the page shown belongs to (the sidebar entry lit): the last
+  /// `top_level` route up to it, else the first page's. `None` while the settings show.
+  pub fn section(&self, top_level: impl Fn(&R) -> bool) -> Option<&R> {
+    self.current()?;
+    let mut first = None;
+    for page in self.behind() {
+      if top_level(&page.route) {
+        return Some(&page.route);
+      }
+      first = Some(&page.route);
+    }
+    first
+  }
+
+  /// The route shown while its page is not built: the space builds it now.
+  pub fn unbuilt(&self) -> Option<&R> {
     self
-      .stack
-      .first()
-      .map(|p| &p.route)
-      .or(self.pending.first())
+      .current()
+      .filter(|page| page.view.is_none())
+      .map(|page| &page.route)
   }
 
-  /// The route on top, built or pending.
-  pub fn top(&self) -> Option<&R> {
-    self.stack.last().map(|p| &p.route).or(self.pending.last())
+  /// Gives the page shown (or under the settings) its view, once built.
+  pub fn set_view(&mut self, view: AnyView) {
+    let end = (self.current + 1).min(self.entries.len());
+    if let Some(page) = self.entries[..end]
+      .iter_mut()
+      .rev()
+      .find_map(Entry::page_mut)
+    {
+      page.view = Some(view);
+    }
   }
 
-  /// Drops the pages and opens `pending` the next time the tab shows.
-  pub fn reset(&mut self, pending: Vec<R>) {
-    self.stack.clear();
-    self.pending = pending;
-    self.label = None;
+  /// Opens `page` after the entry shown, dropping the entries that followed it.
+  pub fn push(&mut self, page: Page<R>) {
+    self.push_entry(Entry::Page(page));
+  }
+
+  /// Shows the settings page after the entry shown, unless they already show; `true` when
+  /// they were added.
+  pub fn push_settings(&mut self) -> bool {
+    if self.settings_shown() {
+      return false;
+    }
+    self.push_entry(Entry::Settings);
+    true
+  }
+
+  fn push_entry(&mut self, entry: Entry<R>) {
+    if !self.entries.is_empty() {
+      self.entries.truncate(self.current + 1);
+    }
+    self.entries.push(entry);
+    if self.entries.len() > MAX_ENTRIES {
+      self.entries.remove(0);
+    }
+    self.current = self.entries.len() - 1;
+    self.trim();
+  }
+
+  /// Whether the page shown (or under the settings) is built: the tab has shown, so a page
+  /// opened in it now is built at once (the next episode, while the mini-player shows it).
+  pub fn live(&self) -> bool {
+    self.page().is_some_and(|page| page.view.is_some())
+  }
+
+  /// Puts `page` in place of the page shown, or of the one under the settings, which stay on
+  /// top (the next video of a queue, the next episode, in the mini-player meanwhile). Opens it
+  /// in an empty history.
+  pub fn replace(&mut self, page: Page<R>) {
+    let end = (self.current + 1).min(self.entries.len());
+    match self.entries[..end]
+      .iter_mut()
+      .rev()
+      .find(|entry| matches!(entry, Entry::Page(_)))
+    {
+      Some(entry) => *entry = Entry::Page(page),
+      None => self.push(page),
+    }
+  }
+
+  pub fn can_go_back(&self) -> bool {
+    self.current > 0
+  }
+
+  pub fn can_go_forward(&self) -> bool {
+    self.current + 1 < self.entries.len()
+  }
+
+  /// Whether "forward" leads to the settings page.
+  pub fn forward_to_settings(&self) -> bool {
+    matches!(self.entries.get(self.current + 1), Some(Entry::Settings))
+  }
+
+  /// Goes back one entry: the page left goes (its player with it, as it did when pages were
+  /// popped), its route stays for "forward". `false` at the first entry.
+  pub fn back(&mut self) -> bool {
+    if !self.can_go_back() {
+      return false;
+    }
+    if let Some(page) = self.current_mut() {
+      page.view = None;
+    }
+    self.current -= 1;
+    true
+  }
+
+  /// Goes forward one entry, built when it shows. `false` at the last entry.
+  pub fn forward(&mut self) -> bool {
+    if !self.can_go_forward() {
+      return false;
+    }
+    self.current += 1;
+    self.trim();
+    true
+  }
+
+  /// Drops the views of the pages behind the one shown whose route `matches`: pages with a
+  /// player, when a sidebar page opens, so that a long history keeps no paused players.
+  pub fn unload_behind(&mut self, matches: impl Fn(&R) -> bool) {
+    let end = self.current.min(self.entries.len());
+    for page in self.entries[..end].iter_mut().filter_map(Entry::page_mut) {
+      if matches(&page.route) {
+        page.view = None;
+      }
+    }
+  }
+
+  /// The pages more than [`KEPT_BEHIND`] entries behind the one shown lose their view.
+  fn trim(&mut self) {
+    let end = self.current.saturating_sub(KEPT_BEHIND);
+    for page in self.entries[..end].iter_mut().filter_map(Entry::page_mut) {
+      page.view = None;
+    }
+  }
+
+  /// Starts the history over on `routes`, the last one shown, each built when it shows.
+  pub fn reset(&mut self, routes: Vec<R>) {
+    self.entries = routes
+      .into_iter()
+      .map(|route| Entry::Page(Page::unbuilt(route)))
+      .collect();
+    if self.entries.len() > MAX_ENTRIES {
+      self.entries.drain(..self.entries.len() - MAX_ENTRIES);
+    }
+    self.current = self.entries.len().saturating_sub(1);
   }
 }
 
@@ -224,15 +431,21 @@ impl<R> Default for Tabs<R> {
 }
 
 impl<R> Tabs<R> {
-  /// A new tab, opening `pending` when it shows; `label` names it meanwhile.
-  pub fn add(&mut self, pending: Vec<R>, label: Option<SharedString>) -> TabId {
+  /// A new tab whose history is `routes`, the last one shown. Nothing is built before the tab
+  /// shows (a watch page would start playing, and report it to the account); `label` names it
+  /// meanwhile (the link's text).
+  pub fn add(&mut self, routes: Vec<R>, label: Option<SharedString>) -> TabId {
     let id = TabId::next();
-    self.list.push(Tab {
+    let mut tab = Tab {
       id,
-      stack: Vec::new(),
-      pending,
-      label,
-    });
+      entries: Vec::new(),
+      current: 0,
+    };
+    tab.reset(routes);
+    if let Some(page) = tab.current_mut() {
+      page.title = label;
+    }
+    self.list.push(tab);
     id
   }
 
@@ -273,45 +486,13 @@ impl<R> Tabs<R> {
     self.shown
   }
 
-  /// Takes the pages waiting to be opened in tab `id`.
-  pub fn take_pending(&mut self, id: TabId) -> Vec<R> {
-    self
-      .get_mut(id)
-      .map(|t| std::mem::take(&mut t.pending))
-      .unwrap_or_default()
-  }
-
-  /// While tab `id` has not built its pages yet, `route` joins them (opened last when the tab
-  /// shows) and `None` comes back; else `route` comes back, to be opened now. Opening it now
-  /// would build a page that the pending ones clear (a top-level page first) or bury.
-  pub fn queue_if_pending(&mut self, id: TabId, route: R) -> Option<R> {
-    match self.get_mut(id) {
-      Some(tab) if !tab.pending.is_empty() => {
-        tab.label = None;
-        tab.pending.push(route);
-        None
-      }
-      _ => Some(route),
-    }
-  }
-
-  /// After the pending pages are built: the tab's label goes to the one on top.
-  pub fn label_top(&mut self, id: TabId) {
-    if let Some(tab) = self.get_mut(id)
-      && let Some(label) = tab.label.take()
-      && let Some(page) = tab.stack.last_mut()
-    {
-      page.title.get_or_insert(label);
-    }
-  }
-
   /// Names the page of `view` (a video's title, once loaded); `true` when a page has it.
   pub fn set_title(&mut self, view: EntityId, title: SharedString) -> bool {
     let page = self
       .list
       .iter_mut()
-      .flat_map(|t| t.stack.iter_mut())
-      .find(|p| p.view.entity_id() == view);
+      .flat_map(|t| t.pages_mut())
+      .find(|p| p.view.as_ref().is_some_and(|v| v.entity_id() == view));
     match page {
       Some(page) => {
         page.title = Some(title);
@@ -321,12 +502,11 @@ impl<R> Tabs<R> {
     }
   }
 
-  /// Label of tab `id`: its top page's title, else `name` of its top route.
+  /// Label of tab `id`: its page's title, else `name` of its route; "Settings" on the settings.
   pub fn title(&self, id: TabId, name: impl Fn(&R) -> SharedString) -> Option<SharedString> {
-    let tab = self.get(id)?;
-    match tab.stack.last() {
-      Some(page) => Some(page.title.clone().unwrap_or_else(|| name(&page.route))),
-      None => tab.label.clone().or_else(|| tab.pending.last().map(name)),
+    match self.get(id)?.current_entry()? {
+      Entry::Page(page) => Some(page.title.clone().unwrap_or_else(|| name(&page.route))),
+      Entry::Settings => Some(t("Settings", "Réglages").into()),
     }
   }
 }
@@ -347,9 +527,21 @@ pub enum SpaceEvent {
 }
 
 /// A service's part of the app: its tabs, their pages, the sidebar entries and what they play.
-pub trait Space: Render + EventEmitter<SpaceEvent> {
+pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
+  /// A page of the space.
+  type Route;
+
   /// Name, logo and accent.
   fn info(&self) -> SpaceInfo;
+
+  /// The tabs and their histories.
+  fn history(&self) -> &Tabs<Self::Route>;
+
+  fn history_mut(&mut self) -> &mut Tabs<Self::Route>;
+
+  /// Pauses the player of the page `tab` shows (or shows the settings over) while another page
+  /// covers it (`covered`), or lets it go on when it shows again.
+  fn cover(&self, _tab: TabId, _covered: bool, _cx: &mut Context<Self>) {}
 
   /// The tabs the space opened by itself at startup.
   fn tabs(&self) -> Vec<TabId>;
@@ -376,10 +568,57 @@ pub trait Space: Render + EventEmitter<SpaceEvent> {
   fn open_entry_in_new_tab(&mut self, tab: TabId, id: &str, cx: &mut Context<Self>);
 
   /// Whether "back" leads somewhere within the tab.
-  fn can_go_back(&self, tab: TabId) -> bool;
+  fn can_go_back(&self, tab: TabId) -> bool {
+    self.history().get(tab).is_some_and(Tab::can_go_back)
+  }
 
-  /// Goes back one page in `tab`.
-  fn back(&mut self, tab: TabId, cx: &mut Context<Self>);
+  /// Whether "forward" leads somewhere within the tab.
+  fn can_go_forward(&self, tab: TabId) -> bool {
+    self.history().get(tab).is_some_and(Tab::can_go_forward)
+  }
+
+  /// Goes back one entry in `tab`: the page left goes, the one before plays on.
+  fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    if self.history_mut().get_mut(tab).is_some_and(Tab::back) {
+      self.cover(tab, false, cx);
+      cx.notify();
+    }
+  }
+
+  /// Goes forward one entry in `tab`. The page left is covered, unless the settings come next
+  /// (the shell moves a playing video to the mini-player instead).
+  fn forward(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    let Some(t) = self.history().get(tab) else {
+      return;
+    };
+    if !t.can_go_forward() {
+      return;
+    }
+    if !t.forward_to_settings() {
+      self.cover(tab, true, cx);
+    }
+    if let Some(t) = self.history_mut().get_mut(tab) {
+      t.forward();
+    }
+    cx.notify();
+  }
+
+  /// Shows the settings page in `tab`, as an entry of its history. The page under it is not
+  /// covered: the shell moves a playing video to the mini-player.
+  fn push_settings(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    if self
+      .history_mut()
+      .get_mut(tab)
+      .is_some_and(Tab::push_settings)
+    {
+      cx.notify();
+    }
+  }
+
+  /// Whether `tab` shows the settings page.
+  fn settings_shown(&self, tab: TabId) -> bool {
+    self.history().get(tab).is_some_and(Tab::settings_shown)
+  }
 
   /// Whether the top bar's search button searches this space (signed in, with a search page).
   fn searchable(&self) -> bool {
@@ -445,6 +684,14 @@ pub trait AnySpace {
   fn can_go_back(&self, tab: TabId, cx: &App) -> bool;
   /// See [`Space::back`].
   fn back(&self, tab: TabId, cx: &mut App);
+  /// See [`Space::can_go_forward`].
+  fn can_go_forward(&self, tab: TabId, cx: &App) -> bool;
+  /// See [`Space::forward`].
+  fn forward(&self, tab: TabId, cx: &mut App);
+  /// See [`Space::push_settings`].
+  fn push_settings(&self, tab: TabId, cx: &mut App);
+  /// See [`Space::settings_shown`].
+  fn settings_shown(&self, tab: TabId, cx: &App) -> bool;
   /// See [`Space::searchable`].
   fn searchable(&self, cx: &App) -> bool;
   /// See [`Space::open_search`].
@@ -517,6 +764,22 @@ impl<T: Space> AnySpace for Entity<T> {
     self.update(cx, |space, cx| space.back(tab, cx));
   }
 
+  fn can_go_forward(&self, tab: TabId, cx: &App) -> bool {
+    self.read(cx).can_go_forward(tab)
+  }
+
+  fn forward(&self, tab: TabId, cx: &mut App) {
+    self.update(cx, |space, cx| space.forward(tab, cx));
+  }
+
+  fn push_settings(&self, tab: TabId, cx: &mut App) {
+    self.update(cx, |space, cx| space.push_settings(tab, cx));
+  }
+
+  fn settings_shown(&self, tab: TabId, cx: &App) -> bool {
+    self.read(cx).settings_shown(tab)
+  }
+
   fn searchable(&self, cx: &App) -> bool {
     self.read(cx).searchable()
   }
@@ -560,30 +823,113 @@ pub type SpaceHandle = Rc<dyn AnySpace>;
 
 #[cfg(test)]
 mod tests {
-  use super::Tabs;
+  use super::{MAX_ENTRIES, Page, Tab, TabId, Tabs};
+
+  fn routes(tabs: &Tabs<&'static str>, id: TabId) -> Vec<&'static str> {
+    let tab = tabs.get(id).unwrap();
+    tab.behind().map(|p| p.route).collect()
+  }
+
+  fn tab<'a>(tabs: &'a mut Tabs<&'static str>, id: TabId) -> &'a mut Tab<&'static str> {
+    tabs.get_mut(id).unwrap()
+  }
 
   #[test]
   fn background_tabs_wait_and_keep_their_label() {
     let mut tabs: Tabs<&str> = Tabs::default();
     let first = tabs.add(vec!["home"], None);
-    let second = tabs.add(vec!["watch"], Some("A video".into()));
+    let second = tabs.add(vec!["home", "watch"], Some("A video".into()));
     let name = |route: &&str| route.to_string().into();
     assert_eq!(tabs.title(first, name).as_deref(), Some("home"));
     assert_eq!(tabs.title(second, name).as_deref(), Some("A video"));
-    assert_eq!(tabs.get(second).and_then(|t| t.root()), Some(&"watch"));
-    assert_eq!(tabs.take_pending(second), vec!["watch"]);
-    assert!(tabs.take_pending(second).is_empty());
+    // Nothing is built: the space builds the page shown when the tab shows.
+    assert_eq!(tabs.get(second).and_then(|t| t.unbuilt()), Some(&"watch"));
+    assert!(tabs.get(second).is_some_and(|t| t.can_go_back()));
   }
 
   #[test]
-  fn a_route_for_a_tab_not_built_yet_waits_after_its_pages() {
+  fn opening_a_page_drops_the_ones_ahead() {
     let mut tabs: Tabs<&str> = Tabs::default();
-    let waiting = tabs.add(vec!["home"], None);
-    let built = tabs.add(Vec::new(), None);
-    assert_eq!(tabs.queue_if_pending(waiting, "watch"), None);
-    assert_eq!(tabs.queue_if_pending(built, "watch"), Some("watch"));
-    assert_eq!(tabs.take_pending(waiting), vec!["home", "watch"]);
-    assert_eq!(tabs.queue_if_pending(waiting, "channel"), Some("channel"));
+    let id = tabs.add(vec!["home"], None);
+    tab(&mut tabs, id).push(Page::unbuilt("channel"));
+    tab(&mut tabs, id).push(Page::unbuilt("watch"));
+    assert!(tab(&mut tabs, id).back());
+    assert!(tab(&mut tabs, id).back());
+    assert!(!tab(&mut tabs, id).back());
+    assert!(tab(&mut tabs, id).forward());
+    assert_eq!(routes(&tabs, id), vec!["channel", "home"]);
+    tab(&mut tabs, id).push(Page::unbuilt("search"));
+    assert!(!tab(&mut tabs, id).can_go_forward());
+    assert_eq!(routes(&tabs, id), vec!["search", "channel", "home"]);
+  }
+
+  #[test]
+  fn a_sidebar_page_keeps_the_pages_before_it() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home"], None);
+    tab(&mut tabs, id).push(Page::unbuilt("watch"));
+    tab(&mut tabs, id).push(Page::unbuilt("subscriptions"));
+    tab(&mut tabs, id).push(Page::unbuilt("channel"));
+    let top_level = |r: &&str| matches!(*r, "home" | "subscriptions");
+    assert_eq!(
+      tabs.get(id).and_then(|t| t.section(top_level)),
+      Some(&"subscriptions")
+    );
+    tab(&mut tabs, id).back();
+    tab(&mut tabs, id).back();
+    assert_eq!(
+      tabs.get(id).and_then(|t| t.current()).map(|p| p.route),
+      Some("watch")
+    );
+    assert_eq!(
+      tabs.get(id).and_then(|t| t.section(top_level)),
+      Some(&"home")
+    );
+  }
+
+  #[test]
+  fn replace_swaps_the_page_shown() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["playlist", "watch"], None);
+    tab(&mut tabs, id).replace(Page::unbuilt("next"));
+    assert_eq!(routes(&tabs, id), vec!["next", "playlist"]);
+  }
+
+  #[test]
+  fn the_settings_are_an_entry_of_the_history() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["watch"], None);
+    assert!(tab(&mut tabs, id).push_settings());
+    assert!(!tab(&mut tabs, id).push_settings());
+    let t = tabs.get(id).unwrap();
+    assert!(t.settings_shown());
+    assert!(t.current().is_none());
+    assert!(t.section(|_| true).is_none());
+    // The page under the settings keeps its player.
+    assert_eq!(t.page().map(|p| p.route), Some("watch"));
+    let name = |route: &&str| route.to_string().into();
+    assert_eq!(tabs.title(id, name).as_deref(), Some("Settings"));
+    tab(&mut tabs, id).push(Page::unbuilt("home"));
+    tab(&mut tabs, id).back();
+    assert!(tabs.get(id).unwrap().settings_shown());
+    tab(&mut tabs, id).back();
+    assert!(tab(&mut tabs, id).forward_to_settings());
+    // The next video of a queue replaces the page under the settings, which stay shown.
+    tab(&mut tabs, id).forward();
+    tab(&mut tabs, id).replace(Page::unbuilt("next"));
+    assert!(tabs.get(id).unwrap().settings_shown());
+    assert_eq!(routes(&tabs, id), vec!["next"]);
+  }
+
+  #[test]
+  fn the_history_is_bounded() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home"], None);
+    for _ in 0..MAX_ENTRIES + 5 {
+      tab(&mut tabs, id).push(Page::unbuilt("page"));
+    }
+    assert_eq!(routes(&tabs, id).len(), MAX_ENTRIES);
+    assert_eq!(tabs.get(id).unwrap().position(), MAX_ENTRIES - 1);
   }
 
   #[test]

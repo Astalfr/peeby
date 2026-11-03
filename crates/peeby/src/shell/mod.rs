@@ -1,8 +1,9 @@
-//! The window's root: a top bar shared by every space (menu button, back, logo, the open tabs
-//! and "+" to open one of any space, search, audio output, notifications, settings), the sidebar
-//! with the entries of the tab's space, and the tab's current page in the content panel.
-//! Switching tabs while a video plays moves it to the mini-player, a window of its own above the
-//! others (docs/design.md, ADR 0008, ADR 0015).
+//! The window's root: a top bar shared by every space (menu button, back and forward, logo, the
+//! open tabs and "+" to open one of any space, search, audio output, notifications, settings),
+//! the sidebar with the entries of the tab's space, and the tab's current page in the content
+//! panel: the space's, or the settings page, an entry of the tab's history like the others.
+//! Switching tabs or opening the settings while a video plays moves it to the mini-player, a
+//! window of its own above the others (docs/design.md, ADR 0008, ADR 0015, ADR 0019).
 
 mod mini_player;
 mod settings_page;
@@ -12,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, ObjectFit,
-  SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img, px,
+  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, NavigationDirection,
+  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img,
+  px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::{Popover, PopoverState};
@@ -76,8 +78,9 @@ pub struct Shell {
   /// The last tab opened in the background from a tab: the next one from there goes after it,
   /// as in a browser. Reset when another tab shows.
   opened_from: Option<(TabId, TabId)>,
-  /// The settings page (gear), shown instead of the tab's page while open.
-  settings: Option<AnyView>,
+  /// The settings page (gear), made for the tab whose history shows it; made again when
+  /// another tab shows its own.
+  settings: Option<(TabId, AnyView)>,
   mini: Option<Mini>,
   /// The opening animation over the window, until it ends.
   splash: Option<Splash>,
@@ -235,16 +238,22 @@ impl Shell {
     self.tabs.iter().find(|t| t.id == id).copied()
   }
 
+  /// Whether the tab shown is on the settings page.
+  fn in_settings(&self, cx: &App) -> bool {
+    self
+      .current()
+      .is_some_and(|(tab, space)| space.settings_shown(tab, cx))
+  }
+
   /// Shows tab `id` (its tab, a notification of its space, the mini-player's button).
   fn activate(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
     let Some(tab) = self.find(id) else {
       return;
     };
-    if self.active == Some(tab) && self.settings.is_none() {
+    if self.active == Some(tab) {
       return;
     }
     self.leave_page(window, cx);
-    self.settings = None;
     self.show(tab, cx);
     cx.refresh_windows();
   }
@@ -324,9 +333,9 @@ impl Shell {
   }
 
   /// The page on screen goes away (another tab, the settings): a video playing on it moves to
-  /// the mini-player.
+  /// the mini-player. With the settings shown, it is the page under them.
   fn leave_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    if self.settings.is_some() || self.mini.is_some() {
+    if self.mini.is_some() {
       return;
     }
     let Some(tab) = self.active else {
@@ -343,7 +352,7 @@ impl Shell {
 
   /// The tab's page is on screen again: its video leaves the mini-player and plays on.
   fn enter_page(&mut self, cx: &mut Context<Self>) {
-    if self.settings.is_none() && self.mini.as_ref().map(|m| m.tab) == self.active {
+    if !self.in_settings(cx) && self.mini.as_ref().map(|m| m.tab) == self.active {
       self.close_mini(cx);
     }
   }
@@ -389,8 +398,12 @@ impl Shell {
     if let Some(tab) = self.mini.as_ref().map(|m| m.tab) {
       window.activate_window();
       self.activate(tab.id, window, cx);
-      // The tab was the active one behind the settings page.
-      self.settings = None;
+      // The tab is on the settings page: back to the page under it.
+      if self.in_settings(cx)
+        && let Some((id, space)) = self.current()
+      {
+        space.clone().back(id, cx);
+      }
       self.enter_page(cx);
       cx.notify();
     }
@@ -403,12 +416,14 @@ impl Shell {
   }
 
   /// A space changed (a page opened, a queue moved to its next video, a title arrived): the
-  /// mini-player follows its tab's current player, and closes when there is none.
+  /// mini-player follows its tab's current player, and closes when there is none, or when its
+  /// tab shows its page again (a page opened from the settings).
   fn space_changed(&mut self, index: usize, cx: &mut Context<Self>) {
     if let Some(mini) = &self.mini
       && mini.tab.space == index
     {
-      if self.mini_player(cx).is_none() {
+      let on_its_page = Some(mini.tab) == self.active && !self.in_settings(cx);
+      if on_its_page || self.mini_player(cx).is_none() {
         self.close_mini(cx);
       } else {
         mini.window.update(cx, |_, _, cx| cx.notify()).ok();
@@ -417,44 +432,73 @@ impl Shell {
     cx.notify();
   }
 
+  /// The gear, or a space's request: the settings page as the next entry of the tab's history.
   fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    if self.settings.is_some() {
+    if self.in_settings(cx) {
       return;
     }
     self.leave_page(window, cx);
-    let spaces = self.spaces.clone();
-    let active = self.active.map_or(0, |t| t.space);
-    self.settings = Some(cx.new(|cx| SettingsView::new(spaces, active, cx)).into());
+    if let Some((tab, space)) = self.current() {
+      space.clone().push_settings(tab, cx);
+    }
     cx.notify();
   }
 
-  fn back(&mut self, cx: &mut Context<Self>) {
-    if self.settings.take().is_some() {
-      self.enter_page(cx);
-    } else if let Some((tab, space)) = self.current() {
+  /// The settings page of the tab shown, made for it if needed.
+  fn settings_view(&mut self, cx: &mut Context<Self>) -> Option<AnyView> {
+    let tab = self.active?;
+    match &self.settings {
+      Some((id, view)) if *id == tab.id => Some(view.clone()),
+      _ => {
+        let spaces = self.spaces.clone();
+        let view: AnyView = cx.new(|cx| SettingsView::new(spaces, tab.space, cx)).into();
+        self.settings = Some((tab.id, view.clone()));
+        Some(view)
+      }
+    }
+  }
+
+  /// Back one entry in the tab's history.
+  fn back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if let Some((tab, space)) = self.current() {
       space.clone().back(tab, cx);
+    }
+    self.navigated(window, cx);
+  }
+
+  /// Forward one entry in the tab's history.
+  fn forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if let Some((tab, space)) = self.current() {
+      space.clone().forward(tab, cx);
+    }
+    self.navigated(window, cx);
+  }
+
+  /// After "back" or "forward": on the settings, a playing video goes to the mini-player; on its
+  /// page, it comes back from there.
+  fn navigated(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if self.in_settings(cx) {
+      self.leave_page(window, cx);
+    } else {
+      self.enter_page(cx);
     }
     cx.notify();
   }
 
   /// The top bar's search: the search page of the tab's space, in the tab.
   fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    if self.settings.take().is_some() {
-      self.enter_page(cx);
-    }
     if let Some((tab, space)) = self.current() {
       space.clone().open_search(tab, window, cx);
     }
+    self.enter_page(cx);
     cx.notify();
   }
 
   fn open_entry(&mut self, id: SharedString, window: &mut Window, cx: &mut Context<Self>) {
-    if self.settings.take().is_some() {
-      self.enter_page(cx);
-    }
     if let Some((tab, space)) = self.current() {
       space.clone().open_entry(tab, &id, window, cx);
     }
+    self.enter_page(cx);
     cx.notify();
   }
 
@@ -503,10 +547,13 @@ impl Shell {
         Settings::update(cx, |s| s.sidebar_collapsed = !s.sidebar_collapsed);
         cx.notify();
       }));
-    let can_go_back = self.settings.is_some()
-      || self
-        .current()
-        .is_some_and(|(tab, s)| s.can_go_back(tab, cx));
+    let can_go_back = self
+      .current()
+      .is_some_and(|(tab, s)| s.can_go_back(tab, cx));
+    let can_go_forward = self
+      .current()
+      .is_some_and(|(tab, s)| s.can_go_forward(tab, cx));
+    let in_settings = self.in_settings(cx);
     let search = self
       .current()
       .filter(|(_, s)| s.searchable(cx))
@@ -517,7 +564,13 @@ impl Shell {
       .icon(Icon::ArrowLeft)
       .disabled(!can_go_back)
       .tooltip(t("Back", "Retour"))
-      .on_click(cx.listener(|this, _, _, cx| this.back(cx)));
+      .on_click(cx.listener(|this, _, window, cx| this.back(window, cx)));
+    let forward = Button::new("forward")
+      .ghost()
+      .icon(Icon::ArrowRight)
+      .disabled(!can_go_forward)
+      .tooltip(t("Forward", "Suivant"))
+      .on_click(cx.listener(|this, _, window, cx| this.forward(window, cx)));
     TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
       h_flex()
         .h_full()
@@ -526,7 +579,7 @@ impl Shell {
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .child(div().occlude().child(menu))
-        .child(div().occlude().child(back))
+        .child(h_flex().occlude().child(back).child(forward))
         .child(mark(window, cx))
         // The bar's empty part, right of "+", still drags the window: a flex row, so the occluding
         // wrapper is as wide as the tabs (a block child would stretch over the whole part).
@@ -562,7 +615,7 @@ impl Shell {
                 .ghost()
                 .icon(Icon::Settings)
                 .tooltip(t("Settings", "Réglages"))
-                .when(self.settings.is_some(), |b| b.selected(true))
+                .when(in_settings, |b| b.selected(true))
                 .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
             ),
         ),
@@ -581,7 +634,7 @@ impl Shell {
         let space = &self.spaces[tab.space];
         let info = space.info(cx);
         let title = space.title(tab.id, cx);
-        let active = Some(tab) == self.active && self.settings.is_none();
+        let active = Some(tab) == self.active;
         let group = SharedString::from(format!("tab-{}", tab.id));
         let id = tab.id;
         let close = closable.then(|| {
@@ -935,7 +988,7 @@ impl Shell {
       .current()
       .map(|(tab, s)| s.menu(tab, cx))
       .unwrap_or_default();
-    let in_settings = self.settings.is_some();
+    let in_settings = self.in_settings(cx);
     let (bottom, top): (Vec<MenuEntry>, Vec<MenuEntry>) =
       entries.into_iter().partition(|e| e.bottom);
     let item = |entry: MenuEntry, window: &mut Window, cx: &mut Context<Self>| {
@@ -1306,15 +1359,37 @@ impl Render for Shell {
         )
         .child(frame)
     });
+    // The mouse's side buttons go back and forward, as in a browser; not in fullscreen, which
+    // belongs to the player (there would be no bar to come back from another page).
     let root = v_flex()
+      .id("shell")
       .relative()
       .size_full()
+      .on_mouse_down(
+        MouseButton::Navigate(NavigationDirection::Back),
+        cx.listener(|this, _, window, cx| {
+          if !window.is_fullscreen() {
+            this.back(window, cx);
+          }
+        }),
+      )
+      .on_mouse_down(
+        MouseButton::Navigate(NavigationDirection::Forward),
+        cx.listener(|this, _, window, cx| {
+          if !window.is_fullscreen() {
+            this.forward(window, cx);
+          }
+        }),
+      )
       .bg(theme::chrome(cx))
       .text_color(theme::foreground());
-    let page = self
-      .settings
-      .clone()
-      .or_else(|| self.current().map(|(_, s)| s.view()));
+    // The settings page is made each time it shows (its cache size measured again).
+    let page = if self.in_settings(cx) {
+      self.settings_view(cx)
+    } else {
+      self.settings = None;
+      self.current().map(|(_, s)| s.view())
+    };
     // Fullscreen belongs to the player: no top bar, no sidebar.
     if window.is_fullscreen() {
       return root.children(page).children(splash);

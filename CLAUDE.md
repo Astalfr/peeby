@@ -85,8 +85,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - A service is a space under `crates/peeby/src/spaces/<name>/` implementing `shell::space::Space`; the shell and the
   `ui` crate know no service. Its settings are its part of the gear's page (`Space::settings`); player settings shared
   by every space are `[player]` (`settings::Player`). Pages keep a `Nav` (their space and their tab, ADR 0015) to
-  navigate: what they open goes to their tab. A tab opened in the background builds nothing until it shows (its routes
-  wait in `Tab::pending`): never build a page that plays in a tab nobody looks at.
+  navigate: what they open goes to their tab. A tab opened in the background builds nothing until it shows (a `Page` has no
+  view until then, ADR 0019): never build a page that plays in a tab nobody looks at.
 - The mini-player is a second window (ADR 0008): never update a window from inside its own event (defer), and add
   window mouse listeners only while painting (a `canvas` paint callback), never from `render`.
 - Jellyfin (ADR 0009): the token lives in the Credential Manager (blocking calls: before the UI or in the background),

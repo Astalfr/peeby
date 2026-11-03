@@ -1,7 +1,7 @@
 //! The Jellyfin space, from the former peeby (ADR 0007, 0009): the login page while signed out;
-//! then home, libraries, a title's page, search and playback in the content panel, as a stack of
-//! pages per tab (it renders the one on top of the tab shown, ADR 0015); its part of the settings
-//! page.
+//! then home, libraries, a title's page, search and playback in the content panel, as a history
+//! of pages per tab (it renders the page shown in the tab shown, ADR 0015, ADR 0019); its part
+//! of the settings page.
 
 pub mod detail;
 pub mod home;
@@ -58,7 +58,7 @@ pub enum Route {
 }
 
 impl Route {
-  /// Pages of the sidebar and the search reset the stack; titles and playback are pushed.
+  /// Pages of the sidebar and the search: the sidebar lights the last one up to the page shown.
   fn is_top_level(&self) -> bool {
     !matches!(self, Self::Item { .. } | Self::Play(_))
   }
@@ -298,23 +298,54 @@ impl JellyfinSpace {
     self.signed.as_ref()?.user.as_ref()?.name.clone()
   }
 
-  /// Shows `route` in `tab`: top-level pages reset its stack, the others are pushed. A tab that
-  /// has not built its pages yet opens it after them, when it shows.
+  /// Opens `route` in `tab`, after the page shown. A tab that has not shown yet builds it when
+  /// it shows. A player left behind goes (it reports the playback stopped).
   pub fn open(&mut self, tab: TabId, route: Route, window: &mut Window, cx: &mut Context<Self>) {
-    let Some(client) = self.client().cloned() else {
-      return;
-    };
-    let Some(route) = self.tabs.queue_if_pending(tab, route) else {
-      return cx.notify();
-    };
-    let Some(stack) = self.tabs.get(tab).map(|t| &t.stack) else {
-      return;
-    };
-    if stack.last().is_some_and(|p| p.route == route) {
+    if self
+      .tabs
+      .get(tab)
+      .is_none_or(|t| t.current().is_some_and(|p| p.route == route))
+    {
       return;
     }
+    let Some(page) = self.page(tab, route, window, cx) else {
+      return;
+    };
+    if let Some(t) = self.tabs.get_mut(tab) {
+      t.push(page);
+      t.unload_behind(|route| matches!(route, Route::Play(_)));
+    }
+    cx.notify();
+  }
+
+  /// The page of `route` in `tab`: built at once in a tab that has shown, else when it shows;
+  /// `None` signed out.
+  fn page(
+    &self,
+    tab: TabId,
+    route: Route,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<Page<Route>> {
+    self.signed.as_ref()?;
+    if !self.tabs.get(tab)?.live() {
+      return Some(Page::unbuilt(route));
+    }
+    let view = self.build(tab, &route, window, cx)?;
+    Some(Page::new(route, view))
+  }
+
+  /// The view of `route` in `tab`; `None` signed out.
+  fn build(
+    &self,
+    tab: TabId,
+    route: &Route,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyView> {
+    let client = self.client().cloned()?;
     let nav = Nav::new(cx.weak_entity(), tab);
-    let view: AnyView = match &route {
+    Some(match route {
       Route::Home => cx.new(|cx| HomeView::new(client, nav, cx)).into(),
       Route::Search => cx.new(|cx| SearchView::new(client, nav, window, cx)).into(),
       Route::Library(id) => {
@@ -328,14 +359,7 @@ impl JellyfinSpace {
       Route::Play(id) => cx
         .new(|cx| PlayView::new(client, nav, id.clone(), window, cx))
         .into(),
-    };
-    if let Some(t) = self.tabs.get_mut(tab) {
-      if route.is_top_level() {
-        t.stack.clear();
-      }
-      t.stack.push(Page::new(route, view));
-    }
-    cx.notify();
+    })
   }
 
   /// Opens `route` in a new tab after `from`, built when the tab first shows.
@@ -358,37 +382,37 @@ impl JellyfinSpace {
     cx.notify();
   }
 
-  /// Replaces the page on top of `tab`, e.g. the player of an episode by the next one's.
+  /// Replaces the page shown in `tab` (or under the settings), e.g. the player of an episode by
+  /// the next one's, built at once: it plays on in the mini-player.
+  /// The page left goes first: its player reports the playback stopped before the next starts.
   pub fn replace(&mut self, tab: TabId, route: Route, window: &mut Window, cx: &mut Context<Self>) {
-    if let Some(t) = self.tabs.get_mut(tab)
-      && t.stack.len() > 1
-    {
-      t.stack.pop();
+    if self.signed.is_none() {
+      return;
     }
-    self.open(tab, route, window, cx);
-  }
-
-  pub fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    if let Some(t) = self.tabs.get_mut(tab)
-      && t.stack.len() > 1
+    let Some(t) = self.tabs.get_mut(tab) else {
+      return;
+    };
+    let live = t.live();
+    t.replace(Page::unbuilt(route.clone()));
+    if live
+      && let Some(view) = self.build(tab, &route, window, cx)
+      && let Some(t) = self.tabs.get_mut(tab)
     {
-      t.stack.pop();
-      cx.notify();
+      t.set_view(view);
     }
+    cx.notify();
   }
 
   /// Reloads the page under the player of `tab` (watched state, progress, "À suivre"), keeping
   /// what it shows until the new data arrives.
   pub fn refresh(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    let Some(page) = self.tabs.get(tab).and_then(|t| {
-      t.stack
-        .iter()
-        .rev()
+    let Some(view) = self.tabs.get(tab).and_then(|t| {
+      t.behind()
         .find(|p| !matches!(p.route, Route::Play(_)))
+        .and_then(|p| p.view.clone())
     }) else {
       return;
     };
-    let view = page.view.clone();
     if let Ok(home) = view.clone().downcast::<HomeView>() {
       home.update(cx, |home, cx| home.reload(cx));
     } else if let Ok(detail) = view.clone().downcast::<DetailView>() {
@@ -425,14 +449,14 @@ impl JellyfinSpace {
     }
   }
 
+  /// The player of the page `tab` shows, or shows the settings over.
   fn top_play(&self, tab: TabId) -> Option<Entity<PlayView>> {
     self
       .tabs
       .get(tab)?
-      .stack
-      .last()?
+      .page()?
       .view
-      .clone()
+      .clone()?
       .downcast::<PlayView>()
       .ok()
   }
@@ -479,12 +503,22 @@ pub fn report(nav: &gpui::WeakEntity<JellyfinSpace>, error: &Error, cx: &mut App
 impl EventEmitter<SpaceEvent> for JellyfinSpace {}
 
 impl Space for JellyfinSpace {
+  type Route = Route;
+
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
       name: "Jellyfin".into(),
       icon: include_bytes!("icon.svg"),
       accent: Self::accent(),
     }
+  }
+
+  fn history(&self) -> &Tabs<Route> {
+    &self.tabs
+  }
+
+  fn history_mut(&mut self) -> &mut Tabs<Route> {
+    &mut self.tabs
   }
 
   fn tabs(&self) -> Vec<TabId> {
@@ -521,7 +555,10 @@ impl Space for JellyfinSpace {
     let Some(signed) = &self.signed else {
       return Vec::new();
     };
-    let root = self.tabs.get(tab).and_then(|t| t.root().cloned());
+    let root = self
+      .tabs
+      .get(tab)
+      .and_then(|t| t.section(Route::is_top_level).cloned());
     let active = |id: &str| root.is_some() && root == Self::entry_route(id);
     let mut entries = vec![MenuEntry {
       active: active("home"),
@@ -596,14 +633,6 @@ impl Space for JellyfinSpace {
     }
   }
 
-  fn can_go_back(&self, tab: TabId) -> bool {
-    self.tabs.get(tab).is_some_and(|t| t.stack.len() > 1)
-  }
-
-  fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    JellyfinSpace::back(self, tab, cx);
-  }
-
   fn searchable(&self) -> bool {
     self.signed.is_some()
   }
@@ -649,21 +678,18 @@ impl Render for JellyfinSpace {
     let Some(tab) = self.tabs.shown() else {
       return div().size_full().into_any_element();
     };
-    // A tab opened in the background, or after signing in: its pages now.
-    let pending = self.tabs.take_pending(tab);
-    if !pending.is_empty() {
-      for route in pending {
-        self.open(tab, route, window, cx);
-      }
-      self.tabs.label_top(tab);
+    // A tab opened in the background, a page reached with "back" or "forward", signing in: the
+    // page shown is built now.
+    if let Some(route) = self.tabs.get(tab).and_then(|t| t.unbuilt()).cloned()
+      && let Some(view) = self.build(tab, &route, window, cx)
+      && let Some(t) = self.tabs.get_mut(tab)
+    {
+      t.set_view(view);
     }
-    let stack = self
+    let playing = self
       .tabs
       .get(tab)
-      .map(|t| t.stack.as_slice())
-      .unwrap_or(&[]);
-    let playing = stack
-      .last()
+      .and_then(|t| t.current())
       .is_some_and(|p| matches!(p.route, Route::Play(_)));
     if self.leave_fullscreen && !playing {
       self.leave_fullscreen = false;
@@ -671,15 +697,17 @@ impl Render for JellyfinSpace {
         window.toggle_fullscreen();
       }
     }
-    let stack = self
-      .tabs
-      .get(tab)
-      .map(|t| t.stack.as_slice())
-      .unwrap_or(&[]);
-    let Some(page) = stack.last() else {
+    let Some(t) = self.tabs.get(tab) else {
       return div().size_full().into_any_element();
     };
-    let view = div().size_full().relative().child(page.view.clone());
+    let Some((page, view)) = t
+      .current()
+      .and_then(|page| Some((page, page.view.clone()?)))
+    else {
+      return div().size_full().into_any_element();
+    };
+    let depth = t.position();
+    let view = div().size_full().relative().child(view);
     // A short fade and rise each time a page appears; not for the player (an external texture,
     // and leaving fullscreen would replay the fade).
     if playing || window.is_fullscreen() {
@@ -687,7 +715,7 @@ impl Render for JellyfinSpace {
     }
     view
       .with_animation(
-        SharedString::from(format!("page-{tab}-{}-{:?}", stack.len(), page.route)),
+        SharedString::from(format!("page-{tab}-{depth}-{:?}", page.route)),
         Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
         |el, t| el.opacity(t).top(px(8. * (1. - t))),
       )

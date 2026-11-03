@@ -27,6 +27,7 @@ use super::login::describe;
 use super::tracks::{StreamPref, SubtitlePref, TrackMap, TrackPrefs};
 use super::{Nav, Route, report};
 use crate::settings::{JellyfinPlayback, Player, Settings};
+use crate::shell::space::Space;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
 /// Trickplay thumbnails at least this wide are picked (the player draws them 176 px wide).

@@ -50,6 +50,7 @@ icons! {
   Back10 => "rotate-ccw",
   Forward10 => "rotate-cw",
   ArrowLeft => "arrow-left",
+  ArrowRight => "arrow-right",
   Home => "house",
   Subscriptions => "users",
   ThumbsUp => "thumbs-up",

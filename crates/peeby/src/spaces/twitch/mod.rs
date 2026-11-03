@@ -3,8 +3,8 @@
 //! plays as the user's account (points, VOD positions, subscriber-only VODs) and names the account
 //! entry. Helix is optional and only for the followed channels (GQL refuses them to raw queries),
 //! and the catalog's backup: its session is refreshed one at a time, validated at startup and
-//! every hour, as Twitch requires. A stack of pages per tab (ADR 0015): "Suivies" (the Helix card
-//! until connected), "Parcourir" or the search, then categories and lives on top. With Helix, the
+//! every hour, as Twitch requires. A history of pages per tab (ADR 0015, ADR 0019): "Suivies" (the Helix card
+//! until connected), "Parcourir" or the search, then categories and lives. With Helix, the
 //! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
 //! the meantime show in the bell ([`bell`]).
 
@@ -122,9 +122,14 @@ impl Route {
     }
   }
 
-  /// Sidebar pages and the search reset the stack; categories and lives are pushed.
+  /// Sidebar pages and the search: the sidebar lights the last one up to the page shown.
   fn is_top_level(&self) -> bool {
     matches!(self, Self::Following | Self::Browse | Self::Search)
+  }
+
+  /// Pages with a player: a sidebar page opened after them drops their view.
+  fn plays(&self) -> bool {
+    matches!(self, Self::Watch(_) | Self::Vod { .. } | Self::Clip(_))
   }
 
   /// The tab's label on this page, before a page sets its own (a VOD's title).
@@ -311,22 +316,16 @@ impl TwitchSpace {
     }
   }
 
-  /// Helix connected or gone: the catalog gets (or loses) its backup, and the "Suivies" pages at
-  /// the bottom of the tabs are made again; the pages above them stay.
+  /// Helix connected or gone: the catalog gets (or loses) its backup, and the "Suivies" pages of
+  /// the tabs are made again when they show; the other pages stay.
   fn helix_changed(&mut self, cx: &mut Context<Self>) {
     let helix = self.helix();
     self.catalog = self.catalog.as_ref().map(|c| c.with_helix(helix));
-    for tab in self.tabs.ids() {
-      let following = self
-        .tabs
-        .get(tab)
-        .and_then(|t| t.stack.first())
-        .is_some_and(|p| p.route == Route::Following);
-      if following
-        && let Some(view) = self.following_view(tab, cx)
-        && let Some(page) = self.tabs.get_mut(tab).and_then(|t| t.stack.first_mut())
-      {
-        *page = Page::new(Route::Following, view);
+    for tab in self.tabs.iter_mut() {
+      for page in tab.pages_mut() {
+        if page.route == Route::Following {
+          page.view = None;
+        }
       }
     }
     cx.notify();
@@ -513,68 +512,70 @@ impl TwitchSpace {
     }
   }
 
-  /// Shows `route` in `tab`: sidebar pages reset its stack, categories and lives are pushed. The
-  /// search needs the window: [`Space::open_search`].
+  /// Opens `route` in `tab`, after the page shown (which is covered: a player pauses). It is
+  /// built when it shows, so a tab in the background builds nothing. A sidebar page or the
+  /// search drops the paused players behind it.
   pub fn open(&mut self, tab: TabId, route: Route, cx: &mut Context<Self>) {
-    // A tab that has not built its pages yet opens it after them, when it shows.
-    let Some(route) = self.tabs.queue_if_pending(tab, route) else {
-      return cx.notify();
-    };
-    let Some(stack) = self.tabs.get(tab).map(|t| &t.stack) else {
+    let Some(t) = self.tabs.get(tab) else {
       return;
     };
-    if stack.last().is_some_and(|p| p.route == route) {
+    if t.current().is_some_and(|p| p.route == route) {
       return;
     }
-    let (Some(catalog), Some(client)) = (self.catalog.clone(), self.client.clone()) else {
+    if self.catalog.is_none() || self.client.is_none() {
       return;
-    };
+    }
+    self.cover(tab, true, cx);
+    let top_level = route.is_top_level();
+    if let Some(t) = self.tabs.get_mut(tab) {
+      t.push(Page::unbuilt(route));
+      if top_level {
+        t.unload_behind(Route::plays);
+      }
+    }
+    cx.notify();
+  }
+
+  /// The view of `route` in `tab`; `None` without a catalog.
+  fn build(
+    &mut self,
+    tab: TabId,
+    route: &Route,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyView> {
+    let (catalog, client) = (self.catalog.clone()?, self.client.clone()?);
     let nav = Nav::new(cx.weak_entity(), tab);
-    let view: AnyView = match &route {
-      Route::Following => match self.following_view(tab, cx) {
-        Some(view) => view,
-        None => return,
-      },
+    Some(match route {
+      Route::Following => self.following_view(tab, cx)?,
       Route::Browse => cx.new(|cx| BrowseView::new(nav, catalog, cx)).into(),
       Route::Category { id, name } => {
         let (id, name) = (id.clone(), name.clone());
         cx.new(|cx| CategoryView::new(nav, catalog, id, name, cx))
           .into()
       }
-      Route::Search => return,
+      Route::Search => cx
+        .new(|cx| SearchView::new(nav, catalog, window, cx))
+        .into(),
       Route::Channel(login) => {
         let login = login.clone();
         cx.new(|cx| ChannelView::new(nav, catalog, client, login, cx))
           .into()
       }
       Route::Watch(_) | Route::Vod { .. } | Route::Clip(_) => {
-        let kind = match &route {
+        let kind = match route {
           Route::Vod { id, start } => Kind::Vod {
             id: id.clone(),
             start: *start,
           },
           Route::Clip(slug) => Kind::Clip(slug.clone()),
           Route::Watch(login) => Kind::Live(login.clone()),
-          _ => return,
+          _ => return None,
         };
         cx.new(|cx| WatchView::new(kind, client, catalog, nav, cx))
           .into()
       }
-    };
-    self.push(tab, route, view, cx);
-  }
-
-  fn push(&mut self, tab: TabId, route: Route, view: AnyView, cx: &mut Context<Self>) {
-    if route.is_top_level()
-      && let Some(t) = self.tabs.get_mut(tab)
-    {
-      t.stack.clear();
-    }
-    self.cover_top(tab, true, cx);
-    if let Some(t) = self.tabs.get_mut(tab) {
-      t.stack.push(Page::new(route, view));
-    }
-    cx.notify();
+    })
   }
 
   /// Opens `route` in a new tab after `from`, built when the tab first shows.
@@ -622,31 +623,14 @@ impl TwitchSpace {
     }
   }
 
-  pub fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    if let Some(t) = self.tabs.get_mut(tab)
-      && t.stack.len() > 1
-    {
-      t.stack.pop();
-      self.cover_top(tab, false, cx);
-      cx.notify();
-    }
-  }
-
-  /// Pauses the player of the page on top of `tab` when another page covers it.
-  fn cover_top(&self, tab: TabId, covered: bool, cx: &mut Context<Self>) {
-    if let Some(player) = self.top_player(tab, cx) {
-      player.update(cx, |player, _| player.set_covered(covered));
-    }
-  }
-
+  /// The player of the page `tab` shows, or shows the settings over.
   fn top_player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
     let watch = self
       .tabs
       .get(tab)?
-      .stack
-      .last()?
+      .page()?
       .view
-      .clone()
+      .clone()?
       .downcast::<WatchView>()
       .ok()?;
     Some(watch.read(cx).player())
@@ -791,11 +775,28 @@ pub fn report(nav: &gpui::WeakEntity<TwitchSpace>, error: &Error, cx: &mut App) 
 impl EventEmitter<SpaceEvent> for TwitchSpace {}
 
 impl Space for TwitchSpace {
+  type Route = Route;
+
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
       name: "Twitch".into(),
       icon: include_bytes!("icon.svg"),
       accent: Self::accent(),
+    }
+  }
+
+  fn history(&self) -> &Tabs<Route> {
+    &self.tabs
+  }
+
+  fn history_mut(&mut self) -> &mut Tabs<Route> {
+    &mut self.tabs
+  }
+
+  /// A covered player pauses.
+  fn cover(&self, tab: TabId, covered: bool, cx: &mut Context<Self>) {
+    if let Some(player) = self.top_player(tab, cx) {
+      player.update(cx, |player, _| player.set_covered(covered));
     }
   }
 
@@ -833,8 +834,8 @@ impl Space for TwitchSpace {
       _ => None,
     };
     let tab = self.tabs.get(tab);
-    let root = tab.and_then(|t| t.root());
-    let top = tab.and_then(|t| t.top());
+    let root = tab.and_then(|t| t.section(Route::is_top_level));
+    let top = tab.and_then(|t| t.current()).map(|p| &p.route);
     let mut entries = vec![
       MenuEntry {
         active: root == Some(&Route::Following),
@@ -943,30 +944,8 @@ impl Space for TwitchSpace {
     self.catalog.is_some()
   }
 
-  fn open_search(&mut self, tab: TabId, window: &mut Window, cx: &mut Context<Self>) {
-    if self.tabs.queue_if_pending(tab, Route::Search).is_none() {
-      return cx.notify();
-    }
-    let Some(catalog) = self.catalog.clone() else {
-      return;
-    };
-    let Some(t) = self.tabs.get(tab) else {
-      return;
-    };
-    if t.stack.last().is_some_and(|p| p.route == Route::Search) {
-      return;
-    }
-    let nav = Nav::new(cx.weak_entity(), tab);
-    let view = cx.new(|cx| SearchView::new(nav, catalog, window, cx));
-    self.push(tab, Route::Search, view.into(), cx);
-  }
-
-  fn can_go_back(&self, tab: TabId) -> bool {
-    self.tabs.get(tab).is_some_and(|t| t.stack.len() > 1)
-  }
-
-  fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    TwitchSpace::back(self, tab, cx);
+  fn open_search(&mut self, tab: TabId, _window: &mut Window, cx: &mut Context<Self>) {
+    self.open(tab, Route::Search, cx);
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
@@ -1013,27 +992,21 @@ impl Space for TwitchSpace {
 impl Render for TwitchSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let tab = self.tabs.shown();
-    // A tab opened in the background: its pages now.
-    if let Some(tab) = tab {
-      let pending = self.tabs.take_pending(tab);
-      if !pending.is_empty() {
-        for route in pending {
-          match route {
-            Route::Search => self.open_search(tab, window, cx),
-            route => self.open(tab, route, cx),
-          }
-        }
-        self.tabs.label_top(tab);
-      }
+    // A tab opened in the background, a page reached with "back" or "forward", Helix connected
+    // or gone: the page shown is built now.
+    if let Some(tab) = tab
+      && let Some(route) = self.tabs.get(tab).and_then(|t| t.unbuilt()).cloned()
+      && let Some(view) = self.build(tab, &route, window, cx)
+      && let Some(t) = self.tabs.get_mut(tab)
+    {
+      t.set_view(view);
     }
     match tab
       .and_then(|tab| self.tabs.get(tab))
-      .and_then(|t| t.stack.last())
+      .and_then(|t| t.current())
+      .and_then(|page| page.view.clone())
     {
-      Some(page) => div()
-        .size_full()
-        .child(page.view.clone())
-        .into_any_element(),
+      Some(view) => div().size_full().child(view).into_any_element(),
       None => div().size_full().into_any_element(),
     }
   }
