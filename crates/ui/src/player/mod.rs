@@ -1757,7 +1757,8 @@ impl PlayerView {
     layers.push(
       v_flex()
         .id("bottom-bar")
-        .occlude()
+        // Clicks stop here, the wheel goes on: it scrolls the page under an embedded player.
+        .block_mouse_except_scroll()
         .on_hover(cx.listener(|this, hovered: &bool, _, _| this.over_controls = *hovered))
         .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx)))
         .absolute()
