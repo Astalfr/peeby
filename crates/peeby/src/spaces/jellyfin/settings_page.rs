@@ -178,6 +178,7 @@ impl SettingsView {
   fn home_section(&self, h: &JellyfinHome, cx: &App) -> impl IntoElement {
     let ages = [
       (Some(7), t("7 days", "7 jours")),
+      (Some(14), t("14 days", "14 jours")),
       (Some(30), t("30 days", "30 jours")),
       (Some(90), t("90 days", "90 jours")),
       (Some(365), t("1 year", "1 an")),

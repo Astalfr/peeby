@@ -322,7 +322,7 @@ Everything peeby does today must work in the Jellyfin space. References are to `
 - [x] Languages: audio (server default, jpn, eng, fra, spa, deu, ita, kor, zho), subtitles (server default,
       off, fra, eng, spa, deu, ita, por), subtitle scale (0.75–2)
 - [x] Network buffer (150/300/600/1000 MiB), hardware acceleration
-- [x] Home: next-up window (7/30/90/365 days, no limit), rewatching, show hero, continue watching, next up,
+- [x] Home: next-up window (7/14/30/90/365 days, no limit), rewatching, show hero, continue watching, next up,
       one switch per library for "latest", hide spoilers
 - [x] Storage: image cache size and Clear
 - [x] About: server name and version, address, user, device, app version, sign out
