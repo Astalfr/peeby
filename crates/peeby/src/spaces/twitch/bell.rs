@@ -18,7 +18,6 @@ use ui::{tf, theme};
 
 use super::cards::{self, Avatars};
 use super::{Route, TwitchSpace};
-use crate::shell::space::SpaceEvent;
 
 /// Lives kept in the panel.
 const KEPT: usize = 30;
@@ -146,8 +145,7 @@ impl BellPanel {
     self
       .nav
       .update(cx, |space, cx| {
-        cx.emit(SpaceEvent::Activate);
-        space.open(Route::Watch(login), cx);
+        space.open_from_notification(Route::Watch(login), cx)
       })
       .ok();
   }

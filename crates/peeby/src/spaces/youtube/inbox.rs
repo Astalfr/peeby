@@ -285,8 +285,7 @@ impl InboxPanel {
     self
       .nav
       .update(cx, |space, cx| {
-        space.request_focus(cx);
-        space.open(Route::Watch(video_id), window, cx);
+        space.open_from_notification(Route::Watch(video_id), window, cx)
       })
       .ok();
   }

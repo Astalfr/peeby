@@ -19,7 +19,7 @@ use std::time::Instant;
 use gpui::prelude::*;
 use gpui::{
   AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
-  Task, WeakEntity, Window, div, px, relative,
+  Task, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
@@ -30,11 +30,12 @@ use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
 
 use crate::settings::{Player, Settings};
+use crate::shell::space::middle_click;
 use crate::spaces::youtube::cards::{compact_card, playlist_row};
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::history::{self, Reporter};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
@@ -90,7 +91,7 @@ struct Replies {
 pub struct WatchView {
   client: Client,
   video_id: String,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   player: Entity<PlayerView>,
   page: Option<WatchPage>,
   votes: Option<Votes>,
@@ -122,7 +123,7 @@ impl WatchView {
     client: Client,
     video_id: String,
     queue: Option<Entity<Queue>>,
-    nav: WeakEntity<YouTubeSpace>,
+    nav: Nav,
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
@@ -181,9 +182,9 @@ impl WatchView {
         queue,
         window,
         move |_, queue, QueueEvent::Play, window, cx| {
-          let queue = queue.clone();
+          let (queue, tab) = (queue.clone(), nav.tab);
           nav
-            .update(cx, |app, cx| app.play_queue(queue, true, window, cx))
+            .update(cx, |app, cx| app.play_queue(tab, queue, true, window, cx))
             .ok();
         },
       ));
@@ -516,6 +517,7 @@ impl WatchView {
           match result {
             Some(Ok(page)) => {
               let title = SharedString::from(page.title.clone());
+              this.nav.set_title(cx.entity_id(), title.clone(), cx);
               let chapters = convert::chapters(&page.chapters);
               this.player.update(cx, |player, cx| {
                 player.set_title(title, cx);
@@ -867,16 +869,9 @@ impl WatchView {
         cx,
       ))
     });
-    let channel = page.channel_id.clone().map(|id| {
-      let nav = self.nav.clone();
-      let name = page.channel.clone().unwrap_or_default();
-      move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut App| {
-        let route = Route::Channel {
-          id: id.clone(),
-          name: name.clone(),
-        };
-        nav.update(cx, |app, cx| app.open(route, window, cx)).ok();
-      }
+    let channel = page.channel_id.clone().map(|id| Route::Channel {
+      id,
+      name: page.channel.clone().unwrap_or_default(),
     });
     let stats = [page.views.clone(), page.date.clone()]
       .into_iter()
@@ -902,8 +897,14 @@ impl WatchView {
               .group("channel")
               .gap_3()
               .items_center()
-              .when_some(channel, |el, on_click| {
-                el.cursor_pointer().on_click(on_click)
+              .when_some(channel, |el, route| {
+                let nav = self.nav.clone();
+                el.cursor_pointer()
+                  .on_aux_click(middle_click({
+                    let (nav, route) = (nav.clone(), route.clone());
+                    move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+                  }))
+                  .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
               })
               .children(avatar)
               .child(

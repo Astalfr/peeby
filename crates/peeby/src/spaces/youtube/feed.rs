@@ -9,7 +9,7 @@
 use gpui::prelude::*;
 use gpui::{
   AnyElement, Context, ListAlignment, ListOffset, ListState, Pixels, ScrollHandle, SharedString,
-  WeakEntity, Window, div, list, px,
+  Window, div, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -19,7 +19,7 @@ use innertube::{Client, Error, Feed, VideoItem};
 use crate::settings::{FeedLayout, Settings};
 use crate::spaces::youtube::cards::{video_card, video_row};
 use crate::spaces::youtube::convert::error_text;
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use ui::assets::Icon;
 use ui::card::{skeleton_card, skeleton_row};
 use ui::i18n::t;
@@ -80,7 +80,7 @@ impl Shape {
 pub struct FeedView {
   client: Client,
   source: Source,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   state: State,
   videos: Vec<VideoItem>,
   continuation: Option<String>,
@@ -102,12 +102,7 @@ pub struct FeedView {
 }
 
 impl FeedView {
-  pub fn new(
-    client: Client,
-    source: Source,
-    nav: WeakEntity<YouTubeSpace>,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(client: Client, source: Source, nav: Nav, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -560,11 +555,7 @@ impl Render for FeedView {
             Button::new("all-channels")
               .icon(Icon::Subscriptions)
               .label(t("All channels", "Toutes les chaînes"))
-              .on_click(move |_, window, cx| {
-                nav
-                  .update(cx, |app, cx| app.open(Route::Channels, window, cx))
-                  .ok();
-              }),
+              .on_click(move |_, window, cx| nav.open(Route::Channels, window, cx)),
           )
         })
     });

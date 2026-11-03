@@ -2,8 +2,7 @@
 
 use gpui::prelude::*;
 use gpui::{
-  Context, FontWeight, SharedString, UniformListScrollHandle, WeakEntity, Window, div, px,
-  uniform_list,
+  Context, FontWeight, SharedString, UniformListScrollHandle, Window, div, px, uniform_list,
 };
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{h_flex, v_flex};
@@ -16,7 +15,7 @@ use ui::rows::{GridLayout, Width};
 use ui::{runtime, tf, theme};
 
 use super::items::{Shape, card, route_for};
-use super::{JellyfinSpace, report};
+use super::{Nav, report};
 
 const PAGE_SIZE: u32 = 200;
 const GAP: f32 = 16.;
@@ -27,7 +26,7 @@ const SCROLLBAR: f32 = 12.;
 
 pub struct LibraryView {
   client: Client,
-  nav: WeakEntity<JellyfinSpace>,
+  nav: Nav,
   id: ItemId,
   kinds: Vec<ItemKind>,
   title: SharedString,
@@ -51,7 +50,7 @@ pub fn item_types(collection: Option<CollectionType>) -> Vec<ItemKind> {
 impl LibraryView {
   pub fn new(
     client: Client,
-    nav: WeakEntity<JellyfinSpace>,
+    nav: Nav,
     id: ItemId,
     library: Option<BaseItem>,
     cx: &mut Context<Self>,

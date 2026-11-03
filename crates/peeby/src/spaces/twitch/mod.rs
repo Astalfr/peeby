@@ -2,9 +2,9 @@
 //! choice), so its only page while signed out is the sign-in card. Signed in, it keeps the Helix
 //! session (refreshed one at a time, validated at startup and every hour, as Twitch requires), the
 //! optional web `auth-token` its playback client sends to GQL, the Helix client of its pages, and a
-//! stack of pages: "Suivies", "Parcourir" or the search, then categories and lives on top. The
-//! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
-//! the meantime show in the bell ([`bell`]).
+//! stack of pages per tab (ADR 0015): "Suivies", "Parcourir" or the search, then categories and
+//! lives on top. The sidebar lists the followed channels on air, refreshed every two minutes; those
+//! that go live in the meantime show in the bell ([`bell`]).
 
 pub mod bell;
 pub mod browse;
@@ -26,8 +26,8 @@ use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString, Subscription, Task,
-  WeakEntity, Window, div, rgb,
+  AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter, SharedString, Subscription,
+  Task, WeakEntity, Window, div, rgb,
 };
 use gpui_component::popover::PopoverState;
 use twitch::Error;
@@ -41,7 +41,9 @@ use ui::theme::Accent;
 use ui::{runtime, theme};
 
 use crate::settings::Settings;
-use crate::shell::space::{Avatar, HoverCard, MenuEntry, Space, SpaceEvent, SpaceInfo};
+use crate::shell::space::{
+  Avatar, HoverCard, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
+};
 use browse::{BrowseView, CategoryView};
 use cards::Avatars;
 use channel::ChannelView;
@@ -114,11 +116,50 @@ impl Route {
   fn is_top_level(&self) -> bool {
     matches!(self, Self::Following | Self::Browse | Self::Search)
   }
+
+  /// The tab's label on this page, before a page sets its own (a VOD's title).
+  fn name(&self) -> SharedString {
+    match self {
+      Self::Following => t("Following", "Suivies").into(),
+      Self::Browse => t("Browse", "Parcourir").into(),
+      Self::Category { name, .. } => name.clone().into(),
+      Self::Search => t("Search", "Recherche").into(),
+      Self::Channel(login) | Self::Watch(login) => login.clone().into(),
+      Self::Vod(_) => t("Video", "Vidéo").into(),
+      Self::Clip(_) => "Clip".into(),
+    }
+  }
 }
 
-struct Page {
-  route: Route,
-  view: AnyView,
+/// What a Twitch page holds to navigate.
+pub type Nav = crate::shell::space::Nav<TwitchSpace>;
+
+impl Nav {
+  /// Opens `route` in the page's tab.
+  pub fn open(&self, route: Route, cx: &mut App) {
+    let tab = self.tab;
+    self.update(cx, |space, cx| space.open(tab, route, cx)).ok();
+  }
+
+  /// Opens `route` in a new tab after the page's, in the background (a middle click); `label`
+  /// names the tab until its page shows.
+  pub fn open_in_new_tab(&self, route: Route, label: Option<SharedString>, cx: &mut App) {
+    let tab = self.tab;
+    self
+      .update(cx, |space, cx| space.open_in_new_tab(tab, route, label, cx))
+      .ok();
+  }
+
+  /// Names the tab while the page of `view` is on top (a VOD's title, once known).
+  pub fn set_title(&self, view: EntityId, title: SharedString, cx: &mut App) {
+    self
+      .update(cx, |space, cx| {
+        if space.tabs.set_title(view, title) {
+          cx.notify();
+        }
+      })
+      .ok();
+  }
 }
 
 /// The signed-in part.
@@ -150,8 +191,9 @@ pub struct TwitchSpace {
   auth_token: Option<String>,
   /// GQL and usher, for playback and the channels' headers.
   client: Option<twitch::Client>,
-  stack: Vec<Page>,
-  /// A page asked for on the command line (a live, a VOD, a clip), opened once signed in.
+  tabs: Tabs<Route>,
+  /// A page asked for on the command line (a live, a VOD, a clip), opened in the first tab once
+  /// signed in.
   pending: Option<Route>,
   /// The sign-in card while signed out, made at the next render.
   login: Option<Entity<LoginView>>,
@@ -172,15 +214,16 @@ impl TwitchSpace {
     }
   }
 
-  /// The space with the secrets read before the UI started: a saved refresh token is exchanged
-  /// in the background. `pending` (from the command line) opens once signed in, and shows the tab.
+  /// The space with one tab and the secrets read before the UI started: a saved refresh token is
+  /// exchanged in the background. `pending` (from the command line) opens once signed in, and
+  /// shows the tab.
   pub fn new(auth: Auth, secrets: Secrets, pending: Option<Route>, cx: &mut Context<Self>) -> Self {
     let mut space = Self {
       auth,
       state: State::SignedOut,
       auth_token: None,
       client: None,
-      stack: Vec::new(),
+      tabs: Tabs::default(),
       pending,
       login: None,
       login_message: None,
@@ -208,10 +251,14 @@ impl TwitchSpace {
     if let Some(refresh) = secrets.refresh {
       space.restore(refresh, cx);
     }
+    let first = space.tabs.add(Vec::new(), None);
+    space.tabs.show(first);
     if space.pending.is_some() {
       // After the shell has subscribed to the space's events.
       cx.spawn(async move |this, cx| {
-        this.update(cx, |_, cx| cx.emit(SpaceEvent::Activate)).ok();
+        this
+          .update(cx, |_, cx| cx.emit(SpaceEvent::Activate(first)))
+          .ok();
       })
       .detach();
     }
@@ -337,10 +384,13 @@ impl TwitchSpace {
     self.login = None;
     self.login_message = None;
     self._login_subscription = None;
-    self.stack.clear();
-    self.open(Route::Following, cx);
-    if let Some(route) = self.pending.take() {
-      self.open(route, cx);
+    for tab in self.tabs.iter_mut() {
+      tab.reset(vec![Route::Following]);
+    }
+    if let Some(route) = self.pending.take()
+      && let Some(tab) = self.tabs.iter_mut().next()
+    {
+      tab.pending.push(route);
     }
     cx.notify();
   }
@@ -349,7 +399,9 @@ impl TwitchSpace {
   /// with `message`.
   fn sign_out(&mut self, message: Option<SharedString>, cx: &mut Context<Self>) {
     self.state = State::SignedOut;
-    self.stack.clear();
+    for tab in self.tabs.iter_mut() {
+      tab.reset(Vec::new());
+    }
     self.login = None;
     self.login_message = message;
     cx.background_executor()
@@ -372,16 +424,26 @@ impl TwitchSpace {
     self.sign_out(None, cx);
   }
 
-  /// Shows `route`: sidebar pages reset the stack, categories and lives are pushed. The search
-  /// needs the window: [`Space::open_search`].
-  pub fn open(&mut self, route: Route, cx: &mut Context<Self>) {
+  /// Shows `route` in `tab`: sidebar pages reset its stack, categories and lives are pushed. The
+  /// search needs the window: [`Space::open_search`].
+  pub fn open(&mut self, tab: TabId, route: Route, cx: &mut Context<Self>) {
+    if !matches!(self.state, State::SignedIn(_)) {
+      return;
+    }
+    // A tab that has not built its pages yet opens it after them, when it shows.
+    let Some(route) = self.tabs.queue_if_pending(tab, route) else {
+      return cx.notify();
+    };
     let State::SignedIn(signed) = &self.state else {
       return;
     };
-    if self.stack.last().is_some_and(|p| p.route == route) {
+    let Some(stack) = self.tabs.get(tab).map(|t| &t.stack) else {
+      return;
+    };
+    if stack.last().is_some_and(|p| p.route == route) {
       return;
     }
-    let nav = cx.weak_entity();
+    let nav = Nav::new(cx.weak_entity(), tab);
     let helix = signed.helix.clone();
     let view: AnyView = match &route {
       Route::Following => {
@@ -418,16 +480,59 @@ impl TwitchSpace {
           .into()
       }
     };
-    self.push(route, view, cx);
+    self.push(tab, route, view, cx);
   }
 
-  fn push(&mut self, route: Route, view: AnyView, cx: &mut Context<Self>) {
-    if route.is_top_level() {
-      self.stack.clear();
+  fn push(&mut self, tab: TabId, route: Route, view: AnyView, cx: &mut Context<Self>) {
+    if route.is_top_level()
+      && let Some(t) = self.tabs.get_mut(tab)
+    {
+      t.stack.clear();
     }
-    self.cover_top(true, cx);
-    self.stack.push(Page { route, view });
+    self.cover_top(tab, true, cx);
+    if let Some(t) = self.tabs.get_mut(tab) {
+      t.stack.push(Page::new(route, view));
+    }
     cx.notify();
+  }
+
+  /// Opens `route` in a new tab after `from`, built when the tab first shows.
+  pub fn open_in_new_tab(
+    &mut self,
+    from: TabId,
+    route: Route,
+    label: Option<SharedString>,
+    cx: &mut Context<Self>,
+  ) {
+    if !matches!(self.state, State::SignedIn(_)) {
+      return;
+    }
+    let tab = self.tabs.add(vec![route], label);
+    cx.emit(SpaceEvent::Opened {
+      tab,
+      after: Some(from),
+      focus: false,
+    });
+    cx.notify();
+  }
+
+  /// Opens `route` from a notification: in the tab of the space last shown, else in a new one,
+  /// and shows it.
+  pub fn open_from_notification(&mut self, route: Route, cx: &mut Context<Self>) {
+    match self.tabs.shown() {
+      Some(tab) => {
+        cx.emit(SpaceEvent::Activate(tab));
+        self.open(tab, route, cx);
+      }
+      None => {
+        let tab = self.tabs.add(vec![route], None);
+        cx.emit(SpaceEvent::Opened {
+          tab,
+          after: None,
+          focus: true,
+        });
+      }
+    }
   }
 
   /// Reacts to an error of any page: an expired session signs out, the rest is logged.
@@ -438,23 +543,27 @@ impl TwitchSpace {
     }
   }
 
-  pub fn back(&mut self, cx: &mut Context<Self>) {
-    if self.stack.len() > 1 {
-      self.stack.pop();
-      self.cover_top(false, cx);
+  pub fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    if let Some(t) = self.tabs.get_mut(tab)
+      && t.stack.len() > 1
+    {
+      t.stack.pop();
+      self.cover_top(tab, false, cx);
       cx.notify();
     }
   }
 
-  /// Pauses the player of the page on top when another page covers it.
-  fn cover_top(&self, covered: bool, cx: &mut Context<Self>) {
-    if let Some(player) = self.top_player(cx) {
+  /// Pauses the player of the page on top of `tab` when another page covers it.
+  fn cover_top(&self, tab: TabId, covered: bool, cx: &mut Context<Self>) {
+    if let Some(player) = self.top_player(tab, cx) {
       player.update(cx, |player, _| player.set_covered(covered));
     }
   }
 
-  fn top_player(&self, cx: &App) -> Option<Entity<PlayerView>> {
+  fn top_player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
     let watch = self
+      .tabs
+      .get(tab)?
       .stack
       .last()?
       .view
@@ -462,6 +571,17 @@ impl TwitchSpace {
       .downcast::<WatchView>()
       .ok()?;
     Some(watch.read(cx).player())
+  }
+
+  /// The route of a sidebar entry.
+  fn entry_route(id: &str) -> Option<Route> {
+    match id {
+      "following" => Some(Route::Following),
+      "browse" => Some(Route::Browse),
+      _ => id
+        .strip_prefix("live:")
+        .map(|login| Route::Watch(login.to_owned())),
+    }
   }
 
   /// The bell's lives are seen (its panel opened).
@@ -567,9 +687,38 @@ impl Space for TwitchSpace {
     }
   }
 
+  fn tabs(&self) -> Vec<TabId> {
+    self.tabs.ids()
+  }
+
+  fn new_tab(&mut self, _cx: &mut Context<Self>) -> TabId {
+    let pages = match self.state {
+      State::SignedIn(_) => vec![Route::Following],
+      _ => Vec::new(),
+    };
+    self.tabs.add(pages, None)
+  }
+
+  fn close_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    self.tabs.remove(tab);
+    cx.notify();
+  }
+
+  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    self.tabs.show(tab);
+    cx.notify();
+  }
+
+  fn title(&self, tab: TabId, _cx: &App) -> SharedString {
+    self
+      .tabs
+      .title(tab, Route::name)
+      .unwrap_or_else(|| "Twitch".into())
+  }
+
   /// "Suivies", "Parcourir", the followed channels on air, then the user (opening the settings)
   /// and sign-out at the bottom.
-  fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
+  fn menu(&self, tab: TabId, _cx: &App) -> Vec<MenuEntry> {
     let State::SignedIn(signed) = &self.state else {
       return Vec::new();
     };
@@ -581,8 +730,9 @@ impl Space for TwitchSpace {
       .to_uppercase()
       .to_string()
       .into();
-    let root = self.stack.first().map(|p| &p.route);
-    let top = self.stack.last().map(|p| &p.route);
+    let tab = self.tabs.get(tab);
+    let root = tab.and_then(|t| t.root());
+    let top = tab.and_then(|t| t.top());
     let mut entries = vec![
       MenuEntry {
         active: root == Some(&Route::Following),
@@ -648,17 +798,21 @@ impl Space for TwitchSpace {
     entries
   }
 
-  fn open_entry(&mut self, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
+  fn open_entry(&mut self, tab: TabId, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
     match id {
-      "following" => self.open(Route::Following, cx),
-      "browse" => self.open(Route::Browse, cx),
       "account" => cx.emit(SpaceEvent::OpenSettings),
       "sign-out" => self.log_out(cx),
       _ => {
-        if let Some(login) = id.strip_prefix("live:") {
-          self.open(Route::Watch(login.to_owned()), cx);
+        if let Some(route) = Self::entry_route(id) {
+          self.open(tab, route, cx);
         }
       }
+    }
+  }
+
+  fn open_entry_in_new_tab(&mut self, tab: TabId, id: &str, cx: &mut Context<Self>) {
+    if let Some(route) = Self::entry_route(id) {
+      self.open_in_new_tab(tab, route, None, cx);
     }
   }
 
@@ -666,28 +820,36 @@ impl Space for TwitchSpace {
     matches!(self.state, State::SignedIn(_))
   }
 
-  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+  fn open_search(&mut self, tab: TabId, window: &mut Window, cx: &mut Context<Self>) {
+    if !matches!(self.state, State::SignedIn(_))
+      || self.tabs.queue_if_pending(tab, Route::Search).is_none()
+    {
+      return cx.notify();
+    }
     let State::SignedIn(signed) = &self.state else {
       return;
     };
-    if self.stack.last().is_some_and(|p| p.route == Route::Search) {
+    let Some(t) = self.tabs.get(tab) else {
+      return;
+    };
+    if t.stack.last().is_some_and(|p| p.route == Route::Search) {
       return;
     }
-    let (nav, helix) = (cx.weak_entity(), signed.helix.clone());
+    let (nav, helix) = (Nav::new(cx.weak_entity(), tab), signed.helix.clone());
     let view = cx.new(|cx| SearchView::new(nav, helix, window, cx));
-    self.push(Route::Search, view.into(), cx);
+    self.push(tab, Route::Search, view.into(), cx);
   }
 
-  fn can_go_back(&self) -> bool {
-    self.stack.len() > 1
+  fn can_go_back(&self, tab: TabId) -> bool {
+    self.tabs.get(tab).is_some_and(|t| t.stack.len() > 1)
   }
 
-  fn back(&mut self, cx: &mut Context<Self>) {
-    TwitchSpace::back(self, cx);
+  fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    TwitchSpace::back(self, tab, cx);
   }
 
-  fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
-    self.top_player(cx)
+  fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
+    self.top_player(tab, cx)
   }
 
   fn unseen(&self, _cx: &App) -> Option<usize> {
@@ -728,7 +890,23 @@ impl Space for TwitchSpace {
 }
 
 impl Render for TwitchSpace {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let tab = self.tabs.shown();
+    // A tab opened in the background, or after signing in: its pages now.
+    if let Some(tab) = tab
+      && matches!(self.state, State::SignedIn(_))
+    {
+      let pending = self.tabs.take_pending(tab);
+      if !pending.is_empty() {
+        for route in pending {
+          match route {
+            Route::Search => self.open_search(tab, window, cx),
+            route => self.open(tab, route, cx),
+          }
+        }
+        self.tabs.label_top(tab);
+      }
+    }
     match &self.state {
       State::Restoring => div()
         .size_full()
@@ -745,7 +923,10 @@ impl Render for TwitchSpace {
         .size_full()
         .child(self.render_login(cx))
         .into_any_element(),
-      State::SignedIn(_) => match self.stack.last() {
+      State::SignedIn(_) => match tab
+        .and_then(|tab| self.tabs.get(tab))
+        .and_then(|t| t.stack.last())
+      {
         Some(page) => div()
           .size_full()
           .child(page.view.clone())

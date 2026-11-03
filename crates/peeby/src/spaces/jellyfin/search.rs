@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use gpui::prelude::*;
-use gpui::{AppContext, Context, Entity, Subscription, Task, WeakEntity, Window, div, px};
+use gpui::{AppContext, Context, Entity, Subscription, Task, Window, div, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::v_flex;
@@ -15,7 +15,7 @@ use ui::widgets::page_title;
 use ui::{runtime, theme};
 
 use super::items::{Shape, card, route_for, section_title};
-use super::{JellyfinSpace, report};
+use super::{Nav, report};
 
 /// Typing pauses this long before the search runs.
 const DEBOUNCE: Duration = Duration::from_millis(300);
@@ -23,7 +23,7 @@ const LIMIT: u32 = 60;
 
 pub struct SearchView {
   client: Client,
-  nav: WeakEntity<JellyfinSpace>,
+  nav: Nav,
   input: Entity<InputState>,
   results: Vec<BaseItem>,
   searched: Option<String>,
@@ -32,12 +32,7 @@ pub struct SearchView {
 }
 
 impl SearchView {
-  pub fn new(
-    client: Client,
-    nav: WeakEntity<JellyfinSpace>,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(client: Client, nav: Nav, window: &mut Window, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }

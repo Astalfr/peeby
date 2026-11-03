@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
-use gpui::{AppContext, Context, Entity, SharedString, Subscription, Task, WeakEntity, Window};
+use gpui::{AppContext, Context, Entity, SharedString, Subscription, Task, Window};
 use jellyfin_api::media::{self, MediaSegment, TrickplayInfo, pick_trickplay};
 use jellyfin_api::models::{BaseItem, ItemKind};
 use jellyfin_api::playback::{MediaSource, MediaStream, PlaybackReport};
@@ -25,7 +25,7 @@ use ui::runtime;
 use super::items::{TICKS_PER_SECOND, episode_number};
 use super::login::describe;
 use super::tracks::{StreamPref, SubtitlePref, TrackMap, TrackPrefs};
-use super::{JellyfinSpace, Route, report};
+use super::{Nav, Route, report};
 use crate::settings::{JellyfinPlayback, Player, Settings};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
@@ -64,7 +64,7 @@ enum ReportKind {
 
 pub struct PlayView {
   client: Client,
-  nav: WeakEntity<JellyfinSpace>,
+  nav: Nav,
   item_id: ItemId,
   player: Entity<PlayerView>,
   prefs: JellyfinPlayback,
@@ -82,7 +82,7 @@ pub struct PlayView {
 impl PlayView {
   pub fn new(
     client: Client,
-    nav: WeakEntity<JellyfinSpace>,
+    nav: Nav,
     item_id: ItemId,
     window: &mut Window,
     cx: &mut Context<Self>,
@@ -278,6 +278,7 @@ impl PlayView {
       ..Default::default()
     };
     let (title, subtitle_line) = titles(&item);
+    self.nav.set_title(cx.entity_id(), title.clone().into(), cx);
     self.playing = Some(Playing {
       source_id: source.id,
       play_session_id,
@@ -343,14 +344,14 @@ impl PlayView {
   /// Back to the page underneath.
   fn close(&mut self, cx: &mut Context<Self>) {
     self.remember_tracks(cx);
-    let leave_fullscreen = self.entered_fullscreen;
+    let (leave_fullscreen, tab) = (self.entered_fullscreen, self.nav.tab);
     self
       .nav
       .update(cx, |space, cx| {
         if leave_fullscreen {
           space.leave_fullscreen();
         }
-        space.back(cx)
+        space.back(tab, cx)
       })
       .ok();
   }
@@ -366,14 +367,14 @@ impl PlayView {
     self.remember_tracks(cx);
     self.finish(watched, cx);
     // The next player finds the window fullscreen already: hand over leaving it.
-    let leave_fullscreen = self.entered_fullscreen;
+    let (leave_fullscreen, tab) = (self.entered_fullscreen, self.nav.tab);
     self
       .nav
       .update(cx, |space, cx| {
         if leave_fullscreen {
           space.leave_fullscreen();
         }
-        space.replace(Route::Play(episode.id), window, cx)
+        space.replace(tab, Route::Play(episode.id), window, cx)
       })
       .ok();
   }
@@ -453,7 +454,8 @@ impl PlayView {
     let nav = self.nav.clone();
     cx.spawn(async move |cx| {
       sent.await;
-      nav.update(cx, |space, cx| space.refresh(cx)).ok();
+      let tab = nav.tab;
+      nav.update(cx, |space, cx| space.refresh(tab, cx)).ok();
     })
     .detach();
   }

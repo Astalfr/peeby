@@ -1,27 +1,35 @@
-//! YouTube videos as the shared media cards: a click opens the watch page, resting on a card
-//! resolves its stream (so a click plays at once), and the save buttons sit on the thumbnail.
+//! YouTube videos as the shared media cards: a click opens the watch page (a middle click, in a
+//! new tab), resting on a card resolves its stream (so a click plays at once), and the save
+//! buttons sit on the thumbnail.
 
-use gpui::{AnyElement, App, WeakEntity, Window};
+use gpui::{AnyElement, App, Window};
 use innertube::VideoItem;
 use ui::card::{Hover, MediaCard, RowAction};
 
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use crate::spaces::youtube::{convert, history, save};
 
 /// Opens the watch page of `video`.
-fn open_video(
-  video: &VideoItem,
-  nav: &WeakEntity<YouTubeSpace>,
-) -> impl Fn(&mut Window, &mut App) + use<> {
+fn open_video(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &mut App) + use<> {
   let nav = nav.clone();
   let route = Route::Watch(video.id.clone());
   let (id, resume) = (video.id.clone(), history::card_resume(video));
   move |window, cx| {
     // Where YouTube resumes it, as a click on youtube.com.
     history::offer(&id, resume, cx);
-    nav
-      .update(cx, |app, cx| app.open(route.clone(), window, cx))
-      .ok();
+    nav.open(route.clone(), window, cx);
+  }
+}
+
+/// Opens the watch page of `video` in a new tab, named after the video.
+fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &mut App) + use<> {
+  let nav = nav.clone();
+  let route = Route::Watch(video.id.clone());
+  let title = gpui::SharedString::from(video.title.clone());
+  let (id, resume) = (video.id.clone(), history::card_resume(video));
+  move |_, cx| {
+    history::offer(&id, resume, cx);
+    nav.open_in_new_tab(route.clone(), Some(title.clone()), cx);
   }
 }
 
@@ -49,7 +57,7 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
 pub fn video_card(
   video: &VideoItem,
   width: f32,
-  nav: &WeakEntity<YouTubeSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -61,31 +69,23 @@ pub fn video_card(
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t))
     .on_click(open_video(video, nav))
+    .on_middle_click(open_video_in_new_tab(video, nav))
     .grid(width, window, cx)
 }
 
 /// Compact card (related videos).
-pub fn compact_card(
-  video: &VideoItem,
-  nav: &WeakEntity<YouTubeSpace>,
-  window: &mut Window,
-  cx: &mut App,
-) -> AnyElement {
+pub fn compact_card(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut App) -> AnyElement {
   let id = format!("related-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   card(&id, hover, video)
     .on_click(open_video(video, nav))
+    .on_middle_click(open_video_in_new_tab(video, nav))
     .compact(window, cx)
 }
 
 /// List row (subscriptions in list mode, as YouTube showed them until about 2023), with the
 /// channel avatar and the save buttons.
-pub fn video_row(
-  video: &VideoItem,
-  nav: &WeakEntity<YouTubeSpace>,
-  window: &mut Window,
-  cx: &mut App,
-) -> AnyElement {
+pub fn video_row(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut App) -> AnyElement {
   let id = format!("row-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
@@ -94,6 +94,7 @@ pub fn video_row(
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t))
     .on_click(open_video(video, nav))
+    .on_middle_click(open_video_in_new_tab(video, nav))
     .row(window, cx)
 }
 

@@ -101,9 +101,11 @@ pub struct MediaCard {
   corner: Option<Corner>,
   play: bool,
   title_click: Option<Rc<Handler>>,
+  title_middle_click: Option<Rc<Handler>>,
   overlays: Vec<AnyElement>,
   trailing: Option<AnyElement>,
   on_click: Option<Rc<Handler>>,
+  on_middle_click: Option<Rc<Handler>>,
   on_hover: Option<Box<HoverHandler>>,
 }
 
@@ -128,9 +130,11 @@ impl MediaCard {
       corner: None,
       play: true,
       title_click: None,
+      title_middle_click: None,
       overlays: Vec::new(),
       trailing: None,
       on_click: None,
+      on_middle_click: None,
       on_hover: None,
     }
   }
@@ -188,6 +192,15 @@ impl MediaCard {
     self
   }
 
+  /// What a middle click on the title link does (opens it in a new tab).
+  pub fn on_title_middle_click(
+    mut self,
+    on_click: impl Fn(&mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.title_middle_click = Some(Rc::new(on_click));
+    self
+  }
+
   /// An element over the picture, such as a button in its corner.
   pub fn overlay(mut self, overlay: impl IntoElement) -> Self {
     self.overlays.push(overlay.into_any_element());
@@ -206,6 +219,12 @@ impl MediaCard {
     self
   }
 
+  /// What a middle click on the card does (opens it in a new tab).
+  pub fn on_middle_click(mut self, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+    self.on_middle_click = Some(Rc::new(on_click));
+    self
+  }
+
   /// Called when the mouse enters (`true`) or leaves the card, e.g. to prefetch what a click
   /// would open.
   pub fn on_hover(mut self, on_hover: impl Fn(bool, &mut App) + 'static) -> Self {
@@ -218,6 +237,7 @@ impl MediaCard {
     let state = self.hover.state.clone();
     let on_hover = self.on_hover.take();
     let on_click = self.on_click.take();
+    let on_middle_click = self.on_middle_click.take();
     div()
       .id(ElementId::Name(self.id.clone()))
       .cursor_pointer()
@@ -231,6 +251,13 @@ impl MediaCard {
       })
       .when_some(on_click, |el, on_click| {
         el.on_click(move |_, window, cx| on_click(window, cx))
+      })
+      .when_some(on_middle_click, |el, on_click| {
+        el.on_aux_click(move |event, window, cx| {
+          if event.is_middle_click() {
+            on_click(window, cx);
+          }
+        })
       })
   }
 
@@ -366,6 +393,7 @@ impl MediaCard {
           .border_color(theme::accent().opacity(t)),
       );
     let title_id = SharedString::from(format!("{}-title", self.id));
+    let title_middle_click = self.title_middle_click.take();
     let title = match self.title_click.take() {
       // A flex row, so the link is only as wide as its text.
       Some(on_click) => div().flex().child(
@@ -378,6 +406,14 @@ impl MediaCard {
           .on_click(move |_, window, cx| {
             cx.stop_propagation();
             on_click(window, cx);
+          })
+          .when_some(title_middle_click, |el, on_click| {
+            el.on_aux_click(move |event, window, cx| {
+              if event.is_middle_click() {
+                cx.stop_propagation();
+                on_click(window, cx);
+              }
+            })
           })
           .child(self.title.clone()),
       ),

@@ -137,8 +137,8 @@ fn main() {
       // The opening animation, unless something opens right away (a video, a live).
       let splash = initial_videos.is_empty() && twitch_page.is_none();
       let opened = cx.open_window(options, |window, cx| {
-        let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, window, cx));
-        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, window, cx));
+        let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, cx));
+        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, cx));
         let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube), Rc::new(jellyfin)];
         if let Some(auth) = twitch_auth {
           let twitch = cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx));

@@ -30,8 +30,9 @@ const END_MARGIN: f64 = 10.0;
 pub struct Resume {
   /// Last position reported per video id; `None` once watched to the end.
   played: HashMap<String, Option<u32>>,
-  /// The card just clicked: its video and where YouTube resumes it.
-  offered: Option<(String, u32)>,
+  /// Cards clicked whose page has not opened yet (a tab opened in the background waits until it
+  /// shows): where YouTube resumes each video.
+  offered: HashMap<String, u32>,
 }
 
 impl Global for Resume {}
@@ -43,16 +44,20 @@ pub fn card_resume(video: &VideoItem) -> Option<u32> {
 
 /// Before opening `video_id`'s page from its card: the page resumes where the card says.
 pub fn offer(video_id: &str, resume: Option<u32>, cx: &mut App) {
-  cx.default_global::<Resume>().offered = resume.map(|seconds| (video_id.to_owned(), seconds));
+  let offered = &mut cx.default_global::<Resume>().offered;
+  match resume {
+    Some(seconds) => offered.insert(video_id.to_owned(), seconds),
+    None => offered.remove(video_id),
+  };
 }
 
 /// Where the page of `video_id` starts: this session's last position, else its card's.
 pub fn start_at(video_id: &str, cx: &mut App) -> Option<f64> {
   let resume = cx.default_global::<Resume>();
-  let offered = resume.offered.take().filter(|(id, _)| id == video_id);
+  let offered = resume.offered.remove(video_id);
   match resume.played.get(video_id) {
     Some(played) => *played,
-    None => offered.map(|(_, seconds)| seconds),
+    None => offered,
   }
   .filter(|&s| s > 0)
   .map(f64::from)

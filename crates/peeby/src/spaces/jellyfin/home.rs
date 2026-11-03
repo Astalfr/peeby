@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyElement, Context, FontWeight, SharedString, Task, WeakEntity, Window,
-  div, ease_out_quint, linear_color_stop, linear_gradient, px,
+  Animation, AnimationExt, AnyElement, Context, FontWeight, SharedString, Task, Window, div,
+  ease_out_quint, linear_color_stop, linear_gradient, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -27,7 +27,7 @@ use super::items::{
   Shape, TICKS_PER_SECOND, backdrop_ref, card, episode_number, is_spoiler, logo_ref, resumable,
   route_for, section_title,
 };
-use super::{JellyfinSpace, Route, report};
+use super::{Nav, Route, report};
 use crate::settings::Settings;
 
 const ROW_LIMIT: u32 = 16;
@@ -48,7 +48,7 @@ struct Row {
 
 pub struct HomeView {
   client: Client,
-  nav: WeakEntity<JellyfinSpace>,
+  nav: Nav,
   rows: Vec<Row>,
   loading: bool,
   hero: Vec<BaseItem>,
@@ -60,7 +60,7 @@ pub struct HomeView {
 }
 
 impl HomeView {
-  pub fn new(client: Client, nav: WeakEntity<JellyfinSpace>, cx: &mut Context<Self>) -> Self {
+  pub fn new(client: Client, nav: Nav, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -240,10 +240,7 @@ impl HomeView {
   }
 
   fn open(&self, route: Route, window: &mut Window, cx: &mut Context<Self>) {
-    self
-      .nav
-      .update(cx, |space, cx| space.open(route, window, cx))
-      .ok();
+    self.nav.open(route, window, cx);
   }
 
   fn render_hero(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {

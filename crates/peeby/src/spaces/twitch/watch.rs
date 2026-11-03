@@ -13,7 +13,7 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, FontWeight, SharedString, Task, WeakEntity, Window, div, px};
+use gpui::{Context, Entity, FontWeight, SharedString, Task, Window, div, px};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use twitch::gql::Channel;
 use twitch::helix::Helix;
@@ -27,8 +27,9 @@ use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, tf, theme};
 
 use super::points::PointsView;
-use super::{Route, TwitchSpace, cards, chat, play, progress, replay};
+use super::{Nav, Route, cards, chat, play, progress, replay};
 use crate::settings::{Player, Settings};
+use crate::shell::space::middle_click;
 
 /// How often the decoding of an AV1 or HEVC quality is checked.
 const DECODING_EVERY: Duration = Duration::from_secs(4);
@@ -62,7 +63,7 @@ pub struct WatchView {
   kind: Kind,
   client: twitch::Client,
   helix: Helix,
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   player: Entity<PlayerView>,
   /// Serves mpv's playlists (a live, a VOD); dropping it (with the page) stops it.
   proxy: Option<Proxy>,
@@ -88,7 +89,7 @@ impl WatchView {
     kind: Kind,
     client: twitch::Client,
     helix: Helix,
-    nav: WeakEntity<TwitchSpace>,
+    nav: Nav,
     cx: &mut Context<Self>,
   ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
@@ -403,6 +404,7 @@ impl WatchView {
               )),
             });
             let title: SharedString = video.title.into();
+            this.nav.set_title(cx.entity_id(), title.clone(), cx);
             let muted = play::muted(&video.muted_segments);
             this.player.update(cx, |p, cx| {
               p.set_title(title, cx);
@@ -493,6 +495,7 @@ impl WatchView {
               )),
             });
             let title: SharedString = clip.title.into();
+            this.nav.set_title(cx.entity_id(), title.clone(), cx);
             this.player.update(cx, |p, cx| p.set_title(title, cx));
           }
           match play {
@@ -618,13 +621,17 @@ impl WatchView {
               .text_color(accent)
               .cursor_pointer()
               .hover(|el| el.underline())
+              .on_aux_click(middle_click({
+                let (nav, login) = (nav.clone(), login.clone());
+                move |cx| {
+                  if !login.is_empty() {
+                    nav.open_in_new_tab(Route::Channel(login.clone()), None, cx);
+                  }
+                }
+              }))
               .on_click(move |_, _, cx| {
                 if !login.is_empty() {
-                  nav
-                    .update(cx, |space, cx| {
-                      space.open(Route::Channel(login.clone()), cx)
-                    })
-                    .ok();
+                  nav.open(Route::Channel(login.clone()), cx);
                 }
               })
               .child(header.name),

@@ -92,6 +92,7 @@ icons! {
   Points => "coins",
   Gift => "gift",
   Speaker => "speaker",
+  Plus => "plus",
 }
 
 macro_rules! files {

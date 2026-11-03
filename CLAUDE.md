@@ -1,7 +1,7 @@
 # Peeby
 
-Native media client for Windows, written in Rust with GPUI: one tab ("space") per service: YouTube, Jellyfin and Twitch
-(docs/twitch.md, ADR 0010, docs/twitch-plan.md). Playback through libmpv, YouTube streams from the InnerTube API, Jellyfin's by Direct Play.
+Native media client for Windows, written in Rust with GPUI: one "space" per service (YouTube, Jellyfin and Twitch), each
+with as many tabs as the user opens (ADR 0015). Twitch: docs/twitch.md, ADR 0010, docs/twitch-plan.md. Playback through libmpv, YouTube streams from the InnerTube API, Jellyfin's by Direct Play.
 Project docs: docs/README.md (start there). Decisions: docs/decisions/. Progress: docs/roadmap.md.
 The playback stack (`player`, `gpui-video`, `vendor/gpui-pre-windows`), `jellyfin-api` and the Jellyfin pages came from
 the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import nothing else from there.
@@ -82,7 +82,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 ## Spaces
 - A service is a space under `crates/peeby/src/spaces/<name>/` implementing `shell::space::Space`; the shell and the
   `ui` crate know no service. Its settings are its part of the gear's page (`Space::settings`); player settings shared
-  by every space are `[player]` (`settings::Player`). Pages of a space keep a `WeakEntity` to their space to navigate.
+  by every space are `[player]` (`settings::Player`). Pages keep a `Nav` (their space and their tab, ADR 0015) to
+  navigate: what they open goes to their tab. A tab opened in the background builds nothing until it shows (its routes
+  wait in `Tab::pending`): never build a page that plays in a tab nobody looks at.
 - The mini-player is a second window (ADR 0008): never update a window from inside its own event (defer), and add
   window mouse listeners only while painting (a `canvas` paint callback), never from `render`.
 - Jellyfin (ADR 0009): the token lives in the Credential Manager (blocking calls: before the UI or in the background),

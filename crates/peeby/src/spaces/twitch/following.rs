@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, Subscription, Task, WeakEntity, Window, div, px};
+use gpui::{Context, Entity, Subscription, Task, Window, div, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
 use twitch::helix::{Followed, Helix, Stream};
@@ -13,7 +13,7 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::runtime;
 
-use super::TwitchSpace;
+use super::Nav;
 use super::cards::{self, Avatars};
 
 /// Pages read at most: 300 live channels, 500 followed ones.
@@ -27,7 +27,7 @@ struct Loaded {
 }
 
 pub struct FollowingView {
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   loaded: Option<Loaded>,
   error: Option<String>,
   /// Filters the offline channels; made on the first render, which has the window.
@@ -36,12 +36,7 @@ pub struct FollowingView {
 }
 
 impl FollowingView {
-  pub fn new(
-    nav: WeakEntity<TwitchSpace>,
-    helix: Helix,
-    user_id: String,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(nav: Nav, helix: Helix, user_id: String, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }

@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, Context, FontWeight, SharedString, WeakEntity, Window, div,
-  ease_out_quint, linear_color_stop, linear_gradient, px, relative,
+  Animation, AnimationExt, Context, FontWeight, SharedString, Window, div, ease_out_quint,
+  linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -26,14 +26,15 @@ use super::items::{
   Shape, backdrop_ref, card_picture, clock, is_spoiler, logo_ref, progress, resumable, runtime,
   section_title,
 };
-use super::{JellyfinSpace, Route, report};
+use super::{Nav, Route, report};
+use crate::shell::space::middle_click;
 
 const HERO_HEIGHT: f32 = 540.;
 const EPISODE_THUMB_WIDTH: f32 = 224.;
 
 pub struct DetailView {
   client: Client,
-  nav: WeakEntity<JellyfinSpace>,
+  nav: Nav,
   id: ItemId,
   item: Option<BaseItem>,
   seasons: Vec<BaseItem>,
@@ -45,7 +46,7 @@ pub struct DetailView {
 impl DetailView {
   pub fn new(
     client: Client,
-    nav: WeakEntity<JellyfinSpace>,
+    nav: Nav,
     id: ItemId,
     season: Option<ItemId>,
     cx: &mut Context<Self>,
@@ -99,6 +100,9 @@ impl DetailView {
                 .filter(|s| seasons.iter().any(|x| &x.id == s))
                 .or_else(|| first_unwatched(&seasons))
                 .or_else(|| seasons.first().map(|s| s.id.clone()));
+              if let Some(name) = item.name.clone() {
+                this.nav.set_title(cx.entity_id(), name.into(), cx);
+              }
               this.item = Some(item);
               this.seasons = seasons;
               if let Some(first) = first {
@@ -181,10 +185,7 @@ impl DetailView {
   }
 
   fn play(&self, id: ItemId, window: &mut Window, cx: &mut Context<Self>) {
-    self
-      .nav
-      .update(cx, |space, cx| space.open(Route::Play(id), window, cx))
-      .ok();
+    self.nav.open(Route::Play(id), window, cx);
   }
 
   fn render_hero(
@@ -382,6 +383,11 @@ impl DetailView {
     let hovered = motion::hover_state(group.clone(), window, cx);
     let hover = if *hovered.read(cx) { 1. } else { 0. };
     let id = episode.id.clone();
+    let in_new_tab = {
+      let (nav, route) = (self.nav.clone(), Route::Play(id.clone()));
+      let label = episode.name.clone().map(SharedString::from);
+      move |cx: &mut gpui::App| nav.open_in_new_tab(route.clone(), label.clone(), cx)
+    };
 
     h_flex()
       .id(group.clone())
@@ -392,6 +398,7 @@ impl DetailView {
         window.refresh();
       })
       .on_click(cx.listener(move |this, _, window, cx| this.play(id.clone(), window, cx)))
+      .on_aux_click(middle_click(in_new_tab))
       .gap_5()
       .p_3()
       .rounded(theme::RADIUS)

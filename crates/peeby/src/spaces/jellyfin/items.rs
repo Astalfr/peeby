@@ -5,14 +5,14 @@
 use std::rc::Rc;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, FontWeight, SharedString, WeakEntity, Window, div};
+use gpui::{AnyElement, App, FontWeight, SharedString, Window, div};
 use jellyfin_api::models::{BaseItem, ImageType, ItemKind};
 use jellyfin_api::{Client, ImageOptions, ItemId};
 use ui::card::{Corner, Hover, MediaCard, TALL, WIDE};
 use ui::picture::Picture;
 use ui::tf;
 
-use super::{JellyfinSpace, Route};
+use super::{Nav, Route};
 use crate::settings::Settings;
 
 /// Card shapes.
@@ -250,7 +250,7 @@ pub fn card(
   item: &BaseItem,
   shape: Shape,
   route: Route,
-  nav: &WeakEntity<JellyfinSpace>,
+  nav: &Nav,
   client: &Client,
   window: &mut Window,
   cx: &mut App,
@@ -267,24 +267,27 @@ pub fn card(
   let plays = matches!(route, Route::Play(_));
   let series_route =
     (plays && item.kind == ItemKind::Episode && item.series_id.is_some()).then(|| route_for(item));
-  let open = nav.clone();
+  let (open, in_new_tab) = (nav.clone(), nav.clone());
+  let label = SharedString::from(title.clone());
+  let new_route = route.clone();
   let mut card = MediaCard::new(id, hover, title, card_picture(client, item, shape, cx))
     .lines([line])
     .progress(progress(item))
     .corner(corner)
     .play(plays)
-    .on_click(move |window, cx| {
-      open
-        .update(cx, |space, cx| space.open(route.clone(), window, cx))
-        .ok();
+    .on_click(move |window, cx| open.open(route.clone(), window, cx))
+    .on_middle_click(move |_, cx| {
+      in_new_tab.open_in_new_tab(new_route.clone(), Some(label.clone()), cx)
     });
   if let Some(series) = series_route {
-    let nav = nav.clone();
-    card = card.on_title_click(move |window, cx| {
-      nav
-        .update(cx, |space, cx| space.open(series.clone(), window, cx))
-        .ok();
-    });
+    let (open, in_new_tab) = (nav.clone(), nav.clone());
+    let label = item.series_name.clone().map(SharedString::from);
+    let new_route = series.clone();
+    card = card
+      .on_title_click(move |window, cx| open.open(series.clone(), window, cx))
+      .on_title_middle_click(move |_, cx| {
+        in_new_tab.open_in_new_tab(new_route.clone(), label.clone(), cx)
+      });
   }
   card.poster(shape.width(), shape.aspect(), window, cx)
 }

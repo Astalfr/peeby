@@ -1,5 +1,5 @@
-//! The YouTube space: its routes, its stack of pages (it renders the one on top) and the
-//! modules of its pages.
+//! The YouTube space: its routes, a stack of pages per tab (it renders the one on top of the tab
+//! shown, ADR 0015) and the modules of its pages.
 
 pub mod account;
 pub mod bell;
@@ -21,8 +21,8 @@ pub mod watch;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EventEmitter, SharedString,
-  WeakEntity, Window, div, ease_out_quint, px,
+  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter,
+  SharedString, WeakEntity, Window, div, ease_out_quint, px,
 };
 use gpui_component::popover::PopoverState;
 use innertube::{Client, Cookies};
@@ -35,7 +35,7 @@ use ui::{runtime, theme};
 
 use crate::settings;
 use crate::settings::{Settings, StartPage};
-use crate::shell::space::{MenuEntry, Space, SpaceEvent, SpaceInfo};
+use crate::shell::space::{MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs};
 use account::AccountView;
 use channels::ChannelsView;
 use feed::{FeedView, Source};
@@ -105,31 +105,67 @@ impl Route {
       _ => false,
     }
   }
+
+  /// The tab's label on this page, before a page sets its own (a video's title).
+  fn name(&self) -> SharedString {
+    match self {
+      Self::Home => t("Home", "Accueil").into(),
+      Self::Subscriptions => t("Subscriptions", "Abonnements").into(),
+      Self::History => t("History", "Historique").into(),
+      Self::Channels => t("Channels", "Chaînes").into(),
+      Self::Channel { name, .. } => name.clone().into(),
+      Self::Playlists => t("Playlists", "Playlists").into(),
+      Self::Playlist { title, .. } => title.clone().into(),
+      Self::Search => t("Search", "Recherche").into(),
+      Self::Watch(_) => t("Video", "Vidéo").into(),
+    }
+  }
 }
 
-struct Page {
-  route: Route,
-  view: AnyView,
+/// What a YouTube page holds to navigate.
+pub type Nav = crate::shell::space::Nav<YouTubeSpace>;
+
+impl Nav {
+  /// Opens `route` in the page's tab.
+  pub fn open(&self, route: Route, window: &mut Window, cx: &mut App) {
+    let tab = self.tab;
+    self
+      .update(cx, |space, cx| space.open(tab, route, window, cx))
+      .ok();
+  }
+
+  /// Opens `route` in a new tab after the page's, in the background (a middle click); `label`
+  /// names the tab until its page shows.
+  pub fn open_in_new_tab(&self, route: Route, label: Option<SharedString>, cx: &mut App) {
+    let tab = self.tab;
+    self
+      .update(cx, |space, cx| space.open_in_new_tab(tab, route, label, cx))
+      .ok();
+  }
+
+  /// Names the tab while the page of `view` is on top (a video's title, once known).
+  pub fn set_title(&self, view: EntityId, title: SharedString, cx: &mut App) {
+    self
+      .update(cx, |space, cx| {
+        if space.tabs.set_title(view, title) {
+          cx.notify();
+        }
+      })
+      .ok();
+  }
 }
 
 pub struct YouTubeSpace {
   client: Client,
-  stack: Vec<Page>,
+  tabs: Tabs<Route>,
   /// The account part of the settings page, made the first time they open.
   account: Option<Entity<AccountView>>,
-  /// Page to open at the next render (it needs the window), after a session change.
-  reset_to: Option<Route>,
 }
 
 impl YouTubeSpace {
-  /// The app on its start page (`Route::start`), then on `initial_videos` in order (command-line
-  /// URLs or ids).
-  pub fn new(
-    client: Client,
-    initial_videos: Vec<String>,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  /// The space with one tab on its start page (`Route::start`), then on `initial_videos` in
+  /// order (command-line URLs or ids).
+  pub fn new(client: Client, initial_videos: Vec<String>, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -139,21 +175,21 @@ impl YouTubeSpace {
     let unseen = inbox::inbox(cx);
     cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
     inbox::reset(cx);
-    let mut app = Self {
+    let mut tabs = Tabs::default();
+    let pages = std::iter::once(Route::start(cx))
+      .chain(initial_videos.into_iter().map(Route::Watch))
+      .collect();
+    let first = tabs.add(pages, None);
+    tabs.show(first);
+    Self {
       client,
-      stack: Vec::new(),
+      tabs,
       account: None,
-      reset_to: None,
-    };
-    app.open(Route::start(cx), window, cx);
-    for id in initial_videos {
-      app.open(Route::Watch(id), window, cx);
     }
-    app
   }
 
-  /// Switches to a new session (imported cookies) or signs out (`None`), then shows the start
-  /// page.
+  /// Switches to a new session (imported cookies) or signs out (`None`), then puts every tab
+  /// back on the start page.
   pub fn set_session(&mut self, cookies: Option<Cookies>, cx: &mut Context<Self>) {
     let Settings {
       language, region, ..
@@ -181,8 +217,11 @@ impl YouTubeSpace {
     bell::reset(cx);
     inbox::reset(cx);
     self.client = client;
-    // Pages hold the old client: they are rebuilt on the next navigation; the start page now.
-    self.reset_to = Some(Route::start(cx));
+    // Every page holds the old client: each tab starts over, rebuilt when it shows.
+    let start = Route::start(cx);
+    for tab in self.tabs.iter_mut() {
+      tab.reset(vec![start.clone()]);
+    }
     cx.notify();
   }
 
@@ -203,8 +242,8 @@ impl YouTubeSpace {
       let cookies = load.await;
       this
         .update(cx, |this, cx| {
-          // Home is rebuilt with the new client the next time the space shows (the settings
-          // page is the shell's, so the space is not on screen meanwhile).
+          // The tabs are rebuilt with the new client the next time each shows (the settings
+          // page is the shell's, so none is on screen meanwhile).
           this.set_session(cookies, cx);
         })
         .ok();
@@ -212,22 +251,30 @@ impl YouTubeSpace {
     .detach();
   }
 
-  /// Shows `route`: top-level pages reset the stack, the others are pushed.
-  pub fn open(&mut self, route: Route, window: &mut Window, cx: &mut Context<Self>) {
-    if self
-      .stack
+  /// Shows `route` in `tab`: top-level pages reset its stack, the others are pushed. A tab that
+  /// has not built its pages yet opens it after them, when it shows.
+  pub fn open(&mut self, tab: TabId, route: Route, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(route) = self.tabs.queue_if_pending(tab, route) else {
+      return cx.notify();
+    };
+    let Some(stack) = self.tabs.get(tab).map(|t| &t.stack) else {
+      return;
+    };
+    if stack
       .last()
       .is_some_and(|page| page.route.same_page(&route))
     {
       return;
     }
     if route.is_top_level() {
-      self.stack.clear();
+      if let Some(t) = self.tabs.get_mut(tab) {
+        t.stack.clear();
+      }
     } else {
       // A covered watch page keeps its player (to resume after "back"), paused.
-      self.set_top_covered(true, cx);
+      self.set_top_covered(tab, true, cx);
     }
-    let nav = cx.weak_entity();
+    let nav = Nav::new(cx.weak_entity(), tab);
     let client = self.client.clone();
     let view: AnyView = match &route {
       Route::Home => cx
@@ -258,16 +305,60 @@ impl YouTubeSpace {
         .new(|cx| WatchView::new(client, id.clone(), None, nav, window, cx))
         .into(),
     };
-    self.stack.push(Page { route, view });
+    if let Some(t) = self.tabs.get_mut(tab) {
+      t.stack.push(Page::new(route, view));
+    }
     cx.notify();
   }
 
-  /// Plays the current video of `queue` on a watch page: pushed on the stack, or replacing the
-  /// watch page on top (`replace`, from one video of the queue to the next). Replacing drops
-  /// the previous page and its player, so a long queue keeps a single player, and "back"
-  /// still leads to the page the queue was started from.
+  /// Opens `route` in a new tab after `from`, built when the tab first shows.
+  pub fn open_in_new_tab(
+    &mut self,
+    from: TabId,
+    route: Route,
+    label: Option<SharedString>,
+    cx: &mut Context<Self>,
+  ) {
+    let tab = self.tabs.add(vec![route], label);
+    cx.emit(SpaceEvent::Opened {
+      tab,
+      after: Some(from),
+      focus: false,
+    });
+    cx.notify();
+  }
+
+  /// Opens `route` from a notification: in the tab of the space last shown, else in a new one,
+  /// and shows it.
+  pub fn open_from_notification(
+    &mut self,
+    route: Route,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    match self.tabs.shown() {
+      Some(tab) => {
+        cx.emit(SpaceEvent::Activate(tab));
+        self.open(tab, route, window, cx);
+      }
+      None => {
+        let tab = self.tabs.add(vec![route], None);
+        cx.emit(SpaceEvent::Opened {
+          tab,
+          after: None,
+          focus: true,
+        });
+      }
+    }
+  }
+
+  /// Plays the current video of `queue` on a watch page of `tab`: pushed on its stack, or
+  /// replacing the watch page on top (`replace`, from one video of the queue to the next).
+  /// Replacing drops the previous page and its player, so a long queue keeps a single player,
+  /// and "back" still leads to the page the queue was started from.
   pub fn play_queue(
     &mut self,
+    tab: TabId,
     queue: Entity<Queue>,
     replace: bool,
     window: &mut Window,
@@ -280,41 +371,55 @@ impl YouTubeSpace {
     else {
       return;
     };
+    let Some(stack) = self.tabs.get(tab).map(|t| &t.stack) else {
+      return;
+    };
     history::offer(&id, resume, cx);
     if replace
-      && self
-        .stack
+      && stack
         .last()
         .is_some_and(|page| matches!(page.route, Route::Watch(_)))
     {
-      self.stack.pop();
+      if let Some(t) = self.tabs.get_mut(tab) {
+        t.stack.pop();
+      }
     } else {
-      self.set_top_covered(true, cx);
+      self.set_top_covered(tab, true, cx);
     }
-    let nav = cx.weak_entity();
+    let nav = Nav::new(cx.weak_entity(), tab);
     let client = self.client.clone();
     let route = Route::Watch(id.clone());
-    let view = cx
-      .new(|cx| WatchView::new(client, id, Some(queue), nav, window, cx))
-      .into();
-    self.stack.push(Page { route, view });
+    let view = cx.new(|cx| WatchView::new(client, id, Some(queue), nav, window, cx));
+    if let Some(t) = self.tabs.get_mut(tab) {
+      t.stack.push(Page::new(route, view));
+    }
     cx.notify();
   }
 
-  pub fn back(&mut self, cx: &mut Context<Self>) {
-    if self.stack.len() > 1 {
-      self.stack.pop();
-      self.set_top_covered(false, cx);
+  pub fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    if let Some(t) = self.tabs.get_mut(tab)
+      && t.stack.len() > 1
+    {
+      t.stack.pop();
+      self.set_top_covered(tab, false, cx);
       cx.notify();
     }
   }
 
-  fn set_top_covered(&self, covered: bool, cx: &mut App) {
-    if let Some(watch) = self
+  fn top_watch(&self, tab: TabId) -> Option<Entity<WatchView>> {
+    self
+      .tabs
+      .get(tab)?
       .stack
-      .last()
-      .and_then(|page| page.view.clone().downcast::<WatchView>().ok())
-    {
+      .last()?
+      .view
+      .clone()
+      .downcast::<WatchView>()
+      .ok()
+  }
+
+  fn set_top_covered(&self, tab: TabId, covered: bool, cx: &mut App) {
+    if let Some(watch) = self.top_watch(tab) {
       watch.update(cx, |watch, cx| watch.set_covered(covered, cx));
     }
   }
@@ -322,11 +427,6 @@ impl YouTubeSpace {
   /// Asks the shell for the settings page (where the account is).
   pub fn open_settings(&mut self, cx: &mut Context<Self>) {
     cx.emit(SpaceEvent::OpenSettings);
-  }
-
-  /// Asks the shell to show this space (a notification was clicked from another tab).
-  pub fn request_focus(&mut self, cx: &mut Context<Self>) {
-    cx.emit(SpaceEvent::Activate);
   }
 
   /// The route of a sidebar entry.
@@ -353,10 +453,35 @@ impl Space for YouTubeSpace {
     }
   }
 
-  /// The entry of the page at the bottom of the stack is active, so Subscriptions stays lit on
-  /// the channels and channel pages opened from it.
-  fn menu(&self, _cx: &App) -> Vec<MenuEntry> {
-    let root = self.stack.first().map(|page| page.route.clone());
+  fn tabs(&self) -> Vec<TabId> {
+    self.tabs.ids()
+  }
+
+  fn new_tab(&mut self, cx: &mut Context<Self>) -> TabId {
+    self.tabs.add(vec![Route::start(cx)], None)
+  }
+
+  fn close_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    self.tabs.remove(tab);
+    cx.notify();
+  }
+
+  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    self.tabs.show(tab);
+    cx.notify();
+  }
+
+  fn title(&self, tab: TabId, _cx: &App) -> SharedString {
+    self
+      .tabs
+      .title(tab, Route::name)
+      .unwrap_or_else(|| "YouTube".into())
+  }
+
+  /// The entry of the page at the bottom of the tab's stack is active, so Subscriptions stays lit
+  /// on the channels and channel pages opened from it.
+  fn menu(&self, tab: TabId, _cx: &App) -> Vec<MenuEntry> {
+    let root = self.tabs.get(tab).and_then(|t| t.root().cloned());
     [
       ("home", t("Home", "Accueil"), Icon::Home, false),
       (
@@ -391,37 +516,36 @@ impl Space for YouTubeSpace {
     .collect()
   }
 
-  fn open_entry(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+  fn open_entry(&mut self, tab: TabId, id: &str, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(route) = Self::entry_route(id) {
-      self.open(route, window, cx);
+      self.open(tab, route, window, cx);
     }
   }
 
-  fn can_go_back(&self) -> bool {
-    self.stack.len() > 1
+  fn open_entry_in_new_tab(&mut self, tab: TabId, id: &str, cx: &mut Context<Self>) {
+    if let Some(route) = Self::entry_route(id) {
+      self.open_in_new_tab(tab, route, None, cx);
+    }
   }
 
-  fn back(&mut self, cx: &mut Context<Self>) {
-    YouTubeSpace::back(self, cx);
+  fn can_go_back(&self, tab: TabId) -> bool {
+    self.tabs.get(tab).is_some_and(|t| t.stack.len() > 1)
+  }
+
+  fn back(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    YouTubeSpace::back(self, tab, cx);
   }
 
   fn searchable(&self) -> bool {
     true
   }
 
-  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    self.open(Route::Search, window, cx);
+  fn open_search(&mut self, tab: TabId, window: &mut Window, cx: &mut Context<Self>) {
+    self.open(tab, Route::Search, window, cx);
   }
 
-  fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
-    let watch = self
-      .stack
-      .last()?
-      .view
-      .clone()
-      .downcast::<WatchView>()
-      .ok()?;
-    Some(watch.read(cx).player())
+  fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
+    Some(self.top_watch(tab)?.read(cx).player())
   }
 
   fn unseen(&self, cx: &App) -> Option<usize> {
@@ -451,14 +575,21 @@ impl Space for YouTubeSpace {
 
 impl Render for YouTubeSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    if let Some(route) = self.reset_to.take() {
-      // Every page holds the old client: start over, even if the start page is on top.
-      self.stack.clear();
-      self.open(route, window, cx);
-    }
-    let Some(page) = self.stack.last() else {
+    let Some(tab) = self.tabs.shown() else {
       return div().size_full().into_any_element();
     };
+    // A tab opened in the background, or after a session change: its pages now.
+    let pending = self.tabs.take_pending(tab);
+    if !pending.is_empty() {
+      for route in pending {
+        self.open(tab, route, window, cx);
+      }
+      self.tabs.label_top(tab);
+    }
+    let Some(page) = self.tabs.get(tab).and_then(|t| t.stack.last()) else {
+      return div().size_full().into_any_element();
+    };
+    let depth = self.tabs.get(tab).map_or(0, |t| t.stack.len());
     let view = div().size_full().relative().child(page.view.clone());
     // A short fade and rise each time a page appears. Not on the watch page: its video surface
     // is an external texture, and leaving fullscreen would replay the fade.
@@ -467,7 +598,7 @@ impl Render for YouTubeSpace {
     }
     view
       .with_animation(
-        SharedString::from(format!("page-{}-{:?}", self.stack.len(), page.route)),
+        SharedString::from(format!("page-{tab}-{depth}-{:?}", page.route)),
         Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
         |el, t| el.opacity(t).top(px(8. * (1. - t))),
       )

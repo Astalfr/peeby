@@ -8,8 +8,7 @@
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, ElementId, FontWeight, ScrollHandle, SharedString, WeakEntity, Window,
-  div, px,
+  AnyElement, App, Context, ElementId, FontWeight, ScrollHandle, SharedString, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -18,11 +17,12 @@ use gpui_component::{Disableable, IconName, Selectable, h_flex, v_flex};
 use innertube::{Client, Error, Playlist, PlaylistSummary};
 
 use crate::settings::Settings;
+use crate::shell::space::middle_click;
 use crate::spaces::youtube::cards::playlist_row;
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::queue::Queue;
 use crate::spaces::youtube::save::{self, EntryRemoved};
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use ui::assets::Icon;
 use ui::card::WIDE;
 use ui::card::skeleton_card;
@@ -55,7 +55,7 @@ impl<T> State<T> {
 }
 
 /// The notice of a page that needs a session, with a link to the account page.
-fn signed_out(nav: &WeakEntity<YouTubeSpace>) -> AnyElement {
+fn signed_out(nav: &Nav) -> AnyElement {
   let nav = nav.clone();
   notice(
     Icon::Account,
@@ -104,12 +104,12 @@ fn gathering_text(count: usize) -> String {
 
 pub struct PlaylistsView {
   client: Client,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   state: State<Vec<PlaylistSummary>>,
 }
 
 impl PlaylistsView {
-  pub fn new(client: Client, nav: WeakEntity<YouTubeSpace>, cx: &mut Context<Self>) -> Self {
+  pub fn new(client: Client, nav: Nav, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -157,7 +157,7 @@ impl PlaylistsView {
 /// then the title and details. On hover it rises, a red ring fades in and the title turns red.
 fn playlist_card(
   playlist: &PlaylistSummary,
-  nav: &WeakEntity<YouTubeSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -206,11 +206,11 @@ fn playlist_card(
       hovered.update(cx, |h, _| *h = *hover);
       window.refresh();
     })
-    .on_click(move |_, window, cx| {
-      nav
-        .update(cx, |app, cx| app.open(route.clone(), window, cx))
-        .ok();
-    })
+    .on_aux_click(middle_click({
+      let (nav, route) = (nav.clone(), route.clone());
+      move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+    }))
+    .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
     // The hovered box stays put and only its content rises (a moving box could loop).
     .child(
       v_flex()
@@ -368,7 +368,7 @@ pub struct PlaylistView {
   id: String,
   /// Title from the playlists page, shown until the playlist has loaded.
   title: String,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   state: State<Playlist>,
   loading_more: bool,
   /// The last next-page request failed: no automatic retry, the button retries.
@@ -377,13 +377,7 @@ pub struct PlaylistView {
 }
 
 impl PlaylistView {
-  pub fn new(
-    client: Client,
-    id: String,
-    title: String,
-    nav: WeakEntity<YouTubeSpace>,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(client: Client, id: String, title: String, nav: Nav, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -532,9 +526,10 @@ impl PlaylistView {
         cx,
       )
     });
+    let tab = self.nav.tab;
     self
       .nav
-      .update(cx, |app, cx| app.play_queue(queue, false, window, cx))
+      .update(cx, |app, cx| app.play_queue(tab, queue, false, window, cx))
       .ok();
   }
 

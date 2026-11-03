@@ -2,21 +2,21 @@
 //! the text, run on Enter. Helix `search/channels` and `search/categories`.
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, Subscription, Task, WeakEntity, Window};
+use gpui::{Context, Entity, Subscription, Task, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
 use twitch::helix::{Category, ChannelResult, Helix};
 use ui::i18n::t;
 use ui::images::Images;
 
-use super::TwitchSpace;
+use super::Nav;
 use super::browse::{load, page};
 use super::cards;
 
 type Results = (Vec<ChannelResult>, Vec<Category>);
 
 pub struct SearchView {
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   helix: Helix,
   input: Entity<InputState>,
   results: Option<Result<Results, String>>,
@@ -26,12 +26,7 @@ pub struct SearchView {
 }
 
 impl SearchView {
-  pub fn new(
-    nav: WeakEntity<TwitchSpace>,
-    helix: Helix,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(nav: Nav, helix: Helix, window: &mut Window, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }

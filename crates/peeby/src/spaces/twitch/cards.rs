@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, FontWeight, SharedString, WeakEntity, Window, div, px};
+use gpui::{AnyElement, App, FontWeight, SharedString, Window, div, px};
 use gpui_component::{h_flex, v_flex};
 use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
 use ui::card::{Hover, MediaCard};
@@ -14,7 +14,8 @@ use ui::i18n::{Lang, lang, t};
 use ui::picture::{self, Picture};
 use ui::{tf, theme};
 
-use super::{Route, TwitchSpace};
+use super::{Nav, Route};
+use crate::shell::space::middle_click;
 
 /// Least width of a stream card: the cards widen to fill their rows.
 pub const STREAM_WIDTH: f32 = 300.;
@@ -115,7 +116,7 @@ pub fn stream_card(
   stream: &Stream,
   width: f32,
   avatar: Option<&String>,
-  nav: &WeakEntity<TwitchSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -132,18 +133,19 @@ pub fn stream_card(
   .avatar(avatar.map(|url| template(url)))
   .lines([stream.user_name.clone(), stream.game_name.clone()])
   .badge(Some(compact_viewers(stream.viewer_count)))
-  .on_click(move |_, cx| {
-    nav
-      .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
-      .ok();
+  .on_middle_click({
+    let (nav, login) = (nav.clone(), login.clone());
+    let label = SharedString::from(stream.user_name.clone());
+    move |_, cx| nav.open_in_new_tab(Route::Watch(login.clone()), Some(label.clone()), cx)
   })
+  .on_click(move |_, cx| nav.open(Route::Watch(login.clone()), cx))
   .grid(width, window, cx)
 }
 
 /// A category's poster; a click opens its streams.
 pub fn category_card(
   category: &Category,
-  nav: &WeakEntity<TwitchSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -154,6 +156,7 @@ pub fn category_card(
     name: category.name.clone(),
   };
   let nav = nav.clone();
+  let label = SharedString::from(category.name.clone());
   MediaCard::new(
     id,
     hover,
@@ -161,11 +164,11 @@ pub fn category_card(
     template(&category.box_art_url),
   )
   .play(false)
-  .on_click(move |_, cx| {
-    nav
-      .update(cx, |space, cx| space.open(route.clone(), cx))
-      .ok();
+  .on_middle_click({
+    let (nav, route, label) = (nav.clone(), route.clone(), label.clone());
+    move |_, cx| nav.open_in_new_tab(route.clone(), Some(label.clone()), cx)
   })
+  .on_click(move |_, cx| nav.open(route.clone(), cx))
   .poster(CATEGORY_WIDTH, BOX_ART, window, cx)
 }
 
@@ -185,12 +188,7 @@ pub struct Chip<'a> {
 
 /// A channel as an avatar and its name (offline followed channels, search results); a click opens
 /// its page.
-pub fn channel_chip(
-  chip: Chip<'_>,
-  nav: &WeakEntity<TwitchSpace>,
-  window: &mut Window,
-  cx: &mut App,
-) -> AnyElement {
+pub fn channel_chip(chip: Chip<'_>, nav: &Nav, window: &mut Window, cx: &mut App) -> AnyElement {
   let Chip {
     login,
     name,
@@ -227,13 +225,11 @@ pub fn channel_chip(
     .rounded(theme::RADIUS)
     .cursor_pointer()
     .hover(|el| el.bg(theme::surface_hover()))
-    .on_click(move |_, _, cx| {
-      nav
-        .update(cx, |space, cx| {
-          space.open(Route::Channel(login.clone()), cx)
-        })
-        .ok();
-    })
+    .on_aux_click(middle_click({
+      let (nav, login) = (nav.clone(), login.clone());
+      move |cx| nav.open_in_new_tab(Route::Channel(login.clone()), None, cx)
+    }))
+    .on_click(move |_, _, cx| nav.open(Route::Channel(login.clone()), cx))
     .child(div().flex_none().child(face))
     .child(
       v_flex()
@@ -365,7 +361,7 @@ pub fn video_card(
   video: &Video,
   position: Option<u32>,
   width: f32,
-  nav: &WeakEntity<TwitchSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -373,6 +369,7 @@ pub fn video_card(
   let hover = Hover::new(&id, window, cx);
   let route = Route::Vod(video.id.clone());
   let nav = nav.clone();
+  let label = SharedString::from(video.title.clone());
   MediaCard::new(
     id,
     hover,
@@ -386,11 +383,11 @@ pub fn video_card(
   )])
   .badge(Some(ui::player::format_time(video.duration as f64)))
   .progress(position.and_then(|p| progress(p, video.duration)))
-  .on_click(move |_, cx| {
-    nav
-      .update(cx, |space, cx| space.open(route.clone(), cx))
-      .ok();
+  .on_middle_click({
+    let (nav, route, label) = (nav.clone(), route.clone(), label.clone());
+    move |_, cx| nav.open_in_new_tab(route.clone(), Some(label.clone()), cx)
   })
+  .on_click(move |_, cx| nav.open(route.clone(), cx))
   .grid(width, window, cx)
 }
 
@@ -398,7 +395,7 @@ pub fn video_card(
 pub fn clip_card(
   clip: &Clip,
   width: f32,
-  nav: &WeakEntity<TwitchSpace>,
+  nav: &Nav,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -406,6 +403,7 @@ pub fn clip_card(
   let hover = Hover::new(&id, window, cx);
   let route = Route::Clip(clip.id.clone());
   let nav = nav.clone();
+  let label = SharedString::from(clip.title.clone());
   let thumbnail = clip.thumbnail_url.clone();
   MediaCard::new(
     id,
@@ -418,11 +416,11 @@ pub fn clip_card(
     format!("{} · {}", views(clip.view_count), date(clip.created_at)),
   ])
   .badge(Some(ui::player::format_time(clip.duration)))
-  .on_click(move |_, cx| {
-    nav
-      .update(cx, |space, cx| space.open(route.clone(), cx))
-      .ok();
+  .on_middle_click({
+    let (nav, route, label) = (nav.clone(), route.clone(), label.clone());
+    move |_, cx| nav.open_in_new_tab(route.clone(), Some(label.clone()), cx)
   })
+  .on_click(move |_, cx| nav.open(route.clone(), cx))
   .grid(width, window, cx)
 }
 

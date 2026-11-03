@@ -1,5 +1,5 @@
 //! The mini-player: a window of its own, above every other window and outside the main one, as
-//! in Chrome's picture-in-picture (ADR 0008). It shows the video of the space that was left
+//! in Chrome's picture-in-picture (ADR 0008). It shows the video of the tab that was left
 //! while it played, without restarting it: the same player and video surface move here. On
 //! hover: buttons to go back to the page and to close (which pauses), and play/pause in the
 //! middle. Dragging the video moves the window; its edges and corners resize it at 16:9, the
@@ -18,7 +18,7 @@ use ui::i18n::t;
 use ui::player::PlayerView;
 
 use super::Shell;
-use super::space::SpaceHandle;
+use super::space::{SpaceHandle, TabId};
 
 /// Width of a new mini-player, logical pixels.
 const WIDTH: f32 = 400.;
@@ -101,6 +101,8 @@ impl Gesture {
 /// The mini-player's view.
 pub struct MiniPlayer {
   space: SpaceHandle,
+  /// The tab of `space` whose video shows.
+  tab: TabId,
   shell: WeakEntity<Shell>,
   /// The main window, where the shell lives.
   main: AnyWindowHandle,
@@ -109,9 +111,11 @@ pub struct MiniPlayer {
   observed: Option<(EntityId, Subscription)>,
 }
 
-/// Opens the mini-player on the screen of `window` (the main one), at its bottom right.
+/// Opens the mini-player on the screen of `window` (the main one), at its bottom right, on the
+/// video of `tab`.
 pub fn open(
   space: SpaceHandle,
+  tab: TabId,
   shell: WeakEntity<Shell>,
   main: AnyWindowHandle,
   window: &Window,
@@ -147,6 +151,7 @@ pub fn open(
   cx.open_window(options, |_, cx| {
     cx.new(|_| MiniPlayer {
       space,
+      tab,
       shell,
       main,
       gesture: None,
@@ -157,7 +162,7 @@ pub fn open(
 
 impl MiniPlayer {
   fn player(&self, cx: &App) -> Option<Entity<PlayerView>> {
-    self.space.player(cx)
+    self.space.player(self.tab, cx)
   }
 
   /// Runs `f` on the shell, in the main window.

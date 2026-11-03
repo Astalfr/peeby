@@ -13,6 +13,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Tabs
+
+- Done (2026-11-03, [ADR 0015](decisions/0015-tabs.md)): tabs of any space instead of one fixed tab per space. "+" opens one (a menu of the spaces), "×" or a middle click closes one (not the last), and a middle click on a link (video, channel, playlist, live, category, VOD, clip, Jellyfin title or episode, sidebar entry) opens it in a new tab in the background, built only when it shows. Tabs are named after their page (a video's title once loaded). A route opened in a tab whose pages are still waiting (a notification into a tab never shown, or after a session change) joins them instead of being cleared by them; a card's resume position is kept per video until its page opens. 3 new tests (`shell::space`). Verified in the app with posted clicks: the three startup tabs, a middle click on a video card opening a background tab named after it, a middle click on that tab closing it, "+" → YouTube opening a new tab on its start page. **Not verified:** playback in a tab opened by a middle click, the mini-player between two tabs of the same space, Twitch and Jellyfin middle clicks, a notification into a tab never shown or with no tab of its space open. No middle click yet on the rows of a playlist page or of the queue panel.
+- Next: restore the tabs at startup (their routes), keyboard shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab).
+
 ## Interface language
 
 - English and French interface (2026-11-02, [ADR 0014](decisions/0014-interface-language.md)): `ui::i18n` (`t`, `tf!`, `Lang`), the setting `interface_language` (default `en`) in the gear's Général section, applied at once to every window. Every UI string of `ui` and of the spaces has its English text next to the French one; YouTube's language and region are relabelled as the content language.

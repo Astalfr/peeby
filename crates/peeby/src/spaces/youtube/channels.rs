@@ -3,7 +3,7 @@
 //! Opened from the subscriptions page.
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, FontWeight, SharedString, Subscription, WeakEntity, Window, div, px};
+use gpui::{Context, Entity, FontWeight, SharedString, Subscription, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
@@ -11,9 +11,10 @@ use gpui_component::skeleton::Skeleton;
 use gpui_component::{IconName, h_flex, v_flex};
 use innertube::{Channel, Client, Error};
 
+use crate::shell::space::middle_click;
 use crate::spaces::youtube::bell;
 use crate::spaces::youtube::convert::{self, error_text};
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use ui::assets::Icon;
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
@@ -35,19 +36,14 @@ enum State {
 
 pub struct ChannelsView {
   client: Client,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   state: State,
   filter: Entity<InputState>,
   _filter_subscription: Subscription,
 }
 
 impl ChannelsView {
-  pub fn new(
-    client: Client,
-    nav: WeakEntity<YouTubeSpace>,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(client: Client, nav: Nav, window: &mut Window, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -134,11 +130,11 @@ impl ChannelsView {
       .rounded(theme::RADIUS_LG)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface()))
-      .on_click(move |_, window, cx| {
-        nav
-          .update(cx, |app, cx| app.open(route.clone(), window, cx))
-          .ok();
-      })
+      .on_aux_click(middle_click({
+        let (nav, route) = (nav.clone(), route.clone());
+        move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+      }))
+      .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
       .relative()
       .children(channel.notifications.as_ref().map(|notifications| {
         div()

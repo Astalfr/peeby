@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use gpui::prelude::*;
-use gpui::{Context, FontWeight, Task, WeakEntity, Window, div, px};
+use gpui::{Context, FontWeight, Task, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex};
 use twitch::gql::Channel;
@@ -16,7 +16,7 @@ use ui::picture;
 use ui::theme;
 
 use super::browse::load;
-use super::{Route, TwitchSpace, cards};
+use super::{Nav, Route, cards};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -34,7 +34,7 @@ struct Loaded {
 }
 
 pub struct ChannelView {
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   login: String,
   tab: Tab,
   loaded: Option<Result<Loaded, String>>,
@@ -43,7 +43,7 @@ pub struct ChannelView {
 
 impl ChannelView {
   pub fn new(
-    nav: WeakEntity<TwitchSpace>,
+    nav: Nav,
     helix: Helix,
     client: twitch::Client,
     login: String,
@@ -190,11 +190,7 @@ impl Render for ChannelView {
             Button::new("twitch-channel-watch")
               .primary()
               .label(t("Watch", "Regarder"))
-              .on_click(move |_, _, cx| {
-                nav
-                  .update(cx, |space, cx| space.open(Route::Watch(login.clone()), cx))
-                  .ok();
-              }),
+              .on_click(move |_, _, cx| nav.open(Route::Watch(login.clone()), cx)),
           ),
       )
     });

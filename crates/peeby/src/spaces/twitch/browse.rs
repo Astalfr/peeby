@@ -2,14 +2,14 @@
 //! its live streams (`streams?game_id=`), most viewers first.
 
 use gpui::prelude::*;
-use gpui::{Context, FontWeight, Task, WeakEntity, Window, div};
+use gpui::{Context, FontWeight, Task, Window, div};
 use gpui_component::v_flex;
 use twitch::helix::{Category, Helix, Stream};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::runtime;
 
-use super::TwitchSpace;
+use super::Nav;
 use super::cards::{self, Avatars};
 
 /// Pages of categories read (100 each).
@@ -20,7 +20,7 @@ pub(super) fn load<V: 'static, T: Send + 'static>(
   cx: &mut Context<V>,
   fetch: impl Future<Output = twitch::Result<T>> + Send + 'static,
   done: impl FnOnce(&mut V, Result<T, String>, &mut Context<V>) + 'static,
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
 ) -> Task<()> {
   let fetch = runtime::spawn(cx, fetch);
   cx.spawn(async move |this, cx| {
@@ -39,13 +39,13 @@ pub(super) fn load<V: 'static, T: Send + 'static>(
 }
 
 pub struct BrowseView {
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   categories: Option<Result<Vec<Category>, String>>,
   _load: Task<()>,
 }
 
 impl BrowseView {
-  pub fn new(nav: WeakEntity<TwitchSpace>, helix: Helix, cx: &mut Context<Self>) -> Self {
+  pub fn new(nav: Nav, helix: Helix, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -96,20 +96,14 @@ impl Render for BrowseView {
 }
 
 pub struct CategoryView {
-  nav: WeakEntity<TwitchSpace>,
+  nav: Nav,
   name: String,
   streams: Option<Result<(Vec<Stream>, Avatars), String>>,
   _load: Task<()>,
 }
 
 impl CategoryView {
-  pub fn new(
-    nav: WeakEntity<TwitchSpace>,
-    helix: Helix,
-    id: String,
-    name: String,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(nav: Nav, helix: Helix, id: String, name: String, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }

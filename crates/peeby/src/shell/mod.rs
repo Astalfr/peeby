@@ -1,8 +1,8 @@
-//! The window's root: a top bar shared by every space (menu button, back, logo, the spaces as
-//! tabs, search, audio output, notifications, settings), the sidebar with the open space's
-//! entries, and the space's current page in the content panel. Switching tabs while a video
-//! plays moves it to the mini-player, a window of its own above the others (docs/design.md,
-//! ADR 0008).
+//! The window's root: a top bar shared by every space (menu button, back, logo, the open tabs
+//! and "+" to open one of any space, search, audio output, notifications, settings), the sidebar
+//! with the entries of the tab's space, and the tab's current page in the content panel.
+//! Switching tabs while a video plays moves it to the mini-player, a window of its own above the
+//! others (docs/design.md, ADR 0008, ADR 0015).
 
 mod mini_player;
 mod settings_page;
@@ -18,7 +18,7 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Disableable, Selectable, TitleBar, h_flex, v_flex};
+use gpui_component::{Disableable, IconName, Selectable, TitleBar, h_flex, v_flex};
 use player::AudioDevice;
 use ui::assets::{self, Icon};
 use ui::i18n::t;
@@ -30,24 +30,53 @@ use ui::{motion, tf, theme};
 use crate::settings::Settings;
 use mini_player::MiniPlayer;
 use settings_page::SettingsView;
-use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle};
+use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle, TabId};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
 /// Width of the audio output menu.
 const AUDIO_MENU_WIDTH: f32 = 320.;
+/// Width of the menu of new tabs.
+const NEW_TAB_MENU_WIDTH: f32 = 220.;
+/// A tab's widest; tabs narrow down to [`TAB_MIN_WIDTH`] when the bar is full.
+const TAB_MAX_WIDTH: f32 = 220.;
+const TAB_MIN_WIDTH: f32 = 96.;
 
-/// The mini-player window and the space whose video it shows.
+/// A tab of the bar: its space (an index in `Shell::spaces`, which never changes) and its id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TabRef {
+  space: usize,
+  id: TabId,
+}
+
+/// The mini-player window and the tab whose video it shows.
 struct Mini {
   window: WindowHandle<MiniPlayer>,
-  space: usize,
+  tab: TabRef,
+}
+
+/// What a space's event asks of the shell, copied out of the event to be handled later.
+enum Request {
+  Activate(TabId),
+  Add {
+    tab: TabId,
+    after: Option<TabId>,
+    focus: bool,
+  },
+  Settings,
 }
 
 /// The window's root view.
 pub struct Shell {
   spaces: Vec<SpaceHandle>,
-  active: usize,
-  /// The settings page (gear), shown instead of the space's page while open.
+  /// The tabs, left to right.
+  tabs: Vec<TabRef>,
+  /// The tab shown; `None` only before the first one.
+  active: Option<TabRef>,
+  /// The last tab opened in the background from a tab: the next one from there goes after it,
+  /// as in a browser. Reset when another tab shows.
+  opened_from: Option<(TabId, TabId)>,
+  /// The settings page (gear), shown instead of the tab's page while open.
   settings: Option<AnyView>,
   mini: Option<Mini>,
   /// The opening animation over the window, until it ends.
@@ -72,8 +101,8 @@ const CARD_DELAY: Duration = Duration::from_millis(500);
 const CARD_GRACE: Duration = Duration::from_millis(300);
 
 impl Shell {
-  /// The shell over `spaces`, the first one open, with the opening animation when `splash` (and
-  /// GPUI's `reduce_motion` is off).
+  /// The shell over `spaces` and the tabs they opened, the first one shown, with the opening
+  /// animation when `splash` (and GPUI's `reduce_motion` is off).
   pub fn new(
     spaces: Vec<SpaceHandle>,
     splash: bool,
@@ -96,7 +125,11 @@ impl Shell {
       subscriptions.push(space.on_event(
         cx,
         Box::new(move |event, cx| {
-          let open_settings = matches!(event, SpaceEvent::OpenSettings);
+          let request = match *event {
+            SpaceEvent::Activate(tab) => Request::Activate(tab),
+            SpaceEvent::Opened { tab, after, focus } => Request::Add { tab, after, focus },
+            SpaceEvent::OpenSettings => Request::Settings,
+          };
           let shell = shell.clone();
           // Deferred: the event comes from inside the window (a click), which cannot be
           // updated again from there.
@@ -104,12 +137,12 @@ impl Shell {
             handle
               .update(cx, |_, window, cx| {
                 shell
-                  .update(cx, |shell, cx| {
-                    if open_settings {
-                      shell.open_settings(window, cx)
-                    } else {
-                      shell.activate(index, window, cx)
+                  .update(cx, |shell, cx| match request {
+                    Request::Activate(tab) => shell.activate(tab, window, cx),
+                    Request::Add { tab, after, focus } => {
+                      shell.add_tab(index, tab, after, focus, window, cx)
                     }
+                    Request::Settings => shell.open_settings(window, cx),
                   })
                   .ok();
               })
@@ -125,12 +158,21 @@ impl Shell {
         shell.close_mini(cx);
       }
     }));
-    if let Some(space) = spaces.first() {
-      theme::set_accent(space.info(cx).accent, cx);
-    }
-    Self {
+    let tabs: Vec<TabRef> = spaces
+      .iter()
+      .enumerate()
+      .flat_map(|(space, handle)| {
+        handle
+          .tabs(cx)
+          .into_iter()
+          .map(move |id| TabRef { space, id })
+      })
+      .collect();
+    let mut shell = Self {
       spaces,
-      active: 0,
+      tabs,
+      active: None,
+      opened_from: None,
       settings: None,
       mini: None,
       splash: (splash && !cx.reduce_motion()).then(Splash::new),
@@ -140,7 +182,14 @@ impl Shell {
       audio_devices: None,
       audio_listing: Task::ready(()),
       _subscriptions: subscriptions,
+    };
+    if let Some(&first) = shell.tabs.first() {
+      shell.active = Some(first);
+      let space = &shell.spaces[first.space];
+      space.show_tab(first.id, cx);
+      theme::set_accent(space.info(cx).accent, cx);
     }
+    shell
   }
 
   /// The pointer entered (`hovered`) or left the sidebar entry `id`, which has a card. From one
@@ -176,21 +225,102 @@ impl Shell {
     });
   }
 
-  fn space(&self) -> Option<&SpaceHandle> {
-    self.spaces.get(self.active)
+  /// The tab shown and its space.
+  fn current(&self) -> Option<(TabId, &SpaceHandle)> {
+    let tab = self.active?;
+    Some((tab.id, self.spaces.get(tab.space)?))
   }
 
-  /// Shows space `index` (its tab, a notification of it, the mini-player's button).
-  fn activate(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-    if index >= self.spaces.len() || (index == self.active && self.settings.is_none()) {
+  fn find(&self, id: TabId) -> Option<TabRef> {
+    self.tabs.iter().find(|t| t.id == id).copied()
+  }
+
+  /// Shows tab `id` (its tab, a notification of its space, the mini-player's button).
+  fn activate(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(tab) = self.find(id) else {
+      return;
+    };
+    if self.active == Some(tab) && self.settings.is_none() {
       return;
     }
     self.leave_page(window, cx);
     self.settings = None;
-    self.active = index;
-    self.enter_page(cx);
-    theme::transition_accent(self.spaces[index].info(cx).accent, cx);
+    self.show(tab, cx);
     cx.refresh_windows();
+  }
+
+  /// Makes `tab` the one shown, its video back from the mini-player.
+  fn show(&mut self, tab: TabRef, cx: &mut Context<Self>) {
+    self.active = Some(tab);
+    self.opened_from = None;
+    let space = self.spaces[tab.space].clone();
+    space.show_tab(tab.id, cx);
+    self.enter_page(cx);
+    theme::transition_accent(space.info(cx).accent, cx);
+    cx.notify();
+  }
+
+  /// Adds a tab a space opened, after `after` (and after the tabs opened from there before it),
+  /// else at the end; shows it when `focus`.
+  fn add_tab(
+    &mut self,
+    space: usize,
+    id: TabId,
+    after: Option<TabId>,
+    focus: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if self.find(id).is_some() {
+      return;
+    }
+    let position = |shell: &Self, id: TabId| shell.tabs.iter().position(|t| t.id == id);
+    let at = match after.and_then(|from| position(self, from).map(|i| (from, i))) {
+      Some((from, i)) => match self.opened_from {
+        Some((opener, last)) if opener == from => position(self, last).map_or(i + 1, |j| j + 1),
+        _ => i + 1,
+      },
+      None => self.tabs.len(),
+    };
+    self.tabs.insert(at, TabRef { space, id });
+    self.opened_from = after.map(|from| (from, id));
+    if focus {
+      self.activate(id, window, cx);
+    }
+    cx.notify();
+  }
+
+  /// The "+" menu: a tab of `space` on its first page, shown.
+  fn new_tab(&mut self, space: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(handle) = self.spaces.get(space).cloned() else {
+      return;
+    };
+    let id = handle.new_tab(cx);
+    self.tabs.push(TabRef { space, id });
+    self.activate(id, window, cx);
+  }
+
+  /// Closes tab `id` (its "×", a middle click on it): its pages and its video go, and the next
+  /// tab shows if it was the one shown. The last tab stays.
+  fn close_tab(&mut self, id: TabId, cx: &mut Context<Self>) {
+    if self.tabs.len() <= 1 {
+      return;
+    }
+    let Some(index) = self.tabs.iter().position(|t| t.id == id) else {
+      return;
+    };
+    let tab = self.tabs.remove(index);
+    if self.mini.as_ref().is_some_and(|m| m.tab == tab) {
+      self.close_mini(cx);
+    }
+    self.spaces[tab.space].close_tab(tab.id, cx);
+    if self.active == Some(tab) {
+      // Nothing to move to the mini-player: the page that showed is gone.
+      let next = self.tabs[index.min(self.tabs.len() - 1)];
+      self.show(next, cx);
+      cx.refresh_windows();
+    }
+    cx.notify();
   }
 
   /// The page on screen goes away (another tab, the settings): a video playing on it moves to
@@ -199,30 +329,33 @@ impl Shell {
     if self.settings.is_some() || self.mini.is_some() {
       return;
     }
-    let Some(player) = self.space().and_then(|s| s.player(cx)) else {
+    let Some(tab) = self.active else {
+      return;
+    };
+    let Some(player) = self.spaces[tab.space].player(tab.id, cx) else {
       return;
     };
     if player.read(cx).is_paused() {
       return;
     }
-    self.open_mini(self.active, window, cx);
+    self.open_mini(tab, window, cx);
   }
 
-  /// The space's page is on screen again: its video leaves the mini-player and plays on.
+  /// The tab's page is on screen again: its video leaves the mini-player and plays on.
   fn enter_page(&mut self, cx: &mut Context<Self>) {
-    if self.settings.is_none() && self.mini.as_ref().is_some_and(|m| m.space == self.active) {
+    if self.settings.is_none() && self.mini.as_ref().map(|m| m.tab) == self.active {
       self.close_mini(cx);
     }
   }
 
-  fn open_mini(&mut self, space: usize, window: &mut Window, cx: &mut Context<Self>) {
-    let Some(handle) = self.spaces.get(space).cloned() else {
+  fn open_mini(&mut self, tab: TabRef, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(handle) = self.spaces.get(tab.space).cloned() else {
       return;
     };
     let shell = cx.weak_entity();
     let main = window.window_handle();
-    match mini_player::open(handle, shell, main, window, cx) {
-      Ok(window) => self.mini = Some(Mini { window, space }),
+    match mini_player::open(handle, tab.id, shell, main, window, cx) {
+      Ok(window) => self.mini = Some(Mini { window, tab }),
       Err(e) => tracing::warn!("cannot open the mini-player: {e:#}"),
     }
   }
@@ -251,29 +384,29 @@ impl Shell {
     cx.notify();
   }
 
-  /// The mini-player's "back to the page": its space opens in the main window.
+  /// The mini-player's "back to the page": its tab shows in the main window.
   pub(crate) fn return_from_mini(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    if let Some(space) = self.mini.as_ref().map(|m| m.space) {
+    if let Some(tab) = self.mini.as_ref().map(|m| m.tab) {
       window.activate_window();
-      self.activate(space, window, cx);
-      // The space was the active one behind the settings page.
+      self.activate(tab.id, window, cx);
+      // The tab was the active one behind the settings page.
       self.settings = None;
       self.enter_page(cx);
       cx.notify();
     }
   }
 
-  /// The player the mini-player shows: the current one of its space.
+  /// The player the mini-player shows: the current one of its tab.
   fn mini_player(&self, cx: &App) -> Option<Entity<PlayerView>> {
     let mini = self.mini.as_ref()?;
-    self.spaces.get(mini.space)?.player(cx)
+    self.spaces.get(mini.tab.space)?.player(mini.tab.id, cx)
   }
 
-  /// A space changed (a page opened, a queue moved to its next video): the mini-player follows
-  /// its current player, and closes when there is none.
+  /// A space changed (a page opened, a queue moved to its next video, a title arrived): the
+  /// mini-player follows its tab's current player, and closes when there is none.
   fn space_changed(&mut self, index: usize, cx: &mut Context<Self>) {
     if let Some(mini) = &self.mini
-      && mini.space == index
+      && mini.tab.space == index
     {
       if self.mini_player(cx).is_none() {
         self.close_mini(cx);
@@ -290,29 +423,27 @@ impl Shell {
     }
     self.leave_page(window, cx);
     let spaces = self.spaces.clone();
-    self.settings = Some(
-      cx.new(|cx| SettingsView::new(spaces, self.active, cx))
-        .into(),
-    );
+    let active = self.active.map_or(0, |t| t.space);
+    self.settings = Some(cx.new(|cx| SettingsView::new(spaces, active, cx)).into());
     cx.notify();
   }
 
   fn back(&mut self, cx: &mut Context<Self>) {
     if self.settings.take().is_some() {
       self.enter_page(cx);
-    } else if let Some(space) = self.space() {
-      space.back(cx);
+    } else if let Some((tab, space)) = self.current() {
+      space.clone().back(tab, cx);
     }
     cx.notify();
   }
 
-  /// The top bar's search: the open space's search page.
+  /// The top bar's search: the search page of the tab's space, in the tab.
   fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if self.settings.take().is_some() {
       self.enter_page(cx);
     }
-    if let Some(space) = self.space().cloned() {
-      space.open_search(window, cx);
+    if let Some((tab, space)) = self.current() {
+      space.clone().open_search(tab, window, cx);
     }
     cx.notify();
   }
@@ -321,10 +452,17 @@ impl Shell {
     if self.settings.take().is_some() {
       self.enter_page(cx);
     }
-    if let Some(space) = self.space().cloned() {
-      space.open_entry(&id, window, cx);
+    if let Some((tab, space)) = self.current() {
+      space.clone().open_entry(tab, &id, window, cx);
     }
     cx.notify();
+  }
+
+  /// A middle click on a sidebar entry: its page in a new tab, in the background.
+  fn open_entry_in_new_tab(&mut self, id: SharedString, cx: &mut Context<Self>) {
+    if let Some((tab, space)) = self.current() {
+      space.clone().open_entry_in_new_tab(tab, &id, cx);
+    }
   }
 
   /// Lists the audio outputs again (the menu opened: a headset may have been plugged in).
@@ -365,11 +503,14 @@ impl Shell {
         Settings::update(cx, |s| s.sidebar_collapsed = !s.sidebar_collapsed);
         cx.notify();
       }));
-    let can_go_back = self.settings.is_some() || self.space().is_some_and(|s| s.can_go_back(cx));
+    let can_go_back = self.settings.is_some()
+      || self
+        .current()
+        .is_some_and(|(tab, s)| s.can_go_back(tab, cx));
     let search = self
-      .space()
-      .filter(|s| s.searchable(cx))
-      .map(|s| s.info(cx).name);
+      .current()
+      .filter(|(_, s)| s.searchable(cx))
+      .map(|(_, s)| s.info(cx).name);
     // Always present (disabled when there is nowhere to go) so the bar does not shift.
     let back = Button::new("back")
       .ghost()
@@ -387,8 +528,14 @@ impl Shell {
         .child(div().occlude().child(menu))
         .child(div().occlude().child(back))
         .child(mark(window, cx))
-        .child(div().occlude().ml_4().child(self.tabs(window, cx)))
-        .child(div().flex_1())
+        // The bar's empty part, right of "+", still drags the window.
+        .child(
+          div()
+            .flex_1()
+            .min_w_0()
+            .ml_4()
+            .child(div().occlude().child(self.tabs(window, cx))),
+        )
         .child(
           h_flex()
             .occlude()
@@ -420,20 +567,55 @@ impl Shell {
     )
   }
 
-  /// The spaces as tabs: the service's logo and the name; the open one has a light background
-  /// and a line in its accent underneath.
+  /// The open tabs: the service's logo and the page's title; the shown one has a light
+  /// background and a line in its accent underneath. Hovered or shown, a tab has its "×" (not
+  /// the last one); a middle click closes it. Then "+", a menu of the spaces to open a tab of.
   fn tabs(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    h_flex()
-      .h(px(34.))
-      .gap_1()
-      .children(self.spaces.iter().enumerate().map(|(index, space)| {
+    let closable = self.tabs.len() > 1;
+    let tabs: Vec<_> = self
+      .tabs
+      .iter()
+      .map(|&tab| {
+        let space = &self.spaces[tab.space];
         let info = space.info(cx);
-        let active = index == self.active && self.settings.is_none();
+        let title = space.title(tab.id, cx);
+        let active = Some(tab) == self.active && self.settings.is_none();
+        let group = SharedString::from(format!("tab-{}", tab.id));
+        let id = tab.id;
+        let close = closable.then(|| {
+          div()
+            .id(SharedString::from(format!("tab-close-{id}")))
+            .flex_none()
+            .size(px(18.))
+            .rounded(px(4.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(theme::muted())
+            .when(!active, |el| {
+              el.invisible().group_hover(group.clone(), |s| s.visible())
+            })
+            .hover(|s| {
+              s.bg(gpui::white().opacity(0.08))
+                .text_color(theme::foreground())
+            })
+            .child(gpui_component::Icon::new(IconName::Close).size(px(12.)))
+            .on_click(cx.listener(move |this, _, _, cx| {
+              cx.stop_propagation();
+              this.close_tab(id, cx);
+            }))
+        });
+        let tooltip = title.clone();
         h_flex()
-          .id(SharedString::from(format!("tab-{index}")))
+          .id(group.clone())
+          .group(group.clone())
           .relative()
           .h_full()
-          .px_3()
+          .min_w(px(TAB_MIN_WIDTH))
+          .max_w(px(TAB_MAX_WIDTH))
+          .flex_shrink_1()
+          .pl_3()
+          .pr_1p5()
           .gap_2()
           .items_center()
           .rounded(theme::RADIUS)
@@ -462,10 +644,94 @@ impl Shell {
             s.bg(gpui::white().opacity(0.04))
               .text_color(theme::foreground())
           })
-          .child(assets::color_svg(info.icon, 18., window, cx))
-          .child(info.name.clone())
-          .on_click(cx.listener(move |this, _, window, cx| this.activate(index, window, cx)))
-      }))
+          .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+          })
+          .child(
+            div()
+              .flex_none()
+              .child(assets::color_svg(info.icon, 18., window, cx)),
+          )
+          .child(div().flex_1().min_w_0().truncate().child(title))
+          .children(close)
+          .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
+          .on_aux_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+            if event.is_middle_click() {
+              this.close_tab(id, cx);
+            }
+          }))
+      })
+      .collect();
+    h_flex()
+      .h(px(34.))
+      .min_w_0()
+      .gap_1()
+      .items_center()
+      .children(tabs)
+      .child(self.new_tab_menu(cx))
+  }
+
+  /// "+": the spaces, a click opens a tab of one on its first page.
+  fn new_tab_menu(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let shell = cx.weak_entity();
+    let spaces: Vec<_> = self.spaces.iter().map(|space| space.info(cx)).collect();
+    let trigger = Button::new("new-tab-button")
+      .ghost()
+      .icon(Icon::Plus)
+      .tooltip(t("New tab", "Nouvel onglet"));
+    div().flex_none().child(
+      Popover::new("new-tab")
+        .anchor(Anchor::TopLeft)
+        .trigger(trigger)
+        .content(move |_, window, cx| {
+          let rows: Vec<_> = spaces
+            .iter()
+            .enumerate()
+            .map(|(index, info)| {
+              let shell = shell.clone();
+              h_flex()
+                .id(SharedString::from(format!("new-tab-{index}")))
+                .w_full()
+                .px_2()
+                .py_1p5()
+                .gap_3()
+                .items_center()
+                .rounded(theme::RADIUS)
+                .cursor_pointer()
+                .text_sm()
+                .hover(|s| s.bg(theme::surface_hover()))
+                .child(assets::color_svg(info.icon, 18., window, cx))
+                .child(info.name.clone())
+                .on_click(cx.listener(move |state, _, window, cx| {
+                  state.dismiss(window, cx);
+                  let shell = shell.clone();
+                  let handle = window.window_handle();
+                  // The popover is drawn in the window: open the tab once it is done.
+                  cx.defer(move |cx| {
+                    handle
+                      .update(cx, |_, window, cx| {
+                        shell
+                          .update(cx, |shell, cx| shell.new_tab(index, window, cx))
+                          .ok();
+                      })
+                      .ok();
+                  });
+                }))
+            })
+            .collect();
+          v_flex()
+            .w(px(NEW_TAB_MENU_WIDTH))
+            .gap_1()
+            .child(
+              div()
+                .px_2()
+                .pb_1()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(t("New tab", "Nouvel onglet")),
+            )
+            .children(rows)
+        }),
+    )
   }
 
   /// The notifications of every space in one panel, a section per space that has some; the
@@ -663,7 +929,10 @@ impl Shell {
   /// The open space's entries; folded, each shows its icon alone with its label as a tooltip.
   fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let collapsed = Settings::get(cx).sidebar_collapsed;
-    let entries = self.space().map(|s| s.menu(cx)).unwrap_or_default();
+    let entries = self
+      .current()
+      .map(|(tab, s)| s.menu(tab, cx))
+      .unwrap_or_default();
     let in_settings = self.settings.is_some();
     let (bottom, top): (Vec<MenuEntry>, Vec<MenuEntry>) =
       entries.into_iter().partition(|e| e.bottom);
@@ -767,6 +1036,14 @@ impl Shell {
             .when(entry.live, |el| el.child(live_pill()))
           }
         })
+        .on_aux_click(cx.listener({
+          let id = id.clone();
+          move |this, event: &gpui::ClickEvent, _, cx| {
+            if event.is_middle_click() {
+              this.open_entry_in_new_tab(id.clone(), cx)
+            }
+          }
+        }))
         .on_click(cx.listener(move |this, _, window, cx| {
           // A click puts the card away, as GPUI does a tooltip.
           this.card_delay = Task::ready(());
@@ -1035,7 +1312,7 @@ impl Render for Shell {
     let page = self
       .settings
       .clone()
-      .or_else(|| self.space().map(|s| s.view()));
+      .or_else(|| self.current().map(|(_, s)| s.view()));
     // Fullscreen belongs to the player: no top bar, no sidebar.
     if window.is_fullscreen() {
       return root.children(page).children(splash);

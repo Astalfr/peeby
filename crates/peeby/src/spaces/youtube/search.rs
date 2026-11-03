@@ -3,8 +3,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-  AppContext, Context, Entity, FontWeight, ScrollHandle, SharedString, Subscription, WeakEntity,
-  Window, div, px,
+  AppContext, Context, Entity, FontWeight, ScrollHandle, SharedString, Subscription, Window, div,
+  px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -12,9 +12,10 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{h_flex, v_flex};
 use innertube::{Channel, Client, Error, SearchResult};
 
+use crate::shell::space::middle_click;
 use crate::spaces::youtube::cards::video_row;
 use crate::spaces::youtube::convert::{self, error_text};
-use crate::spaces::youtube::{Route, YouTubeSpace};
+use crate::spaces::youtube::{Nav, Route};
 use ui::assets::Icon;
 use ui::card::{ROW_WIDTH, WIDE, skeleton_row};
 use ui::i18n::t;
@@ -39,7 +40,7 @@ enum State {
 
 pub struct SearchView {
   client: Client,
-  nav: WeakEntity<YouTubeSpace>,
+  nav: Nav,
   input: Entity<InputState>,
   state: State,
   loading_more: bool,
@@ -52,12 +53,7 @@ pub struct SearchView {
 }
 
 impl SearchView {
-  pub fn new(
-    client: Client,
-    nav: WeakEntity<YouTubeSpace>,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> Self {
+  pub fn new(client: Client, nav: Nav, window: &mut Window, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -206,11 +202,11 @@ impl SearchView {
       .rounded(theme::RADIUS_LG)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface()))
-      .on_click(move |_, window, cx| {
-        nav
-          .update(cx, |app, cx| app.open(route.clone(), window, cx))
-          .ok();
-      })
+      .on_aux_click(middle_click({
+        let (nav, route) = (nav.clone(), route.clone());
+        move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+      }))
+      .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
       .child(
         div()
           .w(px(ROW_WIDTH))
