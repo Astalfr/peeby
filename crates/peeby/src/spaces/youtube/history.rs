@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use gpui::{App, Entity, Global};
+use gpui::{App, Context, Entity, Global};
 use innertube::{Client, Tracking, VideoItem, Watchtime};
 use ui::player::{PlayerEvent, PlayerView};
 use ui::runtime;
@@ -73,6 +73,47 @@ fn remember(video_id: &str, position: f64, duration: f64, cx: &mut App) {
 }
 
 /// What one watch page reports.
+/// Asks for the stats URLs of `reporter`'s video (signed in), then pings every [`PING_EVERY`]
+/// while the view lives; `parts` gives the view's reporter and player.
+pub fn report<V: 'static>(
+  reporter: &Reporter,
+  parts: fn(&mut V) -> (&mut Reporter, Entity<PlayerView>),
+  cx: &mut Context<V>,
+) {
+  let Some(tracking) = reporter.fetch_tracking(cx) else {
+    return;
+  };
+  cx.spawn(async move |this, cx| {
+    match tracking.await {
+      Some(Ok(tracking)) => {
+        let set = this.update(cx, |this, cx| {
+          let (reporter, player) = parts(this);
+          reporter.set_tracking(tracking, &player, cx);
+        });
+        if set.is_err() {
+          return;
+        }
+      }
+      Some(Err(e)) => {
+        tracing::warn!("YouTube history: no stats URLs: {e}");
+        return;
+      }
+      None => return,
+    }
+    loop {
+      cx.background_executor().timer(PING_EVERY).await;
+      let ticked = this.update(cx, |this, cx| {
+        let (reporter, player) = parts(this);
+        reporter.tick(&player, cx);
+      });
+      if ticked.is_err() {
+        break;
+      }
+    }
+  })
+  .detach();
+}
+
 pub struct Reporter {
   client: Client,
   video_id: String,

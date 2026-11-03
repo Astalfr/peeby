@@ -6,6 +6,7 @@ pub mod bell;
 pub mod cards;
 pub mod channels;
 pub mod chat;
+pub mod comments;
 pub mod convert;
 pub mod feed;
 pub mod history;
@@ -13,9 +14,11 @@ pub mod inbox;
 pub mod playlists;
 pub mod prefetch;
 pub mod queue;
+pub mod rating;
 pub mod save;
 pub mod search;
 pub mod settings_page;
+pub mod shorts;
 pub mod tools;
 pub mod watch;
 
@@ -42,6 +45,7 @@ use feed::{FeedView, Source};
 use playlists::{PlaylistView, PlaylistsView};
 use queue::Queue;
 use search::SearchView;
+use shorts::ShortsView;
 use watch::WatchView;
 
 /// A page of the app.
@@ -49,6 +53,8 @@ use watch::WatchView;
 pub enum Route {
   Home,
   Subscriptions,
+  /// YouTube's Shorts, one at a time.
+  Shorts,
   /// The account's watch history.
   History,
   /// The subscribed channels.
@@ -100,7 +106,12 @@ impl Route {
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
-      Self::Home | Self::Subscriptions | Self::History | Self::Playlists | Self::Search => true,
+      Self::Home
+      | Self::Subscriptions
+      | Self::Shorts
+      | Self::History
+      | Self::Playlists
+      | Self::Search => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
     }
@@ -111,6 +122,7 @@ impl Route {
     match self {
       Self::Home => t("Home", "Accueil").into(),
       Self::Subscriptions => t("Subscriptions", "Abonnements").into(),
+      Self::Shorts => t("Shorts", "Shorts").into(),
       Self::History => t("History", "Historique").into(),
       Self::Channels => t("Channels", "Chaînes").into(),
       Self::Channel { name, .. } => name.clone().into(),
@@ -283,6 +295,7 @@ impl YouTubeSpace {
       Route::Subscriptions => cx
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
+      Route::Shorts => cx.new(|cx| ShortsView::new(client, nav, cx)).into(),
       Route::History => cx
         .new(|cx| FeedView::new(client, Source::History, nav, cx))
         .into(),
@@ -418,9 +431,24 @@ impl YouTubeSpace {
       .ok()
   }
 
+  fn top_shorts(&self, tab: TabId) -> Option<Entity<ShortsView>> {
+    self
+      .tabs
+      .get(tab)?
+      .stack
+      .last()?
+      .view
+      .clone()
+      .downcast::<ShortsView>()
+      .ok()
+  }
+
+  /// Pauses the player of the page on top of `tab` while another page covers it.
   fn set_top_covered(&self, tab: TabId, covered: bool, cx: &mut App) {
     if let Some(watch) = self.top_watch(tab) {
       watch.update(cx, |watch, cx| watch.set_covered(covered, cx));
+    } else if let Some(shorts) = self.top_shorts(tab) {
+      shorts.update(cx, |shorts, cx| shorts.set_covered(covered, cx));
     }
   }
 
@@ -434,6 +462,7 @@ impl YouTubeSpace {
     Some(match id {
       "home" => Route::Home,
       "subscriptions" => Route::Subscriptions,
+      "shorts" => Route::Shorts,
       "history" => Route::History,
       "watch-later" => Route::watch_later(),
       "playlists" => Route::Playlists,
@@ -490,6 +519,7 @@ impl Space for YouTubeSpace {
         Icon::Subscriptions,
         false,
       ),
+      ("shorts", t("Shorts", "Shorts"), Icon::Shorts, false),
       ("history", t("History", "Historique"), Icon::History, false),
       (
         "watch-later",
@@ -545,6 +575,9 @@ impl Space for YouTubeSpace {
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
+    if let Some(shorts) = self.top_shorts(tab) {
+      return shorts.read(cx).player(cx);
+    }
     Some(self.top_watch(tab)?.read(cx).player())
   }
 
@@ -591,9 +624,9 @@ impl Render for YouTubeSpace {
     };
     let depth = self.tabs.get(tab).map_or(0, |t| t.stack.len());
     let view = div().size_full().relative().child(page.view.clone());
-    // A short fade and rise each time a page appears. Not on the watch page: its video surface
-    // is an external texture, and leaving fullscreen would replay the fade.
-    if matches!(page.route, Route::Watch(_)) || window.is_fullscreen() {
+    // A short fade and rise each time a page appears. Not on the watch and Shorts pages: their
+    // video surface is an external texture, and leaving fullscreen would replay the fade.
+    if matches!(page.route, Route::Watch(_) | Route::Shorts) || window.is_fullscreen() {
       return view.into_any_element();
     }
     view

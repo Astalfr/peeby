@@ -104,6 +104,11 @@ pub struct WatchPage {
   pub like_status: LikeStatus,
   /// What the page's like and dislike buttons send.
   pub like_params: LikeParams,
+  /// Localized like count on the like button, e.g. `12 k`: as shown while the user does not
+  /// like the video, and while they do.
+  pub likes: Option<String>,
+  /// See [`WatchPage::likes`].
+  pub likes_liked: Option<String>,
   /// The channel's notification bell, when the user is subscribed to it.
   pub notifications: Option<ChannelNotifications>,
   /// Token of a live's chat ([`crate::Client::live_chat`]); `None` for a video or a finished
@@ -597,6 +602,15 @@ pub struct Votes {
   pub likes: u64,
   /// Estimated dislikes.
   pub dislikes: u64,
+}
+
+/// A page of the Shorts feed (`reel/…`): Shorts to play in order, picked by YouTube.
+#[derive(Clone, Debug, Default)]
+pub struct ShortsPage {
+  /// Video ids, in order.
+  pub ids: Vec<String>,
+  /// Token for [`crate::Client::shorts_more`].
+  pub continuation: Option<String>,
 }
 
 /// A playlist of the user's library (`FEplaylist_aggregation`): their own playlists, saved

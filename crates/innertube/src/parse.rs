@@ -15,7 +15,10 @@
 //!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`;
 //! - search results (`search`): `videoRenderer`s and `channelRenderer`s in an
 //!   `itemSectionRenderer`, beside Shorts shelves (`gridShelfViewModel`) and playlist or course
-//!   lockups; a next page in `appendContinuationItemsAction`.
+//!   lockups; a next page in `appendContinuationItemsAction`;
+//! - the Shorts feed: a `reelWatchEndpoint` per Short, the first in the `replacementEndpoint`
+//!   of `reel/reel_item_watch` beside the `sequenceContinuation`, the next ones in the `entries`
+//!   of `reel/reel_watch_sequence` beside a `continuationEndpoint`.
 
 use serde_json::Value;
 
@@ -25,8 +28,8 @@ use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
   LiveChatPage, Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, TextLink,
-  Thumbnail, Tracking, VideoItem, WatchPage,
+  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, ShortsPage, Storyboard,
+  TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -81,6 +84,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
   collect_lockups(secondary_results, true, &mut related);
 
   let (like_status, like_params) = parse_like_buttons(&primary["videoActions"]);
+  let (likes, likes_liked) = parse_like_counts(&primary["videoActions"]);
 
   // A finished live keeps a chat replay: not a chat to follow.
   let chat = &results["conversationBar"]["liveChatRenderer"];
@@ -112,6 +116,8 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     comments_continuation,
     like_status,
     like_params,
+    likes,
+    likes_liked,
     notifications: parse_notification_bell(&secondary["subscribeButton"]),
     live_chat,
     chapters: parse_chapters(response),
@@ -318,6 +324,57 @@ fn parse_like_buttons(actions: &Value) -> (LikeStatus, LikeParams) {
     }
   }
   (status, params)
+}
+
+/// The like button's counts (its title), untoggled and toggled (liked).
+fn parse_like_counts(actions: &Value) -> (Option<String>, Option<String>) {
+  let Some(like) = find_key(actions, "likeButtonViewModel") else {
+    return Default::default();
+  };
+  let title = |key| {
+    find_key(&like, key)
+      .and_then(|b| b["buttonViewModel"]["title"].as_str().map(str::to_owned))
+      .filter(|t| !t.is_empty())
+  };
+  (
+    title("defaultButtonViewModel"),
+    title("toggledButtonViewModel"),
+  )
+}
+
+/// Parses the first page of the Shorts feed (`reel/reel_item_watch` without a video): the
+/// Short YouTube starts with and the token of the next ones.
+pub fn parse_shorts_seed(response: &Value) -> ShortsPage {
+  ShortsPage {
+    ids: reel_video_id(&response["replacementEndpoint"])
+      .into_iter()
+      .collect(),
+    continuation: response["sequenceContinuation"].as_str().map(str::to_owned),
+  }
+}
+
+/// Parses a next page of the Shorts feed (`reel/reel_watch_sequence`). Entries without a video
+/// are skipped.
+pub fn parse_shorts_sequence(response: &Value) -> ShortsPage {
+  ShortsPage {
+    ids: response["entries"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .filter_map(|e| reel_video_id(&e["command"]))
+      .collect(),
+    continuation: response["continuationEndpoint"]["continuationCommand"]["token"]
+      .as_str()
+      .map(str::to_owned),
+  }
+}
+
+/// Video id of a command holding a `reelWatchEndpoint`.
+fn reel_video_id(command: &Value) -> Option<String> {
+  command["reelWatchEndpoint"]["videoId"]
+    .as_str()
+    .filter(|id| !id.is_empty())
+    .map(str::to_owned)
 }
 
 /// Subtitle tracks of a player response, as WebVTT URLs. Machine translations (`tlang`) are

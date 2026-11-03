@@ -1,0 +1,40 @@
+{
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED",
+  "replacementEndpoint": {
+    "commandMetadata": {
+      "webCommandMetadata": {
+        "url": "/shorts/vWfSwQU15Fs",
+        "webPageType": "WEB_PAGE_TYPE_SHORTS",
+        "rootVe": 37414
+      }
+    },
+    "reelWatchEndpoint": {
+      "videoId": "vWfSwQU15Fs",
+      "thumbnail": {
+        "thumbnails": [
+          {
+            "url": "https://i.ytimg.com/vi/vWfSwQU15Fs/frame0.jpg",
+            "width": 1080,
+            "height": 1920
+          }
+        ],
+        "isOriginalAspectRatio": true
+      },
+      "params": "CA8wAroBGFVDdTMtZ1ByMWstSTA1QnJ6UExPUlF2Zw%3D%3D"
+    }
+  },
+  "sequenceContinuation": "GmYKC3ZXZlN3UVUxNUZzGAAgAUJTCAAQIBo18gYyCjAKBZoBAhABGAEiAiAB6sTvvAsVEhMI8JCNh43slwMV7s6OCR0A_g346rrK8w0CCA8iBwoFMzI6U0gqDQoLdldmU3dRVTE1RnMqAhgPQgBiBFJEU0g%3D"
+}

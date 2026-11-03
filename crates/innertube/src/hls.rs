@@ -5,7 +5,8 @@
 /// A video variant of the master playlist.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Variant {
-  /// Height in pixels.
+  /// Height in pixels; a vertical video's width (its shorter side), so that a 1080×1920 Short
+  /// is "1080p" and fits a 1080 cap as YouTube labels it.
   pub height: u32,
   /// `FRAME-RATE` rounded, e.g. 60.
   pub frame_rate: Option<u32>,
@@ -57,7 +58,7 @@ pub fn ladder(master: &str) -> Vec<Variant> {
     let resolution = attribute(attrs, "RESOLUTION").unwrap_or_default();
     let height = resolution
       .split_once('x')
-      .and_then(|(_, h)| h.parse().ok())
+      .and_then(|(w, h)| Some(w.parse::<u32>().ok()?.min(h.parse().ok()?)))
       .unwrap_or(0);
     let bandwidth = attribute(attrs, "BANDWIDTH")
       .and_then(|b| b.parse().ok())
@@ -162,5 +163,14 @@ mod tests {
     assert_eq!(attribute(attrs, "CODECS").unwrap(), "avc1.4D401F,mp4a.40.2");
     assert_eq!(attribute(attrs, "AUDIO").unwrap(), "234");
     assert_eq!(attribute(r#"GROUP-ID="1",ID=2"#, "ID").unwrap(), "2");
+  }
+
+  #[test]
+  fn vertical_variants_count_their_width() {
+    let master = "#EXT-X-STREAM-INF:BANDWIDTH=2,CODECS=\"avc1\",RESOLUTION=1080x1920\nhigh.m3u8\n\
+      #EXT-X-STREAM-INF:BANDWIDTH=1,CODECS=\"avc1\",RESOLUTION=720x1280\nlow.m3u8\n";
+    let best = best_variant(master, 1080).unwrap();
+    assert_eq!((best.height, best.url.as_str()), (1080, "high.m3u8"));
+    assert_eq!(best.label(), "1080p");
   }
 }

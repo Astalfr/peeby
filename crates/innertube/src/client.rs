@@ -8,13 +8,13 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::models::{
   Channel, CommentPage, Feed, LikeStatus, LiveChatPage, NotificationPage, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, Stream, Tracking, Votes, WatchPage, Watchtime,
+  PlaylistSummary, SearchPage, ShortsPage, Stream, Tracking, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
   parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
-  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_tracking,
-  parse_unseen_count, parse_watch, tracking_param,
+  parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -367,6 +367,34 @@ impl Client {
       .web("browse", json!({ "continuation": token }), true)
       .await?;
     self.feed(&response)
+  }
+
+  /// The Shorts feed: its first Short and the token of the next ones ([`Client::shorts_more`]).
+  /// Personalized when signed in; signed in but answered as signed out: [`Error::NotLoggedIn`].
+  pub async fn shorts(&self) -> Result<ShortsPage> {
+    // As the web client asks from its "Shorts" entry: no video ("seedless"), `params` and
+    // `inputType` from that entry's `reelWatchEndpoint`, without the player response.
+    let body = json!({
+      "params": "CA8%3D",
+      "inputType": "REEL_WATCH_INPUT_TYPE_SEEDLESS",
+      "disablePlayerResponse": true,
+    });
+    let response = self.web("reel/reel_item_watch", body, true).await?;
+    self.check_session(&response)?;
+    Ok(parse_shorts_seed(&response))
+  }
+
+  /// The next Shorts of the feed after `token` ([`ShortsPage::continuation`]).
+  pub async fn shorts_more(&self, token: &str) -> Result<ShortsPage> {
+    let response = self
+      .web(
+        "reel/reel_watch_sequence",
+        json!({ "sequenceParams": token }),
+        true,
+      )
+      .await?;
+    self.check_session(&response)?;
+    Ok(parse_shorts_sequence(&response))
   }
 
   /// Watch page: metadata, related videos, comments token.

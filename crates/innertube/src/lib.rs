@@ -7,6 +7,8 @@
 //!   [`Client::subscribed_channels`], [`Client::channel_videos`];
 //! - [`Client::search`], [`Client::search_more`]: videos and channels matching a query;
 //! - [`Client::watch`]: watch page metadata, related videos and the comments token (`next`);
+//! - [`Client::shorts`], [`Client::shorts_more`]: the Shorts feed, an endless sequence picked
+//!   by YouTube (`reel/…`), each Short's metadata then from [`Client::watch`];
 //! - [`Client::comments`]: comment pages and replies (`next` continuations);
 //! - [`Client::rate`]: likes, dislikes or clears the user's rating of a video (`like/…`);
 //! - [`Client::set_channel_notifications`]: the bell of a subscribed channel
@@ -43,12 +45,12 @@ pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
   LiveChatPage, Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, StoryboardFrame,
-  Stream, TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
+  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, ShortsPage, Storyboard,
+  StoryboardFrame, Stream, TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
   parse_notifications, parse_playlist, parse_playlist_choices, parse_playlist_page,
-  parse_playlists, parse_search, parse_storyboard, parse_subscriptions, parse_tracking,
-  parse_unseen_count, parse_watch,
+  parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch,
 };

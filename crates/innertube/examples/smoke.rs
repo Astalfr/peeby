@@ -186,6 +186,41 @@ async fn main() {
       .await
       .map(|s| format!("{} {}", s.resolution, s.codecs)),
   );
+  // The Shorts feed: its first page, the next one, and a Short's stream.
+  let shorts = client.shorts().await;
+  let next_token = shorts.as_ref().ok().and_then(|s| s.continuation.clone());
+  let short = shorts.as_ref().ok().and_then(|s| s.ids.first().cloned());
+  check(
+    "shorts",
+    shorts.map(|s| {
+      format!(
+        "{} shorts · more: {}",
+        s.ids.len(),
+        s.continuation.is_some()
+      )
+    }),
+  );
+  if let Some(token) = next_token {
+    check(
+      "shorts more",
+      client.shorts_more(&token).await.map(|s| {
+        format!(
+          "{} shorts · more: {}",
+          s.ids.len(),
+          s.continuation.is_some()
+        )
+      }),
+    );
+  }
+  if let Some(id) = short {
+    check(
+      "short stream",
+      client
+        .stream(&id, 1080)
+        .await
+        .map(|s| format!("{} {}", s.resolution, s.codecs)),
+    );
+  }
   check(
     "votes (RYD)",
     client

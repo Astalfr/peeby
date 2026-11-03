@@ -18,24 +18,24 @@ use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, Entity, FontWeight, Global, HighlightStyle, InteractiveText,
-  ScrollHandle, SharedString, StyledText, Subscription, Task, UnderlineStyle, WeakEntity, Window,
-  div, point, px, relative,
+  AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
+  Task, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::notification::Notification;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
-use innertube::{Client, Comment, LikeStatus, LinkTarget, TextLink, Votes, WatchPage};
+use gpui_component::{Selectable, h_flex, v_flex};
+use innertube::{Client, LikeStatus, TextLink, Votes, WatchPage};
 
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
 use crate::spaces::youtube::cards::{compact_card, playlist_row};
+use crate::spaces::youtube::comments::{CommentSection, HoveredLink, Links, linked_text};
 use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::history::{self, Reporter};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
+use crate::spaces::youtube::rating::{self, Rating};
 use crate::spaces::youtube::{Nav, Route};
 use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
 use ui::assets::Icon;
@@ -45,8 +45,7 @@ use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::{PlayerEvent, PlayerView, Prefs};
-use ui::widgets::{loading_more, near_scroll_end};
-use ui::{runtime, tf, theme};
+use ui::{runtime, theme};
 
 /// Width of the related videos column.
 const RELATED_WIDTH: f32 = 400.;
@@ -70,27 +69,6 @@ struct VotesCache(HashMap<String, Votes>);
 
 impl Global for VotesCache {}
 
-#[derive(Default)]
-struct Comments {
-  items: Vec<Comment>,
-  count: Option<String>,
-  continuation: Option<String>,
-  loading: bool,
-  /// Whether the first page was asked for.
-  requested: bool,
-  /// The last request failed: no automatic retry, the button retries.
-  failed: bool,
-}
-
-/// Replies of one comment, loaded when first opened.
-#[derive(Default)]
-struct Replies {
-  items: Vec<Comment>,
-  continuation: Option<String>,
-  loading: bool,
-  open: bool,
-}
-
 pub struct WatchView {
   client: Client,
   video_id: String,
@@ -99,16 +77,11 @@ pub struct WatchView {
   page: Option<WatchPage>,
   /// The whole description is shown ("Show more").
   description_open: bool,
-  /// The link under the pointer: the id of its text and its index there.
-  hovered_link: Option<(SharedString, usize)>,
+  /// The description's link under the pointer.
+  hovered_link: HoveredLink,
   votes: Option<Votes>,
-  /// The user's rating as shown: the page's, then each click's until YouTube says otherwise.
-  like_status: LikeStatus,
-  /// A rating is waiting for YouTube's answer: clicks send nothing meanwhile.
-  rating: bool,
-  comments: Comments,
-  /// By comment id.
-  replies: HashMap<String, Replies>,
+  rating: Rating,
+  comments: Entity<CommentSection>,
   scroll: ScrollHandle,
   /// The playlist being played, if any.
   queue: Option<Entity<Queue>>,
@@ -213,6 +186,18 @@ impl WatchView {
     })
     .detach();
     let history = Reporter::new(client.clone(), video_id.clone());
+    let scroll = ScrollHandle::new();
+    let comments = cx.new(|cx| {
+      CommentSection::new(
+        client.clone(),
+        video_id.clone(),
+        nav.clone(),
+        player.clone(),
+        scroll.clone(),
+        true,
+        cx,
+      )
+    });
     let view = Self {
       client,
       video_id,
@@ -220,11 +205,9 @@ impl WatchView {
       player,
       page: None,
       votes,
-      like_status: LikeStatus::Indifferent,
-      rating: false,
-      comments: Comments::default(),
-      replies: HashMap::new(),
-      scroll: ScrollHandle::new(),
+      rating: Rating::default(),
+      comments,
+      scroll,
       description_open: false,
       hovered_link: None,
       queue,
@@ -415,111 +398,17 @@ impl WatchView {
   }
 
   fn load_stream(&self, cx: &mut Context<Self>) {
-    let clicked = Instant::now();
-    if let Some(stream) = prefetch::take(&self.video_id, cx) {
-      tracing::info!(
-        "stream from hover prefetch: {} {}",
-        stream.resolution,
-        stream.codecs
-      );
-      let mut source = convert::source(stream, &Settings::get(cx).player);
-      resume(&mut source, self.start);
-      self
-        .player
-        .update(cx, |player, cx| player.start(source, clicked, cx));
-      return;
-    }
-    let max_height = Settings::get(cx).max_height;
-    let player_settings = Settings::get(cx).player.clone();
-    let (client, id) = (self.client.clone(), self.video_id.clone());
-    let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
-    let player = self.player.downgrade();
-    let video_id = self.video_id.clone();
-    let start = self.start;
-    cx.spawn(async move |_, cx| {
-      let error = match fetch.await {
-        Some(Ok(stream)) => {
-          tracing::info!(
-            "stream after {:.2} s: {} {}",
-            clicked.elapsed().as_secs_f64(),
-            stream.resolution,
-            stream.codecs
-          );
-          let mut source = convert::source(stream, &player_settings);
-          resume(&mut source, start);
-          player
-            .update(cx, |player, cx| player.start(source, clicked, cx))
-            .ok();
-          return;
-        }
-        Some(Err(e)) => e,
-        None => return,
-      };
-      // Network down: yt-dlp would fail too. Anything else (age or membership restriction,
-      // client blocked, unexpected response): let the bundled yt-dlp try (ADR 0005).
-      let fallback = if matches!(error, innertube::Error::Http(_)) {
-        None
-      } else {
-        tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
-        cx.background_executor()
-          .spawn(async move { tools::ytdl_options(&video_id) })
-          .await
-      };
-      player
-        .update(cx, |player, cx| match fallback {
-          Some(mut options) => {
-            player_settings.apply(&mut options);
-            // A card's resume is never a live's.
-            if let Some(start) = start {
-              options.start_seconds = start;
-            }
-            player.start_with(options, clicked, cx)
-          }
-          None => {
-            tracing::warn!("stream: {error}");
-            player.fail(error_text(&error).into(), cx);
-          }
-        })
-        .ok();
-    })
-    .detach();
+    load_stream(&self.client, &self.video_id, self.start, &self.player, cx);
   }
 
   /// Asks for the stats URLs (signed in), then pings every [`history::PING_EVERY`] while the
   /// page lives.
   fn report_history(&self, cx: &mut Context<Self>) {
-    let Some(tracking) = self.history.fetch_tracking(cx) else {
-      return;
-    };
-    cx.spawn(async move |this, cx| {
-      match tracking.await {
-        Some(Ok(tracking)) => {
-          let set = this.update(cx, |this, cx| {
-            let player = this.player.clone();
-            this.history.set_tracking(tracking, &player, cx);
-          });
-          if set.is_err() {
-            return;
-          }
-        }
-        Some(Err(e)) => {
-          tracing::warn!("YouTube history: no stats URLs: {e}");
-          return;
-        }
-        None => return,
-      }
-      loop {
-        cx.background_executor().timer(history::PING_EVERY).await;
-        let ticked = this.update(cx, |this, cx| {
-          let player = this.player.clone();
-          this.history.tick(&player, cx);
-        });
-        if ticked.is_err() {
-          break;
-        }
-      }
-    })
-    .detach();
+    history::report(
+      &self.history,
+      |this| (&mut this.history, this.player.clone()),
+      cx,
+    );
   }
 
   /// Follows the live's chat from `continuation`.
@@ -550,12 +439,13 @@ impl WatchView {
                   player.set_chapters(chapters, cx);
                 }
               });
-              this.like_status = page.like_status;
+              this.rating = Rating::of(&page);
               if let Some(continuation) = page.live_chat.clone() {
                 this.start_chat(continuation, cx);
               }
+              let token = page.comments_continuation.clone();
+              this.comments.update(cx, |c, cx| c.start(token, cx));
               this.page = Some(page);
-              this.load_comments(cx);
             }
             Some(Err(e)) => tracing::warn!("watch page: {e}"),
             None => {}
@@ -589,60 +479,20 @@ impl WatchView {
     .detach();
   }
 
-  /// A click on the like or dislike button: sets that rating, or clears it when it is the
-  /// current one. The button changes at once and goes back if YouTube refuses.
   fn rate(&mut self, clicked: LikeStatus, window: &mut Window, cx: &mut Context<Self>) {
-    if !self.client.signed_in() {
-      let note = Notification::info(t(
-        "Sign in to rate videos: import your cookies from the Account page.",
-        "Connectez-vous pour noter les vidéos : importez vos cookies depuis la page Compte.",
-      ));
-      return window.push_notification(note, cx);
-    }
-    let Some(page) = &self.page else { return };
-    if self.rating {
+    if self.page.is_none() {
       return;
     }
-    let previous = self.like_status;
-    let status = if previous == clicked {
-      LikeStatus::Indifferent
-    } else {
-      clicked
-    };
-    let params = page.like_params.get(status).map(str::to_owned);
-    self.like_status = status;
-    self.rating = true;
-    cx.notify();
     let (client, id) = (self.client.clone(), self.video_id.clone());
-    let fetch = runtime::spawn(cx, async move {
-      client.rate(&id, status, params.as_deref()).await
-    });
-    let handle = window.window_handle();
-    cx.spawn(async move |this, cx| {
-      let result = fetch.await;
-      this
-        .update(cx, |this, cx| {
-          this.rating = false;
-          if let Some(Ok(())) = result {
-            return cx.notify();
-          }
-          this.like_status = previous;
-          cx.notify();
-          if let Some(Err(e)) = result {
-            tracing::warn!("rate: {e}");
-            let note = Notification::error(tf!(
-              "Cannot save your rating. {}",
-              "Impossible d'enregistrer votre avis. {}",
-              error_text(&e)
-            ));
-            handle
-              .update(cx, |_, window, cx| window.push_notification(note, cx))
-              .ok();
-          }
-        })
-        .ok();
-    })
-    .detach();
+    rating::rate(
+      self,
+      |this| &mut this.rating,
+      &client,
+      &id,
+      clicked,
+      window,
+      cx,
+    );
   }
 
   /// The like and dislike buttons side by side on a pill, with the Return YouTube Dislike
@@ -654,7 +504,7 @@ impl WatchView {
       .as_ref()
       .map(|p| p.like_status)
       .unwrap_or_default();
-    let current = self.like_status;
+    let current = self.rating.status;
     let votes = self.votes.map(|votes| {
       let shift = |n: u64, status| {
         (n + u64::from(current == status)).saturating_sub(u64::from(initial == status))
@@ -783,111 +633,6 @@ impl WatchView {
       .children(attribution)
   }
 
-  /// Next comments page once the end of the page is within about a screen.
-  fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
-    let c = &self.comments;
-    if c.requested
-      && !c.loading
-      && !c.failed
-      && c.continuation.is_some()
-      && near_scroll_end(&self.scroll)
-    {
-      self.load_comments(cx);
-    }
-  }
-
-  /// Opens or closes the replies of `comment`, loading them the first time.
-  fn toggle_replies(&mut self, comment: &Comment, cx: &mut Context<Self>) {
-    let replies = self.replies.entry(comment.id.clone()).or_default();
-    replies.open = !replies.open;
-    if replies.open && replies.items.is_empty() && !replies.loading {
-      replies.continuation = comment.replies_continuation.clone();
-      self.load_replies(comment.id.clone(), cx);
-    }
-    cx.notify();
-  }
-
-  /// Next page of replies of comment `id`.
-  fn load_replies(&mut self, id: String, cx: &mut Context<Self>) {
-    let Some(replies) = self.replies.get_mut(&id) else {
-      return;
-    };
-    let Some(token) = replies.continuation.take() else {
-      return;
-    };
-    replies.loading = true;
-    let client = self.client.clone();
-    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
-    cx.spawn(async move |this, cx| {
-      let result = fetch.await;
-      this
-        .update(cx, |this, cx| {
-          let Some(replies) = this.replies.get_mut(&id) else {
-            return;
-          };
-          replies.loading = false;
-          match result {
-            Some(Ok(page)) => {
-              replies.items.extend(page.comments);
-              replies.continuation = page.continuation;
-            }
-            Some(Err(e)) => tracing::warn!("replies: {e}"),
-            None => {}
-          }
-          cx.notify();
-        })
-        .ok();
-    })
-    .detach();
-  }
-
-  /// First page, then the next ones as the page scrolls.
-  fn load_comments(&mut self, cx: &mut Context<Self>) {
-    let token = if self.comments.requested {
-      self.comments.continuation.clone()
-    } else {
-      self
-        .page
-        .as_ref()
-        .and_then(|p| p.comments_continuation.clone())
-    };
-    let Some(token) = token else { return };
-    if self.comments.loading {
-      return;
-    }
-    self.comments.requested = true;
-    self.comments.loading = true;
-    self.comments.failed = false;
-    let client = self.client.clone();
-    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
-    cx.spawn(async move |this, cx| {
-      let result = fetch.await;
-      this
-        .update(cx, |this, cx| {
-          let comments = &mut this.comments;
-          comments.loading = false;
-          match result {
-            Some(Ok(page)) => {
-              tracing::info!("comments: {} more", page.comments.len());
-              comments.items.extend(page.comments);
-              comments.continuation = page.continuation;
-              if page.count.is_some() {
-                comments.count = page.count;
-              }
-            }
-            Some(Err(e)) => {
-              tracing::warn!("comments: {e}");
-              comments.failed = true;
-            }
-            None => {}
-          }
-          cx.notify();
-        })
-        .ok();
-    })
-    .detach();
-  }
-
   fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
       return skeleton_details();
@@ -919,7 +664,15 @@ impl WatchView {
       .map_or(page.description.len(), |(i, _)| i);
     // Folded, a description that could wrap past its lines gets the toggle too.
     let long = cut < page.description.len() || page.description.len() > 300;
-    let links = self.links(cx);
+    let links = Links::new(
+      self.video_id.clone(),
+      self.nav.clone(),
+      self.player.clone(),
+      Some(self.scroll.clone()),
+      cx.weak_entity(),
+      self.hovered_link.clone(),
+      |this| &mut this.hovered_link,
+    );
     let description = if self.description_open {
       linked_text(
         "description",
@@ -1055,160 +808,84 @@ impl WatchView {
           .children(toggle),
       )
   }
-
-  fn comments(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    let comments = &self.comments;
-    let header = h_flex()
-      .gap_2()
-      .items_center()
-      .child(gpui_component::Icon::new(Icon::Comments).size(px(18.)))
-      .child(
-        div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
-          comments
-            .count
-            .clone()
-            .unwrap_or_else(|| t("Comments", "Commentaires").into()),
-        ),
-      );
-    let items: Vec<_> = comments
-      .items
-      .iter()
-      .map(|c| self.comment_thread(c, window, cx))
-      .collect();
-    // Pages load as the page scrolls; the button only shows to retry after a failure.
-    let more = (comments.failed && comments.continuation.is_some()).then(|| {
-      Button::new("more-comments")
-        .ghost()
-        .label(t("Retry", "Réessayer"))
-        .on_click(cx.listener(|this, _, _, cx| this.load_comments(cx)))
-    });
-    let empty = (comments.items.is_empty() && !comments.loading && comments.requested).then(|| {
-      div()
-        .text_color(theme::muted())
-        .child(t("No comments", "Aucun commentaire"))
-    });
-    v_flex()
-      .pt_2()
-      .gap_5()
-      .child(header)
-      .children(items)
-      .children(empty)
-      .when(comments.loading, |el| el.child(loading_more()))
-      .children(more.map(|b| h_flex().child(b)))
-  }
-
-  /// A comment, its "N replies" toggle and, once opened, its replies.
-  fn comment_thread(
-    &self,
-    comment: &Comment,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) -> impl IntoElement + use<> {
-    let links = self.links(cx);
-    let replies = self.replies.get(&comment.id);
-    let open = replies.is_some_and(|r| r.open);
-    let toggle = comment.replies_continuation.as_ref().map(|_| {
-      let label = if open {
-        t("Hide replies", "Masquer les réponses").to_owned()
-      } else {
-        replies_label(&comment.replies)
-      };
-      let target = comment.clone();
-      Button::new(SharedString::from(format!("replies-{}", comment.id)))
-        .ghost()
-        .label(label)
-        .on_click(cx.listener(move |this, _, _, cx| this.toggle_replies(&target, cx)))
-    });
-    let shown = replies.filter(|r| r.open).map(|r| {
-      let rows: Vec<_> = r
-        .items
-        .iter()
-        .map(|reply| comment_row(reply, &links, window, cx))
-        .collect();
-      let more = r.continuation.as_ref().map(|_| {
-        let id = comment.id.clone();
-        Button::new(SharedString::from(format!("more-replies-{}", comment.id)))
-          .ghost()
-          .label(t("More replies", "Plus de réponses"))
-          .on_click(cx.listener(move |this, _, _, cx| this.load_replies(id.clone(), cx)))
-      });
-      v_flex()
-        .pl(px(48.))
-        .gap_3()
-        .children(rows)
-        .when(r.loading, |el| el.child(loading_more()))
-        .children(more.filter(|_| !r.loading).map(|b| h_flex().child(b)))
-    });
-    v_flex()
-      .gap_2()
-      .child(comment_row(comment, &links, window, cx))
-      .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
-      .children(shown)
-  }
-
-  /// What the page's links need to be drawn and followed.
-  fn links(&self, cx: &Context<Self>) -> Links {
-    Links {
-      video_id: self.video_id.clone(),
-      nav: self.nav.clone(),
-      player: self.player.clone(),
-      scroll: self.scroll.clone(),
-      view: cx.weak_entity(),
-      hovered: self.hovered_link.clone(),
-    }
-  }
 }
 
-/// Follows the links of the description and the comments. Clicks never borrow the page:
-/// opening another page updates it (it gets covered).
-#[derive(Clone)]
-struct Links {
-  video_id: String,
-  nav: Nav,
-  player: Entity<PlayerView>,
-  scroll: ScrollHandle,
-  /// The page, told which link is hovered.
-  view: WeakEntity<WatchView>,
-  /// The page's [`WatchView::hovered_link`] when it rendered.
-  hovered: Option<(SharedString, usize)>,
-}
-
-impl Links {
-  /// Underlines link `index` of the text `id` (none: `None`).
-  fn hover(&self, link: Option<(SharedString, usize)>, cx: &mut App) {
-    self
-      .view
-      .update(cx, |this, cx| {
-        if this.hovered_link != link {
-          this.hovered_link = link;
-          cx.notify();
+/// Starts `video_id` in `player` at `start`: from the hover prefetch when it has the stream, else
+/// from VISIONOS (~0.2 s), else through the bundled yt-dlp.
+pub(super) fn load_stream(
+  client: &Client,
+  video_id: &str,
+  start: Option<f64>,
+  player: &Entity<PlayerView>,
+  cx: &mut App,
+) {
+  let clicked = Instant::now();
+  if let Some(stream) = prefetch::take(video_id, cx) {
+    tracing::info!(
+      "stream from hover prefetch: {} {}",
+      stream.resolution,
+      stream.codecs
+    );
+    let mut source = convert::source(stream, &Settings::get(cx).player);
+    resume(&mut source, start);
+    player.update(cx, |player, cx| player.start(source, clicked, cx));
+    return;
+  }
+  let max_height = Settings::get(cx).max_height;
+  let player_settings = Settings::get(cx).player.clone();
+  let (client, id) = (client.clone(), video_id.to_owned());
+  let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
+  let player = player.downgrade();
+  let video_id = video_id.to_owned();
+  cx.spawn(async move |cx| {
+    let error = match fetch.await {
+      Some(Ok(stream)) => {
+        tracing::info!(
+          "stream after {:.2} s: {} {}",
+          clicked.elapsed().as_secs_f64(),
+          stream.resolution,
+          stream.codecs
+        );
+        let mut source = convert::source(stream, &player_settings);
+        resume(&mut source, start);
+        player
+          .update(cx, |player, cx| player.start(source, clicked, cx))
+          .ok();
+        return;
+      }
+      Some(Err(e)) => e,
+      None => return,
+    };
+    // Network down: yt-dlp would fail too. Anything else (age or membership restriction,
+    // client blocked, unexpected response): let the bundled yt-dlp try (ADR 0005).
+    let fallback = if matches!(error, innertube::Error::Http(_)) {
+      None
+    } else {
+      tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
+      cx.background_executor()
+        .spawn(async move { tools::ytdl_options(&video_id) })
+        .await
+    };
+    player
+      .update(cx, |player, cx| match fallback {
+        Some(mut options) => {
+          player_settings.apply(&mut options);
+          // A card's resume is never a live's.
+          if let Some(start) = start {
+            options.start_seconds = start;
+          }
+          player.start_with(options, clicked, cx)
+        }
+        None => {
+          tracing::warn!("stream: {error}");
+          player.fail(error_text(&error).into(), cx);
         }
       })
       .ok();
-  }
-
-  /// A timestamp of this video seeks (and scrolls the player into view), YouTube pages open in
-  /// the tab, other sites in the browser.
-  fn follow(&self, target: LinkTarget, window: &mut Window, cx: &mut App) {
-    match target {
-      LinkTarget::Video { id, start } if id == self.video_id => {
-        let seconds = f64::from(start.unwrap_or(0));
-        self
-          .player
-          .update(cx, |player, cx| player.seek_to(seconds, cx));
-        self.scroll.set_offset(point(px(0.), px(0.)));
-      }
-      LinkTarget::Video { id, .. } => self.nav.open(Route::Watch(id), window, cx),
-      LinkTarget::Channel { id, name } => self.nav.open(Route::Channel { id, name }, window, cx),
-      LinkTarget::Playlist { id, title } => {
-        self.nav.open(Route::Playlist { id, title }, window, cx)
-      }
-      LinkTarget::Url(url) | LinkTarget::Page(url) => cx.open_url(&url),
-    }
-  }
+  })
+  .detach();
 }
 
-/// Placeholder for the title, channel and description while the page loads.
 /// Starts a video at `start` (a live keeps its own start, near its edge).
 fn resume(source: &mut ui::player::Source, start: Option<f64>) {
   if let Some(start) = start.filter(|_| !source.live) {
@@ -1238,144 +915,6 @@ fn skeleton_details() -> gpui::Div {
         .h(px(96.))
         .rounded(theme::RADIUS_LG),
     )
-}
-
-fn comment_row(
-  comment: &Comment,
-  links: &Links,
-  window: &mut Window,
-  cx: &mut App,
-) -> impl IntoElement + use<> {
-  let avatar = comment.avatar.as_ref().map(|url| {
-    let sizes = [innertube::Thumbnail {
-      url: url.clone(),
-      width: 88,
-      height: 88,
-    }];
-    image_fill(&convert::picture(&sizes), 36., 1., px(18.), window, cx)
-  });
-  // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
-  // only, comments are not rated from the app.
-  let likes = h_flex()
-    .gap_1p5()
-    .items_center()
-    .text_xs()
-    .text_color(theme::muted())
-    .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(14.)))
-    .when(!comment.likes.is_empty(), |el| {
-      el.child(comment.likes.clone())
-    });
-  h_flex()
-    .gap_3()
-    .items_start()
-    .child(div().size(px(36.)).flex_none().children(avatar))
-    .child(
-      v_flex()
-        .min_w_0()
-        .gap_1()
-        .child(
-          h_flex()
-            .gap_2()
-            .text_sm()
-            .child(
-              div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .when(comment.by_creator, |el| {
-                  el.px_2().rounded_full().bg(theme::surface_hover())
-                })
-                .child(comment.author.clone()),
-            )
-            .child(
-              div()
-                .text_color(theme::muted())
-                .child(comment.published.clone()),
-            ),
-        )
-        .child(div().child(linked_text(
-          format!("comment-{}", comment.id),
-          &comment.text,
-          &comment.links,
-          links,
-        )))
-        .child(likes),
-    )
-}
-
-/// `text` with its `links` in the accent color, the hovered one underlined, followed on a click
-/// ([`Links::follow`]). `id` is unique on the page: the element keeps its mouse state by it.
-fn linked_text(
-  id: impl Into<SharedString>,
-  text: &str,
-  links: &[TextLink],
-  follow: &Links,
-) -> gpui::Stateful<gpui::Div> {
-  let id: SharedString = id.into();
-  // A `\r` (of `\r\n`) would draw as a glyph: a space keeps the ranges' byte offsets.
-  let text = SharedString::from(text.replace('\r', " "));
-  let hovered = follow
-    .hovered
-    .as_ref()
-    .filter(|(text_id, _)| *text_id == id)
-    .map(|(_, index)| *index);
-  let styled = StyledText::new(text).with_highlights(links.iter().enumerate().map(|(i, l)| {
-    let style = HighlightStyle {
-      color: Some(theme::accent_hover()),
-      underline: (hovered == Some(i)).then(|| UnderlineStyle {
-        thickness: px(1.),
-        color: Some(theme::accent_hover()),
-        wavy: false,
-      }),
-      ..Default::default()
-    };
-    (l.range.clone(), style)
-  }));
-  let ranges: Vec<_> = links.iter().map(|l| l.range.clone()).collect();
-  let targets: Vec<LinkTarget> = links.iter().map(|l| l.target.clone()).collect();
-  let text = InteractiveText::new(id.clone(), styled)
-    .on_hover({
-      let follow = follow.clone();
-      let ranges = ranges.clone();
-      let id = id.clone();
-      move |index, _, _, cx| {
-        let link = index.and_then(|ix| ranges.iter().position(|r| r.contains(&ix)));
-        follow.hover(link.map(|i| (id.clone(), i)), cx);
-      }
-    })
-    .on_click(ranges, {
-      let follow = follow.clone();
-      move |index, window, cx| {
-        if let Some(target) = targets.get(index).cloned() {
-          follow.follow(target, window, cx);
-        }
-      }
-    });
-  // The text reports moves over it only: leaving it clears its underline.
-  div()
-    .id(SharedString::from(format!("{id}-links")))
-    .on_hover({
-      let follow = follow.clone();
-      move |hovered, _, cx| {
-        if !hovered
-          && follow
-            .hovered
-            .as_ref()
-            .is_some_and(|(text_id, _)| *text_id == id)
-        {
-          follow.hover(None, cx);
-        }
-      }
-    })
-    .child(text)
-}
-
-/// The toggle of a comment's replies: "3 replies", from YouTube's count (`1,2 k` stays
-/// plural); singular for one (and for zero in French).
-fn replies_label(count: &str) -> String {
-  match (lang(), count.trim().parse::<u64>().ok()) {
-    (Lang::En, Some(1)) => "1 reply".to_owned(),
-    (Lang::Fr, Some(0 | 1)) => format!("{count} réponse"),
-    _ => tf!("{count} replies", "{count} réponses"),
-  }
 }
 
 /// A short count in the interface's language ([`compact_number_in`]).
@@ -1424,10 +963,8 @@ impl Render for WatchView {
         .map(|_| skeleton_compact().into_any_element())
         .collect(),
     };
-    // Offsets from the last layout: enough to start the next comments page early.
-    self.load_more_if_near_end(cx);
     let details = self.details(window, cx);
-    let comments = self.comments(window, cx);
+    let comments = self.comments.clone();
     let queue = self.queue_panel(window, cx);
     let theater = Settings::get(cx).theater;
     if let Some((panel, _)) = &self.chat {
@@ -1485,7 +1022,9 @@ impl Render for WatchView {
       .overflow_y_scroll()
       .track_scroll(&self.scroll)
       .on_scroll(cx.listener(|this, _, _, cx| {
-        this.load_more_if_near_end(cx);
+        this
+          .comments
+          .update(cx, |c, cx| c.load_more_if_near_end(cx));
         cx.notify();
       }))
       .children(above)

@@ -208,6 +208,8 @@ pub struct PlayerView {
   prefs: Prefs,
   /// The page is in theater mode: the player spans it and squares its corners but one.
   theater: bool,
+  /// The page offers theater mode (button and T); not a page whose player is vertical.
+  theater_offered: bool,
   layout: Layout,
   /// Second line of the title (episode, year), shown in the full-window layout.
   subtitle: SharedString,
@@ -341,6 +343,7 @@ impl PlayerView {
     Self {
       focus: cx.focus_handle(),
       theater,
+      theater_offered: true,
       layout: Layout::Embedded,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
@@ -554,6 +557,18 @@ impl PlayerView {
   /// codec the GPU does not decode).
   pub fn set_quality(&mut self, index: usize, cx: &mut Context<Self>) {
     self.select_quality(index, cx);
+  }
+
+  /// Plays the video again from its start (a page looping its video at the end).
+  pub fn replay(&mut self, cx: &mut Context<Self>) {
+    self.seek_to(0.0, cx);
+    self.with_player(|p| p.set_paused(false));
+  }
+
+  /// Whether the page offers theater mode (its button and T); it does by default.
+  pub fn offer_theater(&mut self, offered: bool, cx: &mut Context<Self>) {
+    self.theater_offered = offered;
+    cx.notify();
   }
 
   /// Plays or pauses. A live paused for a while resumes at its live edge, as Twitch's player:
@@ -1237,7 +1252,9 @@ impl PlayerView {
         self.menu = None;
         self.context_menu = None;
       }
-      "t" if !window.is_fullscreen() && !page_layout => self.toggle_theater(cx),
+      "t" if !window.is_fullscreen() && !page_layout && self.theater_offered => {
+        self.toggle_theater(cx)
+      }
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
       "escape" | "backspace" if page_layout => self.close(cx),
@@ -1964,7 +1981,7 @@ impl PlayerView {
         )
       })
       // In fullscreen the picture fills the window anyway.
-      .when(!fullscreen && embedded, |row| {
+      .when(!fullscreen && embedded && self.theater_offered, |row| {
         row.child(
           self
             .control_button("theater", cx)

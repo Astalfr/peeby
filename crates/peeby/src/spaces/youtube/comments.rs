@@ -1,0 +1,546 @@
+//! The comments of a video, under the watch page's details or in the Shorts page's panel: pages
+//! load as the panel scrolls near its end, replies when a thread opens. The links of comments
+//! and descriptions ([`Links`], [`linked_text`]) live here too: a timestamp of the video seeks
+//! its player, YouTube pages open in the tab, other sites in the browser.
+
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use gpui::prelude::*;
+use gpui::{
+  App, Context, Entity, FontWeight, HighlightStyle, InteractiveText, ScrollHandle, SharedString,
+  StyledText, UnderlineStyle, WeakEntity, Window, div, point, px,
+};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::{h_flex, v_flex};
+use innertube::{Client, Comment, LinkTarget, TextLink};
+
+use crate::spaces::youtube::convert;
+use crate::spaces::youtube::{Nav, Route};
+use ui::assets::Icon;
+use ui::i18n::{Lang, lang, t};
+use ui::images::Images;
+use ui::picture::image_fill;
+use ui::player::PlayerView;
+use ui::widgets::{loading_more, near_scroll_end};
+use ui::{runtime, tf, theme};
+
+#[derive(Default)]
+struct Comments {
+  items: Vec<Comment>,
+  count: Option<String>,
+  continuation: Option<String>,
+  loading: bool,
+  /// Whether the first page was asked for.
+  requested: bool,
+  /// The last request failed: no automatic retry, the button retries.
+  failed: bool,
+}
+
+/// Replies of one comment, loaded when first opened.
+#[derive(Default)]
+struct Replies {
+  items: Vec<Comment>,
+  continuation: Option<String>,
+  loading: bool,
+  open: bool,
+}
+
+/// A link of a text under the pointer: the id of its text and its index there.
+pub type HoveredLink = Option<(SharedString, usize)>;
+
+/// Tells a view which of its links is hovered.
+type SetHovered = dyn Fn(HoveredLink, &mut App);
+
+/// The comments of one video.
+pub struct CommentSection {
+  client: Client,
+  video_id: String,
+  nav: Nav,
+  player: Entity<PlayerView>,
+  /// The scroll of the panel holding the section: the next page loads near its end.
+  scroll: ScrollHandle,
+  /// A timestamp's seek scrolls the panel back to the top, where the player is (the watch
+  /// page; not the Shorts page, whose player is beside the panel).
+  top_on_seek: bool,
+  /// Token of the first page ([`innertube::WatchPage::comments_continuation`]), once known.
+  first: Option<String>,
+  comments: Comments,
+  /// By comment id.
+  replies: HashMap<String, Replies>,
+  hovered_link: HoveredLink,
+}
+
+impl CommentSection {
+  /// The comments of `video_id` played by `player`, in a panel scrolled by `scroll`, back to its
+  /// top on a timestamp's seek when `top_on_seek`. Nothing loads before
+  /// [`CommentSection::start`].
+  pub fn new(
+    client: Client,
+    video_id: String,
+    nav: Nav,
+    player: Entity<PlayerView>,
+    scroll: ScrollHandle,
+    top_on_seek: bool,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
+    }
+    Self {
+      client,
+      video_id,
+      nav,
+      player,
+      scroll,
+      top_on_seek,
+      first: None,
+      comments: Comments::default(),
+      replies: HashMap::new(),
+      hovered_link: None,
+    }
+  }
+
+  /// Loads the first page from `token` (the watch page's); `None` when the video has none.
+  pub fn start(&mut self, token: Option<String>, cx: &mut Context<Self>) {
+    self.first = token;
+    self.load_comments(cx);
+    cx.notify();
+  }
+
+  /// YouTube's localized total, e.g. `2,3 M commentaires`, once the first page came.
+  pub fn count(&self) -> Option<&str> {
+    self.comments.count.as_deref()
+  }
+
+  /// Next comments page once the end of the page is within about a screen.
+  pub fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
+    let c = &self.comments;
+    if c.requested
+      && !c.loading
+      && !c.failed
+      && c.continuation.is_some()
+      && near_scroll_end(&self.scroll)
+    {
+      self.load_comments(cx);
+    }
+  }
+
+  /// Opens or closes the replies of `comment`, loading them the first time.
+  fn toggle_replies(&mut self, comment: &Comment, cx: &mut Context<Self>) {
+    let replies = self.replies.entry(comment.id.clone()).or_default();
+    replies.open = !replies.open;
+    if replies.open && replies.items.is_empty() && !replies.loading {
+      replies.continuation = comment.replies_continuation.clone();
+      self.load_replies(comment.id.clone(), cx);
+    }
+    cx.notify();
+  }
+
+  /// Next page of replies of comment `id`.
+  fn load_replies(&mut self, id: String, cx: &mut Context<Self>) {
+    let Some(replies) = self.replies.get_mut(&id) else {
+      return;
+    };
+    let Some(token) = replies.continuation.take() else {
+      return;
+    };
+    replies.loading = true;
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          let Some(replies) = this.replies.get_mut(&id) else {
+            return;
+          };
+          replies.loading = false;
+          match result {
+            Some(Ok(page)) => {
+              replies.items.extend(page.comments);
+              replies.continuation = page.continuation;
+            }
+            Some(Err(e)) => tracing::warn!("replies: {e}"),
+            None => {}
+          }
+          cx.notify();
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// First page, then the next ones as the page scrolls.
+  fn load_comments(&mut self, cx: &mut Context<Self>) {
+    let token = if self.comments.requested {
+      self.comments.continuation.clone()
+    } else {
+      self.first.clone()
+    };
+    let Some(token) = token else { return };
+    if self.comments.loading {
+      return;
+    }
+    self.comments.requested = true;
+    self.comments.loading = true;
+    self.comments.failed = false;
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.comments(&token).await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          let comments = &mut this.comments;
+          comments.loading = false;
+          match result {
+            Some(Ok(page)) => {
+              tracing::info!("comments: {} more", page.comments.len());
+              comments.items.extend(page.comments);
+              comments.continuation = page.continuation;
+              if page.count.is_some() {
+                comments.count = page.count;
+              }
+            }
+            Some(Err(e)) => {
+              tracing::warn!("comments: {e}");
+              comments.failed = true;
+            }
+            None => {}
+          }
+          cx.notify();
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  fn render_comments(
+    &self,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
+    let comments = &self.comments;
+    let header = h_flex()
+      .gap_2()
+      .items_center()
+      .child(gpui_component::Icon::new(Icon::Comments).size(px(18.)))
+      .child(
+        div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
+          comments
+            .count
+            .clone()
+            .unwrap_or_else(|| t("Comments", "Commentaires").into()),
+        ),
+      );
+    let items: Vec<_> = comments
+      .items
+      .iter()
+      .map(|c| self.comment_thread(c, window, cx))
+      .collect();
+    // Pages load as the page scrolls; the button only shows to retry after a failure.
+    let more = (comments.failed && comments.continuation.is_some()).then(|| {
+      Button::new("more-comments")
+        .ghost()
+        .label(t("Retry", "Réessayer"))
+        .on_click(cx.listener(|this, _, _, cx| this.load_comments(cx)))
+    });
+    let empty = (comments.items.is_empty() && !comments.loading && comments.requested).then(|| {
+      div()
+        .text_color(theme::muted())
+        .child(t("No comments", "Aucun commentaire"))
+    });
+    v_flex()
+      .pt_2()
+      .gap_5()
+      .child(header)
+      .children(items)
+      .children(empty)
+      .when(comments.loading, |el| el.child(loading_more()))
+      .children(more.map(|b| h_flex().child(b)))
+  }
+
+  /// A comment, its "N replies" toggle and, once opened, its replies.
+  fn comment_thread(
+    &self,
+    comment: &Comment,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
+    let links = self.links(cx);
+    let replies = self.replies.get(&comment.id);
+    let open = replies.is_some_and(|r| r.open);
+    let toggle = comment.replies_continuation.as_ref().map(|_| {
+      let label = if open {
+        t("Hide replies", "Masquer les réponses").to_owned()
+      } else {
+        replies_label(&comment.replies)
+      };
+      let target = comment.clone();
+      Button::new(SharedString::from(format!("replies-{}", comment.id)))
+        .ghost()
+        .label(label)
+        .on_click(cx.listener(move |this, _, _, cx| this.toggle_replies(&target, cx)))
+    });
+    let shown = replies.filter(|r| r.open).map(|r| {
+      let rows: Vec<_> = r
+        .items
+        .iter()
+        .map(|reply| comment_row(reply, &links, window, cx))
+        .collect();
+      let more = r.continuation.as_ref().map(|_| {
+        let id = comment.id.clone();
+        Button::new(SharedString::from(format!("more-replies-{}", comment.id)))
+          .ghost()
+          .label(t("More replies", "Plus de réponses"))
+          .on_click(cx.listener(move |this, _, _, cx| this.load_replies(id.clone(), cx)))
+      });
+      v_flex()
+        .pl(px(48.))
+        .gap_3()
+        .children(rows)
+        .when(r.loading, |el| el.child(loading_more()))
+        .children(more.filter(|_| !r.loading).map(|b| h_flex().child(b)))
+    });
+    v_flex()
+      .gap_2()
+      .child(comment_row(comment, &links, window, cx))
+      .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
+      .children(shown)
+  }
+  /// What the section's links need to be drawn and followed.
+  fn links(&self, cx: &Context<Self>) -> Links {
+    Links::new(
+      self.video_id.clone(),
+      self.nav.clone(),
+      self.player.clone(),
+      self.top_on_seek.then(|| self.scroll.clone()),
+      cx.weak_entity(),
+      self.hovered_link.clone(),
+      |this| &mut this.hovered_link,
+    )
+  }
+}
+
+impl Render for CommentSection {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // Offsets from the last layout: enough to start the next page early.
+    self.load_more_if_near_end(cx);
+    self.render_comments(window, cx)
+  }
+}
+
+/// Follows the links of the description and the comments. Clicks never borrow the page:
+/// opening another page updates it (it gets covered).
+#[derive(Clone)]
+pub struct Links {
+  video_id: String,
+  nav: Nav,
+  player: Entity<PlayerView>,
+  /// Scrolled back to its top when a timestamp seeks, if any.
+  scroll: Option<ScrollHandle>,
+  /// Tells the view drawing the links which one is hovered.
+  set_hovered: Rc<SetHovered>,
+  /// The view's hovered link when it rendered.
+  hovered: HoveredLink,
+}
+
+impl Links {
+  /// The links of a view showing `video_id` in `player`, `scroll` back to its top when a
+  /// timestamp seeks; `view` keeps the
+  /// hovered one (`hovered` when it rendered) in the field `slot` gives.
+  pub fn new<V: 'static>(
+    video_id: String,
+    nav: Nav,
+    player: Entity<PlayerView>,
+    scroll: Option<ScrollHandle>,
+    view: WeakEntity<V>,
+    hovered: HoveredLink,
+    slot: fn(&mut V) -> &mut HoveredLink,
+  ) -> Self {
+    let set_hovered = Rc::new(move |link: HoveredLink, cx: &mut App| {
+      view
+        .update(cx, |this, cx| {
+          let hovered = slot(this);
+          if *hovered != link {
+            *hovered = link;
+            cx.notify();
+          }
+        })
+        .ok();
+    });
+    Self {
+      video_id,
+      nav,
+      player,
+      scroll,
+      set_hovered,
+      hovered,
+    }
+  }
+
+  /// Underlines link `index` of the text `id` (none: `None`).
+  fn hover(&self, link: HoveredLink, cx: &mut App) {
+    (self.set_hovered)(link, cx);
+  }
+
+  /// A timestamp of this video seeks (and scrolls the player into view), YouTube pages open in
+  /// the tab, other sites in the browser.
+  fn follow(&self, target: LinkTarget, window: &mut Window, cx: &mut App) {
+    match target {
+      LinkTarget::Video { id, start } if id == self.video_id => {
+        let seconds = f64::from(start.unwrap_or(0));
+        self
+          .player
+          .update(cx, |player, cx| player.seek_to(seconds, cx));
+        if let Some(scroll) = &self.scroll {
+          scroll.set_offset(point(px(0.), px(0.)));
+        }
+      }
+      LinkTarget::Video { id, .. } => self.nav.open(Route::Watch(id), window, cx),
+      LinkTarget::Channel { id, name } => self.nav.open(Route::Channel { id, name }, window, cx),
+      LinkTarget::Playlist { id, title } => {
+        self.nav.open(Route::Playlist { id, title }, window, cx)
+      }
+      LinkTarget::Url(url) | LinkTarget::Page(url) => cx.open_url(&url),
+    }
+  }
+}
+
+fn comment_row(
+  comment: &Comment,
+  links: &Links,
+  window: &mut Window,
+  cx: &mut App,
+) -> impl IntoElement + use<> {
+  let avatar = comment.avatar.as_ref().map(|url| {
+    let sizes = [innertube::Thumbnail {
+      url: url.clone(),
+      width: 88,
+      height: 88,
+    }];
+    image_fill(&convert::picture(&sizes), 36., 1., px(18.), window, cx)
+  });
+  // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
+  // only, comments are not rated from the app.
+  let likes = h_flex()
+    .gap_1p5()
+    .items_center()
+    .text_xs()
+    .text_color(theme::muted())
+    .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(14.)))
+    .when(!comment.likes.is_empty(), |el| {
+      el.child(comment.likes.clone())
+    });
+  h_flex()
+    .gap_3()
+    .items_start()
+    .child(div().size(px(36.)).flex_none().children(avatar))
+    .child(
+      v_flex()
+        .min_w_0()
+        .gap_1()
+        .child(
+          h_flex()
+            .gap_2()
+            .text_sm()
+            .child(
+              div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .when(comment.by_creator, |el| {
+                  el.px_2().rounded_full().bg(theme::surface_hover())
+                })
+                .child(comment.author.clone()),
+            )
+            .child(
+              div()
+                .text_color(theme::muted())
+                .child(comment.published.clone()),
+            ),
+        )
+        .child(div().child(linked_text(
+          format!("comment-{}", comment.id),
+          &comment.text,
+          &comment.links,
+          links,
+        )))
+        .child(likes),
+    )
+}
+
+/// `text` with its `links` in the accent color, the hovered one underlined, followed on a click
+/// ([`Links::follow`]). `id` is unique on the page: the element keeps its mouse state by it.
+pub fn linked_text(
+  id: impl Into<SharedString>,
+  text: &str,
+  links: &[TextLink],
+  follow: &Links,
+) -> gpui::Stateful<gpui::Div> {
+  let id: SharedString = id.into();
+  // A `\r` (of `\r\n`) would draw as a glyph: a space keeps the ranges' byte offsets.
+  let text = SharedString::from(text.replace('\r', " "));
+  let hovered = follow
+    .hovered
+    .as_ref()
+    .filter(|(text_id, _)| *text_id == id)
+    .map(|(_, index)| *index);
+  let styled = StyledText::new(text).with_highlights(links.iter().enumerate().map(|(i, l)| {
+    let style = HighlightStyle {
+      color: Some(theme::accent_hover()),
+      underline: (hovered == Some(i)).then(|| UnderlineStyle {
+        thickness: px(1.),
+        color: Some(theme::accent_hover()),
+        wavy: false,
+      }),
+      ..Default::default()
+    };
+    (l.range.clone(), style)
+  }));
+  let ranges: Vec<_> = links.iter().map(|l| l.range.clone()).collect();
+  let targets: Vec<LinkTarget> = links.iter().map(|l| l.target.clone()).collect();
+  let text = InteractiveText::new(id.clone(), styled)
+    .on_hover({
+      let follow = follow.clone();
+      let ranges = ranges.clone();
+      let id = id.clone();
+      move |index, _, _, cx| {
+        let link = index.and_then(|ix| ranges.iter().position(|r| r.contains(&ix)));
+        follow.hover(link.map(|i| (id.clone(), i)), cx);
+      }
+    })
+    .on_click(ranges, {
+      let follow = follow.clone();
+      move |index, window, cx| {
+        if let Some(target) = targets.get(index).cloned() {
+          follow.follow(target, window, cx);
+        }
+      }
+    });
+  // The text reports moves over it only: leaving it clears its underline.
+  div()
+    .id(SharedString::from(format!("{id}-links")))
+    .on_hover({
+      let follow = follow.clone();
+      move |hovered, _, cx| {
+        if !hovered
+          && follow
+            .hovered
+            .as_ref()
+            .is_some_and(|(text_id, _)| *text_id == id)
+        {
+          follow.hover(None, cx);
+        }
+      }
+    })
+    .child(text)
+}
+
+/// The toggle of a comment's replies: "3 replies", from YouTube's count (`1,2 k` stays
+/// plural); singular for one (and for zero in French).
+fn replies_label(count: &str) -> String {
+  match (lang(), count.trim().parse::<u64>().ok()) {
+    (Lang::En, Some(1)) => "1 reply".to_owned(),
+    (Lang::Fr, Some(0 | 1)) => format!("{count} réponse"),
+    _ => tf!("{count} replies", "{count} réponses"),
+  }
+}

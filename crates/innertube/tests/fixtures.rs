@@ -8,7 +8,7 @@ use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget,
   NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url, parse_feed,
   parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_tracking, parse_watch,
+  parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -102,6 +102,9 @@ fn watch_page() {
 fn signed_in_watch_page_has_the_channel_bell() {
   let page = parse_watch("0-k6i8tBwAU", &fixture("next_signed_in.json"));
   assert_eq!(page.channel_id.as_deref(), Some("UCQeRaTukNYft1_6AZPACnog"));
+  // The like button's count, liked or not (YouTube rounds both the same here).
+  assert_eq!(page.likes.as_deref(), Some("4,2\u{a0}k"));
+  assert_eq!(page.likes_liked.as_deref(), Some("4,2\u{a0}k"));
   let bell = page.notifications.unwrap();
   assert_eq!(bell.level, NotificationLevel::All);
   let levels = bell.options.iter().map(|(l, _)| *l).collect::<Vec<_>>();
@@ -882,4 +885,15 @@ fn search_next_page() {
     ]
   );
   assert!(page.continuation.is_some());
+}
+
+#[test]
+fn shorts_feed_seed_and_sequence() {
+  let seed = parse_shorts_seed(&fixture("reel_seedless.json"));
+  assert_eq!(seed.ids, ["vWfSwQU15Fs"]);
+  assert!(seed.continuation.unwrap().ends_with("%3D"));
+  // The entry without a `reelWatchEndpoint` is skipped.
+  let next = parse_shorts_sequence(&fixture("reel_sequence.json"));
+  assert_eq!(next.ids, ["7N3EdefgZMY", "nfqebsbIpmE", "BfmZ2c44tS0"]);
+  assert!(next.continuation.is_some());
 }
