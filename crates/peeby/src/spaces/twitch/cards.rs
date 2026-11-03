@@ -1,5 +1,5 @@
 //! Twitch's data as the shared cards: a live stream (16:9 preview, avatar, channel, category,
-//! viewers), a category (its 3:4 box art), a channel (avatar). Image URLs are Helix templates
+//! viewers), a category (its 3:4 box art), a channel (avatar). Image URLs are templates
 //! filled at the size drawn.
 
 use std::collections::{HashMap, HashSet};
@@ -12,8 +12,9 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
 use gpui_component::{Sizable, h_flex, v_flex};
+use twitch::catalog::Catalog;
 use twitch::gql;
-use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
+use twitch::helix::{self, Category, Clip, Stream, Video};
 use ui::assets::Icon;
 use ui::card::{Hover, MediaCard};
 use ui::i18n::{Lang, lang, t};
@@ -42,14 +43,14 @@ pub type Avatars = HashMap<String, String>;
 pub type Partners = HashSet<String>;
 
 /// The avatars of `ids` (at most 100), by id; an error leaves them out.
-pub async fn avatars(helix: &Helix, ids: Vec<String>) -> Avatars {
-  faces(helix, ids).await.0
+pub async fn avatars(catalog: &Catalog, ids: Vec<String>) -> Avatars {
+  faces(catalog, ids).await.0
 }
 
 /// The avatars of `ids` (at most 100), by id, and the partners among them; an error leaves them
 /// out.
-pub async fn faces(helix: &Helix, ids: Vec<String>) -> (Avatars, Partners) {
-  match helix.users(&ids).await {
+pub async fn faces(catalog: &Catalog, ids: Vec<String>) -> (Avatars, Partners) {
+  match catalog.users(&ids).await {
     Ok(users) => {
       let partners = users
         .iter()
@@ -69,7 +70,7 @@ pub async fn faces(helix: &Helix, ids: Vec<String>) -> (Avatars, Partners) {
   }
 }
 
-/// A picture for a Helix image template.
+/// A picture for an image template (`{width}x{height}`).
 pub fn template(url: &str) -> Picture {
   let url = url.to_owned();
   Picture::sized(move |w, h| helix::sized(&url, w, h))

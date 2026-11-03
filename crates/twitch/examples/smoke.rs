@@ -1,7 +1,7 @@
 //! Live check of every endpoint, counts only (no token, URL or id printed).
 //!
 //! `cargo run -p twitch --example smoke -- [login]` (default `squeezie`). Also checks an offline
-//! channel (`twitch`) and an unknown one.
+//! channel (`twitch`), an unknown one, and the GQL catalog.
 
 // An example reports on the console.
 #![allow(clippy::print_stdout)]
@@ -74,5 +74,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Err(Error::NotFound) => println!("unknown channel: NotFound, as expected"),
     other => println!("unknown channel: {:?}", other.map(|_| "a token")),
   }
+
+  // The catalog, anonymous GQL (no Helix behind it here).
+  let catalog = twitch::catalog::Catalog::new(&client);
+  let count = |name: &str, n: Result<usize, Error>| match n {
+    Ok(n) => println!("catalog {name}: {n}"),
+    Err(e) => println!("catalog {name}: {e}"),
+  };
+  count(
+    "top categories",
+    catalog.top_categories().await.map(|c| c.len()),
+  );
+  match catalog.category_streams("509658").await {
+    Ok(streams) => {
+      println!("catalog Just Chatting streams: {}", streams.len());
+      let ids: Vec<String> = streams.into_iter().map(|s| s.user_id).collect();
+      count("users of those", catalog.users(&ids).await.map(|u| u.len()));
+    }
+    Err(e) => println!("catalog Just Chatting streams: {e}"),
+  }
+  match catalog.user(&login).await {
+    Ok(user) => {
+      count(
+        "videos",
+        catalog.videos(&user.id, 40).await.map(|v| v.len()),
+      );
+      count("clips", catalog.clips(&user.id, 40).await.map(|c| c.len()));
+      count(
+        "channel badges",
+        catalog.channel_badges(&user.id).await.map(|b| b.len()),
+      );
+    }
+    Err(e) => println!("catalog user: {e}"),
+  }
+  count(
+    "search channels",
+    catalog.search_channels(&login).await.map(|c| c.len()),
+  );
+  count(
+    "search categories",
+    catalog
+      .search_categories("minecraft")
+      .await
+      .map(|c| c.len()),
+  );
+  count(
+    "global badges",
+    catalog.global_badges().await.map(|b| b.len()),
+  );
   Ok(())
 }

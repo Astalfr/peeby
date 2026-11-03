@@ -1,19 +1,17 @@
-//! "Parcourir": the categories with the most viewers (Helix `games/top`), and a category's page with
-//! its live streams (`streams?game_id=`), most viewers first.
+//! "Parcourir": the categories with the most viewers (`games`), and a category's page with its
+//! live streams, most viewers first: a hundred of each, GQL's first page.
 
 use gpui::prelude::*;
 use gpui::{Context, FontWeight, Task, Window, div};
 use gpui_component::v_flex;
-use twitch::helix::{Category, Helix, Stream};
+use twitch::catalog::Catalog;
+use twitch::helix::{Category, Stream};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::runtime;
 
 use super::Nav;
 use super::cards::{self, Avatars};
-
-/// Pages of categories read (100 each).
-const CATEGORY_PAGES: usize = 2;
 
 /// Loads `fetch` on the network runtime and keeps its result in the view.
 pub(super) fn load<V: 'static, T: Send + 'static>(
@@ -45,25 +43,13 @@ pub struct BrowseView {
 }
 
 impl BrowseView {
-  pub fn new(nav: Nav, helix: Helix, cx: &mut Context<Self>) -> Self {
+  pub fn new(nav: Nav, catalog: Catalog, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
     let task = load(
       cx,
-      async move {
-        let mut all = Vec::new();
-        let mut after = None;
-        for _ in 0..CATEGORY_PAGES {
-          let page = helix.top_categories(after.as_deref()).await?;
-          all.extend(page.items);
-          after = page.cursor;
-          if after.is_none() {
-            break;
-          }
-        }
-        Ok(all)
-      },
+      async move { catalog.top_categories().await },
       |this: &mut Self, result, cx| {
         this.categories = Some(result);
         cx.notify();
@@ -103,17 +89,17 @@ pub struct CategoryView {
 }
 
 impl CategoryView {
-  pub fn new(nav: Nav, helix: Helix, id: String, name: String, cx: &mut Context<Self>) -> Self {
+  pub fn new(nav: Nav, catalog: Catalog, id: String, name: String, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
     let task = load(
       cx,
       async move {
-        let page = helix.category_streams(&id, None).await?;
-        let ids = page.items.iter().map(|s| s.user_id.clone()).collect();
-        let avatars = cards::avatars(&helix, ids).await;
-        Ok((page.items, avatars))
+        let streams = catalog.category_streams(&id).await?;
+        let ids = streams.iter().map(|s| s.user_id.clone()).collect();
+        let avatars = cards::avatars(&catalog, ids).await;
+        Ok((streams, avatars))
       },
       |this: &mut Self, result, cx| {
         this.streams = Some(result);

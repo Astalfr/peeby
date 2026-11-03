@@ -1,5 +1,5 @@
-//! The sign-in card, the space's only page while signed out: Twitch's Device Code Grant. A click
-//! asks for a code, shows it large and opens twitch.tv/activate in the browser; the card polls
+//! The card connecting the followed channels, the "Suivies" page while Helix is not connected:
+//! Twitch's Device Code Grant (the rest of the space needs no sign-in). A click asks for a code, shows it large and opens twitch.tv/activate in the browser; the card polls
 //! until the user approves there (docs/twitch-plan.md step 5). No password goes through Peeby.
 
 use std::time::Duration;
@@ -165,8 +165,8 @@ pub fn describe(error: &Error) -> SharedString {
     )
     .into(),
     Error::SessionExpired => t(
-      "Your Twitch session expired. Sign in again.",
-      "Votre session Twitch a expiré. Reconnectez-vous.",
+      "The connection of your followed channels expired. Connect again.",
+      "La connexion de vos chaînes suivies a expiré. Reconnectez-vous.",
     )
     .into(),
     Error::Http(_) => t(
@@ -233,7 +233,7 @@ impl Render for LoginView {
         .child(
           Button::new("twitch-login")
             .primary()
-            .label(t("Sign in with Twitch", "Se connecter avec Twitch"))
+            .label(t("Connect with Twitch", "Se connecter avec Twitch"))
             .loading(self.busy)
             .disabled(self.busy)
             .on_click(cx.listener(|this, _, _, cx| this.start(cx))),
@@ -279,8 +279,8 @@ impl Render for LoginView {
                   ),
               )
               .child(div().text_color(theme::muted()).child(t(
-                "Sign in to watch your channels",
-                "Connectez-vous pour regarder vos chaînes",
+                "Connect your followed channels",
+                "Connectez vos chaînes suivies",
               ))),
           )
           .child(body)

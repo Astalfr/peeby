@@ -1,0 +1,29 @@
+{
+  "data": {
+    "searchCategories": {
+      "edges": [
+        {
+          "node": {
+            "id": "27471",
+            "displayName": "Minecraft",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/27471_IGDB-{width}x{height}.jpg"
+          }
+        },
+        {
+          "node": {
+            "id": "2042681592",
+            "displayName": "Minecraft Dungeons II",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/2042681592_IGDB-{width}x{height}.jpg"
+          }
+        },
+        {
+          "node": {
+            "id": "509725",
+            "displayName": "Minecraft Dungeons",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/509725_IGDB-{width}x{height}.jpg"
+          }
+        }
+      ]
+    }
+  }
+}

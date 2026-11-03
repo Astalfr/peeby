@@ -98,13 +98,17 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - 30 characters, sent as `Authorization: OAuth <token>` with the web Client-ID.
   - It gives full access to the account and survives a sign-out. Revoking it takes a password change or
     "sign out everywhere".
-- **What needs which**:
-  - Helix (A): followed live channels and followed channels (user token); streams by category, top
-    categories, search, a channel's VODs and clips, users, emotes, badges (an app token would be enough,
-    but a public client cannot get one: no client credentials flow without a secret **[src]**, so Peeby
-    uses the user token for all of them, see [twitch-plan.md](twitch-plan.md#facts-checked-for-this-plan)).
-  - GQL with B: the recommended streams (no Helix endpoint; the query names are **[?]**), and playback
-    without ads (Turbo or subscriber), subscriber-only VODs, sometimes the best qualities.
+- **What needs which** (ADR 0016, 2026-11-03):
+  - Nothing: the catalog through anonymous GQL (streams by category, top categories, search, a
+    channel's VODs and clips, users, badges; see "Catalog through GQL instead of Helix"), playback
+    with the ads removed, the chat.
+  - Helix (A), optional: followed live channels and followed channels (user token), which GQL refuses
+    to raw queries; and the catalog's backup when GQL fails. An app token would be enough for the
+    catalog, but a public client cannot get one: no client credentials flow without a secret **[src]**.
+  - GQL with B, the space's sign-in: the account (`currentUser`), playback without ads (Turbo or
+    subscriber), subscriber-only VODs, sometimes the best qualities, channel points (ADR 0012), VOD
+    positions (ADR 0013); the recommended streams would need it too (no Helix endpoint; the query
+    names are **[?]**).
   - A token issued for Peeby's own Client-ID very likely does not unlock what B does **[likely]**.
   - Chat read anonymously needs neither.
 
@@ -162,6 +166,31 @@ Two credentials, for different things. Both are secrets, under the same rules as
   tag, deleted messages, 7TV, badges; FFZ dropped (the user's choice). BTTV added on 2026-11-02 (the user
   asked: its global `D:` is common in chats).
 
+## Catalog through GQL instead of Helix
+
+Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the user's auth-token
+(the same answers both ways, unless said):
+
+- **Answers in full** (no integrity token): `users(ids: [...])` and `user(login)` (`description`,
+  `profileImageURL(width)`, `offlineImageURL`, `roles { isPartner }`), `searchUsers(userQuery, first: 20)`
+  and `searchCategories(query, first: 20)` (their second page too), `searchFor(userQuery, platform: "web")`,
+  `badges { setID version title imageURL(size: NORMAL | DOUBLE | QUADRUPLE) }` (global, 556 versions,
+  ~1.4 s) and `user { broadcastBadges { … } }` (a channel's).
+- **First page only**: `games(first, options: { sort: VIEWER_COUNT })`, `game(id) { streams(first,
+  options: { sort: VIEWER_COUNT }) }`, `user { videos(first, type: ARCHIVE, sort: TIME) }` (with
+  `lengthSeconds`, `previewThumbnailURL(width, height)`, `muteInfo { mutedSegmentConnection { nodes {
+  offset duration } } }`) and `user { clips(first, criteria: { period: ALL_TIME, sort: VIEWS_DESC }) }`.
+  `first` goes up to 100; **the second page (`after: <cursor>`) answers `failed integrity check`**,
+  signed in or not, as the VOD chat's.
+- **Closed**: `currentUser { follows }` and `currentUser { followedLiveUsers }` answer `service error`
+  with a valid auth-token (`currentUser { id }` answers). `personalSections(FOLLOWED_SECTION)` answers
+  the popular section instead. Twitch's own pages send headers Peeby does not have (a device id);
+  making them up is routing around a bot check, so this stops here: **the follows need Helix**.
+- Used by `twitch::catalog::Catalog` (ADR 0016), with Helix as its backup when connected;
+  fixtures `gql_catalog_*.json` (`twitch_capture -- catalog`), counts in `smoke`. The same image
+  templates as Helix's (`{width}x{height}`), the same badge URLs (`/1`, `/2`, `/3`), and
+  `users(ids:)` takes the 97 ids of a category's first page at once.
+
 ## Helix
 
 - Headers `Client-Id` and `Authorization: Bearer <token>`. Pages: `first` (at most 100), `after`,
@@ -211,7 +240,7 @@ Checked against the code on 2026-11-01:
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |
 | Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |
-| GQL hashes and Client-ID refreshed without a release | Nothing yet | **Missing**: settings refreshed at startup, as `WEB_CLIENT_VERSION` |
+| GQL hashes and Client-ID refreshed without a release | The Client-ID is read from twitch.tv's page at startup (`Client::refresh_client_id`); raw queries, no hashes | **Partly**: since ADR 0016 the whole catalog depends on GQL too; the Helix backup covers a connected user |
 
 ## The auth-token tutorial
 

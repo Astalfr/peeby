@@ -1,0 +1,64 @@
+{
+  "data": {
+    "user": {
+      "clips": {
+        "edges": [
+          {
+            "node": {
+              "id": "2548086415",
+              "slug": "OpenRenownedNewtPMSTwin",
+              "title": "ZEDD SKIN?",
+              "viewCount": 345913,
+              "createdAt": "2019-09-29T18:40:03Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/a828f1d6-5d56-4cc1-9750-6178414bf74e/landscape/thumb/thumb-0000000000-1920x1080.jpg",
+              "durationSeconds": 30,
+              "curator": {
+                "displayName": "chegg_ow"
+              },
+              "broadcaster": {
+                "id": "137512364",
+                "displayName": "ow_esports"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "3870853753",
+              "slug": "SpotlessUglyCakeDatBoi",
+              "title": "5000 IQ",
+              "viewCount": 336450,
+              "createdAt": "2018-07-12T03:36:49Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/17c21342-724b-4501-9d02-5f1333cae331/landscape/thumb/thumb-0000000000-1920x1080.jpg",
+              "durationSeconds": 59,
+              "curator": {
+                "displayName": "Thralee"
+              },
+              "broadcaster": {
+                "id": "137512364",
+                "displayName": "ow_esports"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "494567221",
+              "slug": "ObservantHeartlessPastaHeyGuys",
+              "title": "High Noon Kid reacts to DJ Khaled dancing",
+              "viewCount": 333349,
+              "createdAt": "2018-07-28T19:37:56Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/twitch-video-assets/twitch-vap-video-assets-prod-us-west-2/e2456ce4-bc72-4fac-97d4-56d6789824bc/landscape/thumb/thumb-0000000000-1920x1080.jpg",
+              "durationSeconds": 30,
+              "curator": {
+                "displayName": "arealhumanb3an"
+              },
+              "broadcaster": {
+                "id": "137512364",
+                "displayName": "ow_esports"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

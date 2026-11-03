@@ -1,5 +1,6 @@
-//! Twitch's part of the settings page (behind the gear): the Helix account and sign-out, then the
-//! optional web `auth-token` with the tutorial of docs/twitch.md, checked before it is saved.
+//! Twitch's part of the settings page (behind the gear): the account, signed in with the web
+//! `auth-token` (the tutorial of docs/twitch.md, checked before it is saved), the followed
+//! channels' Helix connection, then playback.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, Entity, SharedString, WeakEntity, Window, div, px};
@@ -165,11 +166,12 @@ impl SettingsView {
       .nav
       .update(cx, |space, cx| space.set_auth_token(None, cx))
       .ok();
-    self.outcome = Some((t("Token removed.", "Jeton supprimé.").into(), true));
+    self.outcome = Some((t("Signed out.", "Déconnecté.").into(), true));
     cx.notify();
   }
 
-  fn account_section(&self, cx: &mut Context<Self>) -> AnyElement {
+  /// Helix: the followed channels, connected from the "Suivies" page.
+  fn followed_section(&self, cx: &mut Context<Self>) -> AnyElement {
     let login = self.nav.upgrade().and_then(|nav| nav.read(cx).login());
     let body = match login {
       Some(login) => h_flex()
@@ -179,23 +181,28 @@ impl SettingsView {
           div()
             .flex_1()
             .text_sm()
-            .child(tf!("Signed in as {login}", "Connecté en tant que {login}")),
+            .child(tf!("Connected as {login}", "Connecté en tant que {login}")),
         )
         .child(
           Button::new("twitch-sign-out")
             .small()
-            .label(t("Sign out", "Se déconnecter"))
+            .label(t("Disconnect", "Déconnecter"))
             .on_click(cx.listener(|this, _, _, cx| {
-              this.nav.update(cx, |space, cx| space.log_out(cx)).ok();
+              this
+                .nav
+                .update(cx, |space, cx| space.disconnect_helix(cx))
+                .ok();
             })),
         ),
       None => h_flex().child(div().text_sm().text_color(theme::muted()).child(t(
-        "Sign in from the Twitch tab.",
-        "Connectez-vous depuis l'onglet Twitch.",
+        "The Following page, the sidebar's lives and the bell need Twitch's sign-in by code: \
+         connect from the Following page.",
+        "La page Suivies, les lives de la barre latérale et la cloche demandent la connexion \
+         Twitch par code : connectez-vous depuis la page Suivies.",
       ))),
     };
     section(
-      t("Account", "Compte"),
+      t("Followed channels", "Chaînes suivies"),
       vec![
         div()
           .px_5()
@@ -209,12 +216,50 @@ impl SettingsView {
     .into_any_element()
   }
 
-  fn auth_token_section(&self, cx: &mut Context<Self>) -> AnyElement {
+  /// The site's auth-token: the space's sign-in.
+  fn account_section(&self, cx: &mut Context<Self>) -> AnyElement {
     let (success, danger) = (cx.theme().success, cx.theme().danger);
     let saved = self
       .nav
       .upgrade()
       .is_some_and(|nav| nav.read(cx).has_auth_token());
+    let account = self
+      .nav
+      .upgrade()
+      .and_then(|nav| nav.read(cx).account().map(|a| a.display_name.clone()));
+    if saved {
+      let status = match account {
+        Some(name) => tf!("Signed in as {name}", "Connecté en tant que {name}"),
+        None => t("A token is saved.", "Un jeton est enregistré.").into(),
+      };
+      let card = v_flex()
+        .px_5()
+        .py_4()
+        .gap_3()
+        .rounded(theme::RADIUS)
+        .bg(theme::surface())
+        .child(
+          h_flex()
+            .gap_4()
+            .items_center()
+            .child(div().flex_1().text_sm().child(status))
+            .child(
+              Button::new("twitch-auth-token-forget")
+                .small()
+                .label(t("Sign out", "Se déconnecter"))
+                .on_click(cx.listener(|this, _, _, cx| this.forget(cx))),
+            ),
+        )
+        .when_some(self.outcome.clone(), |card, (message, ok)| {
+          card.child(
+            div()
+              .text_sm()
+              .text_color(if ok { success } else { danger })
+              .child(message),
+          )
+        });
+      return section(t("Account", "Compte"), vec![card.into_any_element()]).into_any_element();
+    }
     let steps = tutorial().into_iter().enumerate().map(|(i, step)| {
       h_flex()
         .gap_2()
@@ -237,12 +282,15 @@ impl SettingsView {
       .rounded(theme::RADIUS)
       .bg(theme::surface())
       .child(div().text_sm().child(t(
-        "With it, Peeby plays videos as your account does on twitch.tv: without ads if you have \
-         Turbo or a subscription to the channel, and subscriber-only VODs. Without it, playback \
-         works too: Peeby removes the ads itself.",
-        "Avec lui, Peeby lit les vidéos comme votre compte sur twitch.tv : sans publicité si vous \
-         avez Turbo ou un abonnement à la chaîne, et les VOD réservées aux abonnés. Sans lui, la \
-         lecture marche aussi : Peeby retire lui-même les publicités.",
+        "Peeby signs in to your account with the twitch.tv site's token. With it, videos play as \
+         on twitch.tv (without ads if you have Turbo or a subscription to the channel, and \
+         subscriber-only VODs), with your channel points and where you stopped in VODs. Without \
+         it, Twitch opens too: browsing, search and playback, with the ads removed by Peeby.",
+        "Peeby se connecte à votre compte avec le jeton du site twitch.tv. Avec lui, les vidéos \
+         se lisent comme sur twitch.tv (sans publicité si vous avez Turbo ou un abonnement à la \
+         chaîne, et les VOD réservées aux abonnés), avec vos points de chaîne et la reprise des \
+         VOD. Sans lui, Twitch s'ouvre aussi : catalogue, recherche et lecture, les publicités \
+         retirées par Peeby.",
       )))
       .child(v_flex().gap_1().children(steps))
       .child(div().text_xs().text_color(theme::muted()).child(t(
@@ -270,22 +318,8 @@ impl SettingsView {
               .loading(self.checking)
               .disabled(self.checking)
               .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
-          )
-          .when(saved, |row| {
-            row.child(
-              Button::new("twitch-auth-token-forget")
-                .ghost()
-                .small()
-                .label(t("Remove the token", "Supprimer le jeton"))
-                .on_click(cx.listener(|this, _, _, cx| this.forget(cx))),
-            )
-          }),
+          ),
       )
-      .child(div().text_xs().text_color(theme::muted()).child(if saved {
-        t("A token is saved.", "Un jeton est enregistré.")
-      } else {
-        t("No token saved.", "Aucun jeton enregistré.")
-      }))
       .when_some(self.outcome.clone(), |card, (message, ok)| {
         card.child(
           div()
@@ -294,14 +328,7 @@ impl SettingsView {
             .child(message),
         )
       });
-    section(
-      t(
-        "Twitch site token (optional)",
-        "Jeton du site Twitch (facultatif)",
-      ),
-      vec![card.into_any_element()],
-    )
-    .into_any_element()
+    section(t("Account", "Compte"), vec![card.into_any_element()]).into_any_element()
   }
 }
 
@@ -352,8 +379,8 @@ impl Render for SettingsView {
     let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
     let sections = vec![
       self.account_section(cx),
+      self.followed_section(cx),
       playback_section(max_height, low_latency),
-      self.auth_token_section(cx),
     ];
     v_flex().gap_8().children(sections)
   }

@@ -64,6 +64,14 @@ impl Client {
     })
   }
 
+  /// The same client without the auth-token: it shares the Client-ID and the connections.
+  pub fn anonymous(&self) -> Self {
+    Self {
+      auth_token: None,
+      ..self.clone()
+    }
+  }
+
   fn client_id(&self) -> String {
     // A poisoned lock only means a writer panicked mid-assignment of a `String`: the value is
     // still a whole string, so it is used as is.
@@ -235,8 +243,14 @@ impl Client {
   /// Who the client's auth-token belongs to (its login): checks a pasted token before it is saved.
   /// [`Error::NotLoggedIn`] when it is refused or there is none.
   pub async fn current_user(&self) -> Result<String> {
+    Ok(self.account().await?.login)
+  }
+
+  /// The account of the client's auth-token. [`Error::NotLoggedIn`] when it is refused or there
+  /// is none.
+  pub async fn account(&self) -> Result<gql::Account> {
     let answer = self.gql(&gql::current_user_request()).await?;
-    gql::parse_current_user(&answer)
+    gql::parse_account(&answer)
   }
 
   /// The viewer's channel points on `login`'s channel and its rewards (needs the auth-token).
@@ -360,7 +374,6 @@ impl Client {
     codecs: &[Codec],
     version: Version,
   ) -> Result<Master> {
-    info!("usher {version:?} master for {target:?} with codecs {codecs:?} and token {token:?}");
     let url = usher::master_url(target, token, codecs, version, nonce())?;
     let response = self
       .http
@@ -385,10 +398,6 @@ impl Client {
         detail: "no variant in the master".into(),
       });
     }
-    info!(
-      "usher {version:?} master for {target:?} variants: {:?} text: {}",
-      variants, text
-    );
     Ok(Master {
       version,
       text,

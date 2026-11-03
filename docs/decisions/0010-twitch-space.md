@@ -1,6 +1,7 @@
 # 0010: A Twitch space
 
-- Status: accepted (the two open questions answered by the user on 2026-11-01)
+- Status: accepted (the two open questions answered by the user on 2026-11-01); its third answer
+  ("Sign-in required") superseded by [0016](0016-twitch-without-helix-sign-in.md)
 - Date: 2026-11-01
 
 ## Context
@@ -63,7 +64,8 @@ and prepare for it without building it (refactor plan, step 9). The research, wi
    ads with Turbo or a subscription, subscriber-only VODs); without it, playback still works, with ads
    removed by the layer above.
 
-3. **Sign-in required** (2026-11-01). A public client cannot get a Helix app token (no client credentials
+3. **Sign-in required** (2026-11-01; superseded on 2026-11-03 by ADR 0016: the catalog goes
+   through anonymous GQL, Helix only serves the followed channels). A public client cannot get a Helix app token (no client credentials
    flow without a secret), so the catalog needs the user's token anyway. Signed out, the space shows only
    its sign-in card. Peeby's Client-ID on dev.twitch.tv is `zsxaog2l339o1lbld85h17ksscnjwr` (public, not
    a secret). Tokens are validated at startup and every hour, as Twitch requires.

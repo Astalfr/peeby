@@ -15,8 +15,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use gpui::prelude::*;
 use gpui::{Context, Entity, FontWeight, SharedString, Task, Window, div, px};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
+use twitch::catalog::Catalog;
 use twitch::gql::Channel;
-use twitch::helix::Helix;
 use twitch::usher::Codec;
 use twitch::{Proxy, Target};
 use ui::chat::{ChatPanel, watch_layout};
@@ -62,7 +62,7 @@ struct Header {
 pub struct WatchView {
   kind: Kind,
   client: twitch::Client,
-  helix: Helix,
+  catalog: Catalog,
   nav: Nav,
   player: Entity<PlayerView>,
   /// Serves mpv's playlists (a live, a VOD); dropping it (with the page) stops it.
@@ -88,7 +88,7 @@ impl WatchView {
   pub fn new(
     kind: Kind,
     client: twitch::Client,
-    helix: Helix,
+    catalog: Catalog,
     nav: Nav,
     cx: &mut Context<Self>,
   ) -> Self {
@@ -132,7 +132,7 @@ impl WatchView {
     let mut view = Self {
       kind,
       client,
-      helix,
+      catalog,
       nav,
       player,
       proxy: None,
@@ -152,7 +152,7 @@ impl WatchView {
         view._tasks.push(chat::start(
           &login,
           view.client.clone(),
-          view.helix.clone(),
+          view.catalog.clone(),
           &panel,
           cx,
         ));
@@ -168,7 +168,7 @@ impl WatchView {
         view._tasks.push(replay::start(
           id.clone(),
           view.client.clone(),
-          view.helix.clone(),
+          view.catalog.clone(),
           &panel,
           view.player.downgrade(),
           cx,
@@ -355,10 +355,10 @@ impl WatchView {
     }
   }
 
-  /// The VOD through the proxy, its storyboard, its game chapters, and its header from Helix.
+  /// The VOD through the proxy, its storyboard, its game chapters, and its header.
   fn start_vod(&mut self, id: String, start: Option<u32>, cx: &mut Context<Self>) {
     let clicked = Instant::now();
-    let (client, helix) = (self.client.clone(), self.helix.clone());
+    let (client, catalog) = (self.client.clone(), self.catalog.clone());
     self.load_chapters(id.clone(), cx);
     let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
     let play = runtime::spawn(cx, {
@@ -376,8 +376,8 @@ impl WatchView {
     });
     let video_id = id.clone();
     let info = runtime::spawn(cx, async move {
-      let video = helix.video(&id).await?;
-      let avatar = cards::avatars(&helix, vec![video.user_id.clone()]).await;
+      let video = catalog.video(&id).await?;
+      let avatar = cards::avatars(&catalog, vec![video.user_id.clone()]).await;
       Ok::<_, twitch::Error>((video, avatar))
     });
     self._tasks.push(cx.spawn(async move |this, cx| {
@@ -492,17 +492,17 @@ impl WatchView {
     }));
   }
 
-  /// The clip's MP4s and its header from Helix.
+  /// The clip's MP4s and its header.
   fn start_clip(&mut self, slug: String, cx: &mut Context<Self>) {
     let clicked = Instant::now();
-    let (client, helix) = (self.client.clone(), self.helix.clone());
+    let (client, catalog) = (self.client.clone(), self.catalog.clone());
     let play = runtime::spawn(cx, {
       let slug = slug.clone();
       async move { client.clip(&slug).await }
     });
     let info = runtime::spawn(cx, async move {
-      let clip = helix.clip(&slug).await?;
-      let user = helix
+      let clip = catalog.clip(&slug).await?;
+      let user = catalog
         .users(std::slice::from_ref(&clip.broadcaster_id))
         .await?;
       Ok::<_, twitch::Error>((clip, user.into_iter().next()))

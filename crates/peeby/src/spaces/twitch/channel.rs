@@ -1,4 +1,4 @@
-//! A channel's page: its header (Helix `users`), its live when on air (GQL `Channel`), then its
+//! A channel's page: its header (`user`), its live when on air (GQL `Channel`), then its
 //! past broadcasts (`videos?type=archive`, with the account's resume positions as progress bars
 //! and their game chapters, each playing the VOD from there)
 //! or its most viewed clips (`clips`), in two tabs.
@@ -9,8 +9,9 @@ use gpui::prelude::*;
 use gpui::{Context, FontWeight, Task, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex};
+use twitch::catalog::Catalog;
 use twitch::gql::{self, Channel};
-use twitch::helix::{Clip, Helix, User, Video};
+use twitch::helix::{Clip, User, Video};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture;
@@ -18,6 +19,9 @@ use ui::theme;
 
 use super::browse::load;
 use super::{Nav, Route, cards};
+
+/// VODs and clips listed, as many as before with Helix.
+const LIST: u32 = 40;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -47,7 +51,7 @@ pub struct ChannelView {
 impl ChannelView {
   pub fn new(
     nav: Nav,
-    helix: Helix,
+    catalog: Catalog,
     client: twitch::Client,
     login: String,
     cx: &mut Context<Self>,
@@ -60,14 +64,10 @@ impl ChannelView {
       {
         let login = login.clone();
         async move {
-          let user = helix.user(&login).await?;
+          let user = catalog.user(&login).await?;
           // The header's live and the lists are optional: their errors leave them out.
           let channel = client.channel(&login).await.ok();
-          let videos = helix
-            .videos(&user.id, Some("archive"), None)
-            .await
-            .map(|p| p.items)
-            .unwrap_or_default();
+          let videos = catalog.videos(&user.id, LIST).await.unwrap_or_default();
           let ids: Vec<String> = videos.iter().map(|v| v.id.clone()).collect();
           let positions = client.vod_positions(&ids).await.unwrap_or_else(|e| {
             tracing::warn!("Twitch VOD positions: {e}");
@@ -77,11 +77,7 @@ impl ChannelView {
             tracing::warn!("Twitch VOD chapters: {e}");
             HashMap::new()
           });
-          let clips = helix
-            .clips(&user.id, None)
-            .await
-            .map(|p| p.items)
-            .unwrap_or_default();
+          let clips = catalog.clips(&user.id, LIST).await.unwrap_or_default();
           Ok(Loaded {
             user,
             channel,

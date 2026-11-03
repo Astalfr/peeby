@@ -13,8 +13,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{App, Entity, Task, WeakEntity};
+use twitch::catalog::Catalog;
 use twitch::gql::{Comment, Comments};
-use twitch::helix::Helix;
 use ui::chat::{ChatEvent, ChatPanel};
 use ui::i18n::t;
 use ui::player::PlayerView;
@@ -118,7 +118,7 @@ impl Replay {
 pub fn start(
   id: String,
   client: twitch::Client,
-  helix: Helix,
+  catalog: Catalog,
   panel: &Entity<ChatPanel>,
   player: WeakEntity<PlayerView>,
   cx: &mut App,
@@ -170,8 +170,8 @@ pub fn start(
           Some(Ok(page)) => {
             if !extras_asked && let Some(channel) = page.channel_id.clone() {
               extras_asked = true;
-              let (client, helix, extras) = (client.clone(), helix.clone(), extras.clone());
-              cx.update(|cx| load_extras(channel, client, helix, extras, cx));
+              let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
+              cx.update(|cx| load_extras(channel, client, catalog, extras, cx));
             }
             replay.add(page, from);
             events.push(ChatEvent::Status(None));

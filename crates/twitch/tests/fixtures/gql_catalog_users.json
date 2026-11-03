@@ -1,0 +1,28 @@
+{
+  "data": {
+    "users": [
+      {
+        "id": "137512364",
+        "login": "ow_esports",
+        "displayName": "ow_esports",
+        "description": "The official home of Overwatch Esports on Twitch.",
+        "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/b532ac95-4050-42cb-9d5d-9666a243654c-profile_image-300x300.png",
+        "offlineImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/d071c0a2-9ad0-4c3a-b19a-89bccd9d7929-channel_offline_image-1920x1080.png",
+        "roles": {
+          "isPartner": true
+        }
+      },
+      {
+        "id": "52130765",
+        "login": "squeezie",
+        "displayName": "Squeezie",
+        "description": "ça live chaque mercredi de 20h à 00h ",
+        "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/1939615e-a34d-4fab-a035-8c3d8ffae278-profile_image-300x300.png",
+        "offlineImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/87fc11b8-0296-442b-9c83-84081434a98b-channel_offline_image-1920x1080.jpeg",
+        "roles": {
+          "isPartner": true
+        }
+      }
+    ]
+  }
+}

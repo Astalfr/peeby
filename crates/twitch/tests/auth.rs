@@ -95,11 +95,22 @@ fn validation() {
 #[test]
 fn auth_token_check() {
   assert!(matches!(
-    gql::parse_current_user(&json("gql_current_user_anonymous.json")),
+    gql::parse_account(&json("gql_current_user_anonymous.json")),
     Err(Error::NotLoggedIn)
   ));
-  let signed = json!({ "data": { "currentUser": { "id": "1", "login": "peeby_test" } } });
-  assert_eq!(gql::parse_current_user(&signed).unwrap(), "peeby_test");
+  let signed = json!({ "data": { "currentUser": {
+    "id": "1", "login": "peeby_test", "displayName": "Peeby_Test", "profileImageURL": null
+  } } });
+  let account = gql::parse_account(&signed).unwrap();
+  assert_eq!(
+    (
+      account.id.as_str(),
+      account.login.as_str(),
+      account.display_name.as_str()
+    ),
+    ("1", "peeby_test", "Peeby_Test")
+  );
+  assert_eq!(account.avatar_url, None);
   assert!(gql::is_auth_token_shape("abcdefghij0123456789abcdefghij"));
   assert!(!gql::is_auth_token_shape("too short"));
   assert!(!gql::is_auth_token_shape("abcdefghij0123456789abcdefgh-j"));

@@ -74,7 +74,8 @@ Re-read on 2026-11-01, in addition to twitch.md:
   token without passing a client secret". Refresh tokens from the device flow "are for one time use only".
   So **every Helix call needs the user's token**: signed out, Peeby has no Helix catalog. This corrects
   twitch.md, which said an app token was enough for several endpoints. The user chose to require the
-  sign-in for the whole space.
+  sign-in for the whole space; on 2026-11-03 the catalog moved to anonymous GQL and Helix became
+  optional, for the followed channels ([ADR 0016](decisions/0016-twitch-without-helix-sign-in.md)).
 - **Validation is required.** "Your app must validate the OAuth token when it starts and on an hourly basis
   thereafter" (`GET https://id.twitch.tv/oauth2/validate`).
 - **The ad layer is a local HTTP proxy, not a libmpv stream callback** **[mem]**. mpv opens HLS through

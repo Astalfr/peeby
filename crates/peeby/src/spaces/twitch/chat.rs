@@ -5,7 +5,7 @@
 //! Once the room's id arrives, the channel's extras load ([`Extras`]): 7TV and BTTV emotes, which
 //! replace the words they name (BTTV's global set, 7TV's, then the channel's BTTV and 7TV sets,
 //! each winning over the ones before; animated ones play, zero-width ones are drawn over the emote
-//! before them), and the chat badges from Helix (global, then the channel's over them). Both are
+//! before them), and the chat badges (global, then the channel's over them). Both are
 //! kept for the session ([`ChatSets`]). Messages that arrived before keep their words and no badges.
 
 use std::cell::RefCell;
@@ -14,8 +14,9 @@ use std::future::Future;
 use std::rc::Rc;
 
 use gpui::{App, Entity, Global, Hsla, SharedString, Task};
+use twitch::catalog::Catalog;
 use twitch::chat::{ChatLine, Event, Piece, RoomState, Status, Update, emote_url};
-use twitch::helix::{self, Helix};
+use twitch::helix;
 use twitch::{bttv, seventv};
 use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatPanel, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
@@ -55,7 +56,7 @@ impl Global for ChatSets {}
 pub fn start(
   login: &str,
   client: twitch::Client,
-  helix: Helix,
+  catalog: Catalog,
   panel: &Entity<ChatPanel>,
   cx: &mut App,
 ) -> Task<()> {
@@ -81,8 +82,8 @@ pub fn start(
         .collect();
       if !extras_asked && let Some(room_id) = room.room_id.clone() {
         extras_asked = true;
-        let (client, helix, extras) = (client.clone(), helix.clone(), extras.clone());
-        cx.update(|cx| load_extras(room_id, client, helix, extras, cx));
+        let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
+        cx.update(|cx| load_extras(room_id, client, catalog, extras, cx));
       }
       if panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
         return;
@@ -96,7 +97,7 @@ pub fn start(
 pub(super) fn load_extras(
   room_id: String,
   client: twitch::Client,
-  helix: Helix,
+  catalog: Catalog,
   target: Rc<RefCell<Rc<Extras>>>,
   cx: &mut App,
 ) {
@@ -141,15 +142,15 @@ pub(super) fn load_extras(
       String::new(),
       |s| &mut s.badges,
       {
-        let helix = helix.clone();
-        move || async move { helix.global_badges().await }
+        let catalog = catalog.clone();
+        move || async move { catalog.global_badges().await }
       },
       cx,
     ),
     set(
       room_id.clone(),
       |s| &mut s.badges,
-      move || async move { helix.channel_badges(&room_id).await },
+      move || async move { catalog.channel_badges(&room_id).await },
       cx,
     ),
   ];
@@ -288,7 +289,7 @@ pub(super) fn message(
   message
 }
 
-/// A Helix badge as the panel's, its image picked for the drawn width (18, 36 or 72 px).
+/// A badge as the panel's, its image picked for the drawn width (18, 36 or 72 px).
 fn badge_of(badge: &Rc<helix::Badge>) -> Badge {
   let urls = badge.clone();
   Badge {

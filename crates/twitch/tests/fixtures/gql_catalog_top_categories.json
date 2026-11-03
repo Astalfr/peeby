@@ -1,0 +1,29 @@
+{
+  "data": {
+    "games": {
+      "edges": [
+        {
+          "node": {
+            "id": "509658",
+            "displayName": "Just Chatting",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg"
+          }
+        },
+        {
+          "node": {
+            "id": "32399",
+            "displayName": "Counter-Strike",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/32399-{width}x{height}.jpg"
+          }
+        },
+        {
+          "node": {
+            "id": "21779",
+            "displayName": "League of Legends",
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/21779-{width}x{height}.jpg"
+          }
+        }
+      ]
+    }
+  }
+}

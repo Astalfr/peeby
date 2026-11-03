@@ -229,7 +229,46 @@ pub fn parse_channel(answer: &Value) -> Result<Channel> {
 
 /// The request asking who the auth-token belongs to.
 pub fn current_user_request() -> Value {
-  json!({ "query": "query { currentUser { id login } }" })
+  json!({
+    "query": "query { currentUser { id login displayName profileImageURL(width: 70) } }"
+  })
+}
+
+/// The account an auth-token belongs to: the space's identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Account {
+  /// Numeric id.
+  pub id: String,
+  /// Login, lowercase.
+  pub login: String,
+  /// Shown name.
+  pub display_name: String,
+  /// Avatar, 70 px.
+  pub avatar_url: Option<String>,
+}
+
+/// The account of `currentUser`; `null` (no or a dead auth-token) is [`Error::NotLoggedIn`].
+pub fn parse_account(answer: &Value) -> Result<Account> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let user = &answer["data"]["currentUser"];
+  let (Some(id), Some(login)) = (user["id"].as_str(), user["login"].as_str()) else {
+    return Err(Error::NotLoggedIn);
+  };
+  Ok(Account {
+    id: id.to_owned(),
+    login: login.to_owned(),
+    display_name: user["displayName"]
+      .as_str()
+      .filter(|n| !n.is_empty())
+      .unwrap_or(login)
+      .to_owned(),
+    avatar_url: user["profileImageURL"]
+      .as_str()
+      .filter(|u| !u.is_empty())
+      .map(str::to_owned),
+  })
 }
 
 /// The login of `currentUser`; `null` (no or a dead auth-token) is [`Error::NotLoggedIn`].

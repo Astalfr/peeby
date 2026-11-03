@@ -1,11 +1,12 @@
 //! The Twitch search, from the top bar's button: channels (on air first) and categories matching
-//! the text, run on Enter. Helix `search/channels` and `search/categories`.
+//! the text, run on Enter. GQL `searchUsers` and `searchCategories`.
 
 use gpui::prelude::*;
 use gpui::{Context, Entity, Subscription, Task, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
-use twitch::helix::{Category, ChannelResult, Helix};
+use twitch::catalog::Catalog;
+use twitch::helix::{Category, ChannelResult};
 use ui::i18n::t;
 use ui::images::Images;
 
@@ -17,7 +18,7 @@ type Results = (Vec<ChannelResult>, Partners, Vec<Category>);
 
 pub struct SearchView {
   nav: Nav,
-  helix: Helix,
+  catalog: Catalog,
   input: Entity<InputState>,
   results: Option<Result<Results, String>>,
   searching: bool,
@@ -26,7 +27,7 @@ pub struct SearchView {
 }
 
 impl SearchView {
-  pub fn new(nav: Nav, helix: Helix, window: &mut Window, cx: &mut Context<Self>) -> Self {
+  pub fn new(nav: Nav, catalog: Catalog, window: &mut Window, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
@@ -45,7 +46,7 @@ impl SearchView {
     );
     Self {
       nav,
-      helix,
+      catalog,
       input,
       results: None,
       searching: false,
@@ -61,17 +62,17 @@ impl SearchView {
     }
     self.searching = true;
     cx.notify();
-    let helix = self.helix.clone();
+    let catalog = self.catalog.clone();
     self._task = Some(load(
       cx,
       async move {
-        let mut channels = helix.search_channels(&text).await?.items;
+        let mut channels = catalog.search_channels(&text).await?;
         // On air first, keeping Twitch's order otherwise.
         channels.sort_by_key(|c| !c.is_live);
         // Search results do not say which channels are partners: `users` does.
         let ids = channels.iter().map(|c| c.id.clone()).collect();
-        let (_, partners) = cards::faces(&helix, ids).await;
-        let categories = helix.search_categories(&text).await?.items;
+        let (_, partners) = cards::faces(&catalog, ids).await;
+        let categories = catalog.search_categories(&text).await?;
         Ok((channels, partners, categories))
       },
       |this: &mut Self, result, cx| {

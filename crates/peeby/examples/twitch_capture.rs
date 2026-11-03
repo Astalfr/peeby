@@ -11,6 +11,8 @@
 //! `-- master-scan` lists which of the top 100 lives offer HEVC or AV1 (logins and codecs only).
 //! `-- positions <vod-id>…` prints how many of those VODs have a resume position on the account
 //! (saved `auth-token`) and saves the answer as `gql_vod_positions.json`; it reads, never writes.
+//! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
+//! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
 //! The saved refresh token is spent and its successor saved back, as the app does: do not run it
 //! while Peeby runs, or the app's session ends at its next refresh. Prints counts only.
@@ -36,6 +38,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "master") {
     let login = args.get(i + 1).ok_or("master <login>")?.clone();
     return twitch::block_on(capture_master(login))?;
+  }
+  if args.iter().any(|a| a == "catalog") {
+    return twitch::block_on(capture_catalog())?;
   }
   let entry = keyring::Entry::new("peeby", "twitch|refresh")?;
   let refresh = entry.get_password()?;
@@ -305,6 +310,97 @@ async fn capture_badges(helix: &Helix) -> Result<(), Box<dyn std::error::Error>>
   trim_badges(&mut channel, |_| true);
   save("helix_badges_channel.json", &channel)?;
   Ok(())
+}
+
+/// The GQL catalog's answers, anonymous, trimmed: public channels (`ow_esports`, its VOD with
+/// muted parts and a clip, as the Helix fixtures), Just Chatting, the searches of `smoke`.
+async fn capture_catalog() -> Result<(), Box<dyn std::error::Error>> {
+  use twitch::catalog;
+  const CHANNEL: &str = "137512364";
+  let client = twitch::Client::new(None, None)?;
+  let answers = [
+    ("top_categories", catalog::top_categories_request()),
+    (
+      "category_streams",
+      catalog::category_streams_request("509658"),
+    ),
+    (
+      "users",
+      catalog::users_request(&[CHANNEL.to_owned(), "52130765".to_owned()]),
+    ),
+    ("user", catalog::user_request("ow_esports")),
+    (
+      "user_not_found",
+      catalog::user_request("peeby_no_such_user_0"),
+    ),
+    ("videos", catalog::videos_request(CHANNEL, 4)),
+    ("video", catalog::video_request("2915878235")),
+    ("clips", catalog::clips_request(CHANNEL, 3)),
+    ("clip", catalog::clip_request("OpenRenownedNewtPMSTwin")),
+    (
+      "search_channels",
+      catalog::search_channels_request("squeezie"),
+    ),
+    (
+      "search_categories",
+      catalog::search_categories_request("minecraft"),
+    ),
+    ("badges_global", catalog::global_badges_request()),
+    (
+      "badges_channel",
+      catalog::channel_badges_request("207813352"),
+    ),
+  ];
+  for (name, request) in answers {
+    let mut answer = client.gql(&request).await?;
+    trim(&mut answer["data"]);
+    if let Some(extensions) = answer.as_object_mut() {
+      extensions.remove("extensions");
+    }
+    let path = Path::new(FIXTURES).join(format!("gql_catalog_{name}.json"));
+    std::fs::write(
+      &path,
+      serde_json::to_string_pretty(&answer)?
+        + "
+",
+    )?;
+    let errors = answer["errors"].as_array().map_or(0, Vec::len);
+    println!("gql_catalog_{name}.json: {errors} errors");
+  }
+  Ok(())
+}
+
+/// Every list cut to 3 items, but the global badges: the sets of [`capture_badges`], 3 versions
+/// each.
+fn trim(value: &mut Value) {
+  const GLOBAL: &[&str] = &[
+    "broadcaster",
+    "moderator",
+    "vip",
+    "partner",
+    "subscriber",
+    "turbo",
+  ];
+  match value {
+    Value::Object(map) => {
+      if let Some(Value::Array(badges)) = map.get_mut("badges") {
+        let mut kept = std::collections::HashMap::<String, usize>::new();
+        badges.retain(|b| {
+          let set = b["setID"].as_str().unwrap_or_default();
+          let n = kept.entry(set.to_owned()).or_default();
+          *n += 1;
+          GLOBAL.contains(&set) && *n <= 3
+        });
+        return;
+      }
+      map.values_mut().for_each(trim);
+    }
+    Value::Array(list) => {
+      list.truncate(3);
+      list.iter_mut().for_each(trim);
+    }
+    _ => {}
+  }
 }
 
 /// Keeps the sets `keep` accepts, with at most 3 versions each.

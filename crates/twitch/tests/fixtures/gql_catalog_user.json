@@ -1,0 +1,15 @@
+{
+  "data": {
+    "user": {
+      "id": "137512364",
+      "login": "ow_esports",
+      "displayName": "ow_esports",
+      "description": "The official home of Overwatch Esports on Twitch.",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/b532ac95-4050-42cb-9d5d-9666a243654c-profile_image-300x300.png",
+      "offlineImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/d071c0a2-9ad0-4c3a-b19a-89bccd9d7929-channel_offline_image-1920x1080.png",
+      "roles": {
+        "isPartner": true
+      }
+    }
+  }
+}

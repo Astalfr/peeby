@@ -12,6 +12,7 @@
 pub mod ads;
 pub mod auth;
 pub mod bttv;
+pub mod catalog;
 pub mod chat;
 mod client;
 mod error;

@@ -1,0 +1,91 @@
+{
+  "data": {
+    "game": {
+      "streams": {
+        "edges": [
+          {
+            "node": {
+              "id": "318223861604",
+              "title": "Fitnäy 2026 - Heute wird rum gestreunert + WSMDS REACTION",
+              "viewersCount": 6185,
+              "createdAt": "2026-11-03T11:55:00Z",
+              "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_therealknossi-{width}x{height}.jpg",
+              "freeformTags": [
+                {
+                  "name": "Deutsch"
+                },
+                {
+                  "name": "DropsAktiviert"
+                }
+              ],
+              "game": {
+                "id": "509658",
+                "displayName": "Just Chatting"
+              },
+              "broadcaster": {
+                "id": "71588578",
+                "login": "therealknossi",
+                "displayName": "TheRealKnossi"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "317189493846",
+              "title": "СМОТРИМ ВОПРОС РЕБРОМ РАВШАН !бб",
+              "viewersCount": 5908,
+              "createdAt": "2026-11-03T12:06:08Z",
+              "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_renatko-{width}x{height}.jpg",
+              "freeformTags": [
+                {
+                  "name": "Русский"
+                },
+                {
+                  "name": "DropsВключены"
+                }
+              ],
+              "game": {
+                "id": "509658",
+                "displayName": "Just Chatting"
+              },
+              "broadcaster": {
+                "id": "92848919",
+                "login": "renatko",
+                "displayName": "renatko"
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "319063657703",
+              "title": "🦃 Treffen sich zwei Jäger | !WoWlan 🦃",
+              "viewersCount": 5822,
+              "createdAt": "2026-11-03T12:14:54Z",
+              "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_handofblood-{width}x{height}.jpg",
+              "freeformTags": [
+                {
+                  "name": "Deutsch"
+                },
+                {
+                  "name": "hänno"
+                },
+                {
+                  "name": "spandau"
+                }
+              ],
+              "game": {
+                "id": "509658",
+                "displayName": "Just Chatting"
+              },
+              "broadcaster": {
+                "id": "49140130",
+                "login": "handofblood",
+                "displayName": "HandOfBlood"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

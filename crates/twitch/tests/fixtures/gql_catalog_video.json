@@ -1,0 +1,35 @@
+{
+  "data": {
+    "video": {
+      "id": "2915878235",
+      "title": "[DROPS] OWCS 2026 | Stage 3 Playoffs Day 2",
+      "createdAt": "2026-10-31T16:36:29Z",
+      "viewCount": 328209,
+      "lengthSeconds": 29349,
+      "previewThumbnailURL": "https://static-cdn.jtvnw.net/cf_vods/d3fi1amfgojobc/a74b4092085d5bd22810_ow_esports_319217211750_1793464582//thumb/thumb0-{width}x{height}.jpg",
+      "owner": {
+        "id": "137512364",
+        "login": "ow_esports",
+        "displayName": "ow_esports"
+      },
+      "muteInfo": {
+        "mutedSegmentConnection": {
+          "nodes": [
+            {
+              "offset": 0,
+              "duration": 180
+            },
+            {
+              "offset": 721,
+              "duration": 180
+            },
+            {
+              "offset": 5047,
+              "duration": 180
+            }
+          ]
+        }
+      }
+    }
+  }
+}

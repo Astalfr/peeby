@@ -1,6 +1,6 @@
 //! "Suivies": the followed channels on air as stream cards (most viewers first), then the others
-//! with their avatars, by name, under a field that filters them. Helix `streams/followed`,
-//! `channels/followed` and `users`.
+//! with their avatars, by name, under a field that filters them. Helix `streams/followed` and
+//! `channels/followed` (GQL refuses the follows to raw queries), the avatars from the catalog.
 
 use std::collections::HashSet;
 
@@ -8,6 +8,7 @@ use gpui::prelude::*;
 use gpui::{Context, Entity, Subscription, Task, Window, div, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::v_flex;
+use twitch::catalog::Catalog;
 use twitch::helix::{Followed, Helix, Stream};
 use ui::i18n::t;
 use ui::images::Images;
@@ -37,11 +38,17 @@ pub struct FollowingView {
 }
 
 impl FollowingView {
-  pub fn new(nav: Nav, helix: Helix, user_id: String, cx: &mut Context<Self>) -> Self {
+  pub fn new(
+    nav: Nav,
+    helix: Helix,
+    catalog: Catalog,
+    user_id: String,
+    cx: &mut Context<Self>,
+  ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
-    let fetch = runtime::spawn(cx, load(helix, user_id));
+    let fetch = runtime::spawn(cx, load(helix, catalog, user_id));
     let load = cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this
@@ -68,7 +75,7 @@ impl FollowingView {
   }
 }
 
-async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
+async fn load(helix: Helix, catalog: Catalog, user_id: String) -> twitch::Result<Loaded> {
   let mut live = Vec::new();
   let mut after = None;
   for _ in 0..LIVE_PAGES {
@@ -98,13 +105,13 @@ async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
   let mut avatars = Avatars::new();
   let ids: Vec<String> = live.iter().map(|s| s.user_id.clone()).collect();
   for chunk in ids.chunks(100) {
-    avatars.extend(cards::avatars(&helix, chunk.to_vec()).await);
+    avatars.extend(cards::avatars(&catalog, chunk.to_vec()).await);
   }
   // All of them (5 requests at most): the filter can show any.
   let mut partners = Partners::new();
   let ids: Vec<String> = offline.iter().map(|f| f.broadcaster_id.clone()).collect();
   for chunk in ids.chunks(100) {
-    let (more, partnered) = cards::faces(&helix, chunk.to_vec()).await;
+    let (more, partnered) = cards::faces(&catalog, chunk.to_vec()).await;
     avatars.extend(more);
     partners.extend(partnered);
   }
