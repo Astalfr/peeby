@@ -315,14 +315,14 @@ impl YouTubeSpace {
     let client = self.client.clone();
     match route {
       Route::Home => cx
-        .new(|cx| FeedView::new(client, Source::Home, nav, cx))
+        .new(|cx| FeedView::new(client, Source::Home, nav, window, cx))
         .into(),
       Route::Subscriptions => cx
-        .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
+        .new(|cx| FeedView::new(client, Source::Subscriptions, nav, window, cx))
         .into(),
       Route::Shorts => cx.new(|cx| ShortsView::new(client, nav, cx)).into(),
       Route::History => cx
-        .new(|cx| FeedView::new(client, Source::History, nav, cx))
+        .new(|cx| FeedView::new(client, Source::History, nav, window, cx))
         .into(),
       Route::Channels => cx
         .new(|cx| ChannelsView::new(client, nav, window, cx))
@@ -332,7 +332,8 @@ impl YouTubeSpace {
           id: id.clone(),
           name: name.clone(),
         };
-        cx.new(|cx| FeedView::new(client, source, nav, cx)).into()
+        cx.new(|cx| FeedView::new(client, source, nav, window, cx))
+          .into()
       }
       Route::Playlists => cx.new(|cx| PlaylistsView::new(client, nav, cx)).into(),
       Route::Playlist { id, title } => cx

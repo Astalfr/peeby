@@ -132,6 +132,11 @@ async fn main() {
   }
   let channel = client.channel_videos(CHANNEL).await;
   let next = channel.as_ref().ok().and_then(|f| f.continuation.clone());
+  let popular = channel
+    .as_ref()
+    .ok()
+    .and_then(|f| f.chips.get(1))
+    .map(|c| c.token.clone());
   check(
     "channel_videos",
     channel.map(|f| format!("{} videos", f.items.len())),
@@ -141,6 +146,33 @@ async fn main() {
       "continuation",
       client
         .continuation(&token)
+        .await
+        .map(|f| format!("{} videos", f.items.len())),
+    );
+  }
+  if let Some(token) = popular {
+    check(
+      "channel_sort",
+      client
+        .continuation(&token)
+        .await
+        .map(|f| format!("{} videos · {} chips", f.items.len(), f.chips.len())),
+    );
+  }
+  let channel_search = client.channel_search(CHANNEL, "never").await;
+  let channel_search_next = channel_search
+    .as_ref()
+    .ok()
+    .and_then(|f| f.continuation.clone());
+  check(
+    "channel_search",
+    channel_search.map(|f| format!("{} videos", f.items.len())),
+  );
+  if let Some(token) = channel_search_next {
+    check(
+      "channel_search_more",
+      client
+        .channel_search_more(&token)
         .await
         .map(|f| format!("{} videos", f.items.len())),
     );

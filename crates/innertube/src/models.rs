@@ -69,6 +69,20 @@ pub struct Feed {
   pub logged_in: bool,
   /// Message YouTube shows instead of videos (e.g. "Your YouTube history is off").
   pub message: Option<String>,
+  /// The chips above the grid: a channel's "Videos" tab sorts by them (latest, popular,
+  /// oldest). Empty on a next page.
+  pub chips: Vec<FeedChip>,
+}
+
+/// One chip above a grid, its label in YouTube's language.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FeedChip {
+  /// What the chip says, e.g. `Populaires`.
+  pub label: String,
+  /// Whether the grid shows this chip's videos.
+  pub selected: bool,
+  /// Token for [`crate::Client::continuation`]: the first page of this chip's videos.
+  pub token: String,
 }
 
 /// Metadata of the watch page.

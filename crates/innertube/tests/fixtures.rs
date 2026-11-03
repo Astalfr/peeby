@@ -6,9 +6,10 @@
 
 use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
-  NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url, parse_feed,
-  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
-  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
+  NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url,
+  parse_channel_search, parse_feed, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
+  parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -47,6 +48,48 @@ fn channel_videos_grid() {
   assert!(first.thumbnails.iter().any(|t| t.width >= 720));
   assert!(feed.items.iter().all(|v| v.id.len() == 11));
   assert!(feed.items.iter().all(|v| !v.live));
+}
+
+#[test]
+fn channel_videos_sort_chips() {
+  let feed = parse_feed(&fixture("channel_videos.json"));
+  let labels: Vec<_> = feed.chips.iter().map(|c| c.label.as_str()).collect();
+  assert_eq!(
+    labels,
+    ["Les plus récentes", "Populaires", "Les plus anciennes"]
+  );
+  assert!(feed.chips[0].selected && !feed.chips[1].selected);
+  assert!(feed.chips.iter().all(|c| !c.token.is_empty()));
+}
+
+#[test]
+fn channel_videos_by_popularity() {
+  // The answer to the "Populaires" chip, captured 2026-11-03, trimmed to three videos: it
+  // replaces the grid, its own chips showing the new order.
+  let feed = parse_feed(&fixture("channel_videos_popular.json"));
+  let ids: Vec<_> = feed.items.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["dQw4w9WgXcQ", "yPYZpwSpKmA", "eYuUAGXN0KM"]);
+  assert!(feed.continuation.is_some());
+  let selected: Vec<_> = feed.chips.iter().filter(|c| c.selected).collect();
+  assert_eq!(selected.len(), 1);
+  assert_eq!(selected[0].label, "Populaires");
+}
+
+#[test]
+fn channel_search_results() {
+  // Rick Astley's channel searched for "never", captured 2026-11-03, trimmed to three videos.
+  let feed = parse_channel_search(&fixture("channel_search.json"));
+  let ids: Vec<_> = feed.items.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["dQw4w9WgXcQ", "RrESvSRNpeo", "DD70oKDlemE"]);
+  let first = &feed.items[0];
+  assert_eq!(first.duration.as_deref(), Some("3:34"));
+  assert!(!first.metadata.is_empty());
+  assert!(feed.chips.is_empty());
+  assert!(feed.continuation.is_some());
+
+  let more = parse_channel_search(&fixture("channel_search_continuation.json"));
+  assert_eq!(more.items.len(), 2);
+  assert!(more.continuation.is_some());
 }
 
 #[test]

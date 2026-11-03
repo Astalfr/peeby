@@ -15,8 +15,8 @@ use crate::models::{
   WatchPage, Watchtime,
 };
 use crate::parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
-  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
+  parse_live_chat, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
   parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
   parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
   parse_watch, tracking_param,
@@ -257,6 +257,27 @@ impl Client {
     let body = json!({ "browseId": channel_id, "params": "EgZ2aWRlb3PyBgQKAjoA" });
     let response = self.web("browse", body, true).await?;
     self.feed(&response).await
+  }
+
+  /// A channel's videos matching `query`, as its "Search" tab shows them (YouTube's order). The
+  /// next pages come from [`Client::channel_search_more`].
+  pub async fn channel_search(&self, channel_id: &str, query: &str) -> Result<Feed> {
+    // Protobuf selecting the "Search" tab, as the web client sends it.
+    let body = json!({ "browseId": channel_id, "params": "EgZzZWFyY2jyBgQKAloA", "query": query });
+    let response = self.web("browse", body, true).await?;
+    self
+      .untranslated(self.checked(parse_channel_search(&response))?)
+      .await
+  }
+
+  /// The next page of a channel's search, from its [`Feed::continuation`].
+  pub async fn channel_search_more(&self, token: &str) -> Result<Feed> {
+    let response = self
+      .web("browse", json!({ "continuation": token }), true)
+      .await?;
+    self
+      .untranslated(self.checked(parse_channel_search(&response))?)
+      .await
   }
 
   /// A page of comments or of replies. `token` comes from

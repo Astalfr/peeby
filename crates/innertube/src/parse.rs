@@ -17,6 +17,10 @@
 //! - search results (`search`): `videoRenderer`s and `channelRenderer`s in an
 //!   `itemSectionRenderer`, beside Shorts shelves (`gridShelfViewModel`) and playlist or course
 //!   lockups; a next page in `appendContinuationItemsAction`;
+//! - a channel's sort orders: the `chipViewModel`s of its grid's `chipBarViewModel`, each a
+//!   `continuationCommand` whose answer replaces the grid (`reloadContinuationItemsCommand`);
+//! - a channel's search (its `expandableTabRenderer`): one `videoRenderer` per
+//!   `itemSectionRenderer`, a next page in `appendContinuationItemsAction`;
 //! - the Shorts feed: a `reelWatchEndpoint` per Short, the first in the `replacementEndpoint`
 //!   of `reel/reel_item_watch` beside the `sequenceContinuation`, the next ones in the `entries`
 //!   of `reel/reel_watch_sequence` beside a `continuationEndpoint`.
@@ -27,8 +31,8 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
-  LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
+  Live, LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
   NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
   SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem,
   WatchPage,
@@ -54,6 +58,55 @@ fn feed(response: &Value, shelves: bool) -> Feed {
     continuation: find_continuation(response),
     logged_in: tracking_param(response, "logged_in").as_deref() == Some("1"),
     message: find_key(response, "feedNudgeRenderer").map(|nudge| text(&nudge["title"])),
+    chips: parse_chips(response),
+  }
+}
+
+/// The chips of the grid's `chipBarViewModel` (a channel's sort orders), each with the token of
+/// its first page; chips without one are skipped.
+fn parse_chips(response: &Value) -> Vec<FeedChip> {
+  let Some(bar) = find_key(response, "chipBarViewModel") else {
+    return Vec::new();
+  };
+  bar["chips"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|chip| {
+      let chip = &chip["chipViewModel"];
+      Some(FeedChip {
+        label: non_empty(chip["text"].as_str()?.to_owned())?,
+        selected: chip["selected"].as_bool().unwrap_or(false),
+        token: chip["tapCommand"]["innertubeCommand"]["continuationCommand"]["token"]
+          .as_str()?
+          .to_owned(),
+      })
+    })
+    .collect()
+}
+
+/// Parses a channel's search results (its "Search" tab, or a continuation of it): its videos
+/// are `videoRenderer`s, as in the global search.
+pub fn parse_channel_search(response: &Value) -> Feed {
+  let mut results = Vec::new();
+  collect_search_results(response, &mut results);
+  Feed {
+    items: results
+      .into_iter()
+      .filter_map(|result| match result {
+        // On the channel's own page, as in its grid: no channel name nor picture.
+        SearchResult::Video(video) => Some(VideoItem {
+          channel: None,
+          channel_id: None,
+          avatar: Vec::new(),
+          ..video
+        }),
+        SearchResult::Channel(_) => None,
+      })
+      .collect(),
+    continuation: find_continuation(response),
+    logged_in: tracking_param(response, "logged_in").as_deref() == Some("1"),
+    ..Feed::default()
   }
 }
 

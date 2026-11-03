@@ -4,7 +4,8 @@
 //! - [`Client::home`]: the "Home" recommendations (`FEwhat_to_watch`), personalized only when
 //!   signed in with browser [`Cookies`] (anonymous Home is empty since 2024);
 //! - [`Client::subscriptions`] (newest first, without YouTube's shelves),
-//!   [`Client::subscribed_channels`], [`Client::channel_videos`];
+//!   [`Client::subscribed_channels`], [`Client::channel_videos`] (sorted by its
+//!   [`Feed::chips`]), [`Client::channel_search`], [`Client::channel_search_more`];
 //! - [`Client::search`], [`Client::search_more`]: videos and channels matching a query;
 //! - [`Client::watch`]: watch page metadata, related videos and the comments token (`next`);
 //! - [`Client::shorts`], [`Client::shorts_more`]: the Shorts feed, an endless sequence picked
@@ -45,15 +46,15 @@ pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
 pub use error::Error;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
-  LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
+  Live, LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
   NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
   SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, Subscription, TextLink, Thumbnail,
   Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
-  parse_captions, parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat,
-  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
+  parse_live_chat, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
   parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
   parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
   parse_watch,

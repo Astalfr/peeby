@@ -1,20 +1,23 @@
 //! A grid of videos, loading the next page as the end comes into view: Home (recommendations),
 //! subscriptions, the watch history, or a channel's "Videos" tab. Pages that need a session link
 //! to the account page. The subscriptions page can also show its videos as a list (`FeedLayout`);
-//! the history is always a list, as on youtube.com.
+//! the history is always a list, as on youtube.com. A channel's videos sort by YouTube's chips
+//! (latest, popular, oldest), and its search box shows the channel's videos matching a text
+//! instead, until it is emptied.
 //!
 //! The videos are a virtual list (GPUI's `list`): each item is a row of cards (or one list row),
 //! and only the items in view are built on a frame, so scrolling a long feed stays smooth.
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, ListAlignment, ListOffset, ListState, Pixels, ScrollHandle, SharedString,
-  Window, div, list, px,
+  AnyElement, Context, Entity, ListAlignment, ListOffset, ListState, Pixels, ScrollHandle,
+  SharedString, Subscription, Window, div, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Selectable, h_flex, v_flex};
-use innertube::{Client, Error, Feed, VideoItem};
+use innertube::{Client, Error, Feed, FeedChip, VideoItem};
 
 use crate::settings::{FeedLayout, Settings};
 use crate::spaces::youtube::cards::{video_card, video_row};
@@ -46,7 +49,7 @@ pub enum Source {
   Subscriptions,
   /// The account's watch history, most recent first.
   History,
-  /// A channel's videos, newest first.
+  /// A channel's videos, newest first unless sorted otherwise.
   Channel {
     id: String,
     name: String,
@@ -99,13 +102,49 @@ pub struct FeedView {
   card_width: f32,
   logged_in: bool,
   message: Option<String>,
+  /// A channel's sort orders, from its first page; kept while a search shows.
+  chips: Vec<FeedChip>,
+  /// Token of the sort order picked; `None`: the channel's default (newest first).
+  sort: Option<String>,
+  /// The text the channel's videos are searched for; `None`: its videos.
+  query: Option<String>,
+  /// A channel's search box.
+  search: Option<Entity<InputState>>,
+  /// Counts the first-page loads, so the answer of an older one (another sort, another search)
+  /// is dropped.
+  generation: u32,
+  _search_subscription: Option<Subscription>,
 }
 
 impl FeedView {
-  pub fn new(client: Client, source: Source, nav: Nav, cx: &mut Context<Self>) -> Self {
+  pub fn new(
+    client: Client,
+    source: Source,
+    nav: Nav,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
+    let search = matches!(source, Source::Channel { .. }).then(|| {
+      cx.new(|cx| {
+        InputState::new(window, cx)
+          .placeholder(t("Search the channel", "Rechercher dans la chaîne"))
+      })
+    });
+    // Enter searches; emptying the box (by hand or with its clear button) goes back to the
+    // videos.
+    let search_subscription = search.as_ref().map(|input| {
+      cx.subscribe(input, |this, input, event: &InputEvent, cx| {
+        let text = input.read(cx).value().trim().to_string();
+        match event {
+          InputEvent::PressEnter { .. } => this.set_query((!text.is_empty()).then_some(text), cx),
+          InputEvent::Change if text.is_empty() => this.set_query(None, cx),
+          _ => {}
+        }
+      })
+    });
     let mut view = Self {
       client,
       source,
@@ -122,6 +161,12 @@ impl FeedView {
       card_width: MIN_CARD_WIDTH,
       logged_in: false,
       message: None,
+      chips: Vec::new(),
+      sort: None,
+      query: None,
+      search,
+      generation: 0,
+      _search_subscription: search_subscription,
     };
     view.load(None, cx);
     view
@@ -131,23 +176,38 @@ impl FeedView {
   fn load(&mut self, token: Option<String>, cx: &mut Context<Self>) {
     let client = self.client.clone();
     let source = self.source.clone();
+    let (sort, query) = (self.sort.clone(), self.query.clone());
     let more = token.is_some();
+    if !more {
+      self.generation += 1;
+    }
+    let generation = self.generation;
     self.loading_more = more;
     self.more_failed = false;
     let fetch = runtime::spawn(cx, async move {
       match (token, source) {
         (Some(token), Source::Subscriptions) => client.subscriptions_more(&token).await,
+        (Some(token), Source::Channel { .. }) if query.is_some() => {
+          client.channel_search_more(&token).await
+        }
         (Some(token), _) => client.continuation(&token).await,
         (None, Source::Home) => client.home().await,
         (None, Source::Subscriptions) => client.subscriptions().await,
         (None, Source::History) => client.history().await,
-        (None, Source::Channel { id, .. }) => client.channel_videos(&id).await,
+        (None, Source::Channel { id, .. }) => match (query, sort) {
+          (Some(query), _) => client.channel_search(&id, &query).await,
+          (None, Some(sort)) => client.continuation(&sort).await,
+          (None, None) => client.channel_videos(&id).await,
+        },
       }
     });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this
         .update(cx, |this, cx| {
+          if this.generation != generation {
+            return;
+          }
           this.loading_more = false;
           match result {
             Some(Ok(feed)) => this.apply(feed, more),
@@ -167,6 +227,35 @@ impl FeedView {
         .ok();
     })
     .detach();
+  }
+
+  /// Loads the first page again, for another sort order or search.
+  fn reload(&mut self, cx: &mut Context<Self>) {
+    self.state = State::Loading;
+    self.continuation = None;
+    self.load(None, cx);
+    cx.notify();
+  }
+
+  /// Sorts a channel's videos by the chip whose token is `token`.
+  fn set_sort(&mut self, token: String, cx: &mut Context<Self>) {
+    if self.chips.iter().any(|c| c.selected && c.token == token) {
+      return;
+    }
+    for chip in &mut self.chips {
+      chip.selected = chip.token == token;
+    }
+    self.sort = Some(token);
+    self.reload(cx);
+  }
+
+  /// Searches a channel's videos for `query`, or shows them all again (`None`).
+  fn set_query(&mut self, query: Option<String>, cx: &mut Context<Self>) {
+    if self.query == query {
+      return;
+    }
+    self.query = query;
+    self.reload(cx);
   }
 
   /// Next page, unless one is loading or the last one failed (the button retries then).
@@ -191,6 +280,10 @@ impl FeedView {
       self.videos.clear();
       self.logged_in = feed.logged_in;
       self.message = feed.message;
+      // A search's results have no chips: the sort orders stay for when it ends.
+      if !feed.chips.is_empty() {
+        self.chips = feed.chips;
+      }
     }
     // YouTube repeats some videos (twice on a page, or again in the next one). A card's id is
     // its video id, and two elements with one id share GPUI's hover state, which then flips on
@@ -359,6 +452,14 @@ impl FeedView {
         )
         .to_owned(),
       ),
+      (_, Source::Channel { .. }, _) if self.query.is_some() => (
+        t("No results", "Aucun résultat").to_owned(),
+        t(
+          "No video of this channel matches this search.",
+          "Aucune vidéo de cette chaîne ne correspond à cette recherche.",
+        )
+        .to_owned(),
+      ),
       _ => (t("No videos", "Aucune vidéo").to_owned(), String::new()),
     };
     let needs_session = matches!(self.state, State::SignedOut | State::Expired)
@@ -368,6 +469,7 @@ impl FeedView {
       match (needs_session, &self.source) {
         (true, _) => Icon::Account,
         (false, Source::History) => Icon::History,
+        (false, Source::Channel { .. }) if self.query.is_some() => Icon::Search,
         (false, _) => Icon::Home,
       },
       title,
@@ -419,6 +521,25 @@ fn layout_switch(list: bool, cx: &mut Context<FeedView>) -> impl IntoElement {
       t("List", "Liste"),
       FeedLayout::List,
     ))
+}
+
+/// A channel's sort orders, as YouTube names them; hidden while a search shows (its results
+/// have their own order).
+fn sort_switch(chips: &[FeedChip], cx: &mut Context<FeedView>) -> impl IntoElement {
+  h_flex()
+    .p_0p5()
+    .gap_0p5()
+    .rounded(theme::RADIUS)
+    .border_1()
+    .border_color(theme::border())
+    .children(chips.iter().enumerate().map(|(ix, chip)| {
+      let token = chip.token.clone();
+      Button::new(("sort", ix))
+        .ghost()
+        .label(chip.label.clone())
+        .selected(chip.selected)
+        .on_click(cx.listener(move |this, _, _, cx| this.set_sort(token.clone(), cx)))
+    }))
 }
 
 /// Cards per row of the grid and their width, from the window: the content panel is the window
@@ -517,11 +638,7 @@ impl Render for FeedView {
             Button::new("retry")
               .primary()
               .label(t("Retry", "Réessayer"))
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.state = State::Loading;
-                this.load(None, cx);
-                cx.notify();
-              })),
+              .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
           ),
         )
         .into_any_element(),
@@ -559,6 +676,21 @@ impl Render for FeedView {
               .on_click(move |_, window, cx| nav.open(Route::Channels, window, cx)),
           )
         })
+        .when(
+          matches!(self.source, Source::Channel { .. })
+            && self.query.is_none()
+            && !self.chips.is_empty(),
+          |el| el.child(sort_switch(&self.chips, cx)),
+        )
+        .children(self.search.as_ref().map(|input| {
+          div().w(px(280.)).child(
+            Input::new(input).cleanable(true).prefix(
+              gpui_component::Icon::new(Icon::Search)
+                .size(px(16.))
+                .text_color(theme::muted()),
+            ),
+          )
+        }))
     });
     v_flex()
       .size_full()
