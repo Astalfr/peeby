@@ -34,6 +34,7 @@ fn main() {
     .init();
 
   let prefs = settings::Settings::load();
+  std::thread::spawn(settings::prune_mpv_logs);
   ui::i18n::set(prefs.interface_lang());
   // `peeby --login <service>`: the sign-in window only (ADR 0017), started by Peeby itself.
   if let Some(code) = web_sign_in::child_from_args() {

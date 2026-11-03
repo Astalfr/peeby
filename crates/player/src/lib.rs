@@ -86,7 +86,8 @@ pub struct StartOptions {
   pub libmpv_path: Option<PathBuf>,
   /// Resolve page URLs (YouTube…) through yt-dlp with mpv's `ytdl_hook`; `None` disables it.
   pub ytdl: Option<Ytdl>,
-  /// Write mpv's log to this file (`log-file`), for troubleshooting.
+  /// Write mpv's log to this file (`log-file`), for troubleshooting; when it exists, to a free
+  /// name next to it (`name-2.log`…), and its folder is created.
   pub log_file: Option<PathBuf>,
   /// Audio output, an [`AudioDevice::name`] (`audio-device`); `None` follows Windows' default.
   pub audio_device: Option<String>,
@@ -647,9 +648,30 @@ fn mpv_options(options: &StartOptions, backend: Backend) -> Vec<(&'static str, S
     opts.push(("audio-device", device.clone()));
   }
   if let Some(path) = &options.log_file {
-    opts.push(("log-file", path.display().to_string()));
+    // mpv does not create it, and this runs off the UI thread.
+    if let Some(dir) = path.parent()
+      && let Err(e) = std::fs::create_dir_all(dir)
+    {
+      tracing::warn!("mpv log folder: {e}");
+    }
+    opts.push(("log-file", free_log_path(path).display().to_string()));
   }
   opts
+}
+
+/// `path`, or `name-2.log`, `name-3.log`… next to it when taken: mpv rewrites its log file, and
+/// a restarted player (another quality, a reload) gets the same options.
+fn free_log_path(path: &std::path::Path) -> PathBuf {
+  let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+  let ext = path.extension().map(|e| e.to_string_lossy());
+  (1..)
+    .map(|n| match (n, &ext) {
+      (1, _) => path.to_owned(),
+      (n, Some(ext)) => path.with_file_name(format!("{stem}-{n}.{ext}")),
+      (n, None) => path.with_file_name(format!("{stem}-{n}")),
+    })
+    .find(|p| !p.exists())
+    .unwrap_or_else(|| path.to_owned())
 }
 
 /// Creates mpv with owned option pairs.
@@ -893,4 +915,22 @@ fn read_tracks(mpv: &Mpv) -> Vec<Track> {
       })
     })
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::free_log_path;
+
+  #[test]
+  fn taken_log_names_get_a_number() {
+    let dir = std::env::temp_dir().join(format!("peeby-log-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("mpv-1.log");
+    assert_eq!(free_log_path(&path), path);
+    std::fs::write(&path, "").unwrap();
+    assert_eq!(free_log_path(&path), dir.join("mpv-1-2.log"));
+    std::fs::write(dir.join("mpv-1-2.log"), "").unwrap();
+    assert_eq!(free_log_path(&path), dir.join("mpv-1-3.log"));
+    std::fs::remove_dir_all(&dir).unwrap();
+  }
 }

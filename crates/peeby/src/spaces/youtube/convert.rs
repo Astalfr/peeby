@@ -103,8 +103,6 @@ fn hls_options(
     external_audio: audio.map(str::to_owned).into_iter().collect(),
     http_headers: vec![format!("User-Agent: {user_agent}")],
     readahead_secs: Some(READAHEAD_SECS),
-    // Opt-in only: the log contains stream URLs, which carry the user's IP.
-    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
   };
   player.apply(&mut options);

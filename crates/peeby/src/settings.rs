@@ -164,6 +164,9 @@ pub struct Player {
   /// Audio output (`player::AudioDevice::name`), picked from the top bar; `None` follows
   /// Windows' default.
   pub audio_device: Option<String>,
+  /// Write each mpv's log to [`mpv_logs_dir`] (troubleshooting). Off by default: the log holds
+  /// stream URLs, which carry the user's IP.
+  pub mpv_log: bool,
 }
 
 impl Default for Player {
@@ -176,6 +179,7 @@ impl Default for Player {
       seek_step_large: 60,
       hardware_acceleration: true,
       audio_device: None,
+      mpv_log: false,
     }
   }
 }
@@ -213,6 +217,46 @@ impl Player {
     options.software_decoding = software;
     options.force_software =
       software || std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1");
+    // `PEEBY_MPV_LOG` names the file; the setting, one per video in `mpv_logs_dir`.
+    options.log_file = std::env::var_os("PEEBY_MPV_LOG")
+      .map(Into::into)
+      .or_else(|| self.mpv_log.then(new_mpv_log).flatten());
+  }
+}
+
+/// How long mpv's logs are kept.
+const MPV_LOGS_KEPT: Duration = Duration::from_secs(7 * 24 * 3600);
+
+/// Folder of mpv's logs: `%LOCALAPPDATA%\peeby\logs`.
+pub fn mpv_logs_dir() -> Option<PathBuf> {
+  Some(dirs::cache_dir()?.join("peeby").join("logs"))
+}
+
+/// A new log file for one mpv, named after the time it starts (mpv creates it, and the
+/// player its folder).
+fn new_mpv_log() -> Option<PathBuf> {
+  let millis = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .ok()?
+    .as_millis();
+  Some(mpv_logs_dir()?.join(format!("mpv-{millis}.log")))
+}
+
+/// Deletes mpv's logs older than [`MPV_LOGS_KEPT`]. Blocking: off the UI thread.
+pub fn prune_mpv_logs() {
+  let Some(entries) = mpv_logs_dir().and_then(|dir| std::fs::read_dir(dir).ok()) else {
+    return;
+  };
+  for entry in entries.flatten() {
+    let old = entry
+      .metadata()
+      .and_then(|m| m.modified())
+      .ok()
+      .and_then(|at| at.elapsed().ok())
+      .is_some_and(|age| age > MPV_LOGS_KEPT);
+    if old && let Err(e) = std::fs::remove_file(entry.path()) {
+      tracing::warn!("old mpv log: {e}");
+    }
   }
 }
 
@@ -444,6 +488,7 @@ mod tests {
     assert!(settings.jellyfin.home.show_next_up);
     assert_eq!(settings.player.seek_step, 10);
     assert!(settings.player.hardware_acceleration);
+    assert!(!settings.player.mpv_log);
     assert_eq!(settings.jellyfin.server_url, None);
     assert!(settings.close_to_tray && !settings.start_with_windows);
     assert!(settings.notifications.twitch_category.windows);

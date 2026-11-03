@@ -52,7 +52,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `keep_rotated_cookies`, which writes the jar back. Ignoring them invalidates the session within about an hour.
   Never give the user's file to yt-dlp (it rewrites it): give it a copy.
 - Stream URLs embed the user's IP and signatures: never log them at info level or above; the mpv log file is opt-in
-  (`PEEBY_MPV_LOG`). Fixtures are redacted (IP 203.0.113.7, signatures `REDACTED`) before they are committed.
+  (`PEEBY_MPV_LOG`, or the player setting "mpv logs": one file per video in `%LOCALAPPDATA%\peeby\logs`, kept
+  7 days). Fixtures are redacted (IP 203.0.113.7, signatures `REDACTED`) before they are committed.
 - Nothing installed on the host: libmpv, yt-dlp and Deno ship with the app. yt-dlp always runs with `--ignore-config`,
   `--cache-dir` in the app's folder and an explicit `--js-runtimes`; versions are pinned with SHA-256 in fetch-tools.ps1.
 - Return YouTube Dislike: attribution is required (link to returnyoutubedislike.com), at most 100 requests/min and

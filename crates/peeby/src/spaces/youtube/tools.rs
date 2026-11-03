@@ -62,8 +62,6 @@ pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
       raw_options,
     }),
     readahead_secs: Some(super::convert::READAHEAD_SECS),
-    // Opt-in only: the log contains stream URLs, which carry the user's IP.
-    log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
   })
 }

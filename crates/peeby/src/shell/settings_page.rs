@@ -268,6 +268,21 @@ fn player_section(p: &Player) -> AnyElement {
         }),
       )
       .into_any_element(),
+      row(
+        t("mpv logs", "Logs de mpv"),
+        t(
+          "Write the player's log for each video to %LOCALAPPDATA%\\peeby\\logs, kept 7 days, \
+           from the next video on. Only to troubleshoot: it holds the stream addresses, which \
+           carry your IP address.",
+          "Écrire le log du lecteur de chaque vidéo dans %LOCALAPPDATA%\\peeby\\logs, gardé \
+           7 jours, à partir de la vidéo suivante. Seulement pour un dépannage : il contient les \
+           adresses des flux, qui portent votre adresse IP.",
+        ),
+        toggle("mpv-log", p.mpv_log, |v, cx| {
+          set_player(cx, |p| p.mpv_log = v)
+        }),
+      )
+      .into_any_element(),
     ],
   )
   .into_any_element()

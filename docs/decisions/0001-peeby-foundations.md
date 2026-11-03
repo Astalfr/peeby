@@ -23,7 +23,7 @@ Reuse them as they are. The crates `player` and `gpui-video`, `vendor/gpui-pre-w
 PeebTube additions to `player`:
 - `StartOptions::external_audio` (`audio-files`, for HLS audio renditions);
 - `StartOptions::ytdl` (mpv's `ytdl_hook`, for the yt-dlp fallback);
-- `StartOptions::log_file`;
+- `StartOptions::log_file` (a free name next to it when the file exists, its folder created);
 - `StartOptions::readahead_secs` (`cache-secs`: YouTube refuses segments fetched in a burst; Twitch VODs would be fetched whole);
 - `Player::add_subtitle` (`sub-add`, captions fetched on demand);
 - `Player::property`, read-only, for the player's statistics panel;
