@@ -66,6 +66,8 @@ pub struct User {
   pub offline_image_url: String,
   /// The channel's description.
   pub description: String,
+  /// A Twitch partner (`broadcaster_type`), shown with the verified badge.
+  pub partner: bool,
 }
 
 /// A channel the user follows.
@@ -246,6 +248,7 @@ pub fn parse_users(answer: &Value) -> Vec<User> {
       profile_image_url: text(&u["profile_image_url"]),
       offline_image_url: text(&u["offline_image_url"]),
       description: text(&u["description"]),
+      partner: u["broadcaster_type"] == "partner",
     })
   })
   .items

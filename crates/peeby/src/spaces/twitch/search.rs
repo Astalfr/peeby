@@ -11,9 +11,9 @@ use ui::images::Images;
 
 use super::Nav;
 use super::browse::{load, page};
-use super::cards;
+use super::cards::{self, Partners};
 
-type Results = (Vec<ChannelResult>, Vec<Category>);
+type Results = (Vec<ChannelResult>, Partners, Vec<Category>);
 
 pub struct SearchView {
   nav: Nav,
@@ -68,8 +68,11 @@ impl SearchView {
         let mut channels = helix.search_channels(&text).await?.items;
         // On air first, keeping Twitch's order otherwise.
         channels.sort_by_key(|c| !c.is_live);
+        // Search results do not say which channels are partners: `users` does.
+        let ids = channels.iter().map(|c| c.id.clone()).collect();
+        let (_, partners) = cards::faces(&helix, ids).await;
         let categories = helix.search_categories(&text).await?.items;
-        Ok((channels, categories))
+        Ok((channels, partners, categories))
       },
       |this: &mut Self, result, cx| {
         this.searching = false;
@@ -85,10 +88,10 @@ impl Render for SearchView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let results = match &self.results {
       _ if self.searching => cards::note(t("Searching…", "Recherche…")).into_any_element(),
-      Some(Ok((channels, categories))) if channels.is_empty() && categories.is_empty() => {
+      Some(Ok((channels, _, categories))) if channels.is_empty() && categories.is_empty() => {
         cards::note(t("No results.", "Aucun résultat.")).into_any_element()
       }
-      Some(Ok((channels, categories))) => {
+      Some(Ok((channels, partners, categories))) => {
         let channels: Vec<_> = channels
           .iter()
           .map(|c| {
@@ -100,6 +103,7 @@ impl Render for SearchView {
                 detail,
                 avatar: Some(&c.thumbnail_url),
                 live: c.is_live,
+                partner: partners.contains(&c.id),
               },
               &self.nav,
               window,

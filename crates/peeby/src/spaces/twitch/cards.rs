@@ -2,13 +2,14 @@
 //! viewers), a category (its 3:4 box art), a channel (avatar). Image URLs are Helix templates
 //! filled at the size drawn.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, FontWeight, SharedString, Window, div, px};
 use gpui_component::{h_flex, v_flex};
 use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
+use ui::assets::Icon;
 use ui::card::{Hover, MediaCard};
 use ui::i18n::{Lang, lang, t};
 use ui::picture::{self, Picture};
@@ -31,16 +32,33 @@ pub const GAP: f32 = 20.;
 /// Avatars by user id.
 pub type Avatars = HashMap<String, String>;
 
+/// The ids of Twitch partners, whose avatars get the verified badge.
+pub type Partners = HashSet<String>;
+
 /// The avatars of `ids` (at most 100), by id; an error leaves them out.
 pub async fn avatars(helix: &Helix, ids: Vec<String>) -> Avatars {
+  faces(helix, ids).await.0
+}
+
+/// The avatars of `ids` (at most 100), by id, and the partners among them; an error leaves them
+/// out.
+pub async fn faces(helix: &Helix, ids: Vec<String>) -> (Avatars, Partners) {
   match helix.users(&ids).await {
-    Ok(users) => users
-      .into_iter()
-      .map(|u| (u.id, u.profile_image_url))
-      .collect(),
+    Ok(users) => {
+      let partners = users
+        .iter()
+        .filter(|u| u.partner)
+        .map(|u| u.id.clone())
+        .collect();
+      let avatars = users
+        .into_iter()
+        .map(|u| (u.id, u.profile_image_url))
+        .collect();
+      (avatars, partners)
+    }
     Err(e) => {
       tracing::warn!("Twitch avatars: {e}");
-      HashMap::new()
+      Default::default()
     }
   }
 }
@@ -184,6 +202,8 @@ pub struct Chip<'a> {
   pub avatar: Option<&'a String>,
   /// On air now.
   pub live: bool,
+  /// A Twitch partner: the verified badge on the avatar.
+  pub partner: bool,
 }
 
 /// A channel as an avatar and its name (offline followed channels, search results); a click opens
@@ -195,6 +215,7 @@ pub fn channel_chip(chip: Chip<'_>, nav: &Nav, window: &mut Window, cx: &mut App
     detail,
     avatar,
     live,
+    partner,
   } = chip;
   let login = login.to_owned();
   let nav = nav.clone();
@@ -230,7 +251,13 @@ pub fn channel_chip(chip: Chip<'_>, nav: &Nav, window: &mut Window, cx: &mut App
       move |cx| nav.open_in_new_tab(Route::Channel(login.clone()), None, cx)
     }))
     .on_click(move |_, _, cx| nav.open(Route::Channel(login.clone()), cx))
-    .child(div().flex_none().child(face))
+    .child(
+      div()
+        .flex_none()
+        .relative()
+        .child(face)
+        .when(partner, |el| el.child(verified())),
+    )
     .child(
       v_flex()
         .min_w_0()
@@ -257,6 +284,24 @@ pub fn channel_chip(chip: Chip<'_>, nav: &Nav, window: &mut Window, cx: &mut App
         }),
     )
     .into_any_element()
+}
+
+/// Twitch's verified badge, over an avatar's bottom right corner.
+fn verified() -> impl IntoElement {
+  div()
+    .absolute()
+    .right(px(-3.))
+    .bottom(px(-3.))
+    .size(px(18.))
+    .rounded_full()
+    .border_2()
+    .border_color(theme::background())
+    .bg(theme::accent())
+    .text_color(gpui::white())
+    .flex()
+    .items_center()
+    .justify_center()
+    .child(gpui_component::Icon::new(Icon::Check).size(px(10.)))
 }
 
 /// A titled block of the page.

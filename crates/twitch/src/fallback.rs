@@ -69,10 +69,10 @@ pub(crate) async fn fallback(
       .to_string();
     let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_string)
       .map(|dt| dt.with_timezone(&chrono::Utc))
-      .unwrap_or_else(|_| chrono::DateTime::from(chrono::Utc::now()));
+      .unwrap_or_else(|_| chrono::Utc::now());
     let now = "2023-02-10"
       .parse::<chrono::DateTime<chrono::Utc>>()
-      .unwrap_or_else(|_| chrono::DateTime::from(chrono::Utc::now()));
+      .unwrap_or_else(|_| chrono::Utc::now());
     let days_difference = (now - created_at).num_days();
 
     let resolutions = vec![
@@ -97,36 +97,36 @@ pub(crate) async fn fallback(
     for (resolution_key, resolution_name, resolution_dimensions, resolution_framerate) in
       resolutions
     {
-      let playlist_url;
-      if broadcast_type == "highlight" {
-        playlist_url = format!(
+      let playlist_url = if broadcast_type == "highlight" {
+        format!(
           "https://{}/{}/{}/highlight-{}.m3u8",
           domain, vod_special_id, resolution_key, vod_id
-        );
+        )
       } else if broadcast_type == "upload" && days_difference > 7 {
         // Only old uploaded VOD works with this method now
-        playlist_url = format!(
+        format!(
           "https://{}/{}/{}/{}/{}/index-dvr.m3u8",
           domain, channel_data["login"], vod_id, vod_special_id, resolution_key
-        );
+        )
       } else {
         // Only old uploaded VOD works with this method now
-        playlist_url = format!(
+        format!(
           "https://{}/{}/{}/index-dvr.m3u8",
           domain, vod_special_id, resolution_key
-        );
-      }
+        )
+      };
 
       async fn get_video_quality(http: &reqwest::Client, playlist_url: &str) -> Option<String> {
         let video_quality_result = http.get(playlist_url).send().await;
-        if video_quality_result.is_err() {
+        let video_quality_response = if let Ok(response) = video_quality_result {
+          response
+        } else {
           warn!(
             "Failed to fetch playlist for playlist {playlist_url}: {:?}",
             video_quality_result.err()
           );
           return None;
-        }
-        let video_quality_response = video_quality_result.unwrap();
+        };
         if !video_quality_response.status().is_success() {
           warn!(
             "Failed to fetch playlist for playlist {playlist_url}: HTTP {}",
@@ -135,14 +135,15 @@ pub(crate) async fn fallback(
           return None;
         }
         let data = video_quality_response.text().await;
-        if data.is_err() {
+        let data = if let Ok(data) = data {
+          data
+        } else {
           warn!(
             "Failed to read playlist for playlist {playlist_url}: {:?}",
             data.err()
           );
           return None;
-        }
-        let data = data.unwrap();
+        };
         info!("Fetched playlist for playlist {playlist_url}: {}", data);
         if data.contains(".ts") {
           return Some("avc1.4D001E".to_string());
@@ -152,30 +153,29 @@ pub(crate) async fn fallback(
             .get(playlist_url.replace("index-dvr.m3u8", "init-0.mp4"))
             .send()
             .await;
-          if mp4_request.is_err() {
-            return Some("hev1.1.6.L93.B0".to_string());
-          } else {
-            let content = mp4_request.unwrap().text().await.unwrap_or_default();
+          if let Ok(mp4_request) = mp4_request {
+            let content = mp4_request.text().await.unwrap_or_default();
             if content.contains("hev1") {
               return Some("hev1.1.6.L93.B0".to_string());
             } else {
               return Some("avc1.4D001E".to_string());
             }
+          } else {
+            return Some("hev1.1.6.L93.B0".to_string());
           }
         }
-        return None;
+        None
       }
 
       let video_quality = get_video_quality(&client.http, &playlist_url).await;
-
-      if video_quality.is_none() {
+      let codec = if let Some(video_quality) = video_quality {
+        video_quality
+      } else {
         warn!(
           "Failed to determine video quality for playlist {playlist_url}, skipping this resolution."
         );
         continue;
-      }
-
-      let codec = video_quality.unwrap();
+      };
       let resolution = resolution_dimensions;
       let frame_rate = resolution_framerate;
       info!("Found codec {codec} for playlist {playlist_url}, adding to variants.");
@@ -227,5 +227,5 @@ pub(crate) async fn fallback(
       });
     }
   }
-  return Err(Error::SubscriberOnly);
+  Err(Error::SubscriberOnly)
 }

@@ -421,6 +421,8 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
     category, viewers), widened to fill their rows, then "Hors ligne", the others as avatars and
     names in alphabetical order, under a field filtering them by name or login. It reads up to 300
     live and 500 followed channels;
+  - partners (Helix `users`, `broadcaster_type`) get Twitch's verified badge on their avatar in
+    "Hors ligne" and in the search's channels;
   - **Parcourir**: the top 200 categories as 3:4 box-art posters. A category's page shows its 100
     lives with the most viewers;
   - **Rechercher** from the top bar: up to 20 channels (on air first, with "En direct") and the

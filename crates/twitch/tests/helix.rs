@@ -19,6 +19,7 @@ fn me() {
   assert_eq!(users.len(), 1);
   assert_eq!(users[0].login, "peeby_test");
   assert!(users[0].profile_image_url.starts_with("https://"));
+  assert!(!users[0].partner);
 }
 
 #[test]
@@ -28,6 +29,7 @@ fn a_broadcaster() {
   assert!(!users[0].login.is_empty());
   assert!(!users[0].display_name.is_empty());
   assert!(users[0].profile_image_url.contains("profile_image"));
+  assert!(users[0].partner);
 }
 
 #[test]

@@ -14,7 +14,7 @@ use ui::images::Images;
 use ui::runtime;
 
 use super::Nav;
-use super::cards::{self, Avatars};
+use super::cards::{self, Avatars, Partners};
 
 /// Pages read at most: 300 live channels, 500 followed ones.
 const LIVE_PAGES: usize = 3;
@@ -24,6 +24,7 @@ struct Loaded {
   live: Vec<Stream>,
   offline: Vec<Followed>,
   avatars: Avatars,
+  partners: Partners,
 }
 
 pub struct FollowingView {
@@ -100,14 +101,18 @@ async fn load(helix: Helix, user_id: String) -> twitch::Result<Loaded> {
     avatars.extend(cards::avatars(&helix, chunk.to_vec()).await);
   }
   // All of them (5 requests at most): the filter can show any.
+  let mut partners = Partners::new();
   let ids: Vec<String> = offline.iter().map(|f| f.broadcaster_id.clone()).collect();
   for chunk in ids.chunks(100) {
-    avatars.extend(cards::avatars(&helix, chunk.to_vec()).await);
+    let (more, partnered) = cards::faces(&helix, chunk.to_vec()).await;
+    avatars.extend(more);
+    partners.extend(partnered);
   }
   Ok(Loaded {
     live,
     offline,
     avatars,
+    partners,
   })
 }
 
@@ -168,6 +173,7 @@ impl Render for FollowingView {
                 detail: None,
                 avatar: loaded.avatars.get(&f.broadcaster_id),
                 live: false,
+                partner: loaded.partners.contains(&f.broadcaster_id),
               },
               &self.nav,
               window,
