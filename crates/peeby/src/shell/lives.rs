@@ -1,20 +1,23 @@
 //! The list of lives the notification area's icon opens (ADR 0020): a small window above the
 //! icon, a tab per space that has lives (`Space::lives`), the followed channels on air in each.
 //! A click on one shows the main window on its live; the list closes when it loses the focus,
-//! with Escape, or with another click on the icon.
+//! with Escape, or with another click on the icon. It rises from the taskbar as it opens, a
+//! tab's list slides in from the side of its tab and its rows come in from the right one after
+//! the other (none of it with reduced motion).
 
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Bounds, Context, DisplayId, ElementId, FocusHandle, FontWeight, Global,
-  KeyDownEvent, SharedString, Subscription, Window, WindowBackgroundAppearance, WindowBounds,
-  WindowHandle, WindowKind, WindowOptions, div, point, px, size,
+  Animation, AnimationExt, AnyElement, App, Bounds, Context, DisplayId, ElementId, FocusHandle,
+  FontWeight, Global, KeyDownEvent, SharedString, Subscription, Window, WindowBackgroundAppearance,
+  WindowBounds, WindowHandle, WindowKind, WindowOptions, div, ease_out_quint, point, px, relative,
+  size,
 };
-use gpui_component::{Root, h_flex, v_flex};
+use gpui_component::{ActiveTheme, h_flex, v_flex};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::{assets, picture, tf, theme, widgets};
+use ui::{assets, motion, picture, tf, theme, widgets};
 
 use super::space::{LiveEntry, Lives, SpaceHandle};
 use crate::desktop;
@@ -24,6 +27,15 @@ const MAX_HEIGHT: f32 = 560.;
 /// Between the list and the screen's edges or the icon.
 const MARGIN: f32 = 12.;
 const AVATAR: f32 = 40.;
+/// How far the list rises from the taskbar as it opens.
+const RISE: f32 = 16.;
+/// How far a tab's list slides in from the side of its tab.
+const SLIDE: f32 = 24.;
+/// How far a row comes in from the right.
+const ROW_SLIDE: f32 = 32.;
+/// Between two rows coming in, and how many rows wait for the ones above at most.
+const STAGGER: Duration = Duration::from_millis(30);
+const STAGGERED: usize = 10;
 
 /// The icon the list opens from: its rectangle, physical pixels of the virtual screen.
 #[derive(Clone, Copy, Debug)]
@@ -37,7 +49,7 @@ pub struct Anchor {
 /// The list's window while it is open, when it last closed, and the tab last shown.
 #[derive(Default)]
 struct State {
-  window: Option<WindowHandle<Root>>,
+  window: Option<WindowHandle<LivesView>>,
   closed: Option<Instant>,
   tab: Option<SharedString>,
 }
@@ -71,7 +83,7 @@ pub fn open(spaces: &[SpaceHandle], anchor: Anchor, cx: &mut App) {
   for space in &spaces {
     space.refresh_lives(cx);
   }
-  let (display, bounds) = place(anchor, cx);
+  let (display, bounds, from_below) = place(anchor, cx);
   let options = WindowOptions {
     window_bounds: Some(WindowBounds::Windowed(bounds)),
     // Windows checks the bounds against this display, else the primary one (CLAUDE.md).
@@ -82,12 +94,13 @@ pub fn open(spaces: &[SpaceHandle], anchor: Anchor, cx: &mut App) {
     is_resizable: false,
     is_movable: false,
     is_minimizable: false,
-    window_background: WindowBackgroundAppearance::Opaque,
+    // The rounded panel rises inside it, and its corners show what is behind.
+    window_background: WindowBackgroundAppearance::Transparent,
     ..Default::default()
   };
+  // Without gpui-component's `Root`, which paints the window's background.
   let opened = cx.open_window(options, |window, cx| {
-    let view = cx.new(|cx| LivesView::new(spaces, window, cx));
-    cx.new(|cx| Root::new(view, window, cx))
+    cx.new(|cx| LivesView::new(spaces, from_below, window, cx))
   });
   match opened {
     Ok(handle) => {
@@ -113,8 +126,8 @@ pub fn close(cx: &mut App) {
 }
 
 /// Where the list goes: on the screen of the icon, against the taskbar, centered on the icon
-/// as far as the work area allows.
-fn place(anchor: Anchor, cx: &App) -> (Option<DisplayId>, Bounds<gpui::Pixels>) {
+/// as far as the work area allows; and whether the icon is below it (it rises from there).
+fn place(anchor: Anchor, cx: &App) -> (Option<DisplayId>, Bounds<gpui::Pixels>, bool) {
   let (cx_phys, cy_phys) = (anchor.x + anchor.width / 2, anchor.y + anchor.height / 2);
   let (monitor, scale) = desktop::sys::monitor_at(cx_phys, cy_phys);
   let display = cx
@@ -124,7 +137,7 @@ fn place(anchor: Anchor, cx: &App) -> (Option<DisplayId>, Bounds<gpui::Pixels>) 
     .or_else(|| cx.primary_display());
   let Some(display) = display else {
     let bounds = Bounds::new(point(px(0.), px(0.)), size(px(WIDTH), px(MAX_HEIGHT)));
-    return (None, bounds);
+    return (None, bounds, true);
   };
   let area = display.visible_bounds();
   let (left, top) = (f32::from(area.origin.x), f32::from(area.origin.y));
@@ -150,6 +163,7 @@ fn place(anchor: Anchor, cx: &App) -> (Option<DisplayId>, Bounds<gpui::Pixels>) 
   (
     Some(display.id()),
     Bounds::new(point(px(x), px(y)), size(px(WIDTH), px(height))),
+    icon_y > y + height / 2.,
   )
 }
 
@@ -157,12 +171,21 @@ struct LivesView {
   spaces: Vec<SpaceHandle>,
   /// The space whose tab shows, by name.
   tab: SharedString,
+  /// Where the tab shown came from: -1 from a tab on its left, 1 on its right, 0 at the start.
+  came_from: f32,
+  /// The icon is below the list.
+  from_below: bool,
   focus: FocusHandle,
   _subscriptions: Vec<Subscription>,
 }
 
 impl LivesView {
-  fn new(spaces: Vec<SpaceHandle>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+  fn new(
+    spaces: Vec<SpaceHandle>,
+    from_below: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
     let mut subscriptions = Vec::new();
     for space in &spaces {
       let view = cx.weak_entity();
@@ -201,12 +224,29 @@ impl LivesView {
     Self {
       spaces,
       tab,
+      came_from: 0.,
+      from_below,
       focus,
       _subscriptions: subscriptions,
     }
   }
 
   fn select(&mut self, tab: SharedString, cx: &mut Context<Self>) {
+    if tab == self.tab {
+      return;
+    }
+    let index = |name: &SharedString| {
+      self
+        .spaces
+        .iter()
+        .position(|s| s.info(cx).name == *name)
+        .unwrap_or(0)
+    };
+    self.came_from = if index(&tab) > index(&self.tab) {
+      1.
+    } else {
+      -1.
+    };
     cx.default_global::<State>().tab = Some(tab.clone());
     self.tab = tab;
     cx.notify();
@@ -233,18 +273,27 @@ impl LivesView {
       };
       let selected = info.name == self.tab;
       let name = info.name.clone();
+      // The underline grows from the middle of the tab chosen and shrinks under the other.
+      let shown = if selected { 1. } else { 0. };
+      let line = if cx.reduce_motion() {
+        shown
+      } else {
+        motion::tween(
+          ElementId::Name(format!("lives-line-{}", info.name).into()),
+          shown,
+          shown,
+          theme::NORMAL,
+          window,
+          cx,
+        )
+      };
       bar = bar.child(
         h_flex()
           .id(ElementId::Name(format!("lives-tab-{}", info.name).into()))
+          .relative()
           .px_3()
           .py_2()
           .gap_2()
-          .border_b_2()
-          .border_color(if selected {
-            info.accent.base
-          } else {
-            gpui::transparent_black()
-          })
           .cursor_pointer()
           .text_sm()
           .text_color(if selected {
@@ -272,13 +321,51 @@ impl LivesView {
                 theme::muted()
               })
               .child(n.to_string())
-          })),
+          }))
+          .when(line > 0., |el| {
+            el.child(
+              h_flex()
+                .absolute()
+                .bottom_0()
+                .left_0()
+                .right_0()
+                .justify_center()
+                .child(
+                  div()
+                    .h(px(2.))
+                    .w(relative(line))
+                    .rounded_full()
+                    .bg(info.accent.base)
+                    .opacity(line),
+                ),
+            )
+          }),
       );
     }
     bar.into_any_element()
   }
 
+  /// The tab's list, sliding in from the side of the tab it came from.
   fn list(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    let content = self.content(window, cx);
+    let slide = SLIDE * self.came_from;
+    let list = div()
+      .flex_1()
+      .min_h_0()
+      .flex()
+      .flex_col()
+      .relative()
+      .child(content);
+    animated(
+      list,
+      ElementId::Name(format!("lives-tab-list-{}", self.tab).into()),
+      Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
+      move |el, t| el.opacity(t).left(px(slide * (1. - t))),
+      cx,
+    )
+  }
+
+  fn content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let Some(space) = self.spaces.iter().find(|s| s.info(cx).name == self.tab) else {
       return div().into_any_element();
     };
@@ -308,8 +395,21 @@ impl LivesView {
       .min_h_0()
       .overflow_y_scroll()
       .p_1();
-    for live in lives {
-      list = list.child(self.row(space.clone(), live, now, window, cx));
+    for (i, live) in lives.into_iter().enumerate() {
+      // A row waits for the ones above it (the first ones only), then comes in from the right.
+      let delay = STAGGER * i.min(STAGGERED) as u32;
+      let total = theme::NORMAL + delay;
+      let wait = delay.as_secs_f32() / total.as_secs_f32();
+      let ease = ease_out_quint();
+      let key = format!("lives-row-{}-{}", self.tab, live.id);
+      let row = self.row(space.clone(), live, now, window, cx);
+      list = list.child(animated(
+        div().relative().child(row),
+        ElementId::Name(key.into()),
+        Animation::new(total).with_easing(move |t| ease(((t - wait) / (1. - wait)).max(0.))),
+        |el, t| el.opacity(t).left(px(ROW_SLIDE * (1. - t))),
+        cx,
+      ));
     }
     list.into_any_element()
   }
@@ -323,6 +423,9 @@ impl LivesView {
     cx: &mut Context<Self>,
   ) -> AnyElement {
     let red = theme::Accent::red().base;
+    // The tab's space's accent, as its pages have it: a soft tint and the name in the accent.
+    let accent = space.info(cx).accent;
+    let group = SharedString::from(format!("live-row-{}", live.id));
     let avatar = live
       .avatar
       .picture
@@ -336,9 +439,10 @@ impl LivesView {
       .px_2()
       .py_2()
       .gap_3()
+      .group(group.clone())
       .rounded(theme::RADIUS)
       .cursor_pointer()
-      .hover(|s| s.bg(theme::surface_hover()))
+      .hover(move |s| s.bg(accent.base.opacity(0.14)))
       .on_click(cx.listener(move |this, _, _, cx| this.open_live(space.clone(), id.clone(), cx)))
       // The avatar in a red ring, its initial while it loads.
       .child(
@@ -380,6 +484,7 @@ impl LivesView {
                   .truncate()
                   .text_sm()
                   .font_weight(FontWeight::SEMIBOLD)
+                  .group_hover(group, move |s| s.text_color(accent.hover))
                   .child(live.channel.clone()),
               )
               .children(live.viewers.clone().map(|viewers| {
@@ -422,9 +527,13 @@ impl LivesView {
 
 impl Render for LivesView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // What gpui-component's `Root` would set: the theme's font and its rem size.
+    window.set_rem_size(cx.theme().font_size);
+    let font = cx.theme().font_family.clone();
     let tabs = self.tabs(window, cx);
     let list = self.list(window, cx);
-    v_flex()
+    let rise = if self.from_below { RISE } else { -RISE };
+    let panel = v_flex()
       .id("lives")
       .track_focus(&self.focus)
       .on_key_down(cx.listener(|_, event: &KeyDownEvent, _, cx| {
@@ -432,10 +541,14 @@ impl Render for LivesView {
           cx.defer(close);
         }
       }))
+      .relative()
       .size_full()
+      .overflow_hidden()
+      .rounded(theme::RADIUS_LG)
       .bg(theme::base())
       .border_1()
       .border_color(theme::border())
+      .font_family(font)
       .text_color(theme::foreground())
       .child(
         h_flex()
@@ -464,8 +577,31 @@ impl Render for LivesView {
             })
           })
           .child(t("Open Peeby", "Ouvrir Peeby")),
-      )
+      );
+    animated(
+      panel,
+      "lives-open",
+      Animation::new(theme::SLOW).with_easing(ease_out_quint()),
+      move |el, t| el.opacity(t).top(px(rise * (1. - t))),
+      cx,
+    )
   }
+}
+
+/// `element` animated by `animator`, or as it is with reduced motion.
+fn animated<E: IntoElement + 'static>(
+  element: E,
+  id: impl Into<ElementId>,
+  animation: Animation,
+  animator: impl Fn(E, f32) -> E + 'static,
+  cx: &App,
+) -> AnyElement {
+  if cx.reduce_motion() {
+    return element.into_any_element();
+  }
+  element
+    .with_animation(id, animation, animator)
+    .into_any_element()
 }
 
 /// The tab's text when nobody shows.
