@@ -1,6 +1,6 @@
 //! The notifications inbox: a bell in the title bar with the unseen count, opening the list
-//! of notifications as youtube.com's bell does ("Important", then the others), each opening
-//! its video.
+//! of notifications in one list, newest first (YouTube's sections, "Important" then the
+//! others, are merged), each opening its video.
 //!
 //! Peeby's bell counts the notifications not seen in Peeby: YouTube's unseen count at startup
 //! and on every session change, then the new ones. The count is read every [`POLL`]; when it
@@ -11,7 +11,8 @@
 //! count grows.
 //!
 //! The list is loaded each time the panel opens, without the kinds left out of the bell, its
-//! next page when the end of the list comes near. A click marks the notification read, at once
+//! next page when the end of the list comes near; each page is merged in by date (a
+//! notification's id). A click marks the notification read, at once
 //! here and on YouTube.
 
 use std::collections::HashSet;
@@ -19,15 +20,13 @@ use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, ElementId, Entity, FontWeight, Global, ScrollHandle, SharedString,
-  WeakEntity, Window, div, px,
+  AnyElement, App, Context, ElementId, Entity, Global, ScrollHandle, SharedString, WeakEntity,
+  Window, div, px,
 };
 use gpui_component::popover::PopoverState;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::{h_flex, v_flex};
-use innertube::{
-  Error, Notification, NotificationKind, NotificationPage, NotificationSection, Thumbnail,
-};
+use innertube::{Error, Notification, NotificationKind, NotificationPage, Thumbnail};
 
 use crate::desktop::toast::{self, Toast};
 use crate::settings::{Delivery, Settings};
@@ -111,9 +110,30 @@ impl Poll {
       .filter(|n| seen.insert(n.id.clone()))
       .cloned()
       .collect();
-    fresh.sort_by_key(|n| std::cmp::Reverse(n.id.parse::<u64>().unwrap_or_default()));
+    fresh.sort_by_key(|n| std::cmp::Reverse(sent_micros(n)));
     fresh
   }
+}
+
+/// When `n` was sent, microseconds since the Unix epoch (its id); 0 when the id is no time.
+fn sent_micros(n: &Notification) -> u64 {
+  n.id.parse().unwrap_or_default()
+}
+
+/// Merges the sections of `page` into `items`, one list newest first: the notifications that
+/// `keep` keeps and `items` does not have yet.
+fn merge(
+  items: &mut Vec<Notification>,
+  page: NotificationPage,
+  keep: impl Fn(&Notification) -> bool,
+) {
+  for n in page.sections.into_iter().flat_map(|s| s.items) {
+    if keep(&n) && !items.iter().any(|m| m.id == n.id) {
+      items.push(n);
+    }
+  }
+  // Stable: the notifications without a time keep YouTube's order, at the end.
+  items.sort_by_key(|n| std::cmp::Reverse(sent_micros(n)));
 }
 
 /// Marks a notification read on YouTube, as a click on it on youtube.com; `token` is its
@@ -359,7 +379,8 @@ struct InboxPanel {
   nav: WeakEntity<YouTubeSpace>,
   popover: WeakEntity<PopoverState>,
   state: State,
-  sections: Vec<NotificationSection>,
+  /// The notifications of every page loaded, newest first.
+  items: Vec<Notification>,
   continuation: Option<String>,
   loading_more: bool,
   /// The last next page failed: no automatic retry.
@@ -387,7 +408,7 @@ impl InboxPanel {
       nav,
       popover,
       state: State::Loading,
-      sections: Vec::new(),
+      items: Vec::new(),
       continuation: None,
       loading_more: false,
       failed_more: false,
@@ -418,7 +439,7 @@ impl InboxPanel {
         .update(cx, |this, cx| {
           this.loading_more = false;
           match result {
-            Some(Ok(mut page)) => {
+            Some(Ok(page)) => {
               // Seen here: not to be announced later.
               let ids = page
                 .sections
@@ -426,12 +447,7 @@ impl InboxPanel {
                 .flat_map(|s| &s.items)
                 .map(|n| n.id.clone());
               seen(cx, |seen| seen.extend(ids));
-              // The kinds the settings leave out of the bell.
-              for section in &mut page.sections {
-                section.items.retain(|n| in_bell(n.kind, cx));
-              }
-              page.sections.retain(|s| !s.items.is_empty());
-              this.append(page)
+              this.append(page, |n| in_bell(n.kind, cx))
             }
             Some(Err(e)) => {
               tracing::warn!("notifications: {e}");
@@ -450,16 +466,12 @@ impl InboxPanel {
     .detach();
   }
 
-  /// Adds a page: a next page's untitled section continues the last one.
-  fn append(&mut self, page: NotificationPage) {
+  /// Adds the notifications of a page that `keep` keeps (the kinds the settings leave out of
+  /// the bell are not).
+  fn append(&mut self, page: NotificationPage, keep: impl Fn(&Notification) -> bool) {
     self.state = State::Loaded;
-    self.continuation = page.continuation;
-    for section in page.sections {
-      match self.sections.last_mut() {
-        Some(last) if section.title.is_empty() => last.items.extend(section.items),
-        _ => self.sections.push(section),
-      }
-    }
+    self.continuation = page.continuation.clone();
+    merge(&mut self.items, page, keep);
   }
 
   fn load_more_if_near_end(&mut self, cx: &mut Context<Self>) {
@@ -475,12 +487,8 @@ impl InboxPanel {
   }
 
   /// Opens the video of a notification and marks it read.
-  fn open(&mut self, section: usize, item: usize, window: &mut Window, cx: &mut Context<Self>) {
-    let Some(notification) = self
-      .sections
-      .get_mut(section)
-      .and_then(|s| s.items.get_mut(item))
-    else {
+  fn open(&mut self, item: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(notification) = self.items.get_mut(item) else {
       return;
     };
     let Some(video_id) = notification.video_id.clone() else {
@@ -506,12 +514,11 @@ impl InboxPanel {
 
   fn row(
     &self,
-    section: usize,
     item: usize,
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> impl IntoElement + use<> {
-    let n = &self.sections[section].items[item];
+    let n = &self.items[item];
     h_flex()
       .id(ElementId::Name(format!("notification-{}", n.id).into()))
       .w_full()
@@ -522,7 +529,7 @@ impl InboxPanel {
       .rounded(theme::RADIUS)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface_hover()))
-      .on_click(cx.listener(move |this, _, window, cx| this.open(section, item, window, cx)))
+      .on_click(cx.listener(move |this, _, window, cx| this.open(item, window, cx)))
       .child(
         div()
           .mt(px(16.))
@@ -616,7 +623,7 @@ impl Render for InboxPanel {
         .text_color(theme::muted())
         .child(message.clone())
         .into_any_element(),
-      State::Loaded if self.sections.is_empty() => div()
+      State::Loaded if self.items.is_empty() => div()
         .px_2()
         .text_sm()
         .text_color(theme::muted())
@@ -633,22 +640,8 @@ impl Render for InboxPanel {
             cx.notify();
           }))
           .gap_0p5();
-        for (s, section) in self.sections.iter().enumerate() {
-          if !section.title.is_empty() {
-            list = list.child(
-              div()
-                .px_2()
-                .pt_2()
-                .pb_1()
-                .text_sm()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::muted())
-                .child(section.title.clone()),
-            );
-          }
-          for i in 0..section.items.len() {
-            list = list.child(self.row(s, i, window, cx));
-          }
+        for i in 0..self.items.len() {
+          list = list.child(self.row(i, window, cx));
         }
         if self.loading_more {
           list = list.child(div().p_2().child(loading_more()));
@@ -664,6 +657,7 @@ impl Render for InboxPanel {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use innertube::NotificationSection;
 
   fn notification(id: &str) -> Notification {
     Notification {
@@ -710,5 +704,29 @@ mod tests {
       ["1200000000", "1100000000"]
     );
     assert!(poll.fresh(&second, &mut seen).is_empty());
+  }
+
+  #[test]
+  fn panel_merges_sections_newest_first() {
+    let section = |title: &str, ids: &[&str]| NotificationSection {
+      title: title.into(),
+      items: ids.iter().map(|id| notification(id)).collect(),
+    };
+    let page = |sections| NotificationPage {
+      sections,
+      continuation: None,
+    };
+    let mut items = Vec::new();
+    let first = page(vec![
+      section("Important", &["100", "300"]),
+      section("Others", &["400", "notatime", "200", "250"]),
+    ]);
+    merge(&mut items, first, |n| n.id != "250");
+    // A next page: older ones, and one already there.
+    merge(&mut items, page(vec![section("", &["150", "300"])]), |_| {
+      true
+    });
+    let ids: Vec<&str> = items.iter().map(|n| n.id.as_str()).collect();
+    assert_eq!(ids, ["400", "300", "200", "150", "100", "notatime"]);
   }
 }
