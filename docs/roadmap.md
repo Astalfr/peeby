@@ -13,6 +13,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Log file
+
+- Done (2026-11-03): Peeby writes its log to `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log` as well as stderr: a release build has no console, so its warnings were lost (a Twitch live's Windows notification went missing with no trace; `build` or `Show` failed in `desktop::toast`). One file per launch, created at its first line by a thread of its own, a panic logged and flushed, deleted after 7 days with mpv's logs. Checked with a debug run: the file holds the stderr lines.
+
 ## Subscribe and follow buttons
 
 - Done (2026-11-03): YouTube's watch page has a subscribe button left of the bell (a small one under a Short, from the same `WatchPage`): "S'abonner" (red) or "Abonné", whose menu has "Se désabonner de <chaîne>" (the second click YouTube's confirmation dialog asks for). `Client::set_subscribed` posts `subscription/subscribe` or `subscription/unsubscribe` with the button's `params`; the state is kept by channel id for the session (reset on a session change), shows at once, and goes back with a toast if YouTube refuses. The bell, which the button carries even before a subscription, shows while subscribed, so it appears right after a subscription. Parsed and tested on `next.json` (not subscribed) and `next_signed_in.json` (subscribed, unsubscribe params in the dialog).

@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod desktop;
+mod logs;
 mod settings;
 mod shell;
 mod spaces;
@@ -26,15 +27,10 @@ use spaces::youtube::{YouTubeSpace, convert, prefetch, tools};
 use ui::{assets, images, runtime, theme};
 
 fn main() {
-  tracing_subscriber::fmt()
-    .with_env_filter(
-      tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "peeby=info,innertube=info,twitch=info".into()),
-    )
-    .init();
+  logs::init();
 
   let prefs = settings::Settings::load();
-  std::thread::spawn(settings::prune_mpv_logs);
+  std::thread::spawn(settings::prune_logs);
   ui::i18n::set(prefs.interface_lang());
   // `peeby --login <service>`: the sign-in window only (ADR 0017), started by Peeby itself.
   if let Some(code) = web_sign_in::child_from_args() {

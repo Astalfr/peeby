@@ -185,7 +185,7 @@ pub struct Player {
   /// Audio output (`player::AudioDevice::name`), picked from the top bar; `None` follows
   /// Windows' default.
   pub audio_device: Option<String>,
-  /// Write each mpv's log to [`mpv_logs_dir`] (troubleshooting). Off by default: the log holds
+  /// Write each mpv's log to [`logs_dir`] (troubleshooting). Off by default: the log holds
   /// stream URLs, which carry the user's IP.
   pub mpv_log: bool,
 }
@@ -238,18 +238,18 @@ impl Player {
     options.software_decoding = software;
     options.force_software =
       software || std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1");
-    // `PEEBY_MPV_LOG` names the file; the setting, one per video in `mpv_logs_dir`.
+    // `PEEBY_MPV_LOG` names the file; the setting, one per video in `logs_dir`.
     options.log_file = std::env::var_os("PEEBY_MPV_LOG")
       .map(Into::into)
       .or_else(|| self.mpv_log.then(new_mpv_log).flatten());
   }
 }
 
-/// How long mpv's logs are kept.
-const MPV_LOGS_KEPT: Duration = Duration::from_secs(7 * 24 * 3600);
+/// How long the logs (Peeby's and mpv's) are kept.
+const LOGS_KEPT: Duration = Duration::from_secs(7 * 24 * 3600);
 
-/// Folder of mpv's logs: `%LOCALAPPDATA%\peeby\logs`.
-pub fn mpv_logs_dir() -> Option<PathBuf> {
+/// Folder of the logs, Peeby's and mpv's: `%LOCALAPPDATA%\peeby\logs`.
+pub fn logs_dir() -> Option<PathBuf> {
   Some(dirs::cache_dir()?.join("peeby").join("logs"))
 }
 
@@ -260,12 +260,12 @@ fn new_mpv_log() -> Option<PathBuf> {
     .duration_since(std::time::UNIX_EPOCH)
     .ok()?
     .as_millis();
-  Some(mpv_logs_dir()?.join(format!("mpv-{millis}.log")))
+  Some(logs_dir()?.join(format!("mpv-{millis}.log")))
 }
 
-/// Deletes mpv's logs older than [`MPV_LOGS_KEPT`]. Blocking: off the UI thread.
-pub fn prune_mpv_logs() {
-  let Some(entries) = mpv_logs_dir().and_then(|dir| std::fs::read_dir(dir).ok()) else {
+/// Deletes the logs older than [`LOGS_KEPT`]. Blocking: off the UI thread.
+pub fn prune_logs() {
+  let Some(entries) = logs_dir().and_then(|dir| std::fs::read_dir(dir).ok()) else {
     return;
   };
   for entry in entries.flatten() {
@@ -274,9 +274,9 @@ pub fn prune_mpv_logs() {
       .and_then(|m| m.modified())
       .ok()
       .and_then(|at| at.elapsed().ok())
-      .is_some_and(|age| age > MPV_LOGS_KEPT);
+      .is_some_and(|age| age > LOGS_KEPT);
     if old && let Err(e) = std::fs::remove_file(entry.path()) {
-      tracing::warn!("old mpv log: {e}");
+      tracing::warn!("old log: {e}");
     }
   }
 }

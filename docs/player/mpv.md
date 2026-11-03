@@ -39,7 +39,7 @@ These are starting points, to be tuned. The reason for each option is recorded h
 
 ## Security
 
-mpv's log holds stream URLs, which carry the user's IP, so it is opt-in. `PEEBY_MPV_LOG` names a file. The setting **mpv logs** (`[player] mpv_log`, off by default) writes one file per video to `%LOCALAPPDATA%\peeby\logs\mpv-<ms>.log`. Files older than 7 days are deleted at startup. A restarted player (another quality, a reload after an early end) writes next to the taken name (`-2`, `-3`…), so a restart never overwrites the log that shows why it happened.
+mpv's log holds stream URLs, which carry the user's IP, so it is opt-in. `PEEBY_MPV_LOG` names a file. The setting **mpv logs** (`[player] mpv_log`, off by default) writes one file per video to `%LOCALAPPDATA%\peeby\logs\mpv-<ms>.log`. Files older than 7 days are deleted at startup, with Peeby's own logs from the same folder. A restarted player (another quality, a reload after an early end) writes next to the taken name (`-2`, `-3`…), so a restart never overwrites the log that shows why it happened.
 
 mpv error messages built by `player::sys` never include option values or command arguments. Those can hold the Authorization header or private URLs, and they would end up in logs. Only the option or command name is reported.
 

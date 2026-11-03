@@ -124,4 +124,5 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 | YouTube session cookies | `%APPDATA%\peeby\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
 | Jellyfin access token | Windows Credential Manager, service `peeby`, account `<server URL>\|<user id>` ([ADR 0009](decisions/0009-jellyfin-12-single-account.md)) |
 | Image cache | `%LOCALAPPDATA%\peeby\images\` |
+| Peeby's log (`logs`: what goes to stderr, without colors, one file per launch, created at its first line; UTC times; `RUST_LOG` sets the filter, info by default, and debug writes stream URLs into it) and mpv's opt-in logs, both deleted after 7 days | `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log`, `mpv-<ms>.log` |
 | Fonts of external ASS subtitles (Jellyfin) | `%LOCALAPPDATA%\peeby\fonts\<item>\` |
