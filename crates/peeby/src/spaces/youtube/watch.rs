@@ -365,13 +365,28 @@ impl WatchView {
             ),
         )
         .child(
-          v_flex()
-            .id("queue-list")
-            .max_h(px(420.))
-            .p_1()
-            .overflow_y_scroll()
-            .track_scroll(&self.queue_scroll)
-            .children(rows),
+          div()
+            .relative()
+            .vertical_scrollbar(&self.queue_scroll)
+            .child(
+              v_flex()
+                .id("queue-list")
+                .max_h(px(420.))
+                .p_1()
+                .overflow_y_scroll()
+                .track_scroll(&self.queue_scroll)
+                // GPUI hands the wheel to every scrollable ancestor too: keep it from scrolling the
+                // page while the list has something to scroll (its own listener has already run).
+                .on_scroll({
+                  let scroll = self.queue_scroll.clone();
+                  move |_, _, cx| {
+                    if scroll.max_offset().y > px(0.) {
+                      cx.stop_propagation();
+                    }
+                  }
+                })
+                .children(rows),
+            ),
         )
         .into_any_element(),
     )
