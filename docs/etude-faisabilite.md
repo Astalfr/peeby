@@ -58,7 +58,7 @@ Il n'y a plus de `videoRenderer` : tout passe par `lockupViewModel` (`contentId`
 ### Obtenir les cookies (UX de connexion)
 
 1. **v1 : import d'un `cookies.txt`.** L'utilisateur se connecte dans une fenêtre de navigation privée, exporte les cookies, puis **ferme la fenêtre** : un onglet ouvert fait tourner (« rotate ») les cookies et invalide l'export. C'est la méthode recommandée par yt-dlp.
-2. **Plus tard : connexion via une WebView intégrée** (WebView2 / `wry`), comme le fait Grayjay, en lisant les cookies via le CookieManager. Google bloque parfois la connexion dans une vue intégrée (« ce navigateur n'est peut-être pas sécurisé »), c'est donc à valider.
+2. **Plus tard : connexion via une WebView intégrée** (WebView2 / `wry`), comme le fait Grayjay, en lisant les cookies via le CookieManager. Google bloque parfois la connexion dans une vue intégrée (« ce navigateur n'est peut-être pas sécurisé »), c'est donc à valider. **Validé le 2026-11-03** (WebView2 InPrivate via `wry`) : aucun rejet, et les cookies lus passent tout le `smoke` connecté. C'est désormais la connexion par défaut ([ADR 0017](decisions/0017-sign-in-webview.md)), l'import restant possible.
 3. **Lire directement les cookies du navigateur** (crate `rookie`) : Firefox fonctionne. Chrome sur Windows utilise le chiffrement *app-bound* depuis la v127, ce qui rend cette lecture peu fiable.
 
 Une fois connecté, le client doit **persister les `Set-Cookie`** renvoyés par YouTube (notamment `__Secure-1PSIDTS`), sinon la session expire.

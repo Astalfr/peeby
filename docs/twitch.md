@@ -244,6 +244,12 @@ Checked against the code on 2026-11-01:
 
 ## The auth-token tutorial
 
+Since [ADR 0017](decisions/0017-sign-in-webview.md) this is the manual way: "Se connecter à Twitch…"
+opens twitch.tv's sign-in in a WebView2 window (`peeby --login twitch`) and reads the `auth-token`
+cookie, checked with `currentUser` like a pasted one. Only the sign-in goes through it: the window
+closes right after, never kept for integrity tokens or a device id (ADRs 0012, 0016). The tutorial
+stays below the button, and is what a failure points to.
+
 The text Peeby shows above the `auth-token` field, in the Twitch part of the settings (UI text in French, as
 the rest of the app):
 

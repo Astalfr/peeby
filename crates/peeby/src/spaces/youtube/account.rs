@@ -1,5 +1,6 @@
-//! The YouTube account, in the settings page: session state, cookie import (checked against
-//! YouTube before it replaces the current session) and sign-out.
+//! The YouTube account, in the settings page: session state, sign-in through Google's page in a
+//! WebView (ADR 0017), cookie import as the manual way (both checked against YouTube before they
+//! replace the current session) and sign-out.
 
 use std::path::PathBuf;
 
@@ -13,12 +14,17 @@ use crate::settings;
 use crate::settings::Settings;
 use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::convert::error_text;
+use crate::web_sign_in::{self, Outcome, Pending, Service};
 use ui::assets::Icon;
 use ui::i18n::t;
 use ui::{runtime, tf, theme};
 
 enum Status {
   Idle,
+  /// The sign-in window is open (it closes when this is dropped).
+  Waiting {
+    _window: Pending,
+  },
   Checking,
   Failed(SharedString),
   Done(SharedString),
@@ -37,6 +43,44 @@ impl AccountView {
       signed_in,
       status: Status::Idle,
     }
+  }
+
+  /// Opens Google's sign-in in its own window; the session it gives goes through `check`.
+  fn sign_in(&mut self, cx: &mut Context<Self>) {
+    let (pending, run) = match web_sign_in::open(Service::YouTube) {
+      Ok(window) => window,
+      Err(e) => {
+        tracing::warn!("cannot open the YouTube sign-in window: {e}");
+        self.status = Status::Failed(window_failed().into());
+        return cx.notify();
+      }
+    };
+    self.status = Status::Waiting { _window: pending };
+    cx.notify();
+    // Blocks a background thread until the window closes.
+    let outcome = cx.background_executor().spawn(async move { run() });
+    cx.spawn(async move |this, cx| {
+      let outcome = outcome.await;
+      this
+        .update(cx, |this, cx| {
+          if !matches!(this.status, Status::Waiting { .. }) {
+            return;
+          }
+          match outcome {
+            Outcome::SignedIn(jar) => this.check(Ok(jar), cx),
+            Outcome::Closed => {
+              this.status = Status::Idle;
+              cx.notify();
+            }
+            Outcome::Failed => {
+              this.status = Status::Failed(window_failed().into());
+              cx.notify();
+            }
+          }
+        })
+        .ok();
+    })
+    .detach();
   }
 
   fn pick_file(&mut self, cx: &mut Context<Self>) {
@@ -58,9 +102,24 @@ impl AccountView {
     .detach();
   }
 
-  /// Reads `path`, checks the cookies with a Home request, then saves them and switches the
-  /// app to the new session. A file YouTube does not accept changes nothing.
   fn import(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+    self.status = Status::Checking;
+    cx.notify();
+    let read = cx.background_executor().spawn(async move {
+      std::fs::read_to_string(&path)
+        .map_err(|e| tf!("Cannot read the file: {e}", "Lecture impossible : {e}"))
+    });
+    cx.spawn(async move |this, cx| {
+      let text = read.await;
+      this.update(cx, |this, cx| this.check(text, cx)).ok();
+    })
+    .detach();
+  }
+
+  /// Checks a cookie file's `text` (imported, or from the sign-in window) with a Home request,
+  /// then saves it and switches the app to the new session. Cookies YouTube does not accept
+  /// change nothing.
+  fn check(&mut self, text: Result<String, String>, cx: &mut Context<Self>) {
     self.status = Status::Checking;
     cx.notify();
     let Settings {
@@ -69,17 +128,13 @@ impl AccountView {
       ..
     } = Settings::get(cx).clone();
     let check = runtime::spawn(cx, async move {
-      let text = std::fs::read_to_string(&path)
-        .map_err(|e| tf!("Cannot read the file: {e}", "Lecture impossible : {e}"))?;
+      let text = text?;
       let cookies = Cookies::from_netscape(&text).map_err(|e| error_text(&e))?;
       // No cookie file yet: a rotation during the check must not touch the current one.
       let client =
         Client::new(Some(cookies.clone()), None, &hl, &gl).map_err(|e| error_text(&e))?;
       let feed = client.home().await.map_err(|e| error_text(&e))?;
-      tracing::info!(
-        "imported cookies accepted: {} videos on Home",
-        feed.items.len()
-      );
+      tracing::info!("new cookies accepted: {} videos on Home", feed.items.len());
       settings::save_cookies(&cookies).map_err(|e| {
         tf!(
           "Cannot save the cookies: {e}",
@@ -153,8 +208,19 @@ impl Render for AccountView {
       .map(|p| p.display().to_string())
       .unwrap_or_default();
     let checking = matches!(self.status, Status::Checking);
+    let waiting = matches!(self.status, Status::Waiting { .. });
+    let busy = checking || waiting;
     let message = match &self.status {
       Status::Idle => None,
+      Status::Waiting { .. } => Some((
+        t(
+          "Sign in in the window that opened. It closes by itself once you are signed in.",
+          "Connectez-vous dans la fenêtre qui s'est ouverte. Elle se ferme d'elle-même une fois \
+           connecté.",
+        )
+        .into(),
+        theme::muted(),
+      )),
       Status::Checking => Some((
         t("Checking with YouTube…", "Vérification auprès de YouTube…").into(),
         theme::muted(),
@@ -246,7 +312,7 @@ impl Render for AccountView {
                 Button::new("sign-out")
                   .ghost()
                   .label(t("Sign out", "Se déconnecter"))
-                  .disabled(checking)
+                  .disabled(busy)
                   .on_click(cx.listener(|this, _, _, cx| this.sign_out(cx))),
               )
             }),
@@ -260,8 +326,44 @@ impl Render for AccountView {
             .border_color(theme::border())
             .text_sm()
             .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
-              "Export the cookies of youtube.com in Netscape format",
-              "Exporter les cookies de youtube.com au format Netscape",
+              "Sign in with your Google account",
+              "Se connecter avec son compte Google",
+            )))
+            .child(div().text_color(theme::muted()).child(t(
+              "A window opens on Google's sign-in page. Your password goes to Google only: Peeby \
+               keeps the session cookies once you are signed in, then closes the window.",
+              "Une fenêtre s'ouvre sur la page de connexion de Google. Votre mot de passe ne va \
+               qu'à Google : Peeby garde les cookies de la session une fois connecté, puis ferme \
+               la fenêtre.",
+            )))
+            .child(
+              h_flex().child(
+                Button::new("sign-in")
+                  .primary()
+                  .label(if waiting {
+                    t("Waiting for the sign-in…", "En attente de la connexion…")
+                  } else if checking {
+                    t("Checking…", "Vérification…")
+                  } else {
+                    t("Sign in to YouTube…", "Se connecter à YouTube…")
+                  })
+                  .loading(busy)
+                  .disabled(busy)
+                  .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+              ),
+            ),
+        )
+        .child(
+          v_flex()
+            .gap_4()
+            .p_5()
+            .rounded(theme::RADIUS_LG)
+            .border_1()
+            .border_color(theme::border())
+            .text_sm()
+            .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
+              "Or import the cookies of youtube.com by hand (Netscape format)",
+              "Ou importer les cookies de youtube.com à la main (format Netscape)",
             )))
             .child(
               v_flex()
@@ -301,13 +403,8 @@ impl Render for AccountView {
             .child(
               h_flex().child(
                 Button::new("import")
-                  .primary()
-                  .label(if checking {
-                    t("Checking…", "Vérification…")
-                  } else {
-                    t("Import cookies.txt…", "Importer cookies.txt…")
-                  })
-                  .disabled(checking)
+                  .label(t("Import cookies.txt…", "Importer cookies.txt…"))
+                  .disabled(busy)
                   .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),
               ),
             ),
@@ -315,4 +412,12 @@ impl Render for AccountView {
         .children(message.map(|(text, color)| div().text_color(color).child(text))),
     )
   }
+}
+
+fn window_failed() -> &'static str {
+  t(
+    "The sign-in window couldn't open (WebView2 missing?). Import the cookies by hand below.",
+    "La fenêtre de connexion n'a pas pu s'ouvrir (WebView2 absent ?). Importez les cookies à la \
+     main ci-dessous.",
+  )
 }

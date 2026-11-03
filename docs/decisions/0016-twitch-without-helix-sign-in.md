@@ -27,7 +27,8 @@ Peeby's pages only ever used one page of each list, but "Parcourir" (two pages, 
 - **The space opens without signing in.** Its catalog goes through anonymous GQL
   (`twitch::catalog::Catalog`, raw queries, the first page of each list), with Helix's types as the
   shared model. Anonymous on purpose: a refused auth-token never stops the browsing.
-- **The auth-token is the sign-in.** It names the account entry (`currentUser`), plays as the
+- **The auth-token is the sign-in** (read from twitch.tv's sign-in in a WebView since
+  [ADR 0017](0017-sign-in-webview.md), the tutorial as the manual way). It names the account entry (`currentUser`), plays as the
   user's account and carries the points and VOD positions, as before. The settings page asks for it
   first ("Compte"); "Se déconnecter" in the sidebar forgets it and disconnects Helix.
 - **Helix is optional**, for the followed channels only ("Suivies", the sidebar's lives, the bell),

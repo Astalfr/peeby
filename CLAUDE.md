@@ -32,6 +32,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `-- master-scan` lists the top lives offering HEVC/AV1; `-- positions <vod-id>…` saves the account's resume
   positions in those VODs, read only, without spending the refresh token)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
+- Sign-in window alone (ADR 0017): `cargo run -p peeby -- --login youtube|twitch` writes the session (a
+  cookie jar, the auth-token) on stdout: redirect it to a file, never into a log or a shared terminal
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_VARIANT`, `PEEBY_USHER=v1`, `PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0`,
   `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the

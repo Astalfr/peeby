@@ -3,7 +3,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
-use tracing::info;
 
 use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};

@@ -19,6 +19,7 @@ Anonymous Home has been empty since 2024 (verified: `logged_in=0`, empty grid, "
 - Cookies are secrets: never in logs, URLs or error messages. `Cookies` has a redacting `Debug`.
 - **YouTube rotates session cookies** (`SIDCC`, `__Secure-*PSIDTS`…) through `Set-Cookie` on signed-in responses. A client that keeps sending the old values gets the session invalidated: it happened on 2026-11-01, about an hour after the first export, before the updates were handled. Since then `Client` applies the `Set-Cookie` headers of signed-in responses and writes the whole jar back to the file (temporary file + rename). Deletions are ignored. Not yet verified over a long session.
 - yt-dlp also writes the jar back when it exits, so the fallback gives it a copy, never the user's file.
-- Later: a sign-in WebView (Grayjay-style), if Google allows it.
+- A sign-in WebView now comes first ([ADR 0017](0017-sign-in-webview.md), 2026-11-03): Google allows
+  WebView2, and the jar it gives goes through the same Home check. This import stays as the manual way.
 - Using cookies goes against YouTube's terms of service. The risk to the account is low for personal use, but not zero.
 - The signed-in path was verified on 2026-11-01 (`cargo run -p innertube --example smoke -- <cookies.txt>`: Home, subscriptions, 475 channels).

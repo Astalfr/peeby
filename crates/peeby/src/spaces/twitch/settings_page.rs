@@ -1,6 +1,7 @@
 //! Twitch's part of the settings page (behind the gear): the account, signed in with the web
-//! `auth-token` (the tutorial of docs/twitch.md, checked before it is saved), the followed
-//! channels' Helix connection, then playback.
+//! `auth-token` (read from twitch.tv's sign-in in a WebView, ADR 0017, or pasted by hand with the
+//! tutorial of docs/twitch.md, checked before it is saved), the followed channels' Helix
+//! connection, then playback.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, Entity, SharedString, WeakEntity, Window, div, px};
@@ -13,6 +14,7 @@ use ui::{runtime, tf, theme};
 
 use super::{TwitchSpace, play, session};
 use crate::settings::Settings;
+use crate::web_sign_in::{self, Outcome, Pending, Service};
 
 /// The tutorial's steps (docs/twitch.md, "The auth-token tutorial").
 fn tutorial() -> [&'static str; 5] {
@@ -42,6 +44,8 @@ fn tutorial() -> [&'static str; 5] {
 pub struct SettingsView {
   nav: WeakEntity<TwitchSpace>,
   input: Entity<InputState>,
+  /// The sign-in window, while it is open (dropping it closes the window).
+  window: Option<Pending>,
   checking: bool,
   /// The outcome of the last save: the message, and whether it went well.
   outcome: Option<(SharedString, bool)>,
@@ -58,15 +62,65 @@ impl SettingsView {
     Self {
       nav,
       input,
+      window: None,
       checking: false,
       outcome: None,
     }
   }
 
-  /// Checks the pasted token (its shape, then a GQL call that answers as signed in), then saves
-  /// it in the Credential Manager.
+  /// Opens twitch.tv's sign-in in its own window; the token it gives goes through `check`.
+  fn sign_in(&mut self, cx: &mut Context<Self>) {
+    let failed = || {
+      t(
+        "The sign-in window couldn't open (WebView2 missing?). Paste the token by hand below.",
+        "La fenêtre de connexion n'a pas pu s'ouvrir (WebView2 absent ?). Collez le jeton à la \
+         main ci-dessous.",
+      )
+    };
+    let (pending, run) = match web_sign_in::open(Service::Twitch) {
+      Ok(window) => window,
+      Err(e) => {
+        tracing::warn!("cannot open the Twitch sign-in window: {e}");
+        self.outcome = Some((failed().into(), false));
+        return cx.notify();
+      }
+    };
+    self.window = Some(pending);
+    self.outcome = None;
+    cx.notify();
+    // Blocks a background thread until the window closes.
+    let outcome = cx.background_executor().spawn(async move { run() });
+    cx.spawn(async move |this, cx| {
+      let outcome = outcome.await;
+      this
+        .update(cx, |this, cx| {
+          if this.window.take().is_none() {
+            return;
+          }
+          match outcome {
+            Outcome::SignedIn(token) => this.check(token, cx),
+            Outcome::Closed => {}
+            Outcome::Failed => this.outcome = Some((failed().into(), false)),
+          }
+          cx.notify();
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// The pasted token.
   fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     let token = self.input.read(cx).value().trim().to_owned();
+    self
+      .input
+      .update(cx, |input, cx| input.set_value("", window, cx));
+    self.check(token, cx);
+  }
+
+  /// Checks a token (its shape, then a GQL call that answers as signed in), then saves it in the
+  /// Credential Manager.
+  fn check(&mut self, token: String, cx: &mut Context<Self>) {
     if !twitch::gql::is_auth_token_shape(&token) {
       self.outcome = Some((
         t(
@@ -90,9 +144,6 @@ impl SettingsView {
           .await
       }
     });
-    self
-      .input
-      .update(cx, |input, cx| input.set_value("", window, cx));
     cx.spawn(async move |this, cx| {
       let result = check.await;
       let saved = match result {
@@ -260,6 +311,7 @@ impl SettingsView {
         });
       return section(t("Account", "Compte"), vec![card.into_any_element()]).into_any_element();
     }
+    let busy = self.checking || self.window.is_some();
     let steps = tutorial().into_iter().enumerate().map(|(i, step)| {
       h_flex()
         .gap_2()
@@ -292,6 +344,41 @@ impl SettingsView {
          VOD. Sans lui, Twitch s'ouvre aussi : catalogue, recherche et lecture, les publicités \
          retirées par Peeby.",
       )))
+      .child(
+        h_flex().child(
+          Button::new("twitch-sign-in")
+            .primary()
+            .small()
+            .label(if self.window.is_some() {
+              t("Waiting for the sign-in…", "En attente de la connexion…")
+            } else {
+              t("Sign in to Twitch…", "Se connecter à Twitch…")
+            })
+            .loading(busy)
+            .disabled(busy)
+            .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+        ),
+      )
+      .child(div().text_xs().text_color(theme::muted()).child(
+        if self.window.is_some() {
+          t(
+            "Sign in in the window that opened. It closes by itself once you are signed in.",
+            "Connectez-vous dans la fenêtre qui s'est ouverte. Elle se ferme d'elle-même une fois \
+             connecté.",
+          )
+        } else {
+          t(
+            "A window opens on twitch.tv's sign-in page. Your password goes to Twitch only: Peeby \
+             keeps the site's token once you are signed in, then closes the window.",
+            "Une fenêtre s'ouvre sur la page de connexion de twitch.tv. Votre mot de passe ne va \
+             qu'à Twitch : Peeby garde le jeton du site une fois connecté, puis ferme la fenêtre.",
+          )
+        },
+      ))
+      .child(div().pt_2().text_sm().child(t(
+        "Or paste the token by hand:",
+        "Ou collez le jeton à la main :",
+      )))
       .child(v_flex().gap_1().children(steps))
       .child(div().text_xs().text_color(theme::muted()).child(t(
         "This token gives full access to your account: don't share it. Peeby keeps it in the \
@@ -308,15 +395,13 @@ impl SettingsView {
           .child(
             div()
               .flex_1()
-              .child(Input::new(&self.input).disabled(self.checking)),
+              .child(Input::new(&self.input).disabled(busy)),
           )
           .child(
             Button::new("twitch-auth-token-save")
-              .primary()
               .small()
               .label(t("Save", "Enregistrer"))
-              .loading(self.checking)
-              .disabled(self.checking)
+              .disabled(busy)
               .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
           ),
       )

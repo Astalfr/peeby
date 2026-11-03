@@ -6,6 +6,7 @@
 mod settings;
 mod shell;
 mod spaces;
+mod web_sign_in;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -30,6 +31,13 @@ fn main() {
     )
     .init();
 
+  let prefs = settings::Settings::load();
+  ui::i18n::set(prefs.interface_lang());
+  // `peeby --login <service>`: the sign-in window only (ADR 0017), started by Peeby itself.
+  if let Some(code) = web_sign_in::child_from_args() {
+    std::process::exit(code);
+  }
+
   // `peeby <url-or-id>…` opens those videos, the last one on top ("back" goes through the
   // others).
   let initial_videos: Vec<String> = std::env::args()
@@ -53,8 +61,6 @@ fn main() {
       "no session cookies: signed out"
     }
   );
-  let prefs = settings::Settings::load();
-  ui::i18n::set(prefs.interface_lang());
   let (hl, gl) = (prefs.language.clone(), prefs.region.clone());
   // The Jellyfin session, with its token from the Credential Manager (a blocking call). A first
   // run makes this installation's id, saved once the UI is up.
