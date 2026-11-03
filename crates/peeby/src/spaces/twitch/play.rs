@@ -3,16 +3,18 @@
 //!   step 3), one quality each;
 //! - a clip: its direct MP4s, one quality each.
 //!
-//! A VOD's storyboard becomes the seek bar's previews, its muted parts red on the seek bar.
+//! A VOD's storyboard becomes the seek bar's previews, its muted parts red on the seek bar, its
+//! game chapters the player's chapters.
 
 use std::rc::Rc;
 
 use player::StartOptions;
 use twitch::Proxy;
-use twitch::gql::{ClipPlayback, StoryboardLevel};
+use twitch::gql::{self, ClipPlayback, StoryboardLevel};
 use twitch::helix::MutedSegment;
 use twitch::usher::{Codec, Variant};
 use ui::i18n::t;
+use ui::picture::Picture;
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{Previews, Quality, Source, Tile};
 use ui::tf;
@@ -220,6 +222,24 @@ pub fn muted(parts: &[MutedSegment]) -> Vec<Segment> {
   out
 }
 
+/// A VOD's game chapters as the player's, named after their games, with their box art. A single
+/// one says nothing that the header does not: none then.
+pub fn chapters(chapters: &[gql::Chapter]) -> Vec<(player::Chapter, Option<Picture>)> {
+  if chapters.len() < 2 {
+    return Vec::new();
+  }
+  chapters
+    .iter()
+    .map(|c| {
+      let chapter = player::Chapter {
+        start: f64::from(c.start),
+        title: Some(c.game.clone()),
+      };
+      (chapter, c.box_art.as_deref().map(super::cards::template))
+    })
+    .collect()
+}
+
 /// What the user reads when a live, a VOD or a clip cannot play.
 pub fn describe(error: &twitch::Error, channel: &str) -> String {
   use twitch::Error;
@@ -258,6 +278,29 @@ pub fn describe(error: &twitch::Error, channel: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn one_game_is_no_chapters() {
+    let chapter = |start, game: &str| gql::Chapter {
+      start,
+      game: game.into(),
+      box_art: Some("https://static-cdn.jtvnw.net/ttv-boxart/21779-{width}x{height}.jpg".into()),
+    };
+    assert!(chapters(&[chapter(0, "Just Chatting")]).is_empty());
+    let two = chapters(&[
+      chapter(0, "Just Chatting"),
+      chapter(1407, "League of Legends"),
+    ]);
+    assert_eq!(two.len(), 2);
+    let (chapter, picture) = &two[1];
+    assert_eq!(chapter.start, 1407.0);
+    assert_eq!(chapter.title.as_deref(), Some("League of Legends"));
+    let url = picture.as_ref().and_then(|p| p.url(52, 72));
+    assert_eq!(
+      url.as_deref(),
+      Some("https://static-cdn.jtvnw.net/ttv-boxart/21779-52x72.jpg")
+    );
+  }
 
   #[test]
   fn muted_parts_that_touch_are_one() {

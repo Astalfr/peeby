@@ -476,6 +476,8 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 - [x] Muted segments (2026-11-02): `Video::muted_segments`, merged when they touch (`play::muted`), given to
       the player as `SegmentKind::Muted` segments: red on the seek bar, "Son coupé" in the hover preview, an
       OSD "Son coupé (droits d'auteur)" on entering one, and the skip button "Passer la partie muette" (S)
+- [x] Game chapters (2026-11-03): `Client::vod_chapters` (GQL `moments`, `GAME_CHANGE`), given to the player
+      with their box art (`set_chapters_with_pictures`) when a VOD has two games or more (`play::chapters`), without delaying playback
 - Verified in the app (screenshots, posted clicks and moves):
   - a public VOD plays in 0.99 s (7 qualities, seek bar, 8:09:09), with a storyboard frame shown when
     hovering the seek bar;

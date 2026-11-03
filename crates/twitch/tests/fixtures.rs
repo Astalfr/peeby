@@ -269,6 +269,38 @@ fn vod_storyboard() {
 }
 
 #[test]
+fn vod_chapters() {
+  // kamet0's VOD 2914347797 (2026-11-03, anonymous): three games.
+  let chapters = gql::parse_chapters(&json("gql_vod_chapters.json")).unwrap();
+  let list: Vec<_> = chapters
+    .iter()
+    .map(|c| (c.start, c.game.as_str()))
+    .collect();
+  assert_eq!(
+    list,
+    [
+      (0, "League of Legends"),
+      (8342, "FIFA 16"),
+      (8375, "EA Sports FC 26")
+    ]
+  );
+  assert_eq!(
+    chapters[1].box_art.as_deref(),
+    Some("https://static-cdn.jtvnw.net/ttv-boxart/489608_IGDB-{width}x{height}.jpg")
+  );
+  // A VOD that kept one game has none; an unknown one is not found.
+  assert!(
+    gql::parse_chapters(&json("gql_vod_chapters_single.json"))
+      .unwrap()
+      .is_empty()
+  );
+  assert!(matches!(
+    gql::parse_chapters(&json("gql_vod_chapters_not_found.json")),
+    Err(Error::NotFound)
+  ));
+}
+
+#[test]
 fn vod_comments() {
   // zerator's VOD around 10 min (2026-11-02, anonymous), chatters renamed, trimmed to 7.
   let page = gql::parse_comments(&json("gql_vod_comments.json")).unwrap();

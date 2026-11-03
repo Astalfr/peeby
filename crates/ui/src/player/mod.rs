@@ -38,6 +38,7 @@ use tracks::{SUBTITLE_DELAY_STEP, UpNext};
 use crate::assets::Icon;
 use crate::i18n::{Lang, lang, t};
 use crate::images::Images;
+use crate::picture::{self, Picture};
 use crate::{motion, tf, theme};
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
@@ -50,6 +51,9 @@ const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
 const PREVIEW_WIDTH: f32 = 176.;
+/// Width of a chapter's picture in the seek bar's hover preview.
+const HOVER_PICTURE_WIDTH: f32 = 16.;
+
 /// Space between two chapters on the seek bar.
 const CHAPTER_GAP: f32 = 2.;
 const CONTROL_SIZE: f32 = 40.;
@@ -194,6 +198,8 @@ pub struct PlayerView {
   /// The chapters come from the source's server (YouTube's), not from the file: mpv's list
   /// (empty for a stream, sent again by each new mpv) no longer replaces them.
   given_chapters: bool,
+  /// The given chapters' pictures (a game's box art), one per chapter; empty when they have none.
+  chapter_pictures: Vec<Option<Picture>>,
   /// Segments from the source's server; without them, `segments` comes from the chapters.
   given_segments: Vec<Segment>,
   segments: Vec<Segment>,
@@ -306,6 +312,7 @@ impl PlayerView {
       subtitle_delay: 0.0,
       chapters: Vec::new(),
       given_chapters: false,
+      chapter_pictures: Vec::new(),
       given_segments: Vec::new(),
       segments: Vec::new(),
       muted_at: None,
@@ -1229,15 +1236,44 @@ impl PlayerView {
       let seconds = self.seek_time(fraction);
       let bar_width = f32::from(self.seek_bounds.get().size.width);
       let thumbnail = self.render_storyboard_frame(seconds, cx);
-      let width = if thumbnail.is_some() {
+      let index = self.chapter_at(seconds);
+      let chapter = index.and_then(|i| self.chapters[i].title.clone());
+      // A chapter's name needs the room of a thumbnail, even without one.
+      let width = if thumbnail.is_some() || chapter.is_some() {
         PREVIEW_WIDTH + 4.
       } else {
         72.
       };
       let left = (bar_width * fraction as f32 - width / 2.).clamp(0., (bar_width - width).max(0.));
-      let chapter = self
-        .chapter_at(seconds)
-        .and_then(|i| self.chapters[i].title.clone());
+      let chapter = chapter.map(|title| {
+        let picture = index.and_then(|i| self.chapter_picture(i)).map(|p| {
+          div()
+            .flex_shrink_0()
+            .w(px(HOVER_PICTURE_WIDTH))
+            .h(px(HOVER_PICTURE_WIDTH / overlays::CHAPTER_PICTURE_ASPECT))
+            .child(picture::image_fill(
+              p,
+              HOVER_PICTURE_WIDTH,
+              overlays::CHAPTER_PICTURE_ASPECT,
+              px(2.),
+              window,
+              cx,
+            ))
+        });
+        h_flex()
+          .max_w_full()
+          .gap_1p5()
+          .justify_center()
+          .children(picture)
+          .child(
+            div()
+              .min_w_0()
+              .text_xs()
+              .text_center()
+              .opacity(0.8)
+              .child(title),
+          )
+      });
       let muted = segments::muted_at(&self.segments, seconds).is_some();
       v_flex()
         .absolute()
@@ -1249,6 +1285,7 @@ impl PlayerView {
         .children(thumbnail)
         .child(
           v_flex()
+            .max_w_full()
             .items_center()
             .px_2()
             .py_1()
@@ -1261,7 +1298,7 @@ impl PlayerView {
             } else {
               format_time(seconds)
             }))
-            .children(chapter.map(|c| div().text_xs().opacity(0.8).child(c)))
+            .children(chapter)
             .when(muted, |el| {
               el.child(
                 div()
@@ -2148,7 +2185,7 @@ impl Render for PlayerView {
     if show_ui {
       root = root.children(self.render_controls(window, cx));
       if let Some(menu) = self.menu {
-        root = root.child(self.render_menu(menu, cx));
+        root = root.child(self.render_menu(menu, window, cx));
       }
     }
     if self.stats {

@@ -16,7 +16,17 @@ use super::tracks::{SUBTITLE_DELAY_STEP, UpNext};
 use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView, format_time};
 use crate::assets::Icon;
 use crate::i18n::t;
+use crate::picture::{Picture, image_fill};
 use crate::tf;
+
+/// Width of a chapter's picture in the chapters menu.
+const CHAPTER_PICTURE_WIDTH: f32 = 24.;
+
+/// Widest a chapter's title gets in the chapters menu before it wraps.
+const CHAPTER_TITLE_MAX_WIDTH: f32 = 220.;
+
+/// Width / height of a chapter's picture: Twitch's box art (52×72).
+pub(super) const CHAPTER_PICTURE_ASPECT: f32 = 52. / 72.;
 
 /// The help's rows, keys and action in English then French; an empty action is the seek line,
 /// whose steps come from the preferences (see `render_help`).
@@ -95,13 +105,27 @@ pub fn format_step(seconds: u32) -> String {
 
 impl PlayerView {
   /// The open menu above the control bar.
-  pub(super) fn render_menu(&self, menu: Menu, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  pub(super) fn render_menu(
+    &self,
+    menu: Menu,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
     let theme = cx.theme();
     let (popover, border) = (theme.popover, theme.border);
     let mut list = v_flex().gap_1();
+    // The label in a child that takes the row: a button centers its own label.
+    let text = |label: String| {
+      div()
+        .flex_1()
+        .min_w_0()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .child(label)
+    };
     let entry = |id: SharedString, label: String, selected: bool| {
       Button::new(id)
-        .label(label)
+        .child(text(label))
         .when(selected, |b| b.primary())
         .when(!selected, |b| b.ghost())
     };
@@ -188,19 +212,56 @@ impl PlayerView {
       }
       Menu::Chapters => {
         let current = self.chapter_at(self.position + 0.5);
+        let pictures = !self.chapter_pictures.is_empty();
         for i in 0..self.chapters.len() {
           let start = self.chapters[i].start;
-          list = list.child(
-            entry(
-              format!("chapter-{i}").into(),
-              format!("{}  ·  {}", format_time(start), self.chapter_title(i)),
-              current == Some(i),
+          // `line_clamp` only counts wrapped lines: a line break would add more.
+          let title = self.chapter_title(i).replace(['\r', '\n'], " ");
+          let picture = pictures.then(|| {
+            let picture = self
+              .chapter_picture(i)
+              .cloned()
+              .unwrap_or(Picture::Sizes(Vec::new()));
+            div()
+              .flex_shrink_0()
+              .w(px(CHAPTER_PICTURE_WIDTH))
+              .h(px(CHAPTER_PICTURE_WIDTH / CHAPTER_PICTURE_ASPECT))
+              .child(image_fill(
+                &picture,
+                CHAPTER_PICTURE_WIDTH,
+                CHAPTER_PICTURE_ASPECT,
+                px(2.),
+                window,
+                cx,
+              ))
+          });
+          // A title wraps on two lines at most; the row grows with it.
+          let button = Button::new(SharedString::from(format!("chapter-{i}")))
+            .h_auto()
+            .min_h_8()
+            .py_1()
+            .child(
+              h_flex()
+                .flex_1()
+                .min_w_0()
+                .gap_2()
+                .children(picture)
+                .child(div().flex_shrink_0().child(format_time(start)))
+                .child(
+                  div()
+                    .min_w_0()
+                    .max_w(px(CHAPTER_TITLE_MAX_WIDTH))
+                    .whitespace_normal()
+                    .line_clamp(2)
+                    .child(title),
+                ),
             )
-            .on_click(cx.listener(move |this, _, _, cx| {
-              this.menu = None;
-              this.seek_to(start, cx);
-            })),
-          );
+            .when(current == Some(i), |b| b.primary())
+            .when(current != Some(i), |b| b.ghost());
+          list = list.child(button.on_click(cx.listener(move |this, _, _, cx| {
+            this.menu = None;
+            this.seek_to(start, cx);
+          })));
         }
       }
     }
@@ -211,7 +272,7 @@ impl PlayerView {
       .right_4()
       .bottom(px(84.))
       .max_h(px(380.))
-      .min_w(px(240.))
+      .min_w(px(if menu == Menu::Quality { 200. } else { 240. }))
       .overflow_y_scroll()
       .p_2()
       .rounded_lg()

@@ -143,6 +143,13 @@ Two credentials, for different things. Both are secrets, under the same rules as
       a Twitch user without BTTV answers 404 `{"message":"user not found"}`;
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
+- **VOD game chapters**, checked on 2026-11-03, anonymous: the raw query `video(id) { moments(first: 100,
+  momentRequestType: VIDEO_CHAPTER_MARKERS, types: [GAME_CHANGE]) { edges { node { positionMilliseconds
+  durationMilliseconds description details { ... on GameChangeMomentDetails { game { id displayName boxArtURL } } } } } } }`
+  answers with the web Client-ID, no integrity token (about 40 ms). The first chapter starts at 0; a VOD that
+  kept one game answers `edges: []`, an unknown id `video: null`. `boxArtURL` without arguments is a size template
+  (`…/ttv-boxart/21779-{width}x{height}.jpg`), as Helix's. Used by `Client::vod_chapters`, given to the
+  player as its chapters (only from two games).
 - **VOD resume position**, checked on 2026-11-02 with the auth-token: `currentUser { viewedVideos(first: N) }` and
   `video(id) { self { viewingHistory { position updatedAt } } }` read it (null signed out);
   `updateUserViewedVideo(input: {userID, videoID, position, videoType: VOD})` writes it, raw, with no integrity
@@ -190,6 +197,7 @@ Checked against the code on 2026-11-01:
 | Quality menu over the master's variants | `Source::qualities` (one `StartOptions` each) | Covered |
 | Clips as direct MP4 | `Source::options` with a plain URL | Covered |
 | VOD storyboard on the seek bar | `ui::player::Previews` | Covered |
+| VOD game chapters (twitch.tv's chapter button), with the game's box art | `set_chapters_with_pictures`: seek bar pieces, hover title and picture, chapters menu, Page Up / Page Down | Covered |
 | VOD muted parts (`muted_segments`) red on the seek bar, told on entering, skippable | `set_segments` with `SegmentKind::Muted` | Covered |
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |

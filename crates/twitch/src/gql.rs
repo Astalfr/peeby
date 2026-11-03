@@ -424,6 +424,66 @@ pub fn parse_storyboard(text: &str, url: &str) -> Vec<StoryboardLevel> {
   levels
 }
 
+/// twitch.tv's game chapters of a VOD (its player's chapter button), raw: it answers anonymously
+/// with the web Client-ID (checked 2026-11-03). A VOD that kept one game has none.
+const CHAPTERS_QUERY: &str = "query VideoChapters($id: ID!) { video(id: $id) { id moments(first: \
+  100, momentRequestType: VIDEO_CHAPTER_MARKERS, types: [GAME_CHANGE]) { edges { node { \
+  positionMilliseconds description details { ... on GameChangeMomentDetails { game { id \
+  displayName boxArtURL } } } } } } } }";
+
+/// A VOD's chapter: the game played from `start` until the next chapter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Chapter {
+  /// Seconds from the VOD's start.
+  pub start: u32,
+  /// The game's name.
+  pub game: String,
+  /// The game's box art, a size template (`{width}x{height}`) as Helix's.
+  pub box_art: Option<String>,
+}
+
+/// The request for VOD `id`'s game chapters.
+pub fn chapters_request(id: &str) -> Value {
+  json!({
+    "operationName": "VideoChapters",
+    "query": CHAPTERS_QUERY,
+    "variables": { "id": id },
+  })
+}
+
+/// Reads the chapters in order; a node without a position or a name is skipped. `video: null`
+/// is [`Error::NotFound`].
+pub fn parse_chapters(answer: &Value) -> Result<Vec<Chapter>> {
+  let video = &answer["data"]["video"];
+  if video.is_null() {
+    return Err(gql_error(answer).unwrap_or(Error::NotFound));
+  }
+  let mut chapters: Vec<Chapter> = video["moments"]["edges"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|edge| {
+      let node = &edge["node"];
+      let start = u32::try_from(node["positionMilliseconds"].as_u64()? / 1000).ok()?;
+      let details = &node["details"]["game"];
+      let game = details["displayName"]
+        .as_str()
+        .or_else(|| node["description"].as_str())
+        .filter(|name| !name.is_empty())?;
+      Some(Chapter {
+        start,
+        game: game.to_owned(),
+        box_art: details["boxArtURL"]
+          .as_str()
+          .filter(|url| !url.is_empty())
+          .map(str::to_owned),
+      })
+    })
+    .collect();
+  chapters.sort_by_key(|c| c.start);
+  Ok(chapters)
+}
+
 /// A VOD's chat replay around an offset, a page at a time.
 const COMMENTS_QUERY: &str = "query VideoComments($id: ID!, $offset: Int) { video(id: $id) { \
   owner { id } comments(contentOffsetSeconds: $offset) { edges { node { id contentOffsetSeconds \

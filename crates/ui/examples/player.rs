@@ -8,7 +8,9 @@
 //! size (panels larger than the player scroll) · `PEEBY_LIVE=1` plays it as a live (badge,
 //! uptime and viewers, no seeking) with a notice counting down for 8 s, as during a removed ad ·
 //! `PEEBY_LIVE=dvr` as a DVR live (YouTube's): the seek bar over its last 2 minutes, the badge
-//! greyed with the delay when started behind the edge (`PEEBY_START=60`).
+//! greyed with the delay when started behind the edge (`PEEBY_START=60`) · `PEEBY_PICTURES=1` gives
+//! the chapters a picture each, as the Twitch space does (empty boxes: the example has no image
+//! store).
 
 // The example reports the player's events on the console on purpose.
 #![allow(clippy::print_stderr)]
@@ -19,6 +21,7 @@ use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
 use player::{Chapter, StartOptions};
+use ui::picture::Picture;
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{Layout, LiveInfo, PlayerEvent, PlayerView, Prefs, Source};
 use ui::{assets, theme};
@@ -92,20 +95,29 @@ fn main() {
           } else {
             view.set_queue(Some((false, true)), cx);
             view.set_up_next(Some("S1:E2 · La suite".into()), cx);
-            view.set_chapters(
-              [
-                (0.0, "Introduction"),
-                (40.0, "Première partie"),
-                (95.0, "Seconde partie"),
-                (150.0, "Générique"),
-              ]
-              .map(|(start, title)| Chapter {
-                start,
-                title: Some(title.to_owned()),
-              })
-              .to_vec(),
-              cx,
-            );
+            let chapters = [
+              (0.0, "Introduction"),
+              (40.0, "Première partie"),
+              (
+                95.0,
+                "Seconde partie, au titre assez long pour tenir sur deux lignes au plus",
+              ),
+              (150.0, "Générique"),
+            ]
+            .map(|(start, title)| Chapter {
+              start,
+              title: Some(title.to_owned()),
+            })
+            .to_vec();
+            if std::env::var("PEEBY_PICTURES").as_deref() == Ok("1") {
+              let picture = || Some(Picture::sized(|w, h| format!("box-art-{w}x{h}.jpg")));
+              view.set_chapters_with_pictures(
+                chapters.into_iter().map(|c| (c, picture())).collect(),
+                cx,
+              );
+            } else {
+              view.set_chapters(chapters, cx);
+            }
           }
           view.set_segments(
             vec![

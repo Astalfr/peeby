@@ -3,8 +3,8 @@
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute; the viewer's channel points at the header's right ([`super::points`]);
-//! - a VOD: through the proxy too, seekable, with the storyboard's previews and its muted parts on
-//!   the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
+//! - a VOD: through the proxy too, seekable, with the storyboard's previews, its muted parts and
+//!   its game chapters on the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
 //!
 //! The layout is `ui::chat::watch_layout`: theater mode gives the whole page to the player and the
@@ -355,10 +355,11 @@ impl WatchView {
     }
   }
 
-  /// The VOD through the proxy, its storyboard, and its header from Helix.
+  /// The VOD through the proxy, its storyboard, its game chapters, and its header from Helix.
   fn start_vod(&mut self, id: String, cx: &mut Context<Self>) {
     let clicked = Instant::now();
     let (client, helix) = (self.client.clone(), self.helix.clone());
+    self.load_chapters(id.clone(), cx);
     let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
     let play = runtime::spawn(cx, {
       let (client, id) = (client.clone(), id.clone());
@@ -438,6 +439,32 @@ impl WatchView {
             None => {}
           }
           cx.notify();
+        })
+        .ok();
+    }));
+  }
+
+  /// The VOD's game chapters, given to the player when they come: playback does not wait for them.
+  fn load_chapters(&mut self, id: String, cx: &mut Context<Self>) {
+    let client = self.client.clone();
+    let chapters = runtime::spawn(cx, async move { client.vod_chapters(&id).await });
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      let chapters = match chapters.await {
+        Some(Ok(chapters)) => play::chapters(&chapters),
+        Some(Err(e)) => {
+          tracing::warn!("VOD chapters: {e}");
+          return;
+        }
+        None => return,
+      };
+      if chapters.is_empty() {
+        return;
+      }
+      this
+        .update(cx, |this, cx| {
+          this
+            .player
+            .update(cx, |p, cx| p.set_chapters_with_pictures(chapters, cx));
         })
         .ok();
     }));

@@ -152,6 +152,12 @@ impl Client {
     Ok(gql::parse_storyboard(&response.text().await?, &url))
   }
 
+  /// VOD `id`'s game chapters, in order; empty when it kept one game.
+  pub async fn vod_chapters(&self, id: &str) -> Result<Vec<gql::Chapter>> {
+    let answer = self.gql(&gql::chapters_request(id)).await?;
+    gql::parse_chapters(&answer)
+  }
+
   /// Where the viewer stopped in VOD `id` (their account's, as twitch.tv resumes it). Without an
   /// auth-token, no position and no user id.
   pub async fn vod_viewing(&self, id: &str) -> Result<gql::Viewing> {

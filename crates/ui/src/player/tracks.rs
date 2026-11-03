@@ -10,6 +10,7 @@ use player::{Choice, Track, TrackKind};
 use super::segments::{self, Segment, SegmentKind};
 use super::{PlayerEvent, PlayerView};
 use crate::i18n::t;
+use crate::picture::Picture;
 use crate::text::repair_mojibake;
 use crate::tf;
 
@@ -206,6 +207,11 @@ impl PlayerView {
       .unwrap_or_else(|| tf!("Chapter {}", "Chapitre {}", index + 1))
   }
 
+  /// The picture of chapter `index`, if the source gave one.
+  pub(super) fn chapter_picture(&self, index: usize) -> Option<&Picture> {
+    self.chapter_pictures.get(index)?.as_ref()
+  }
+
   /// Page Up / Page Down: the previous or next chapter.
   pub(super) fn add_chapter(&mut self, delta: i64, cx: &mut Context<Self>) {
     if self.chapters.is_empty() {
@@ -235,8 +241,24 @@ impl PlayerView {
   /// Chapters the source's server knows (YouTube's): they replace the file's. Segments are not
   /// guessed from their titles, whose words (`Intro`, `Outro`) are a creator's, not a release's.
   pub fn set_chapters(&mut self, chapters: Vec<player::Chapter>, cx: &mut Context<Self>) {
+    self.set_chapters_with_pictures(chapters.into_iter().map(|c| (c, None)).collect(), cx);
+  }
+
+  /// Chapters from the source's server with a picture each (a game's box art), shown in the
+  /// chapters menu and over the seek bar.
+  pub fn set_chapters_with_pictures(
+    &mut self,
+    chapters: Vec<(player::Chapter, Option<Picture>)>,
+    cx: &mut Context<Self>,
+  ) {
+    let (chapters, pictures): (Vec<_>, Vec<_>) = chapters.into_iter().unzip();
     self.given_chapters = true;
     self.chapters = chapters;
+    self.chapter_pictures = if pictures.iter().any(Option::is_some) {
+      pictures
+    } else {
+      Vec::new()
+    };
     self.refresh_segments();
     cx.notify();
   }
