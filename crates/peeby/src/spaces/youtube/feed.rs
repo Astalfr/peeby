@@ -1,6 +1,7 @@
 //! A grid of videos, loading the next page as the end comes into view: Home (recommendations),
-//! subscriptions, or a channel's "Videos" tab. Pages that need a session link to the account page.
-//! The subscriptions page can also show its videos as a list (`FeedLayout`).
+//! subscriptions, the watch history, or a channel's "Videos" tab. Pages that need a session link
+//! to the account page. The subscriptions page can also show its videos as a list (`FeedLayout`);
+//! the history is always a list, as on youtube.com.
 //!
 //! The videos are a virtual list (GPUI's `list`): each item is a row of cards (or one list row),
 //! and only the items in view are built on a frame, so scrolling a long feed stays smooth.
@@ -43,6 +44,8 @@ const OVERDRAW: Pixels = px(800.);
 pub enum Source {
   Home,
   Subscriptions,
+  /// The account's watch history, most recent first.
+  History,
   /// A channel's videos, newest first.
   Channel {
     id: String,
@@ -142,6 +145,7 @@ impl FeedView {
         (Some(token), _) => client.continuation(&token).await,
         (None, Source::Home) => client.home().await,
         (None, Source::Subscriptions) => client.subscriptions().await,
+        (None, Source::History) => client.history().await,
         (None, Source::Channel { id, .. }) => client.channel_videos(&id).await,
       }
     });
@@ -305,6 +309,7 @@ impl FeedView {
     match &self.source {
       Source::Home => t("Home", "Accueil").into(),
       Source::Subscriptions => t("Subscriptions", "Abonnements").into(),
+      Source::History => t("History", "Historique").into(),
       Source::Channel { name, .. } => name.clone(),
     }
   }
@@ -348,16 +353,27 @@ impl FeedView {
         )
         .to_owned(),
       ),
+      (_, Source::History, _) => (
+        self
+          .message
+          .clone()
+          .unwrap_or_else(|| t("No history", "Aucun historique").into()),
+        t(
+          "The videos watched on this account appear here, unless the watch history is turned            off.",
+          "Les vidéos regardées sur ce compte apparaissent ici, sauf si l'historique des vidéos            regardées est désactivé.",
+        )
+        .to_owned(),
+      ),
       _ => (t("No videos", "Aucune vidéo").to_owned(), String::new()),
     };
     let needs_session = matches!(self.state, State::SignedOut | State::Expired)
       || (matches!(self.source, Source::Home) && !self.logged_in);
     let nav = self.nav.clone();
     notice(
-      if needs_session {
-        Icon::Account
-      } else {
-        Icon::Home
+      match (needs_session, &self.source) {
+        (true, _) => Icon::Account,
+        (false, Source::History) => Icon::History,
+        (false, _) => Icon::Home,
       },
       title,
       body,
@@ -427,8 +443,11 @@ fn grid(window: &Window, cx: &gpui::App) -> (usize, f32) {
 
 impl Render for FeedView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let list_mode = matches!(self.source, Source::Subscriptions)
-      && Settings::get(cx).subscriptions_layout == FeedLayout::List;
+    let list_mode = match self.source {
+      Source::Subscriptions => Settings::get(cx).subscriptions_layout == FeedLayout::List,
+      Source::History => true,
+      _ => false,
+    };
     let shown = if matches!(self.state, State::Loading) {
       0.
     } else {

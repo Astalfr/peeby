@@ -113,6 +113,17 @@ impl Client {
     self.checked(parse_subscriptions(&response))
   }
 
+  /// The account's watch history, most recent first (its next pages through
+  /// [`Client::continuation`]). Needs cookies. With the history off, no videos and a
+  /// [`Feed::message`].
+  pub async fn history(&self) -> Result<Feed> {
+    self.require_session()?;
+    let response = self
+      .web("browse", json!({ "browseId": "FEhistory" }), true)
+      .await?;
+    self.feed(&response)
+  }
+
   /// All subscribed channels, in YouTube's order. Needs cookies.
   pub async fn subscribed_channels(&self) -> Result<Vec<Channel>> {
     self.require_session()?;

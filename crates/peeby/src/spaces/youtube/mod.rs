@@ -49,6 +49,8 @@ use watch::WatchView;
 pub enum Route {
   Home,
   Subscriptions,
+  /// The account's watch history.
+  History,
   /// The subscribed channels.
   Channels,
   /// A channel's videos.
@@ -98,7 +100,7 @@ impl Route {
   /// Top-level pages (the sidebar's) reset the stack; the others are pushed on it.
   fn is_top_level(&self) -> bool {
     match self {
-      Self::Home | Self::Subscriptions | Self::Playlists | Self::Search => true,
+      Self::Home | Self::Subscriptions | Self::History | Self::Playlists | Self::Search => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
     }
@@ -234,6 +236,9 @@ impl YouTubeSpace {
       Route::Subscriptions => cx
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, cx))
         .into(),
+      Route::History => cx
+        .new(|cx| FeedView::new(client, Source::History, nav, cx))
+        .into(),
       Route::Channels => cx
         .new(|cx| ChannelsView::new(client, nav, window, cx))
         .into(),
@@ -329,6 +334,7 @@ impl YouTubeSpace {
     Some(match id {
       "home" => Route::Home,
       "subscriptions" => Route::Subscriptions,
+      "history" => Route::History,
       "watch-later" => Route::watch_later(),
       "playlists" => Route::Playlists,
       _ => return None,
@@ -359,6 +365,7 @@ impl Space for YouTubeSpace {
         Icon::Subscriptions,
         false,
       ),
+      ("history", t("History", "Historique"), Icon::History, false),
       (
         "watch-later",
         save::watch_later_title(),

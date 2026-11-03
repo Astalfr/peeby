@@ -71,6 +71,7 @@ icons! {
   Next => "skip-forward",
   More => "ellipsis-vertical",
   WatchLater => "clock",
+  History => "history",
   Save => "list-plus",
   Check => "check",
   Lock => "lock",

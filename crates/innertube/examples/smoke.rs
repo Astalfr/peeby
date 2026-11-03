@@ -51,6 +51,16 @@ async fn main() {
       }),
     );
     check(
+      "history",
+      client.history().await.map(|f| {
+        format!(
+          "{} videos · more: {}",
+          f.items.len(),
+          f.continuation.is_some()
+        )
+      }),
+    );
+    check(
       "subscribed_channels",
       client.subscribed_channels().await.map(|c| {
         let bells = c.iter().filter(|c| c.notifications.is_some()).count();
