@@ -12,8 +12,9 @@
 //!
 //! The list is loaded each time the panel opens, without the kinds left out of the bell, its
 //! next page when the end of the list comes near; each page is merged in by date (a
-//! notification's id). A click marks the notification read, at once
-//! here and on YouTube.
+//! notification's id). Opening the panel marks the unread notifications it loads read on
+//! YouTube (one request each, as clicks on youtube.com); their dot still shows until it closes,
+//! telling what was new.
 
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
@@ -136,23 +137,23 @@ fn merge(
   items.sort_by_key(|n| std::cmp::Reverse(sent_micros(n)));
 }
 
-/// Marks a notification read on YouTube, as a click on it on youtube.com; `token` is its
-/// [`Notification::read_token`].
-fn mark_read(token: String, cx: &mut App) {
+/// Marks notifications read on YouTube, as a click on each on youtube.com (it has no request
+/// for several), one after the other; `tokens` are their [`Notification::read_token`]s.
+fn mark_read(tokens: Vec<String>, cx: &mut App) {
+  if tokens.is_empty() {
+    return;
+  }
   let Some(client) = cx.try_global::<Session>().map(|s| s.0.clone()) else {
     return;
   };
-  let task = runtime::spawn(
-    cx,
-    async move { client.mark_notification_read(&token).await },
-  );
-  cx.background_executor()
-    .spawn(async move {
-      if let Some(Err(e)) = task.await {
+  // Runs on the network runtime to the end even though nobody awaits it.
+  drop(runtime::spawn(cx, async move {
+    for token in tokens {
+      if let Err(e) = client.mark_notification_read(&token).await {
         tracing::warn!("mark notification read: {e}");
       }
-    })
-    .detach();
+    }
+  }));
 }
 
 /// Shows the uploads and lives of `fresh` as Windows notifications, for the kinds that ask
@@ -204,9 +205,7 @@ fn toasts(fresh: &[Notification], nav: &WeakEntity<YouTubeSpace>, cx: &mut App) 
         toast::show(
           toast,
           move |window, cx| {
-            if let Some(token) = token {
-              mark_read(token, cx);
-            }
+            mark_read(token.into_iter().collect(), cx);
             if let Some(id) = video_id {
               nav
                 .update(cx, |space, cx| {
@@ -447,6 +446,16 @@ impl InboxPanel {
                 .flat_map(|s| &s.items)
                 .map(|n| n.id.clone());
               seen(cx, |seen| seen.extend(ids));
+              // Opening the inbox reads what it shows: marked read on YouTube, while their dot
+              // still tells here what was new.
+              let tokens = page
+                .sections
+                .iter()
+                .flat_map(|s| &s.items)
+                .filter(|n| !n.read && in_bell(n.kind, cx))
+                .filter_map(|n| n.read_token.clone())
+                .collect();
+              mark_read(tokens, cx);
               this.append(page, |n| in_bell(n.kind, cx))
             }
             Some(Err(e)) => {
@@ -486,7 +495,7 @@ impl InboxPanel {
     }
   }
 
-  /// Opens the video of a notification and marks it read.
+  /// Opens the video of a notification (already marked read on YouTube by the opening).
   fn open(&mut self, item: usize, window: &mut Window, cx: &mut Context<Self>) {
     let Some(notification) = self.items.get_mut(item) else {
       return;
@@ -494,12 +503,7 @@ impl InboxPanel {
     let Some(video_id) = notification.video_id.clone() else {
       return;
     };
-    if !notification.read {
-      notification.read = true;
-      if let Some(token) = notification.read_token.clone() {
-        mark_read(token, cx);
-      }
-    }
+    notification.read = true;
     self
       .popover
       .update(cx, |popover, cx| popover.dismiss(window, cx))
