@@ -6,7 +6,7 @@
 use gpui::prelude::*;
 use gpui::{
   AnyElement, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea, div,
-  linear_color_stop, linear_gradient, px,
+  linear_color_stop, linear_gradient, px, rems,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
@@ -213,6 +213,23 @@ impl PlayerView {
       Menu::Chapters => {
         let current = self.chapter_at(self.position + 0.5);
         let pictures = !self.chapter_pictures.is_empty();
+        // The times as wide as the longest one (`0:00` and `1:00:04`), so that the titles line up.
+        let time_width = {
+          let style = window.text_style();
+          let size = rems(0.875).to_pixels(window.rem_size());
+          self
+            .chapters
+            .iter()
+            .map(|c| {
+              let time = format_time(c.start);
+              let run = style.to_run(time.len());
+              window
+                .text_system()
+                .shape_line(time.into(), size, &[run], None)
+                .width
+            })
+            .fold(px(0.), Pixels::max)
+        };
         for i in 0..self.chapters.len() {
           let start = self.chapters[i].start;
           // `line_clamp` only counts wrapped lines: a line break would add more.
@@ -246,7 +263,13 @@ impl PlayerView {
                 .min_w_0()
                 .gap_2()
                 .children(picture)
-                .child(div().flex_shrink_0().child(format_time(start)))
+                .child(
+                  div()
+                    .flex_shrink_0()
+                    .w(time_width)
+                    .whitespace_nowrap()
+                    .child(format_time(start)),
+                )
                 .child(
                   div()
                     .min_w_0()
