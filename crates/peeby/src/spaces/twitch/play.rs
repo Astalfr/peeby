@@ -27,6 +27,10 @@ pub const QUALITIES: &[u32] = &[1440, 1080, 720, 480, 360];
 /// Default highest quality.
 pub const DEFAULT_HEIGHT: u32 = 1080;
 
+/// How far ahead mpv downloads a VOD or a clip: unbounded, it would fetch a whole VOD through
+/// the proxy at once. A live never gets this far ahead of its edge.
+const READAHEAD_SECS: u32 = 60;
+
 /// mpv's options for `url`: Twitch's CDN wants the player's origin.
 fn options(url: &str, player: &settings::Player) -> StartOptions {
   let mut options = StartOptions {
@@ -35,6 +39,7 @@ fn options(url: &str, player: &settings::Player) -> StartOptions {
       format!("Referer: {}", twitch::usher::PLAYER_ORIGIN),
       format!("Origin: {}", twitch::usher::PLAYER_ORIGIN),
     ],
+    readahead_secs: Some(READAHEAD_SECS),
     ..StartOptions::default()
   };
   player.apply(&mut options);

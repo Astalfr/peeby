@@ -80,6 +80,8 @@ pub struct StartOptions {
   pub subtitle_scale: Option<f64>,
   /// Read-ahead buffer, MiB (`demuxer-max-bytes`); default 300.
   pub buffer_mb: Option<u32>,
+  /// Read-ahead limit, seconds (`cache-secs`); default mpv's, an hour: as far as `buffer_mb`.
+  pub readahead_secs: Option<u32>,
   /// Path of `libmpv-2.dll`; default: next to the executable.
   pub libmpv_path: Option<PathBuf>,
   /// Resolve page URLs (YouTube…) through yt-dlp with mpv's `ytdl_hook`; `None` disables it.
@@ -605,6 +607,9 @@ fn mpv_options(options: &StartOptions, backend: Backend) -> Vec<(&'static str, S
     ("audio-channels", "auto-safe".into()),
     ("input-default-bindings", "no".into()),
   ];
+  if let Some(secs) = options.readahead_secs {
+    opts.push(("cache-secs", secs.to_string()));
+  }
   if options.start_seconds > 0.0 {
     opts.push(("start", format!("{:.3}", options.start_seconds)));
   }

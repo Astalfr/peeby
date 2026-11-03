@@ -48,6 +48,11 @@ const PAUSE_PULSE: Duration = Duration::from_millis(600);
 /// A live paused longer than this resumes at its live edge rather than where it stopped (shorter:
 /// a double click's two toggles).
 const LIVE_RESUME_AFTER: Duration = Duration::from_secs(1);
+/// mpv reporting the end further than this from the duration: a stream stopped short (its
+/// segments stopped coming), not the end of the video.
+const EARLY_END_MARGIN: f64 = 10.0;
+/// A second early end within this time of a reload is not reloaded again: it fails.
+const EARLY_END_RETRY: Duration = Duration::from_secs(60);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
@@ -282,6 +287,8 @@ pub struct PlayerView {
   live_tick: Option<Task<()>>,
   /// A message over the picture from the page, e.g. why it waits (an ad removed from a live).
   notice: Option<SharedString>,
+  /// When the stream was last reloaded after ending early ([`EARLY_END_MARGIN`]).
+  early_end_reload: Option<Instant>,
   _events: Option<Task<()>>,
 }
 
@@ -366,6 +373,7 @@ impl PlayerView {
       live_info: None,
       live_tick: None,
       notice: None,
+      early_end_reload: None,
       _events: None,
     }
   }
@@ -855,6 +863,7 @@ impl PlayerView {
       Event::Muted(muted) => self.muted = muted,
       Event::Tracks(tracks) => self.on_tracks(tracks, cx),
       Event::Chapters(chapters) => self.on_chapters(chapters),
+      Event::EndReached if self.ended_early() => self.reload_after_early_end(cx),
       Event::EndReached => {
         self.position = self.position.max(self.duration);
         let autoplay = self.up_next_title.is_some()
@@ -877,6 +886,57 @@ impl PlayerView {
       }
     }
     cx.notify();
+  }
+
+  /// Whether mpv reached the end of a video well before its duration: one of its streams (the
+  /// video or the separate audio of a YouTube variant) stopped, and the other ran on alone or
+  /// a seek went past where it stopped. Not a reason to play the next video.
+  fn ended_early(&self) -> bool {
+    !self.is_live() && self.duration > 0.0 && self.position < self.duration - EARLY_END_MARGIN
+  }
+
+  /// Restarts mpv on the playing quality from the current position, once: a second early end
+  /// soon after stops playback with an error rather than skipping to the next video.
+  fn reload_after_early_end(&mut self, cx: &mut Context<Self>) {
+    let options = self.source.as_ref().map(|source| {
+      self
+        .quality
+        .and_then(|i| source.qualities.get(i))
+        .map_or_else(|| source.options.clone(), |q| q.options.clone())
+    });
+    let retried = self
+      .early_end_reload
+      .is_some_and(|at| at.elapsed() < EARLY_END_RETRY);
+    let Some(options) = options.filter(|_| !retried) else {
+      tracing::warn!(
+        "stream ended at {:.0} s of {:.0} s",
+        self.position,
+        self.duration
+      );
+      return self.fail(
+        t(
+          "Playback stopped: the stream ended before the video.",
+          "Lecture interrompue : le flux s'est arrêté avant la fin de la vidéo.",
+        )
+        .into(),
+        cx,
+      );
+    };
+    tracing::warn!(
+      "stream ended at {:.0} s of {:.0} s: reloading",
+      self.position,
+      self.duration
+    );
+    self.early_end_reload = Some(Instant::now());
+    let options = StartOptions {
+      start_seconds: self.position,
+      ..options
+    };
+    if let Some(old) = self.player.take() {
+      old.set_paused(true);
+    }
+    self.captions_added.clear();
+    self.start_with(options, Instant::now(), cx);
   }
 
   fn with_player(&self, f: impl FnOnce(&Player)) {

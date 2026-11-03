@@ -19,6 +19,7 @@ These are starting points, to be tuned. The reason for each option is recorded h
 | `cache` | `yes` | Network file |
 | `demuxer-max-bytes` | `300MiB` | Readahead for remote MKV, to tune |
 | `demuxer-readahead-secs` | `20` | To tune |
+| `cache-secs` | `60` for YouTube and Twitch (`StartOptions::readahead_secs`), else mpv's default (1 h) | Without it, mpv downloads a YouTube video as fast as it can: after about 160 segments in two seconds, YouTube answers HTTP 401 to the rest, and the video or audio stops where its download stopped. A Twitch VOD would otherwise be fetched whole through the proxy |
 | `network-timeout` | `30` | Slow servers |
 | `http-header-fields` | `Authorization: MediaBrowser …`, added with `change-list http-header-fields append` | Auth without a token in the URL. As a plain option it would be split on its commas; the `-append` option variants do not exist in the client API |
 | `embeddedfonts` | `yes` | MKV font attachments (default) |

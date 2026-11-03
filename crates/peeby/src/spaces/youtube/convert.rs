@@ -86,6 +86,11 @@ pub fn error_text(error: &innertube::Error) -> String {
   }
 }
 
+/// How far ahead mpv downloads a YouTube video. Unbounded, it fetches the whole video at once:
+/// after about 160 segments in two seconds YouTube answers 401 to every further one, and the
+/// video or the audio stops where its download stopped.
+pub const READAHEAD_SECS: u32 = 60;
+
 /// mpv options for an HLS variant and its audio rendition (YouTube's variants are video only).
 fn hls_options(
   video: &str,
@@ -97,6 +102,7 @@ fn hls_options(
     url: video.to_owned(),
     external_audio: audio.map(str::to_owned).into_iter().collect(),
     http_headers: vec![format!("User-Agent: {user_agent}")],
+    readahead_secs: Some(READAHEAD_SECS),
     // Opt-in only: the log contains stream URLs, which carry the user's IP.
     log_file: std::env::var_os("PEEBY_MPV_LOG").map(Into::into),
     ..Default::default()
