@@ -18,7 +18,12 @@ use super::InMain as OnClick;
 
 /// Peeby's AppUserModelID, registered under `HKCU\Software\Classes\AppUserModelId` so that an
 /// app without a Start menu shortcut can show toasts, under its name and icon.
-const APP_ID: &str = "Peeby.Peeby";
+/// A debug build has its own, so that Windows lists it apart.
+const APP_ID: &str = if cfg!(debug_assertions) {
+  "Peeby.PeebyDev"
+} else {
+  "Peeby.Peeby"
+};
 /// Toasts kept for their click: Windows' Action Center holds about twenty per app.
 const KEPT: usize = 32;
 
@@ -155,7 +160,7 @@ pub fn register(icon: Option<&Path>) {
   let key =
     windows_registry::CURRENT_USER.create(format!(r"Software\Classes\AppUserModelId\{APP_ID}"));
   let result = key.and_then(|key| {
-    key.set_string("DisplayName", "Peeby")?;
+    key.set_string("DisplayName", crate::settings::APP_NAME)?;
     match icon {
       Some(icon) => key.set_string("IconUri", icon.to_string_lossy().as_ref()),
       None => Ok(()),

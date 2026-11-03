@@ -4,7 +4,7 @@
 use windows_registry::CURRENT_USER;
 
 const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const VALUE: &str = "Peeby";
+const VALUE: &str = crate::settings::APP_NAME;
 /// The argument of the `Run` key's command: Peeby starts without showing its window.
 pub const BACKGROUND: &str = "--background";
 

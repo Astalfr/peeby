@@ -10,7 +10,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Build: `cargo build` · run: `cargo run -p peeby` (optionally `-- <youtube-url-or-id>…` to open videos, the last on top);
   `PEEBY_DISPLAY=secondary` (or `=2`) opens the window on another screen: use it for test runs.
   Peeby is a single instance (ADR 0020): while it runs, a launch only hands it its arguments and
-  ends, so quit it first (notification area icon → Quit); `-- --background` starts it hidden
+  ends, so quit it first (notification area icon → Quit); `-- --background` starts it hidden.
+  A debug build is a separate profile (`peeby-dev`: own settings, cookies, Credential Manager
+  entries, instance), so it runs next to the release build but signs in on its own
 - Test runs never open a console window on the user's screen: debug builds, examples and spikes are console
   apps, so start them with `Start-Process -NoNewWindow` (redirect their output to files), or `cargo run` in
   the current shell; helper scripts follow the same rule

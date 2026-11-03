@@ -4,6 +4,9 @@
 //! The cookies are a whole browser cookie jar (dozens of values, several KB): too large for the
 //! Windows Credential Manager, which holds Jellyfin's single token (ADR 0009). They live in a file
 //! under the user's profile instead (`%APPDATA%\peeby\cookies.txt`), never in logs.
+//!
+//! A debug build has a profile of its own ([`PROFILE`]), so that it runs next to the release
+//! one without sharing its cookie jar or its single-use Twitch refresh token.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -11,6 +14,22 @@ use std::time::Duration;
 use gpui::{App, Global, Task};
 use innertube::Cookies;
 use serde::{Deserialize, Serialize};
+
+/// This build's profile: the folder of its settings and cookies, its Credential Manager service
+/// and its single instance. `peeby-dev` for a debug build, signed in on its own; the caches
+/// (`%LOCALAPPDATA%\peeby`) stay shared.
+pub const PROFILE: &str = if cfg!(debug_assertions) {
+  "peeby-dev"
+} else {
+  "peeby"
+};
+
+/// The app's name where Windows shows it (window, notification area, toasts, `Run` key).
+pub const APP_NAME: &str = if cfg!(debug_assertions) {
+  "Peeby (dev)"
+} else {
+  "Peeby"
+};
 
 /// Languages offered for YouTube: (language, region, label).
 pub const LANGUAGES: &[(&str, &str, &str)] = &[
@@ -430,7 +449,7 @@ impl Settings {
 }
 
 fn settings_path() -> Option<PathBuf> {
-  dirs::config_dir().map(|d| d.join("peeby").join("settings.toml"))
+  dirs::config_dir().map(|d| d.join(PROFILE).join("settings.toml"))
 }
 
 /// Writes next to `path` then renames, so a crash never leaves a truncated file.
@@ -443,11 +462,11 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
   std::fs::rename(&temporary, path)
 }
 
-/// `PEEBY_COOKIES`, else `%APPDATA%\peeby\cookies.txt`.
+/// `PEEBY_COOKIES`, else `%APPDATA%\peeby\cookies.txt` (`peeby-dev` for a debug build).
 pub fn cookies_path() -> Option<PathBuf> {
   std::env::var_os("PEEBY_COOKIES")
     .map(PathBuf::from)
-    .or_else(|| dirs::config_dir().map(|d| d.join("peeby").join("cookies.txt")))
+    .or_else(|| dirs::config_dir().map(|d| d.join(PROFILE).join("cookies.txt")))
 }
 
 /// Loads the session cookies, if a file is there. A broken file is logged and ignored, so the

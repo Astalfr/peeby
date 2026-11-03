@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use twitch::auth::Store;
 
-const KEYRING_SERVICE: &str = "peeby";
+const KEYRING_SERVICE: &str = crate::settings::PROFILE;
 const REFRESH: &str = "twitch|refresh";
 const AUTH_TOKEN: &str = "twitch|auth-token";
 

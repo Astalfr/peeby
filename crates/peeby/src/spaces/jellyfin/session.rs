@@ -12,7 +12,7 @@ use ui::images::{self, Download, Fetch};
 
 use crate::settings::{self, Settings};
 
-const KEYRING_SERVICE: &str = "peeby";
+const KEYRING_SERVICE: &str = crate::settings::PROFILE;
 
 /// What the app tells the server about itself.
 pub fn client_info(device_id: &str) -> ClientInfo {

@@ -43,7 +43,7 @@ pub fn init(cx: &mut App) -> bool {
     }
   };
   let built = TrayIconBuilder::new()
-    .with_tooltip("Peeby")
+    .with_tooltip(crate::settings::APP_NAME)
     .with_icon(icon)
     .with_menu(Box::new(menu))
     .with_menu_on_left_click(false)

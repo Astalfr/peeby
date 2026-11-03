@@ -76,6 +76,12 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   ends too: running alone would bring back the race on the cookies and the refresh token. The
   first one shows its window and opens what it was given (YouTube videos, a Twitch page). The
   next end of the pipe is made before the last one is read, so the pipe never disappears.
+- **A debug build is another profile** (`settings::PROFILE`, 2026-11-03), so that `cargo run`
+  works while the release build runs: `peeby-dev` names its pipe (`\\.\pipe\peeby-dev-<user
+  name>`), its settings and cookies folder (`%APPDATA%\peeby-dev`) and its Credential Manager
+  service, so it never shares the cookie jar or the single-use refresh token and signs in on its
+  own. Its app id is `Peeby.PeebyDev`, its name "Peeby (dev)" (window, notification area, toasts,
+  `Run` value). The caches (`%LOCALAPPDATA%\peeby`) stay shared.
 - **Start with Windows** (`start_with_windows`, off by default): a `Peeby` value under
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `"<exe>" --background`; it is
   rewritten at startup (the executable may have moved). `--background` opens the main window

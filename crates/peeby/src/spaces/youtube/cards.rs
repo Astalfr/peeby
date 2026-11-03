@@ -73,11 +73,13 @@ pub fn video_card(
     .grid(width, window, cx)
 }
 
-/// Compact card (related videos).
+/// Compact card (related videos), with the "Watch later" button.
 pub fn compact_card(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut App) -> AnyElement {
   let id = format!("related-{}", video.id);
   let hover = Hover::new(&id, window, cx);
+  let t = hover.t;
   card(&id, hover, video)
+    .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .on_click(open_video(video, nav))
     .on_middle_click(open_video_in_new_tab(video, nav))
     .compact(window, cx)

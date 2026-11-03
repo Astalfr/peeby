@@ -16,9 +16,9 @@ use windows::Win32::System::Pipes::{
 use windows::Win32::UI::WindowsAndMessaging::{IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, ShowWindow};
 use windows::core::{HSTRING, PCWSTR};
 
-/// The pipe's name, before the user's: pipe names are machine-wide, and another user's Peeby
-/// is another instance.
-const PIPE: &str = r"\\.\pipe\peeby-";
+/// The pipes' folder. A pipe is named after the profile and the user: pipe names are
+/// machine-wide, and another user's Peeby (or a debug build) is another instance.
+const PIPE: &str = r"\\.\pipe\";
 /// A launch's arguments, at most.
 const MAX_MESSAGE: u64 = 64 * 1024;
 
@@ -131,14 +131,14 @@ impl Listener {
   }
 }
 
-/// This user's pipe: [`PIPE`] and the user name, letters and digits only.
+/// This user's pipe: [`PIPE`], the profile and the user name, letters and digits only.
 fn pipe_name() -> String {
   let user: String = std::env::var("USERNAME")
     .unwrap_or_default()
     .chars()
     .filter(char::is_ascii_alphanumeric)
     .collect();
-  format!("{PIPE}{user}")
+  format!("{PIPE}{}-{user}", crate::settings::PROFILE)
 }
 
 /// A new end of the pipe `name`; `first` fails with `ERROR_ACCESS_DENIED` when it exists.

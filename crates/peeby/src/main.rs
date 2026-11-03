@@ -148,7 +148,7 @@ fn main() {
         // GPUI caps an unfocused window at 30 fps by default: video plays while you work elsewhere.
         inactive_frame_interval: None,
         titlebar: Some(TitlebarOptions {
-          title: Some("Peeby".into()),
+          title: Some(settings::APP_NAME.into()),
           ..TitleBar::title_bar_options()
         }),
         ..TitleBar::window_options()
