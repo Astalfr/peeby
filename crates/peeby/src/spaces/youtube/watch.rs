@@ -196,7 +196,7 @@ impl WatchView {
     }
     // The current video near the top of the panel, under the one before it.
     let queue_scroll_to = queue.as_ref().map(|queue| {
-      let current = queue.read(cx).position() - 1;
+      let current = queue.read(cx).place();
       current.min(QUEUE_BEFORE).saturating_sub(1)
     });
     // The page goes (replaced, back, closed): the last watch-time ping.
@@ -264,7 +264,8 @@ impl WatchView {
     let (title, position, total) = (queue.title.clone(), queue.position(), queue.order().len());
     let playlist_id = queue.playlist_id.clone();
     let (shuffle, repeat, more) = (queue.shuffle(), queue.repeat(), queue.has_more());
-    let current = position - 1;
+    // Once the video playing was removed, `current` is the one that followed it, not highlighted.
+    let (current, playing) = (queue.place(), queue.playing_place());
     let start = current.saturating_sub(QUEUE_BEFORE);
     let end = (current + QUEUE_AFTER + 1).min(total);
     let entries: Vec<_> = queue.order()[start..end]
@@ -276,18 +277,17 @@ impl WatchView {
       .into_iter()
       .map(|(place, index, video)| {
         let queue = entity.clone();
-        // The playing video keeps its place: no "x" on it.
+        // The playing video too: it plays on, out of the queue.
         let remove = video
           .set_video_id
           .clone()
-          .filter(|_| place != current)
           .map(|entry| save::removal(&playlist_id, &title, &entry, &video.id, cx));
         playlist_row(
           &format!("q-{place}-{}", video.id),
           place + 1,
           &video,
           QUEUE_THUMB,
-          place == current,
+          Some(place) == playing,
           move |_, cx| queue.update(cx, |q, cx| q.jump(index, cx)),
           remove,
           window,
@@ -346,7 +346,7 @@ impl WatchView {
                 };
                 queue.update(cx, |q, cx| q.toggle_shuffle(cx));
                 // The order changed: bring the current video back into view.
-                let current = queue.read(cx).position() - 1;
+                let current = queue.read(cx).place();
                 this.queue_scroll_to = Some(current.min(QUEUE_BEFORE).saturating_sub(1));
                 cx.notify();
               })),

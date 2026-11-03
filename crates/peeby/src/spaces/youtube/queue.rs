@@ -28,8 +28,11 @@ pub struct Queue {
   items: Vec<VideoItem>,
   /// Indexes in `items`, in play order.
   order: Vec<usize>,
-  /// Place of the current video in `order`.
+  /// Place of the current video in `order`; once it has been removed (`current_removed`), the
+  /// place of the video that followed it.
   position: usize,
+  /// The video playing was removed from the playlist: it plays on, no longer in the queue.
+  current_removed: bool,
   shuffle: bool,
   repeat: bool,
   continuation: Option<String>,
@@ -64,7 +67,7 @@ impl Queue {
     let edits = save::edits(cx);
     let edits = cx.subscribe(&edits, |queue, _, removed: &EntryRemoved, cx| {
       if removed.playlist_id == queue.playlist_id {
-        queue.drop_entry(&removed.set_video_id);
+        queue.drop_entry(&removed.set_video_id, cx);
         cx.notify();
       }
     });
@@ -74,6 +77,7 @@ impl Queue {
       title,
       order: (0..items.len()).collect(),
       position: start,
+      current_removed: false,
       items,
       shuffle: false,
       repeat: false,
@@ -93,9 +97,32 @@ impl Queue {
     &self.items
   }
 
-  /// Index in [`Self::items`] of the video playing.
+  /// Index in [`Self::items`] of the video playing, unless it was removed from the queue.
   pub fn current(&self) -> Option<usize> {
+    if self.current_removed {
+      return None;
+    }
     self.order.get(self.position).copied()
+  }
+
+  /// Place in [`Self::order`] of the video playing, or of the one that followed it once it was
+  /// removed.
+  pub fn place(&self) -> usize {
+    self.position
+  }
+
+  /// Place in [`Self::order`] of the video playing, unless it was removed.
+  pub fn playing_place(&self) -> Option<usize> {
+    (!self.current_removed && self.position < self.order.len()).then_some(self.position)
+  }
+
+  /// Place in [`Self::order`] of the video Next plays.
+  fn next_place(&self) -> usize {
+    if self.current_removed {
+      self.position
+    } else {
+      self.position + 1
+    }
   }
 
   pub fn current_video(&self) -> Option<&VideoItem> {
@@ -107,9 +134,10 @@ impl Queue {
     &self.order
   }
 
-  /// 1-based place of the current video in the play order.
+  /// 1-based place of the current video in the play order, or the number of videos before it
+  /// once it was removed.
   pub fn position(&self) -> usize {
-    self.position + 1
+    self.position + usize::from(!self.current_removed)
   }
 
   pub fn shuffle(&self) -> bool {
@@ -130,7 +158,7 @@ impl Queue {
   }
 
   pub fn has_next(&self) -> bool {
-    self.position + 1 < self.order.len()
+    self.next_place() < self.order.len()
       || self.continuation.is_some()
       || (self.repeat && !self.order.is_empty())
   }
@@ -150,8 +178,8 @@ impl Queue {
   /// The next video: the following one, the first again with repeat on, or the first of the
   /// next page once it has loaded. Nothing at the end of the playlist.
   pub fn next(&mut self, cx: &mut Context<Self>) {
-    if self.position + 1 < self.order.len() {
-      self.play_at(self.position + 1, cx);
+    if self.next_place() < self.order.len() {
+      self.play_at(self.next_place(), cx);
     } else if self.continuation.is_some() {
       self.advance_when_loaded = true;
       self.load_more(cx);
@@ -179,8 +207,9 @@ impl Queue {
     }
   }
 
-  /// Drops the entry `set_video_id` (removed from the playlist), unless it is playing.
-  fn drop_entry(&mut self, set_video_id: &str) {
+  /// Drops the entry `set_video_id` (removed from the playlist). The video playing plays on,
+  /// out of the queue: Next plays the one that followed it.
+  fn drop_entry(&mut self, set_video_id: &str, cx: &mut Context<Self>) {
     let Some(index) = self
       .items
       .iter()
@@ -188,9 +217,7 @@ impl Queue {
     else {
       return;
     };
-    if self.current() == Some(index) {
-      return;
-    }
+    let playing = self.current() == Some(index);
     self.items.remove(index);
     if let Some(place) = self.order.iter().position(|&i| i == index) {
       self.order.remove(place);
@@ -203,12 +230,28 @@ impl Queue {
         *i -= 1;
       }
     }
+    if playing {
+      self.current_removed = true;
+      // The video that followed is next now: resolve its stream ahead, as `started` did.
+      if let Some(&next) = self.order.get(self.position) {
+        let id = self.items[next].id.clone();
+        prefetch::warm(&id, cx);
+      }
+      if self.order.len() - self.position <= LOAD_AHEAD {
+        self.load_more(cx);
+      }
+    }
   }
 
   pub fn toggle_shuffle(&mut self, cx: &mut Context<Self>) {
     if self.shuffle {
       self.shuffle = false;
-      let current = self.current().unwrap_or(0);
+      // Once the video playing was removed, the one that was to follow stays next.
+      let current = self
+        .order
+        .get(self.position)
+        .copied()
+        .unwrap_or(self.items.len());
       self.order = (0..self.items.len()).collect();
       self.position = current;
     } else {
@@ -224,25 +267,31 @@ impl Queue {
 
   fn play_at(&mut self, position: usize, cx: &mut Context<Self>) {
     self.position = position;
+    self.current_removed = false;
     if self.current().is_some() {
       cx.emit(QueueEvent::Play);
     }
     cx.notify();
   }
 
-  /// Shuffled order with the current video first, so it keeps playing.
+  /// Shuffled order with the current video first, so it keeps playing. Once it was removed,
+  /// the one that was to follow comes first, so Next still plays it.
   fn reshuffle(&mut self) {
     self.shuffle = true;
-    let current = self.current().unwrap_or(0);
+    let Some(current) = self.order.get(self.position).copied() else {
+      // Nothing was left after the removed video: everything loaded is behind it.
+      self.order = (0..self.items.len()).collect();
+      self.position = self.order.len();
+      return;
+    };
     self.order = (0..self.items.len()).collect();
     self.position = 0;
-    if current < self.order.len() {
-      self.order.swap(0, current);
-    }
+    self.order.swap(0, current);
     self.shuffle_after_current();
   }
 
-  /// Fisher-Yates over the videos after the current one.
+  /// Fisher-Yates over the videos after the current one (after the next one, once the current
+  /// one was removed).
   fn shuffle_after_current(&mut self) {
     let start = self.position + 1;
     for i in (start + 1..self.order.len()).rev() {
@@ -296,7 +345,8 @@ impl Queue {
       let index = self.items.len();
       self.items.push(video);
       if self.shuffle {
-        let slot = self.position + 1 + self.rng.below(self.order.len() - self.position);
+        let after = self.next_place();
+        let slot = after + self.rng.below(self.order.len() - after + 1);
         self.order.insert(slot, index);
       } else {
         self.order.push(index);
