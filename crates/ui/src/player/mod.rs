@@ -1036,7 +1036,8 @@ impl PlayerView {
     }
   }
 
-  fn seek_to(&mut self, seconds: f64, cx: &mut Context<Self>) {
+  /// Seeks to `seconds`, within what can be seeked (a timestamp's click).
+  pub fn seek_to(&mut self, seconds: f64, cx: &mut Context<Self>) {
     let (start, mut end) = self.seek_range();
     // Closer to a live's edge, mpv would wait for segments that do not exist yet.
     if self.dvr_window().is_some() {

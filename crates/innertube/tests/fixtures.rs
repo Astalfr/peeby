@@ -5,10 +5,10 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, NotificationLevel, Progress,
-  SearchResult, Watchtime, hls, hls_manifest_url, parse_feed, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_tracking,
-  parse_watch,
+  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget,
+  NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url, parse_feed,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -261,6 +261,98 @@ fn comment_replies() {
       .comments
       .iter()
       .all(|c| c.replies_continuation.is_none())
+  );
+}
+
+#[test]
+fn comment_links() {
+  // A page trimmed to three comments (captured 2026-11-03, anonymous): a link, timestamps,
+  // plain text.
+  let page = innertube::parse_comments(&fixture("comments_links.json"));
+  assert_eq!(page.comments.len(), 3);
+  let link = page
+    .comments
+    .iter()
+    .find(|c| c.text.contains("simulator.dev"))
+    .unwrap();
+  // Out of YouTube's redirect.
+  assert_eq!(link.links.len(), 1);
+  assert_eq!(
+    link.links[0].target,
+    LinkTarget::Url("https://simulator.dev/".into())
+  );
+  assert_eq!(
+    &link.text[link.links[0].range.clone()],
+    "https://simulator.dev/"
+  );
+  let stamps = page
+    .comments
+    .iter()
+    .find(|c| c.text.starts_with("0:00"))
+    .unwrap();
+  let first = &stamps.links[0];
+  assert_eq!(&stamps.text[first.range.clone()], "0:00");
+  // `0:00` has no `startTimeSeconds`.
+  assert_eq!(
+    first.target,
+    LinkTarget::Video {
+      id: "rfscVS0vtbw".into(),
+      start: None
+    }
+  );
+  let second = &stamps.links[1];
+  assert_eq!(&stamps.text[second.range.clone()], "1:45");
+  assert_eq!(
+    second.target,
+    LinkTarget::Video {
+      id: "rfscVS0vtbw".into(),
+      start: Some(105)
+    }
+  );
+  assert!(page.comments.iter().any(|c| c.links.is_empty()));
+}
+
+#[test]
+fn description_links() {
+  // An emoji (two UTF-16 units) comes before the first link: ranges are bytes of the text.
+  let page = parse_watch("dQw4w9WgXcQ", &fixture("next.json"));
+  let texts: Vec<&str> = page
+    .description_links
+    .iter()
+    .map(|l| &page.description[l.range.clone()])
+    .collect();
+  assert_eq!(texts.len(), 16);
+  assert_eq!(texts[0], "#RickAstleyNever");
+  assert_eq!(texts[1], "https://linktr.ee/rickastleynever");
+  assert_eq!(
+    page.description_links[0].target,
+    LinkTarget::Page("https://www.youtube.com/hashtag/rickastleynever".into())
+  );
+  assert_eq!(
+    page.description_links[1].target,
+    LinkTarget::Url("https://linktr.ee/rickastleynever".into())
+  );
+
+  // Chips: a channel and a playlist, named by their text.
+  let live = parse_watch("bygxS5WGoKE", &fixture("next_live.json"));
+  let targets: Vec<&LinkTarget> = live.description_links.iter().map(|l| &l.target).collect();
+  assert!(targets.contains(&&LinkTarget::Channel {
+    id: "UC_CDTi963WuQ99TnPdCF_Gg".into(),
+    name: "@chrystalghost".into()
+  }));
+  assert!(targets.contains(&&LinkTarget::Playlist {
+    id: "PLLnnKogt5Lcs75NirFznyenILhpFJxrIm".into(),
+    title: "Livestreams".into()
+  }));
+
+  // Another video.
+  let signed_in = parse_watch("0-k6i8tBwAU", &fixture("next_signed_in.json"));
+  assert_eq!(
+    signed_in.description_links[0].target,
+    LinkTarget::Video {
+      id: "zqDJYN5qppQ".into(),
+      start: Some(0)
+    }
   );
 }
 

@@ -18,8 +18,9 @@ use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
-  Task, Window, div, px, relative,
+  AnyElement, App, Context, Entity, FontWeight, Global, HighlightStyle, InteractiveText,
+  ScrollHandle, SharedString, StyledText, Subscription, Task, UnderlineStyle, WeakEntity, Window,
+  div, point, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
@@ -27,7 +28,7 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, WindowExt, h_flex, v_flex};
-use innertube::{Client, Comment, LikeStatus, Votes, WatchPage};
+use innertube::{Client, Comment, LikeStatus, LinkTarget, TextLink, Votes, WatchPage};
 
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
@@ -55,6 +56,8 @@ const QUEUE_THUMB: f32 = 100.;
 /// build thousands of rows on every frame.
 const QUEUE_BEFORE: usize = 50;
 const QUEUE_AFTER: usize = 150;
+/// Lines of the description shown until it is expanded.
+const DESCRIPTION_LINES: usize = 4;
 /// Theater mode: height left under the player for the start of the title, and the player's
 /// least height.
 const THEATER_BELOW: f32 = 120.;
@@ -94,6 +97,10 @@ pub struct WatchView {
   nav: Nav,
   player: Entity<PlayerView>,
   page: Option<WatchPage>,
+  /// The whole description is shown ("Show more").
+  description_open: bool,
+  /// The link under the pointer: the id of its text and its index there.
+  hovered_link: Option<(SharedString, usize)>,
   votes: Option<Votes>,
   /// The user's rating as shown: the page's, then each click's until YouTube says otherwise.
   like_status: LikeStatus,
@@ -218,6 +225,8 @@ impl WatchView {
       comments: Comments::default(),
       replies: HashMap::new(),
       scroll: ScrollHandle::new(),
+      description_open: false,
+      hovered_link: None,
       queue,
       queue_scroll,
       queue_scroll_to,
@@ -902,6 +911,56 @@ impl WatchView {
       .flatten()
       .collect::<Vec<_>>()
       .join(" · ");
+    // `line_clamp` limits wrapped lines, not explicit line breaks: cut those first.
+    let cut = page
+      .description
+      .match_indices('\n')
+      .nth(DESCRIPTION_LINES - 1)
+      .map_or(page.description.len(), |(i, _)| i);
+    // Folded, a description that could wrap past its lines gets the toggle too.
+    let long = cut < page.description.len() || page.description.len() > 300;
+    let links = self.links(cx);
+    let description = if self.description_open {
+      linked_text(
+        "description",
+        &page.description,
+        &page.description_links,
+        &links,
+      )
+      .into_any_element()
+    } else {
+      let shown: Vec<TextLink> = page
+        .description_links
+        .iter()
+        .filter(|l| l.range.end <= cut)
+        .cloned()
+        .collect();
+      div()
+        .line_clamp(DESCRIPTION_LINES)
+        .child(linked_text(
+          "description",
+          &page.description[..cut],
+          &shown,
+          &links,
+        ))
+        .into_any_element()
+    };
+    let toggle = long.then(|| {
+      h_flex().child(
+        Button::new("description-toggle")
+          .ghost()
+          .compact()
+          .label(if self.description_open {
+            t("Show less", "Afficher moins")
+          } else {
+            t("Show more", "Afficher plus")
+          })
+          .on_click(cx.listener(|this, _, _, cx| {
+            this.description_open = !this.description_open;
+            cx.notify();
+          })),
+      )
+    });
     v_flex()
       .gap_4()
       .child(
@@ -992,17 +1051,8 @@ impl WatchView {
           .border_color(theme::border())
           .text_sm()
           .child(div().font_weight(FontWeight::SEMIBOLD).child(stats))
-          // `line_clamp` limits wrapped lines, not explicit line breaks: cut those first.
-          .child(
-            div().line_clamp(4).child(
-              page
-                .description
-                .lines()
-                .take(4)
-                .collect::<Vec<_>>()
-                .join("\n"),
-            ),
-          ),
+          .child(description)
+          .children(toggle),
       )
   }
 
@@ -1054,6 +1104,7 @@ impl WatchView {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> impl IntoElement + use<> {
+    let links = self.links(cx);
     let replies = self.replies.get(&comment.id);
     let open = replies.is_some_and(|r| r.open);
     let toggle = comment.replies_continuation.as_ref().map(|_| {
@@ -1072,7 +1123,7 @@ impl WatchView {
       let rows: Vec<_> = r
         .items
         .iter()
-        .map(|reply| comment_row(reply, window, cx))
+        .map(|reply| comment_row(reply, &links, window, cx))
         .collect();
       let more = r.continuation.as_ref().map(|_| {
         let id = comment.id.clone();
@@ -1090,9 +1141,70 @@ impl WatchView {
     });
     v_flex()
       .gap_2()
-      .child(comment_row(comment, window, cx))
+      .child(comment_row(comment, &links, window, cx))
       .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
       .children(shown)
+  }
+
+  /// What the page's links need to be drawn and followed.
+  fn links(&self, cx: &Context<Self>) -> Links {
+    Links {
+      video_id: self.video_id.clone(),
+      nav: self.nav.clone(),
+      player: self.player.clone(),
+      scroll: self.scroll.clone(),
+      view: cx.weak_entity(),
+      hovered: self.hovered_link.clone(),
+    }
+  }
+}
+
+/// Follows the links of the description and the comments. Clicks never borrow the page:
+/// opening another page updates it (it gets covered).
+#[derive(Clone)]
+struct Links {
+  video_id: String,
+  nav: Nav,
+  player: Entity<PlayerView>,
+  scroll: ScrollHandle,
+  /// The page, told which link is hovered.
+  view: WeakEntity<WatchView>,
+  /// The page's [`WatchView::hovered_link`] when it rendered.
+  hovered: Option<(SharedString, usize)>,
+}
+
+impl Links {
+  /// Underlines link `index` of the text `id` (none: `None`).
+  fn hover(&self, link: Option<(SharedString, usize)>, cx: &mut App) {
+    self
+      .view
+      .update(cx, |this, cx| {
+        if this.hovered_link != link {
+          this.hovered_link = link;
+          cx.notify();
+        }
+      })
+      .ok();
+  }
+
+  /// A timestamp of this video seeks (and scrolls the player into view), YouTube pages open in
+  /// the tab, other sites in the browser.
+  fn follow(&self, target: LinkTarget, window: &mut Window, cx: &mut App) {
+    match target {
+      LinkTarget::Video { id, start } if id == self.video_id => {
+        let seconds = f64::from(start.unwrap_or(0));
+        self
+          .player
+          .update(cx, |player, cx| player.seek_to(seconds, cx));
+        self.scroll.set_offset(point(px(0.), px(0.)));
+      }
+      LinkTarget::Video { id, .. } => self.nav.open(Route::Watch(id), window, cx),
+      LinkTarget::Channel { id, name } => self.nav.open(Route::Channel { id, name }, window, cx),
+      LinkTarget::Playlist { id, title } => {
+        self.nav.open(Route::Playlist { id, title }, window, cx)
+      }
+      LinkTarget::Url(url) | LinkTarget::Page(url) => cx.open_url(&url),
+    }
   }
 }
 
@@ -1128,7 +1240,12 @@ fn skeleton_details() -> gpui::Div {
     )
 }
 
-fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl IntoElement + use<> {
+fn comment_row(
+  comment: &Comment,
+  links: &Links,
+  window: &mut Window,
+  cx: &mut App,
+) -> impl IntoElement + use<> {
   let avatar = comment.avatar.as_ref().map(|url| {
     let sizes = [innertube::Thumbnail {
       url: url.clone(),
@@ -1174,9 +1291,81 @@ fn comment_row(comment: &Comment, window: &mut Window, cx: &mut App) -> impl Int
                 .child(comment.published.clone()),
             ),
         )
-        .child(div().child(comment.text.clone()))
+        .child(div().child(linked_text(
+          format!("comment-{}", comment.id),
+          &comment.text,
+          &comment.links,
+          links,
+        )))
         .child(likes),
     )
+}
+
+/// `text` with its `links` in the accent color, the hovered one underlined, followed on a click
+/// ([`Links::follow`]). `id` is unique on the page: the element keeps its mouse state by it.
+fn linked_text(
+  id: impl Into<SharedString>,
+  text: &str,
+  links: &[TextLink],
+  follow: &Links,
+) -> gpui::Stateful<gpui::Div> {
+  let id: SharedString = id.into();
+  // A `\r` (of `\r\n`) would draw as a glyph: a space keeps the ranges' byte offsets.
+  let text = SharedString::from(text.replace('\r', " "));
+  let hovered = follow
+    .hovered
+    .as_ref()
+    .filter(|(text_id, _)| *text_id == id)
+    .map(|(_, index)| *index);
+  let styled = StyledText::new(text).with_highlights(links.iter().enumerate().map(|(i, l)| {
+    let style = HighlightStyle {
+      color: Some(theme::accent_hover()),
+      underline: (hovered == Some(i)).then(|| UnderlineStyle {
+        thickness: px(1.),
+        color: Some(theme::accent_hover()),
+        wavy: false,
+      }),
+      ..Default::default()
+    };
+    (l.range.clone(), style)
+  }));
+  let ranges: Vec<_> = links.iter().map(|l| l.range.clone()).collect();
+  let targets: Vec<LinkTarget> = links.iter().map(|l| l.target.clone()).collect();
+  let text = InteractiveText::new(id.clone(), styled)
+    .on_hover({
+      let follow = follow.clone();
+      let ranges = ranges.clone();
+      let id = id.clone();
+      move |index, _, _, cx| {
+        let link = index.and_then(|ix| ranges.iter().position(|r| r.contains(&ix)));
+        follow.hover(link.map(|i| (id.clone(), i)), cx);
+      }
+    })
+    .on_click(ranges, {
+      let follow = follow.clone();
+      move |index, window, cx| {
+        if let Some(target) = targets.get(index).cloned() {
+          follow.follow(target, window, cx);
+        }
+      }
+    });
+  // The text reports moves over it only: leaving it clears its underline.
+  div()
+    .id(SharedString::from(format!("{id}-links")))
+    .on_hover({
+      let follow = follow.clone();
+      move |hovered, _, cx| {
+        if !hovered
+          && follow
+            .hovered
+            .as_ref()
+            .is_some_and(|(text_id, _)| *text_id == id)
+        {
+          follow.hover(None, cx);
+        }
+      }
+    })
+    .child(text)
 }
 
 /// The toggle of a comment's replies: "3 replies", from YouTube's count (`1,2 k` stays

@@ -23,10 +23,10 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, Live, LiveChatPage,
-  Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, Thumbnail, Tracking, VideoItem,
-  WatchPage,
+  ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
+  LiveChatPage, Notification, NotificationLevel, NotificationPage, NotificationSection, Playlist,
+  PlaylistChoice, PlaylistSummary, Progress, SearchPage, SearchResult, Storyboard, TextLink,
+  Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -106,6 +106,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
       .as_str()
       .unwrap_or_default()
       .to_owned(),
+    description_links: attributed_links(&secondary["attributedDescription"]),
     related,
     related_continuation: find_continuation(secondary_results),
     comments_continuation,
@@ -842,11 +843,114 @@ fn parse_comment(entity: &Value) -> Option<Comment> {
     avatar: author["avatarThumbnailUrl"].as_str().map(str::to_owned),
     by_creator: author["isCreator"].as_bool().unwrap_or(false),
     text: properties["content"]["content"].as_str()?.to_owned(),
+    links: attributed_links(&properties["content"]),
     published: string(&properties["publishedTime"]),
     likes: string(&toolbar["likeCountNotliked"]),
     replies: string(&toolbar["replyCount"]),
     replies_continuation: None,
   })
+}
+
+/// The links of an attributed string (`{content, commandRuns}`). Runs count UTF-16 code units:
+/// a run that does not fall on characters of the text, or overlaps the previous one, is skipped.
+fn attributed_links(attributed: &Value) -> Vec<TextLink> {
+  let content = attributed["content"].as_str().unwrap_or_default();
+  // Byte offset of each UTF-16 offset that starts a character, the text's end included.
+  let mut bytes = HashMap::new();
+  let mut utf16 = 0;
+  for (byte, c) in content.char_indices() {
+    bytes.insert(utf16, byte);
+    utf16 += c.len_utf16();
+  }
+  bytes.insert(utf16, content.len());
+  let mut links: Vec<TextLink> = Vec::new();
+  for run in attributed["commandRuns"].as_array().into_iter().flatten() {
+    let (Some(start), Some(length)) = (run["startIndex"].as_u64(), run["length"].as_u64()) else {
+      continue;
+    };
+    let (Some(&start), Some(&end)) = (
+      bytes.get(&(start as usize)),
+      bytes.get(&((start + length) as usize)),
+    ) else {
+      continue;
+    };
+    if start >= end || links.last().is_some_and(|l| l.range.end > start) {
+      continue;
+    }
+    let label = &content[start..end];
+    if let Some(target) = link_target(&run["onTap"]["innertubeCommand"], label) {
+      links.push(TextLink {
+        range: start..end,
+        target,
+      });
+    }
+  }
+  links
+}
+
+/// Where a run's command leads. `label` is the run's text, which names channels and playlists:
+/// their chips pad it with no-break spaces, an icon and a `/`.
+fn link_target(command: &Value, label: &str) -> Option<LinkTarget> {
+  let label = || {
+    label
+      .trim_matches(|c: char| !c.is_alphanumeric() && c != '@')
+      .to_owned()
+  };
+  if let Some(watch) = command.get("watchEndpoint") {
+    return Some(LinkTarget::Video {
+      id: watch["videoId"].as_str()?.to_owned(),
+      start: watch["startTimeSeconds"]
+        .as_u64()
+        .and_then(|s| u32::try_from(s).ok()),
+    });
+  }
+  if let Some(url) = command["urlEndpoint"]["url"].as_str() {
+    return web(unredirect(url)).map(LinkTarget::Url);
+  }
+  let browse = &command["browseEndpoint"];
+  if let Some(id) = browse["browseId"].as_str() {
+    if id.starts_with("UC") {
+      return Some(LinkTarget::Channel {
+        id: id.to_owned(),
+        name: label(),
+      });
+    }
+    if let Some(playlist) = id.strip_prefix("VL") {
+      return Some(LinkTarget::Playlist {
+        id: playlist.to_owned(),
+        title: label(),
+      });
+    }
+  }
+  let path = command["commandMetadata"]["webCommandMetadata"]["url"].as_str()?;
+  let url = if path.starts_with('/') {
+    format!("https://www.youtube.com{path}")
+  } else {
+    path.to_owned()
+  };
+  web(url).map(LinkTarget::Page)
+}
+
+/// `url` when it is a web page: Windows would hand any other scheme (`ms-msdt:`, `search-ms:`…)
+/// to its handler, from text any commenter writes.
+fn web(url: String) -> Option<String> {
+  reqwest::Url::parse(&url)
+    .ok()
+    .filter(|u| matches!(u.scheme(), "http" | "https"))
+    .map(|_| url)
+}
+
+/// The page behind YouTube's redirect (`youtube.com/redirect?…&q=<url>`), else `url` itself.
+fn unredirect(url: &str) -> String {
+  reqwest::Url::parse(url)
+    .ok()
+    .filter(|u| u.host_str() == Some("www.youtube.com") && u.path() == "/redirect")
+    .and_then(|u| {
+      u.query_pairs()
+        .find(|(k, _)| k == "q")
+        .map(|(_, v)| v.into_owned())
+    })
+    .unwrap_or_else(|| url.to_owned())
 }
 
 /// Collects every video lockup under `value`, skipping malformed ones, and those of the grid's
@@ -1060,4 +1164,27 @@ fn text(value: &Value) -> String {
 
 fn non_empty(s: String) -> Option<String> {
   (!s.is_empty()).then_some(s)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn links_open_web_pages_only() {
+    let redirect = |q: &str| {
+      serde_json::json!({ "urlEndpoint": {
+        "url": format!("https://www.youtube.com/redirect?event=comments&q={q}")
+      }})
+    };
+    assert_eq!(
+      link_target(&redirect("https%3A%2F%2Fexample.com%2Fa%3Fb%3D1"), ""),
+      Some(LinkTarget::Url("https://example.com/a?b=1".into()))
+    );
+    assert_eq!(link_target(&redirect("ms-msdt%3A%2Fid"), ""), None);
+    let page = serde_json::json!({ "commandMetadata": { "webCommandMetadata": {
+      "url": "search-ms:query=x"
+    }}});
+    assert_eq!(link_target(&page, ""), None);
+  }
 }
