@@ -367,7 +367,6 @@ impl WatchView {
         .child(
           div()
             .relative()
-            .vertical_scrollbar(&self.queue_scroll)
             .child(
               v_flex()
                 .id("queue-list")
@@ -386,7 +385,9 @@ impl WatchView {
                   }
                 })
                 .children(rows),
-            ),
+            )
+            // After the list: children paint in order, and a hovered row would cover it.
+            .vertical_scrollbar(&self.queue_scroll),
         )
         .into_any_element(),
     )
@@ -1326,8 +1327,8 @@ impl Render for WatchView {
     div()
       .size_full()
       .relative()
-      .vertical_scrollbar(&self.scroll)
       .child(page)
+      .vertical_scrollbar(&self.scroll)
       .into_any_element()
   }
 }

@@ -322,7 +322,6 @@ impl Render for SearchView {
     div()
       .size_full()
       .relative()
-      .vertical_scrollbar(&self.scroll)
       .child(
         v_flex()
           .id("youtube-search")
@@ -345,5 +344,7 @@ impl Render for SearchView {
               .child(body),
           ),
       )
+      // After the content: children paint in order, and a hovered row would cover it.
+      .vertical_scrollbar(&self.scroll)
   }
 }

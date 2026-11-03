@@ -776,7 +776,6 @@ impl Render for PlaylistView {
     div()
       .size_full()
       .relative()
-      .vertical_scrollbar(&self.scroll)
       .child(
         v_flex()
           .id("playlist")
@@ -790,5 +789,7 @@ impl Render for PlaylistView {
           }))
           .child(v_flex().px_8().py_6().gap_6().children(title).child(body)),
       )
+      // After the content: children paint in order, and a hovered row would cover it.
+      .vertical_scrollbar(&self.scroll)
   }
 }

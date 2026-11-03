@@ -481,7 +481,6 @@ impl Render for FeedView {
       div()
         .size_full()
         .relative()
-        .vertical_scrollbar(&self.list)
         .child(
           list(
             self.list.clone(),
@@ -489,6 +488,8 @@ impl Render for FeedView {
           )
           .size_full(),
         )
+        // After the content: children paint in order, and a hovered row would cover it.
+        .vertical_scrollbar(&self.list)
         .when(self.fade < 1., |el| {
           el.child(
             div()
@@ -529,7 +530,6 @@ impl Render for FeedView {
       div()
         .size_full()
         .relative()
-        .vertical_scrollbar(&self.scroll)
         .child(
           div()
             .id("feed")
@@ -538,6 +538,7 @@ impl Render for FeedView {
             .track_scroll(&self.scroll)
             .child(div().px_8().pt(px(TOP_ROOM)).pb_6().child(content)),
         )
+        .vertical_scrollbar(&self.scroll)
         .into_any_element()
     };
     // The header stays above the videos, which scroll under it.
