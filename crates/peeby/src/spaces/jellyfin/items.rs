@@ -51,7 +51,7 @@ pub struct ImageRef {
   pub tag: Option<String>,
   pub blurhash: Option<String>,
   pub index: Option<u32>,
-  /// Ask the server for a blurred image (spoiler-free stills).
+  /// Ask the server for a blurred image: a spoiling still whose series has no artwork.
   pub blur: bool,
 }
 
@@ -189,6 +189,11 @@ pub fn backdrop_ref(item: &BaseItem) -> Option<ImageRef> {
       ..ImageRef::new(item.id.clone(), ImageType::Backdrop, Some(tag.clone()))
     });
   }
+  parent_backdrop(item)
+}
+
+/// The first backdrop of the item's parent (the series' for episodes and seasons).
+fn parent_backdrop(item: &BaseItem) -> Option<ImageRef> {
   Some(ImageRef {
     index: Some(0),
     ..ImageRef::new(
@@ -206,16 +211,21 @@ pub fn is_spoiler(item: &BaseItem, cx: &App) -> bool {
     && Settings::get(cx).jellyfin.home.hide_spoilers
 }
 
-/// Blurs an episode's own still (not series artwork) when it would spoil.
+/// An episode's own still (not series artwork) replaced, when it would spoil, by its series'
+/// 16:9 artwork: its thumb, else its backdrop; blurred when the series has neither.
 pub fn spoiler_safe(mut image: ImageRef, item: &BaseItem, cx: &App) -> ImageRef {
-  if image.item == item.id && is_spoiler(item, cx) {
-    image.blur = true;
-    image.blurhash = None;
+  if image.item != item.id || !is_spoiler(item, cx) {
+    return image;
   }
+  if let Some(series) = parent_thumb(item).or_else(|| parent_backdrop(item)) {
+    return series;
+  }
+  image.blur = true;
+  image.blurhash = None;
   image
 }
 
-/// The picture of `item` for `shape`, blurred when it would spoil.
+/// The picture of `item` for `shape`, its series' artwork when it would spoil.
 pub fn card_picture(client: &Client, item: &BaseItem, shape: Shape, cx: &App) -> Picture {
   match image_ref(item, shape) {
     Some(image) => spoiler_safe(image, item, cx).picture(client),
