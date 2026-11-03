@@ -424,12 +424,12 @@ pub fn parse_storyboard(text: &str, url: &str) -> Vec<StoryboardLevel> {
   levels
 }
 
-/// twitch.tv's game chapters of a VOD (its player's chapter button), raw: it answers anonymously
-/// with the web Client-ID (checked 2026-11-03). A VOD that kept one game has none.
-const CHAPTERS_QUERY: &str = "query VideoChapters($id: ID!) { video(id: $id) { id moments(first: \
-  100, momentRequestType: VIDEO_CHAPTER_MARKERS, types: [GAME_CHANGE]) { edges { node { \
-  positionMilliseconds description details { ... on GameChangeMomentDetails { game { id \
-  displayName boxArtURL } } } } } } } }";
+/// A VOD's game chapters (`video.moments`, twitch.tv's chapter button), raw: it answers anonymously
+/// with the web Client-ID (checked 2026-11-03). A VOD that kept one game has none. Shared by
+/// [`chapters_request`] and [`chapters_many_request`].
+const CHAPTERS_FIELDS: &str = "moments(first: 100, momentRequestType: VIDEO_CHAPTER_MARKERS, \
+  types: [GAME_CHANGE]) { edges { node { positionMilliseconds description details { ... on \
+  GameChangeMomentDetails { game { id displayName boxArtURL } } } } } }";
 
 /// A VOD's chapter: the game played from `start` until the next chapter.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -446,7 +446,7 @@ pub struct Chapter {
 pub fn chapters_request(id: &str) -> Value {
   json!({
     "operationName": "VideoChapters",
-    "query": CHAPTERS_QUERY,
+    "query": format!("query VideoChapters($id: ID!) {{ video(id: $id) {{ id {CHAPTERS_FIELDS} }} }}"),
     "variables": { "id": id },
   })
 }
@@ -458,6 +458,47 @@ pub fn parse_chapters(answer: &Value) -> Result<Vec<Chapter>> {
   if video.is_null() {
     return Err(gql_error(answer).unwrap_or(Error::NotFound));
   }
+  Ok(chapters_of(video))
+}
+
+/// The request for the game chapters of the VODs `ids`, one aliased `video` per VOD (`v0`,
+/// `v1`…), as [`positions_request`]. Ids that are not numbers are left out: they go into the
+/// query's text.
+pub fn chapters_many_request(ids: &[String]) -> Value {
+  let fields: String = ids
+    .iter()
+    .enumerate()
+    .filter(|(_, id)| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+    .map(|(i, id)| format!(" v{i}: video(id: \"{id}\") {{ id {CHAPTERS_FIELDS} }}"))
+    .collect();
+  json!({
+    "operationName": "VideoChaptersMany",
+    "query": format!("query VideoChaptersMany {{{fields} }}"),
+  })
+}
+
+/// The chapters in [`chapters_many_request`]'s answer, by VOD id; the VODs that kept one game
+/// (no chapters) or were not found are left out.
+pub fn parse_chapters_many(answer: &Value) -> Result<HashMap<String, Vec<Chapter>>> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  Ok(
+    answer["data"]
+      .as_object()
+      .into_iter()
+      .flatten()
+      .filter_map(|(_, video)| {
+        let id = video["id"].as_str()?.to_owned();
+        let chapters = chapters_of(video);
+        (!chapters.is_empty()).then_some((id, chapters))
+      })
+      .collect(),
+  )
+}
+
+/// A `video`'s chapters, in order.
+fn chapters_of(video: &Value) -> Vec<Chapter> {
   let mut chapters: Vec<Chapter> = video["moments"]["edges"]
     .as_array()
     .into_iter()
@@ -481,7 +522,7 @@ pub fn parse_chapters(answer: &Value) -> Result<Vec<Chapter>> {
     })
     .collect();
   chapters.sort_by_key(|c| c.start);
-  Ok(chapters)
+  chapters
 }
 
 /// A VOD's chat replay around an offset, a page at a time.

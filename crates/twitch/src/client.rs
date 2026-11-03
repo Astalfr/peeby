@@ -11,9 +11,9 @@ use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
 use crate::{points, spade};
 
-/// VODs per [`Client::vod_positions`] request: GQL allows 15 aliased root fields in a query
-/// (checked 2026-11-02).
-const POSITIONS_PER_REQUEST: usize = 15;
+/// VODs per [`Client::vod_positions`] or [`Client::vod_chapters_many`] request: GQL allows 15
+/// aliased root fields in a query (checked 2026-11-02).
+const VODS_PER_REQUEST: usize = 15;
 
 const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
@@ -158,6 +158,20 @@ impl Client {
     gql::parse_chapters(&answer)
   }
 
+  /// The game chapters of each of the VODs `ids`, by id (for the channel page's cards), a
+  /// request per [`VODS_PER_REQUEST`]; the VODs that kept one game are left out.
+  pub async fn vod_chapters_many(
+    &self,
+    ids: &[String],
+  ) -> Result<HashMap<String, Vec<gql::Chapter>>> {
+    let mut chapters = HashMap::new();
+    for chunk in ids.chunks(VODS_PER_REQUEST) {
+      let answer = self.gql(&gql::chapters_many_request(chunk)).await?;
+      chapters.extend(gql::parse_chapters_many(&answer)?);
+    }
+    Ok(chapters)
+  }
+
   /// Where the viewer stopped in VOD `id` (their account's, as twitch.tv resumes it). Without an
   /// auth-token, no position and no user id.
   pub async fn vod_viewing(&self, id: &str) -> Result<gql::Viewing> {
@@ -166,14 +180,14 @@ impl Client {
   }
 
   /// Where the viewer stopped in each of the VODs `ids`, by id (for the cards' progress bars),
-  /// a request per [`POSITIONS_PER_REQUEST`]; the ones never watched are left out. Without an
+  /// a request per [`VODS_PER_REQUEST`]; the ones never watched are left out. Without an
   /// auth-token, nothing.
   pub async fn vod_positions(&self, ids: &[String]) -> Result<HashMap<String, u32>> {
     let mut positions = HashMap::new();
     if self.auth_token.is_none() {
       return Ok(positions);
     }
-    for chunk in ids.chunks(POSITIONS_PER_REQUEST) {
+    for chunk in ids.chunks(VODS_PER_REQUEST) {
       let answer = self.gql(&gql::positions_request(chunk)).await?;
       positions.extend(gql::parse_positions(&answer)?);
     }

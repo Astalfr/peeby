@@ -301,6 +301,33 @@ fn vod_chapters() {
 }
 
 #[test]
+fn vod_chapters_many() {
+  // kamet0's three VODs (2026-11-03, anonymous), the last one with a single game.
+  let by_id = gql::parse_chapters_many(&json("gql_vod_chapters_many.json")).unwrap();
+  let mut ids: Vec<_> = by_id.keys().map(String::as_str).collect();
+  ids.sort_unstable();
+  assert_eq!(ids, ["2914347797", "2915865330"]);
+  let games: Vec<_> = by_id["2915865330"]
+    .iter()
+    .map(|c| (c.start, c.game.as_str()))
+    .collect();
+  assert_eq!(
+    games,
+    [
+      (0, "Just Chatting"),
+      (1407, "League of Legends"),
+      (27922, "Just Chatting")
+    ]
+  );
+  assert_eq!(by_id["2914347797"].len(), 3);
+  // The ids go into the query's text: anything but digits is left out.
+  let request = gql::chapters_many_request(&["1".into(), "2\") {".into()]);
+  let query = request["query"].as_str().unwrap();
+  assert!(query.contains("v0: video(id: \"1\")"));
+  assert!(!query.contains("v1"));
+}
+
+#[test]
 fn vod_comments() {
   // zerator's VOD around 10 min (2026-11-02, anonymous), chatters renamed, trimmed to 7.
   let page = gql::parse_comments(&json("gql_vod_comments.json")).unwrap();

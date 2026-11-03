@@ -149,7 +149,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
   answers with the web Client-ID, no integrity token (about 40 ms). The first chapter starts at 0; a VOD that
   kept one game answers `edges: []`, an unknown id `video: null`. `boxArtURL` without arguments is a size template
   (`…/ttv-boxart/21779-{width}x{height}.jpg`), as Helix's. Used by `Client::vod_chapters`, given to the
-  player as its chapters (only from two games).
+  player as its chapters (only from two games). Several VODs in one query, one aliased `video(id)` each, at most 15
+  as for the positions (`Client::vod_chapters_many`, checked 2026-11-03): the channel page's cards.
 - **VOD resume position**, checked on 2026-11-02 with the auth-token: `currentUser { viewedVideos(first: N) }` and
   `video(id) { self { viewingHistory { position updatedAt } } }` read it (null signed out);
   `updateUserViewedVideo(input: {userID, videoID, position, videoType: VOD})` writes it, raw, with no integrity
@@ -197,6 +198,7 @@ Checked against the code on 2026-11-01:
 | Quality menu over the master's variants | `Source::qualities` (one `StartOptions` each) | Covered |
 | Clips as direct MP4 | `Source::options` with a plain URL | Covered |
 | VOD storyboard on the seek bar | `ui::player::Previews` | Covered |
+| VOD cards' chapters ("3 chapitres" over the picture, each playing the VOD from there) | `ui::player::chapter_list` in a `Popover`, `Route::Vod { start }` | Covered |
 | VOD game chapters (twitch.tv's chapter button), with the game's box art | `set_chapters_with_pictures`: seek bar pieces, hover title and picture, chapters menu, Page Up / Page Down | Covered |
 | VOD muted parts (`muted_segments`) red on the seek bar, told on entering, skippable | `set_segments` with `SegmentKind::Muted` | Covered |
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |

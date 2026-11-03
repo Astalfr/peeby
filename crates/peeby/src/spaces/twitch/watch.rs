@@ -41,8 +41,8 @@ const INFO_EVERY: Duration = Duration::from_secs(60);
 pub enum Kind {
   /// A channel's live, by login.
   Live(String),
-  /// A VOD, by id.
-  Vod(String),
+  /// A VOD, by id, from `start` seconds instead of the viewer's resume position.
+  Vod { id: String, start: Option<u32> },
   /// A clip, by slug.
   Clip(String),
 }
@@ -163,7 +163,7 @@ impl WatchView {
         view.points = Some(cx.new(|cx| PointsView::new(login_, client, player, cx)));
         view.start_live(login, cx)
       }
-      Kind::Vod(id) => {
+      Kind::Vod { id, start } => {
         let panel = cx.new(|cx| ChatPanel::new(cx).titled(t("Chat replay", "Rediffusion du chat")));
         view._tasks.push(replay::start(
           id.clone(),
@@ -174,7 +174,7 @@ impl WatchView {
           cx,
         ));
         view.chat = Some(panel);
-        view.start_vod(id, cx)
+        view.start_vod(id, start, cx)
       }
       Kind::Clip(slug) => view.start_clip(slug, cx),
     }
@@ -356,7 +356,7 @@ impl WatchView {
   }
 
   /// The VOD through the proxy, its storyboard, its game chapters, and its header from Helix.
-  fn start_vod(&mut self, id: String, cx: &mut Context<Self>) {
+  fn start_vod(&mut self, id: String, start: Option<u32>, cx: &mut Context<Self>) {
     let clicked = Instant::now();
     let (client, helix) = (self.client.clone(), self.helix.clone());
     self.load_chapters(id.clone(), cx);
@@ -421,8 +421,12 @@ impl WatchView {
                 &Settings::get(cx).player,
               );
               source.previews = storyboard.and_then(Result::ok).and_then(play::previews);
+              // A chapter or a link's time wins over where the viewer stopped.
+              if let Some(start) = start {
+                source.options.start_seconds = f64::from(start);
+              }
               if let Some(viewing) = &viewing {
-                if let Some(start) = progress::start_at(viewing) {
+                if let Some(start) = progress::start_at(viewing).filter(|_| start.is_none()) {
                   source.options.start_seconds = start;
                 }
                 this.saver = progress::Saver::new(this.client.clone(), video_id, viewing);

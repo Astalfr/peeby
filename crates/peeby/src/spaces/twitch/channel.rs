@@ -1,5 +1,6 @@
 //! A channel's page: its header (Helix `users`), its live when on air (GQL `Channel`), then its
-//! past broadcasts (`videos?type=archive`, with the account's resume positions as progress bars)
+//! past broadcasts (`videos?type=archive`, with the account's resume positions as progress bars
+//! and their game chapters, each playing the VOD from there)
 //! or its most viewed clips (`clips`), in two tabs.
 
 use std::collections::HashMap;
@@ -8,7 +9,7 @@ use gpui::prelude::*;
 use gpui::{Context, FontWeight, Task, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex};
-use twitch::gql::Channel;
+use twitch::gql::{self, Channel};
 use twitch::helix::{Clip, Helix, User, Video};
 use ui::i18n::t;
 use ui::images::Images;
@@ -30,6 +31,8 @@ struct Loaded {
   videos: Vec<Video>,
   /// Where the viewer stopped in the VODs, seconds, by id.
   positions: HashMap<String, u32>,
+  /// The VODs' game chapters, by id; the ones that kept one game are left out.
+  chapters: HashMap<String, Vec<gql::Chapter>>,
   clips: Vec<Clip>,
 }
 
@@ -70,6 +73,10 @@ impl ChannelView {
             tracing::warn!("Twitch VOD positions: {e}");
             HashMap::new()
           });
+          let chapters = client.vod_chapters_many(&ids).await.unwrap_or_else(|e| {
+            tracing::warn!("Twitch VOD chapters: {e}");
+            HashMap::new()
+          });
           let clips = helix
             .clips(&user.id, None)
             .await
@@ -80,6 +87,7 @@ impl ChannelView {
             channel,
             videos,
             positions,
+            chapters,
             clips,
           })
         }
@@ -206,7 +214,8 @@ impl Render for ChannelView {
           .iter()
           .map(|v| {
             let position = loaded.positions.get(&v.id).copied();
-            cards::video_card(v, position, width, &self.nav, window, cx)
+            let chapters = loaded.chapters.get(&v.id).map(Vec::as_slice);
+            cards::video_card(v, position, chapters, width, &self.nav, window, cx)
           })
           .collect(),
       )

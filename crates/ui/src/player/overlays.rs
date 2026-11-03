@@ -6,27 +6,18 @@
 use gpui::prelude::*;
 use gpui::{
   AnyElement, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea, div,
-  linear_color_stop, linear_gradient, px, rems,
+  linear_color_stop, linear_gradient, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
 use player::TrackKind;
 
+use super::chapter_list::{ChapterItem, chapter_list};
 use super::tracks::{SUBTITLE_DELAY_STEP, UpNext};
-use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView, format_time};
+use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView};
 use crate::assets::Icon;
 use crate::i18n::t;
-use crate::picture::{Picture, image_fill};
 use crate::tf;
-
-/// Width of a chapter's picture in the chapters menu.
-const CHAPTER_PICTURE_WIDTH: f32 = 24.;
-
-/// Widest a chapter's title gets in the chapters menu before it wraps.
-const CHAPTER_TITLE_MAX_WIDTH: f32 = 220.;
-
-/// Width / height of a chapter's picture: Twitch's box art (52×72).
-pub(super) const CHAPTER_PICTURE_ASPECT: f32 = 52. / 72.;
 
 /// The help's rows, keys and action in English then French; an empty action is the seek line,
 /// whose steps come from the preferences (see `render_help`).
@@ -212,80 +203,30 @@ impl PlayerView {
       }
       Menu::Chapters => {
         let current = self.chapter_at(self.position + 0.5);
-        let pictures = !self.chapter_pictures.is_empty();
-        // The times as wide as the longest one (`0:00` and `1:00:04`), so that the titles line up.
-        let time_width = {
-          let style = window.text_style();
-          let size = rems(0.875).to_pixels(window.rem_size());
-          self
-            .chapters
-            .iter()
-            .map(|c| {
-              let time = format_time(c.start);
-              let run = style.to_run(time.len());
-              window
-                .text_system()
-                .shape_line(time.into(), size, &[run], None)
-                .width
-            })
-            .fold(px(0.), Pixels::max)
-        };
-        for i in 0..self.chapters.len() {
-          let start = self.chapters[i].start;
-          // `line_clamp` only counts wrapped lines: a line break would add more.
-          let title = self.chapter_title(i).replace(['\r', '\n'], " ");
-          let picture = pictures.then(|| {
-            let picture = self
-              .chapter_picture(i)
-              .cloned()
-              .unwrap_or(Picture::Sizes(Vec::new()));
-            div()
-              .flex_shrink_0()
-              .w(px(CHAPTER_PICTURE_WIDTH))
-              .h(px(CHAPTER_PICTURE_WIDTH / CHAPTER_PICTURE_ASPECT))
-              .child(image_fill(
-                &picture,
-                CHAPTER_PICTURE_WIDTH,
-                CHAPTER_PICTURE_ASPECT,
-                px(2.),
-                window,
-                cx,
-              ))
-          });
-          // A title wraps on two lines at most; the row grows with it.
-          let button = Button::new(SharedString::from(format!("chapter-{i}")))
-            .h_auto()
-            .min_h_8()
-            .py_1()
-            .child(
-              h_flex()
-                .flex_1()
-                .min_w_0()
-                .gap_2()
-                .children(picture)
-                .child(
-                  div()
-                    .flex_shrink_0()
-                    .w(time_width)
-                    .whitespace_nowrap()
-                    .child(format_time(start)),
-                )
-                .child(
-                  div()
-                    .min_w_0()
-                    .max_w(px(CHAPTER_TITLE_MAX_WIDTH))
-                    .whitespace_normal()
-                    .line_clamp(2)
-                    .child(title),
-                ),
-            )
-            .when(current == Some(i), |b| b.primary())
-            .when(current != Some(i), |b| b.ghost());
-          list = list.child(button.on_click(cx.listener(move |this, _, _, cx| {
-            this.menu = None;
-            this.seek_to(start, cx);
-          })));
-        }
+        let items: Vec<ChapterItem> = (0..self.chapters.len())
+          .map(|i| ChapterItem {
+            start: self.chapters[i].start,
+            title: self.chapter_title(i),
+            picture: self.chapter_picture(i).cloned(),
+          })
+          .collect();
+        let starts: Vec<f64> = items.iter().map(|item| item.start).collect();
+        let view = cx.weak_entity();
+        list = list.child(chapter_list(
+          "chapter",
+          &items,
+          current,
+          move |i, _, cx| {
+            view
+              .update(cx, |this, cx| {
+                this.menu = None;
+                this.seek_to(starts[i], cx);
+              })
+              .ok();
+          },
+          window,
+          cx,
+        ));
       }
     }
     div()

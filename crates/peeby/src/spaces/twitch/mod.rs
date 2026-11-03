@@ -81,17 +81,23 @@ pub enum Route {
   Channel(String),
   /// A channel's live, by login.
   Watch(String),
-  /// A VOD, by id.
-  Vod(String),
+  /// A VOD, by id, from `start` seconds (a chapter, a link's `?t=`) rather than where the viewer
+  /// stopped.
+  Vod { id: String, start: Option<u32> },
   /// A clip, by slug.
   Clip(String),
 }
 
 impl Route {
-  /// The page of a Twitch link: `twitch.tv/videos/<id>`, `clips.twitch.tv/<slug>`,
-  /// `twitch.tv/<login>/clip/<slug>`, else `twitch.tv/<login>`'s live.
+  /// The page of a Twitch link: `twitch.tv/videos/<id>` (from its `?t=1h2m3s`, if any),
+  /// `clips.twitch.tv/<slug>`, `twitch.tv/<login>/clip/<slug>`, else `twitch.tv/<login>`'s live.
   pub fn from_url(url: &str) -> Option<Self> {
     let (_, rest) = url.split_once("twitch.tv/")?;
+    let start = rest
+      .split_once('?')
+      .and_then(|(_, query)| query.split(['&', '#']).find_map(|p| p.strip_prefix("t=")))
+      .map(|t| u32::try_from(twitch::helix::parse_duration(t)).unwrap_or(u32::MAX))
+      .filter(|&s| s > 0);
     let mut parts = rest
       .split(['?', '#'])
       .next()?
@@ -104,9 +110,10 @@ impl Route {
       return Some(Self::Clip(first.to_owned()));
     }
     match (first, second, third) {
-      ("videos", Some(id), _) if id.bytes().all(|b| b.is_ascii_digit()) => {
-        Some(Self::Vod(id.to_owned()))
-      }
+      ("videos", Some(id), _) if id.bytes().all(|b| b.is_ascii_digit()) => Some(Self::Vod {
+        id: id.to_owned(),
+        start,
+      }),
       (_, Some("clip"), Some(slug)) => Some(Self::Clip(slug.to_owned())),
       _ => following::channel_login(first).map(Self::Watch),
     }
@@ -125,7 +132,7 @@ impl Route {
       Self::Category { name, .. } => name.clone().into(),
       Self::Search => t("Search", "Recherche").into(),
       Self::Channel(login) | Self::Watch(login) => login.clone().into(),
-      Self::Vod(_) => t("Video", "Vidéo").into(),
+      Self::Vod { .. } => t("Video", "Vidéo").into(),
       Self::Clip(_) => "Clip".into(),
     }
   }
@@ -466,12 +473,15 @@ impl TwitchSpace {
         cx.new(|cx| ChannelView::new(nav, helix, client, login, cx))
           .into()
       }
-      Route::Watch(_) | Route::Vod(_) | Route::Clip(_) => {
+      Route::Watch(_) | Route::Vod { .. } | Route::Clip(_) => {
         let Some(client) = self.client.clone() else {
           return;
         };
         let kind = match &route {
-          Route::Vod(id) => Kind::Vod(id.clone()),
+          Route::Vod { id, start } => Kind::Vod {
+            id: id.clone(),
+            start: *start,
+          },
           Route::Clip(slug) => Kind::Clip(slug.clone()),
           Route::Watch(login) => Kind::Live(login.clone()),
           _ => return,
@@ -949,7 +959,24 @@ mod tests {
     );
     assert_eq!(
       Route::from_url("https://www.twitch.tv/videos/2915878235?t=1h"),
-      Some(Route::Vod("2915878235".into()))
+      Some(Route::Vod {
+        id: "2915878235".into(),
+        start: Some(3600)
+      })
+    );
+    assert_eq!(
+      Route::from_url("https://www.twitch.tv/videos/2915878235?filter=archives&t=1h2m3s"),
+      Some(Route::Vod {
+        id: "2915878235".into(),
+        start: Some(3723)
+      })
+    );
+    assert_eq!(
+      Route::from_url("https://www.twitch.tv/videos/2915878235"),
+      Some(Route::Vod {
+        id: "2915878235".into(),
+        start: None
+      })
     );
     assert_eq!(
       Route::from_url("https://clips.twitch.tv/OpenRenownedNewtPMSTwin"),

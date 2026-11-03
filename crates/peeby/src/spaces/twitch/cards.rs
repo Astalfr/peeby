@@ -6,13 +6,19 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, FontWeight, SharedString, Window, div, px};
-use gpui_component::{h_flex, v_flex};
+use gpui::{
+  Anchor, AnyElement, App, ElementId, FontWeight, MouseButton, SharedString, Window, div, px,
+};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::popover::Popover;
+use gpui_component::{Sizable, h_flex, v_flex};
+use twitch::gql;
 use twitch::helix::{self, Category, Clip, Helix, Stream, Video};
 use ui::assets::Icon;
 use ui::card::{Hover, MediaCard};
 use ui::i18n::{Lang, lang, t};
 use ui::picture::{self, Picture};
+use ui::player::chapter_list::{ChapterItem, chapter_list};
 use ui::{tf, theme};
 
 use super::{Nav, Route};
@@ -405,6 +411,7 @@ fn progress(position: u32, length: u64) -> Option<f32> {
 pub fn video_card(
   video: &Video,
   position: Option<u32>,
+  chapters: Option<&[gql::Chapter]>,
   width: f32,
   nav: &Nav,
   window: &mut Window,
@@ -412,10 +419,17 @@ pub fn video_card(
 ) -> AnyElement {
   let id = format!("twitch-video-{}", video.id);
   let hover = Hover::new(&id, window, cx);
-  let route = Route::Vod(video.id.clone());
+  let route = Route::Vod {
+    id: video.id.clone(),
+    start: None,
+  };
+  // As twitch.tv: the games played, from two, under a button at the picture's bottom left.
+  let chapters = chapters
+    .filter(|c| c.len() >= 2)
+    .map(|c| chapters_button(&id, &video.id, c, nav));
   let nav = nav.clone();
   let label = SharedString::from(video.title.clone());
-  MediaCard::new(
+  let mut card = MediaCard::new(
     id,
     hover,
     video.title.clone(),
@@ -427,13 +441,81 @@ pub fn video_card(
     date(video.created_at)
   )])
   .badge(Some(ui::player::format_time(video.duration as f64)))
-  .progress(position.and_then(|p| progress(p, video.duration)))
-  .on_middle_click({
-    let (nav, route, label) = (nav.clone(), route.clone(), label.clone());
-    move |_, cx| nav.open_in_new_tab(route.clone(), Some(label.clone()), cx)
-  })
-  .on_click(move |_, cx| nav.open(route.clone(), cx))
-  .grid(width, window, cx)
+  .progress(position.and_then(|p| progress(p, video.duration)));
+  if let Some(button) = chapters {
+    card = card.overlay(button);
+  }
+  card
+    .on_middle_click({
+      let (nav, route, label) = (nav.clone(), route.clone(), label.clone());
+      move |_, cx| nav.open_in_new_tab(route.clone(), Some(label.clone()), cx)
+    })
+    .on_click(move |_, cx| nav.open(route.clone(), cx))
+    .grid(width, window, cx)
+}
+
+/// "3 chapters" over a VOD's picture: a list of its games, a click on one plays the VOD from
+/// there.
+fn chapters_button(
+  key: &str,
+  video_id: &str,
+  chapters: &[gql::Chapter],
+  nav: &Nav,
+) -> impl IntoElement + use<> {
+  let key = format!("{key}-chapters");
+  let items: Vec<ChapterItem> = chapters
+    .iter()
+    .map(|c| ChapterItem {
+      start: f64::from(c.start),
+      title: c.game.clone(),
+      picture: c.box_art.as_deref().map(template),
+    })
+    .collect();
+  let count = items.len();
+  let (video_id, nav) = (video_id.to_owned(), nav.clone());
+  div()
+    .absolute()
+    .left(px(8.))
+    .bottom(px(8.))
+    // The card opens the VOD on click: keep this click from reaching it.
+    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+    .child(
+      Popover::new(ElementId::Name(key.clone().into()))
+        .anchor(Anchor::TopLeft)
+        .trigger(
+          Button::new(ElementId::Name(format!("{key}-button").into()))
+            .xsmall()
+            .ghost()
+            .icon(Icon::Chapters)
+            .label(tf!("{count} chapters", "{count} chapitres"))
+            .bg(gpui::black().opacity(0.8))
+            .text_color(gpui::white()),
+        )
+        .content(move |_, window, cx| {
+          let (video_id, nav) = (video_id.clone(), nav.clone());
+          let starts: Vec<u32> = items.iter().map(|item| item.start as u32).collect();
+          div()
+            .id(ElementId::Name(format!("{key}-list").into()))
+            .max_h(px(380.))
+            .overflow_y_scroll()
+            .child(chapter_list(
+              &key,
+              &items,
+              None,
+              move |i, _, cx| {
+                nav.open(
+                  Route::Vod {
+                    id: video_id.clone(),
+                    start: Some(starts[i]),
+                  },
+                  cx,
+                );
+              },
+              window,
+              cx,
+            ))
+        }),
+    )
 }
 
 /// A clip's grid card, `width` wide; a click plays it.

@@ -6,6 +6,7 @@
 //! or the window ([`Layout::Window`], the example); fills the window in fullscreen. Controls and
 //! behavior come from peeby's player page.
 
+pub mod chapter_list;
 mod overlays;
 pub mod segments;
 mod source;
@@ -1250,11 +1251,11 @@ impl PlayerView {
           div()
             .flex_shrink_0()
             .w(px(HOVER_PICTURE_WIDTH))
-            .h(px(HOVER_PICTURE_WIDTH / overlays::CHAPTER_PICTURE_ASPECT))
+            .h(px(HOVER_PICTURE_WIDTH / chapter_list::PICTURE_ASPECT))
             .child(picture::image_fill(
               p,
               HOVER_PICTURE_WIDTH,
-              overlays::CHAPTER_PICTURE_ASPECT,
+              chapter_list::PICTURE_ASPECT,
               px(2.),
               window,
               cx,
