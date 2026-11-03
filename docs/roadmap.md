@@ -16,6 +16,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 ## Log file
 
 - Done (2026-11-03): Peeby writes its log to `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log` as well as stderr: a release build has no console, so its warnings were lost (a Twitch live's Windows notification went missing with no trace; `build` or `Show` failed in `desktop::toast`). One file per launch, created at its first line by a thread of its own, a panic logged and flushed, deleted after 7 days with mpv's logs. Checked with a debug run: the file holds the stderr lines.
+- Done (2026-11-03): the log told why: `ToastNotifier::Show` failed with 0x800401FD (the notifier kept since startup disconnected, 25 to 70 minutes after launch). A failure now makes a new notifier and shows the toast again ([ADR 0020](decisions/0020-notifications-and-background.md)). **Not verified:** the retry in the app (it needs the notifier to go stale).
 
 ## Subscribe and follow buttons
 

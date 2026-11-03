@@ -60,7 +60,10 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   the image cache. The last 32 toasts are kept so that their click arrives; it goes through a
   channel to the UI thread, shows the main window and runs the toast's action there. The app id
   `Peeby.Peeby` is registered under `HKCU\Software\Classes\AppUserModelId` with the name and
-  the icon (written to `%LOCALAPPDATA%\peeby\peeby.ico`).
+  the icon (written to `%LOCALAPPDATA%\peeby\peeby.ico`). The `ToastNotifier` made at startup
+  gets disconnected from Windows' notification service after a while (`Show` fails with
+  0x800401FD, seen 25 to 70 minutes after launch, without any restart of the service or the
+  shell): on a failure, a new notifier shows the toast and replaces it.
 - **Notification area** (`desktop::tray`, `tray-icon` 0.26): Peeby's icon (resource 1); a left
   click opens the list of lives, a double click shows the window, its menu has "Open Peeby" and
   "Quit". Its hidden window gets its

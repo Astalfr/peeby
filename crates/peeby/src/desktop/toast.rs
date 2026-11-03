@@ -53,7 +53,7 @@ impl Global for Toasts {}
 /// Starts handling the toasts and their clicks. Called once at startup, [`register`] in the
 /// background; the toasts are left out when it fails.
 pub fn init(cx: &mut App) {
-  let notifier = match ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID)) {
+  let notifier = match notifier() {
     Ok(notifier) => notifier,
     Err(e) => {
       tracing::warn!("Windows notifications unavailable: {e}");
@@ -75,6 +75,10 @@ pub fn init(cx: &mut App) {
   .detach();
 }
 
+fn notifier() -> windows::core::Result<ToastNotifier> {
+  ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID))
+}
+
 /// Shows `toast`; a click shows the main window, then runs `on_click` in it.
 pub fn show(toast: Toast, on_click: impl FnOnce(&mut Window, &mut App) + 'static, cx: &mut App) {
   let Some(toasts) = cx.try_global::<Toasts>() else {
@@ -89,8 +93,20 @@ pub fn show(toast: Toast, on_click: impl FnOnce(&mut Window, &mut App) + 'static
     }
   };
   if let Err(e) = toasts.notifier.Show(&notification) {
-    tracing::warn!("cannot show a Windows notification: {e}");
-    return;
+    // A notifier kept a while gets disconnected from Windows' notification service
+    // (0x800401FD, seen after 25 to 70 minutes): a new one shows it.
+    tracing::info!("Windows notification failed ({e}), with a new notifier again");
+    let shown = notifier().and_then(|notifier| {
+      notifier.Show(&notification)?;
+      Ok(notifier)
+    });
+    match shown {
+      Ok(notifier) => cx.global_mut::<Toasts>().notifier = notifier,
+      Err(e) => {
+        tracing::warn!("cannot show a Windows notification: {e}");
+        return;
+      }
+    }
   }
   let toasts = cx.global_mut::<Toasts>();
   toasts.next += 1;
