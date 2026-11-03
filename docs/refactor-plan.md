@@ -214,7 +214,7 @@ Principles:
 
 | Key | Action |
 |---|---|
-| Space, K | Play/pause |
+| Space, K | Play/pause; Space or the left button held on the picture: 2× speed until the release (not on a live) |
 | ←/→, J/L | Seek by the seek step (setting); with Shift, the large step |
 | Page Up / Page Down | Previous / next chapter |
 | 0–9 | Jump to 0–90 % |
@@ -232,6 +232,7 @@ Principles:
 | Backspace | Close the full-window player |
 | ? | Shortcut help |
 | Right click | Menu: shortcut help, statistics |
+| Speed button (not on a live) | Menu: 0.5×, 0.75×, normal, 1.25×, 1.5×, 2×, kept across qualities and next videos |
 
 ## Jellyfin parity checklist
 

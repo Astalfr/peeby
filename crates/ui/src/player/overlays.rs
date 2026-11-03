@@ -14,7 +14,7 @@ use player::TrackKind;
 
 use super::chapter_list::{ChapterItem, chapter_list};
 use super::tracks::{SUBTITLE_DELAY_STEP, UpNext};
-use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView};
+use super::{CONTROL_ICON, CONTROL_SIZE, Layout, Menu, PlayerView, SPEEDS, speed_label};
 use crate::assets::Icon;
 use crate::i18n::t;
 use crate::tf;
@@ -25,8 +25,8 @@ const SHORTCUTS: &[(&str, &str, &str, &str)] = &[
   (
     "Space / K",
     "Espace / K",
-    "Play or pause",
-    "Lecture ou pause",
+    "Play or pause; hold: 2× speed",
+    "Lecture ou pause ; maintenir : vitesse 2×",
   ),
   ("← / → · J / L", "← / → · J / L", "", ""),
   (
@@ -138,6 +138,18 @@ impl PlayerView {
           );
         }
       }
+      Menu::Speed => {
+        for (i, speed) in SPEEDS.into_iter().enumerate() {
+          list = list.child(
+            entry(
+              format!("speed-{i}").into(),
+              speed_label(speed),
+              self.speed == speed,
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.select_speed(speed, cx))),
+          );
+        }
+      }
       Menu::Audio => {
         let current = self.selected(TrackKind::Audio);
         for track in self.tracks_of(TrackKind::Audio) {
@@ -236,7 +248,11 @@ impl PlayerView {
       .right_4()
       .bottom(px(84.))
       .max_h(px(380.))
-      .min_w(px(if menu == Menu::Quality { 200. } else { 240. }))
+      .min_w(px(if matches!(menu, Menu::Quality | Menu::Speed) {
+        200.
+      } else {
+        240.
+      }))
       .overflow_y_scroll()
       .p_2()
       .rounded_lg()

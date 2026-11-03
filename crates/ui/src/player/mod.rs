@@ -23,8 +23,8 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, ClickEvent, Context, Corners, DispatchPhase,
-  Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent, MouseButton,
-  MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
+  Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent, KeyUpEvent,
+  MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
   SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint, img, linear_color_stop,
   linear_gradient, px, relative,
 };
@@ -45,6 +45,12 @@ use crate::{motion, tf, theme};
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
+/// Space or the left button held on the picture this long plays at [`HOLD_SPEED`] until the
+/// release; released sooner, it plays or pauses.
+const HOLD_DELAY: Duration = Duration::from_millis(350);
+const HOLD_SPEED: f64 = 2.0;
+/// The speeds of the speed menu.
+const SPEEDS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 /// A live paused longer than this resumes at its live edge rather than where it stopped (shorter:
 /// a double click's two toggles).
 const LIVE_RESUME_AFTER: Duration = Duration::from_secs(1);
@@ -183,9 +189,17 @@ impl Default for Prefs {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Menu {
   Quality,
+  Speed,
   Audio,
   Subtitles,
   Chapters,
+}
+
+/// What is held down for the 2× speed ([`HOLD_DELAY`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Hold {
+  Space,
+  Mouse,
 }
 
 /// The player: see the module documentation.
@@ -240,6 +254,17 @@ pub struct PlayerView {
   /// The last play/pause change, shown as a short pulse in the middle of the picture; the
   /// counter gives each pulse its own animation id, so a new change restarts it.
   pause_pulse: Option<(u32, bool)>,
+  /// Space or the left button held on the picture, and the task switching to [`HOLD_SPEED`]
+  /// once it lasts [`HOLD_DELAY`].
+  hold: Option<Hold>,
+  hold_task: Option<Task<()>>,
+  /// Playing at [`HOLD_SPEED`] until the hold ends.
+  fast: bool,
+  /// The speed picked in the menu, kept across mpv restarts (qualities, next videos).
+  speed: f64,
+  /// The last left-button press on the picture ended a 2× hold: its click neither plays nor
+  /// pauses.
+  hold_ended: bool,
   buffering: bool,
   volume: f64,
   muted: bool,
@@ -344,6 +369,11 @@ impl PlayerView {
       paused_since: None,
       started: false,
       pause_pulse: None,
+      hold: None,
+      hold_task: None,
+      fast: false,
+      speed: 1.0,
+      hold_ended: false,
       buffering: false,
       volume: prefs.volume,
       muted: prefs.muted,
@@ -535,6 +565,58 @@ impl PlayerView {
       self.resume_live(cx);
     } else {
       self.with_player(Player::toggle_pause);
+    }
+  }
+
+  /// Space or the left button went down: once held for [`HOLD_DELAY`], a playing video (not a
+  /// live, which has nothing ahead) plays at [`HOLD_SPEED`] until the release.
+  fn start_hold(&mut self, hold: Hold, cx: &mut Context<Self>) {
+    self.hold = Some(hold);
+    // Redrawn so that the window listens for the button's release.
+    cx.notify();
+    self.hold_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(HOLD_DELAY).await;
+      this
+        .update(cx, |this, cx| {
+          this.hold_task = None;
+          if this.hold.is_some() && !this.paused && !this.is_live() && this.player.is_some() {
+            this.fast = true;
+            this.with_player(|p| p.set_speed(HOLD_SPEED));
+            cx.notify();
+          }
+        })
+        .ok();
+    }));
+  }
+
+  /// Plays at `speed`, picked in the speed menu. A live has nothing ahead: it keeps 1×.
+  fn select_speed(&mut self, speed: f64, cx: &mut Context<Self>) {
+    self.menu = None;
+    self.speed = speed;
+    if !self.fast {
+      self.with_player(|p| p.set_speed(speed));
+    }
+    self.show_osd(tf!("Speed {}", "Vitesse {}", speed_label(speed)).into(), cx);
+  }
+
+  /// Ends the hold, back to the menu's speed; true when it was playing at [`HOLD_SPEED`] (the
+  /// release then neither plays nor pauses).
+  fn end_hold(&mut self, cx: &mut Context<Self>) -> bool {
+    self.hold = None;
+    self.hold_task = None;
+    let fast = std::mem::take(&mut self.fast);
+    if fast {
+      let speed = self.speed;
+      self.with_player(|p| p.set_speed(speed));
+      cx.notify();
+    }
+    fast
+  }
+
+  /// The left button held on the picture was released, wherever the mouse is.
+  fn end_mouse_hold(&mut self, _: Point<Pixels>, cx: &mut Context<Self>) {
+    if self.hold == Some(Hold::Mouse) {
+      self.hold_ended = self.end_hold(cx);
     }
   }
 
@@ -803,6 +885,9 @@ impl PlayerView {
     player.set_volume(self.volume);
     if self.muted {
       player.set_muted(true);
+    }
+    if self.speed != 1.0 && !self.is_live() {
+      player.set_speed(self.speed);
     }
     if self.covered {
       tracing::info!("player started on a covered page: paused");
@@ -1113,7 +1198,13 @@ impl PlayerView {
       return;
     }
     match key {
-      "space" | "k" => self.toggle_pause(cx),
+      // Plays or pauses on its release, unless held long enough for the 2× speed.
+      "space" => {
+        if !event.is_held && self.hold.is_none() {
+          self.start_hold(Hold::Space, cx);
+        }
+      }
+      "k" => self.toggle_pause(cx),
       "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
       "right" | "l" => self.seek_by(self.seek_step(shift), cx),
       "pageup" => self.add_chapter(-1, cx),
@@ -1149,6 +1240,25 @@ impl PlayerView {
     self.show_controls(cx);
   }
 
+  fn on_key_up(&mut self, event: &KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+    if event.keystroke.key == "space" && self.hold == Some(Hold::Space) {
+      if !self.end_hold(cx) {
+        self.toggle_pause(cx);
+      }
+      cx.stop_propagation();
+    }
+  }
+
+  /// Left button down on the picture: a hold may start ([`Self::start_hold`]), unless the press
+  /// closes a menu.
+  fn on_video_mouse_down(&mut self, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    self.hold_ended = false;
+    let closing = self.menu.is_some() || self.help || self.context_menu.is_some();
+    if !closing && self.hold.is_none() {
+      self.start_hold(Hold::Mouse, cx);
+    }
+  }
+
   /// Right click on the picture: the menu with the shortcuts and the statistics, where the
   /// mouse is.
   fn on_right_click(
@@ -1169,8 +1279,15 @@ impl PlayerView {
   }
 
   /// Click on the picture: play/pause; double-click: fullscreen (undoing the first click's pause).
+  /// A press held for the 2× speed is no click.
   fn on_video_click(&mut self, event: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
     window.focus(&self.focus, cx);
+    // Released before the window listened for the release: the hold ends here.
+    let held =
+      std::mem::take(&mut self.hold_ended) | (self.hold == Some(Hold::Mouse) && self.end_hold(cx));
+    if held {
+      return;
+    }
     let closed = self.menu.take().is_some()
       | std::mem::take(&mut self.help)
       | self.context_menu.take().is_some();
@@ -1812,6 +1929,15 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Subtitles, cx))),
         )
       })
+      .when(!self.is_live(), |row| {
+        row.child(
+          self
+            .control_button("speed-menu", cx)
+            .icon(Icon::Speed)
+            .tooltip(t("Speed", "Vitesse"))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Speed, cx))),
+        )
+      })
       .when(has_qualities, |row| {
         row.child(
           self
@@ -2079,6 +2205,19 @@ fn corner_radii(window: &Window, theater: bool) -> Corners<Pixels> {
   }
 }
 
+/// `1.25×` in English, `1,25×` in French; `Normal` for 1×.
+fn speed_label(speed: f64) -> String {
+  if speed == 1.0 {
+    return t("Normal", "Normale").to_string();
+  }
+  let number = format!("{speed}");
+  let number = match lang() {
+    Lang::Fr => number.replace('.', ","),
+    Lang::En => number,
+  };
+  format!("{number}×")
+}
+
 /// `12,345` in English, `12 345` in French (with a narrow no-break space).
 fn group_thousands(n: u64) -> String {
   let separator = lang().pick(',', '\u{202f}');
@@ -2124,11 +2263,21 @@ impl Render for PlayerView {
       .bg(gpui::black())
       .track_focus(&self.focus)
       .on_key_down(cx.listener(Self::on_key))
+      .on_key_up(cx.listener(Self::on_key_up))
       .child({
         let bounds = self.bounds.clone();
-        canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {})
-          .absolute()
-          .inset_0()
+        let (mouse_hold, view) = (self.hold == Some(Hold::Mouse), cx.weak_entity());
+        canvas(
+          move |b, _, _| bounds.set(b),
+          move |_, _, window, _| {
+            // The release of a left button held on the picture, wherever it happens.
+            if mouse_hold {
+              listen_to_drag(&view, window, |_, _, _| {}, PlayerView::end_mouse_hold);
+            }
+          },
+        )
+        .absolute()
+        .inset_0()
       })
       .children(
         self
@@ -2143,6 +2292,7 @@ impl Render for PlayerView {
           .absolute()
           .inset_0()
           .on_click(cx.listener(Self::on_video_click))
+          .on_mouse_down(MouseButton::Left, cx.listener(Self::on_video_mouse_down))
           .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_click))
           .on_scroll(cx.listener(Self::on_wheel))
           .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx))),
@@ -2208,7 +2358,18 @@ impl Render for PlayerView {
           ),
       );
     }
-    if let Some(osd) = self.osd.clone() {
+    // No key up comes once the focus or the window is gone: the 2× speed ends there.
+    if self.hold == Some(Hold::Space)
+      && !(self.focus.is_focused(window) && window.is_window_active())
+    {
+      self.end_hold(cx);
+    }
+    let osd = if self.fast {
+      Some(t("2× speed", "Vitesse 2×").into())
+    } else {
+      self.osd.clone()
+    };
+    if let Some(osd) = osd {
       root = root.child(
         div()
           .absolute()
@@ -2264,7 +2425,7 @@ impl Render for PlayerView {
 
 #[cfg(test)]
 mod tests {
-  use super::group_thousands;
+  use super::{group_thousands, speed_label};
 
   #[test]
   fn thousands() {
@@ -2273,5 +2434,12 @@ mod tests {
     // Tests see the default language, English.
     assert_eq!(group_thousands(12_345), "12,345");
     assert_eq!(group_thousands(1_234_567), "1,234,567");
+  }
+
+  #[test]
+  fn speeds() {
+    assert_eq!(speed_label(1.0), "Normal");
+    assert_eq!(speed_label(0.75), "0.75×");
+    assert_eq!(speed_label(2.0), "2×");
   }
 }

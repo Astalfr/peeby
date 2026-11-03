@@ -60,6 +60,7 @@ icons! {
   Keyboard => "keyboard",
   Chapters => "list-video",
   Settings => "settings",
+  Speed => "gauge",
   Account => "circle-user",
   Search => "search",
   Grid => "layout-grid",

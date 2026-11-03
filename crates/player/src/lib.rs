@@ -509,6 +509,11 @@ impl Player {
     self.set("audio-device", device.unwrap_or("auto"));
   }
 
+  /// Playback speed, 1.0 being normal (mpv keeps the audio's pitch).
+  pub fn set_speed(&self, speed: f64) {
+    self.set("speed", &format!("{speed:.2}"));
+  }
+
   /// Subtitle delay in seconds.
   pub fn set_subtitle_delay(&self, seconds: f64) {
     self.set("sub-delay", &format!("{seconds:.3}"));
