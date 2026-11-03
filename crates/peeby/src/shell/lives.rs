@@ -10,14 +10,16 @@ use std::time::{Duration, Instant, SystemTime};
 use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, Context, DisplayId, ElementId, FocusHandle,
-  FontWeight, Global, KeyDownEvent, SharedString, Subscription, Window, WindowBackgroundAppearance,
-  WindowBounds, WindowHandle, WindowKind, WindowOptions, div, ease_out_quint, point, px, relative,
-  size,
+  FontWeight, Global, KeyDownEvent, SharedString, Subscription, Task, Window,
+  WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
+  ease_out_quint, point, px, relative, size,
 };
+use gpui_component::scroll::ScrollableElement;
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::{assets, motion, picture, tf, theme, widgets};
+use ui::{assets, motion, picture, theme, widgets};
 
 use super::space::{LiveEntry, Lives, SpaceHandle};
 use crate::desktop;
@@ -26,7 +28,17 @@ const WIDTH: f32 = 380.;
 const MAX_HEIGHT: f32 = 560.;
 /// Between the list and the screen's edges or the icon.
 const MARGIN: f32 = 12.;
-const AVATAR: f32 = 40.;
+/// The channel's picture, next to its name.
+const AVATAR: f32 = 20.;
+/// The lines right of the preview, which is as tall as they are: the title's, and the viewers'
+/// and the category's, held close together.
+const TITLE_LINE: f32 = 16.;
+const META_LINE: f32 = 15.;
+/// Between the name and the title, and between the title and the viewers.
+const NAME_GAP: f32 = 4.;
+const META_GAP: f32 = 2.;
+/// A title's tooltip, at most (the window clips it).
+const TOOLTIP: f32 = 300.;
 /// How far the list rises from the taskbar as it opens.
 const RISE: f32 = 16.;
 /// How far a tab's list slides in from the side of its tab.
@@ -177,6 +189,8 @@ struct LivesView {
   from_below: bool,
   focus: FocusHandle,
   _subscriptions: Vec<Subscription>,
+  /// Redraws every second, for the uptimes.
+  _tick: Task<()>,
 }
 
 impl LivesView {
@@ -228,6 +242,14 @@ impl LivesView {
       from_below,
       focus,
       _subscriptions: subscriptions,
+      _tick: cx.spawn(async move |this, cx| {
+        loop {
+          cx.background_executor().timer(Duration::from_secs(1)).await;
+          if this.update(cx, |_, cx| cx.notify()).is_err() {
+            return;
+          }
+        }
+      }),
     }
   }
 
@@ -389,12 +411,7 @@ impl LivesView {
       }
     };
     let now = SystemTime::now();
-    let mut list = v_flex()
-      .id("lives-list")
-      .flex_1()
-      .min_h_0()
-      .overflow_y_scroll()
-      .p_1();
+    let mut rows = Vec::new();
     for (i, live) in lives.into_iter().enumerate() {
       // A row waits for the ones above it (the first ones only), then comes in from the right.
       let delay = STAGGER * i.min(STAGGERED) as u32;
@@ -403,7 +420,7 @@ impl LivesView {
       let ease = ease_out_quint();
       let key = format!("lives-row-{}-{}", self.tab, live.id);
       let row = self.row(space.clone(), live, now, window, cx);
-      list = list.child(animated(
+      rows.push(animated(
         div().relative().child(row),
         ElementId::Name(key.into()),
         Animation::new(total).with_easing(move |t| ease(((t - wait) / (1. - wait)).max(0.))),
@@ -411,7 +428,15 @@ impl LivesView {
         cx,
       ));
     }
-    list.into_any_element()
+    // Each tab its own scroll position, gpui-component's scrollbar as in the app's pages.
+    v_flex()
+      .id(ElementId::Name(format!("lives-list-{}", self.tab).into()))
+      .flex_1()
+      .min_h_0()
+      .p_1()
+      .overflow_y_scrollbar()
+      .children(rows)
+      .into_any_element()
   }
 
   fn row(
@@ -430,53 +455,81 @@ impl LivesView {
       .avatar
       .picture
       .as_ref()
-      .map(|p| picture::avatar(p, AVATAR - 4., window, cx));
+      .map(|p| picture::avatar(p, AVATAR, window, cx));
+    // The preview is as tall as the lines beside it.
+    let metas = usize::from(live.viewers.is_some()) + usize::from(live.detail.is_some());
+    let height = AVATAR
+      + NAME_GAP
+      + TITLE_LINE
+      + if metas > 0 {
+        META_GAP + META_LINE * metas as f32
+      } else {
+        0.
+      };
+    let width = height * 16. / 9.;
+    let preview = live
+      .preview
+      .as_ref()
+      .map(|p| picture::image_fill(p, width, 16. / 9., theme::RADIUS, window, cx));
     let uptime = live.since.and_then(|since| now.duration_since(since).ok());
     let id = live.id.clone();
     h_flex()
       .id(ElementId::Name(format!("live-{}", live.id).into()))
       .w_full()
-      .px_2()
-      .py_2()
+      .p_2()
       .gap_3()
+      .items_start()
       .group(group.clone())
       .rounded(theme::RADIUS)
       .cursor_pointer()
       .hover(move |s| s.bg(accent.base.opacity(0.14)))
       .on_click(cx.listener(move |this, _, _, cx| this.open_live(space.clone(), id.clone(), cx)))
-      // The avatar in a red ring, its initial while it loads.
+      // The preview, the uptime over its corner as on Twitch.
       .child(
         div()
-          .size(px(AVATAR))
+          .relative()
           .flex_none()
-          .rounded_full()
-          .border_2()
-          .border_color(red)
-          .flex()
-          .items_center()
-          .justify_center()
-          .child(
+          .w(px(width))
+          .h(px(height))
+          .rounded(theme::RADIUS)
+          .bg(theme::surface())
+          .children(preview)
+          .children(uptime.map(|d| {
             div()
-              .size(px(AVATAR - 4.))
-              .rounded_full()
-              .bg(theme::surface_hover())
-              .flex()
-              .items_center()
-              .justify_center()
-              .text_sm()
-              .text_color(theme::muted())
-              .when(avatar.is_none(), |el| el.child(live.avatar.initial.clone()))
-              .children(avatar),
-          ),
+              .absolute()
+              .bottom(px(4.))
+              .right(px(4.))
+              .px_1()
+              .rounded(px(4.))
+              .bg(gpui::black().opacity(0.7))
+              .text_size(px(11.))
+              .text_color(gpui::white())
+              .child(duration(d.as_secs()))
+          })),
       )
       .child(
         v_flex()
           .flex_1()
           .min_w_0()
-          .gap_0p5()
+          // The channel's picture (its initial while it loads) and name.
           .child(
             h_flex()
-              .gap_2()
+              .h(px(AVATAR))
+              .gap_1p5()
+              .child(
+                div()
+                  .size(px(AVATAR))
+                  .flex_none()
+                  .rounded_full()
+                  .bg(theme::surface_hover())
+                  .flex()
+                  .items_center()
+                  .justify_center()
+                  .text_size(px(10.))
+                  .text_color(theme::muted())
+                  .when(avatar.is_none(), |el| el.child(live.avatar.initial.clone()))
+                  .children(avatar),
+              )
               .child(
                 div()
                   .flex_1()
@@ -486,40 +539,45 @@ impl LivesView {
                   .font_weight(FontWeight::SEMIBOLD)
                   .group_hover(group, move |s| s.text_color(accent.hover))
                   .child(live.channel.clone()),
-              )
-              .children(live.viewers.clone().map(|viewers| {
-                h_flex()
-                  .flex_none()
-                  .gap_1()
-                  .text_xs()
-                  .text_color(theme::muted())
-                  .child(div().size(px(6.)).rounded_full().bg(red))
-                  .child(viewers)
-              })),
+              ),
           )
-          .when(live.detail.is_some() || uptime.is_some(), |el| {
-            el.child(
-              h_flex()
-                .gap_2()
-                .text_xs()
-                .text_color(theme::muted())
-                .child(
-                  div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .children(live.detail.clone()),
-                )
-                .children(uptime.map(|d| div().flex_none().child(duration(d.as_secs())))),
-            )
-          })
-          .child(
+          .child({
+            let title = live.title.clone();
             div()
+              .id(ElementId::Name(format!("live-title-{}", live.id).into()))
+              .mt(px(NAME_GAP))
+              .h(px(TITLE_LINE))
+              .line_height(px(TITLE_LINE))
               .truncate()
               .text_xs()
-              .text_color(theme::subtle())
-              .child(live.title.clone()),
-          ),
+              .child(live.title.clone())
+              // The whole title, wrapped within the list's width.
+              .tooltip(move |window, cx| {
+                let title = title.clone();
+                Tooltip::element(move |_, _| div().max_w(px(TOOLTIP)).child(title.clone()))
+                  .build(window, cx)
+              })
+          })
+          .when(metas > 0, |el| el.child(div().h(px(META_GAP))))
+          .children(live.viewers.clone().map(|viewers| {
+            h_flex()
+              .h(px(META_LINE))
+              .line_height(px(META_LINE))
+              .gap_1()
+              .text_xs()
+              .text_color(theme::muted())
+              .child(div().size(px(6.)).rounded_full().bg(red))
+              .child(viewers)
+          }))
+          .children(live.detail.clone().map(|detail| {
+            div()
+              .h(px(META_LINE))
+              .line_height(px(META_LINE))
+              .truncate()
+              .text_xs()
+              .text_color(theme::muted())
+              .child(detail)
+          })),
       )
       .into_any_element()
   }
@@ -619,15 +677,14 @@ fn message(text: impl Into<SharedString>) -> AnyElement {
     .into_any_element()
 }
 
-/// A live's uptime: `45 min`, `2 h 05`.
+/// A live's uptime: `5:30`, `2:05:30` from an hour (the minutes padded only then; the seconds
+/// always).
 fn duration(seconds: u64) -> String {
-  let minutes = seconds / 60;
-  match minutes {
-    0..60 => tf!("{minutes} min", "{minutes} min"),
-    _ => {
-      let (hours, minutes) = (minutes / 60, minutes % 60);
-      tf!("{hours} h {minutes:02}", "{hours} h {minutes:02}")
-    }
+  let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+  if hours == 0 {
+    format!("{minutes}:{seconds:02}")
+  } else {
+    format!("{hours}:{minutes:02}:{seconds:02}")
   }
 }
 
@@ -637,8 +694,10 @@ mod tests {
 
   #[test]
   fn uptimes() {
-    assert_eq!(duration(59), "0 min");
-    assert_eq!(duration(45 * 60), "45 min");
-    assert_eq!(duration(2 * 3600 + 5 * 60 + 30), "2 h 05");
+    assert_eq!(duration(59), "0:59");
+    assert_eq!(duration(5 * 60 + 7), "5:07");
+    assert_eq!(duration(45 * 60 + 7), "45:07");
+    assert_eq!(duration(2 * 3600 + 5 * 60 + 30), "2:05:30");
+    assert_eq!(duration(12 * 3600 + 45 * 60), "12:45:00");
   }
 }

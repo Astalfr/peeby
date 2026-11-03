@@ -75,7 +75,7 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   badge, no duration), read when the list opens and at most once a minute, never in the
   background. A row opens its live in the space's last tab, in the main window shown. Windows
   sends a double click as click, double click, release: a click waits for the double click's
-  time (`GetDoubleClickTime`) before opening the list, and a double click cancels it. The list
+  time (`GetDoubleClickTime`, at most 100 ms: the default 500 ms made the list slow) before opening the list, and a double click cancels it. The list
   closes when it loses the focus; the click on the icon that took it does not open it again.
 - **Nothing plays where nobody looks** (ADR 0019): hiding the window pauses the video of the
   page shown (`Shell::go_background`); a mini-player stays on screen and goes on. Twitch's

@@ -1014,6 +1014,7 @@ impl Space for TwitchSpace {
           .started_at
           .and_then(|ms| u64::try_from(ms).ok())
           .map(|ms| SystemTime::UNIX_EPOCH + Duration::from_millis(ms)),
+        preview: (!stream.thumbnail_url.is_empty()).then(|| cards::preview(&stream.thumbnail_url)),
         avatar: Avatar::of(
           &stream.user_name,
           signed

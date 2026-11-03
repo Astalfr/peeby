@@ -78,7 +78,7 @@ pub fn template(url: &str) -> Picture {
 
 /// A live preview: Twitch's CDN keeps it for a while, so a five-minute stamp gets a fresh one
 /// regularly while the image store still caches it in between.
-fn preview(url: &str) -> Picture {
+pub fn preview(url: &str) -> Picture {
   let stamp = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .map_or(0, |d| d.as_secs() / 300);

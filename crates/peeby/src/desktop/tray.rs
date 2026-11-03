@@ -24,6 +24,11 @@ const ICON_RESOURCE: u16 = 1;
 /// the list): it does not open it again.
 const CLOSED_BY_CLICK: Duration = Duration::from_millis(800);
 
+/// A click waits at most this long for a second one (Windows' double click time is 500 ms by
+/// default, which makes the list slow to open): a slower double click opens the list for a
+/// moment before the window shows.
+const CLICK_WAIT: Duration = Duration::from_millis(100);
+
 /// What the icon asks for.
 enum Request {
   Show,
@@ -107,7 +112,7 @@ pub fn init(cx: &mut App) -> bool {
     // the list only once the double click's time has passed without another. Every click and
     // double click bumps the count, which cancels the click waiting.
     let clicks = Rc::new(Cell::new(0_u64));
-    let wait = sys::double_click_time();
+    let wait = sys::double_click_time().min(CLICK_WAIT);
     // The release that ends a double click is no click of its own.
     let mut after_double = false;
     while let Ok(request) = received.recv().await {

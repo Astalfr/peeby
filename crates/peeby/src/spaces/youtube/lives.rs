@@ -98,6 +98,7 @@ fn entry(video: &VideoItem) -> LiveEntry {
     // YouTube's own words, in the session's language: "169 spectateurs".
     viewers: video.metadata.first().cloned().map(Into::into),
     since: None,
+    preview: (!video.thumbnails.is_empty()).then(|| convert::picture(&video.thumbnails)),
     avatar: Avatar::of(
       &channel,
       (!video.avatar.is_empty()).then(|| convert::picture(&video.avatar)),

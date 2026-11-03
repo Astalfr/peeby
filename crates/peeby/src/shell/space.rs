@@ -126,6 +126,8 @@ pub struct LiveEntry {
   pub viewers: Option<SharedString>,
   /// When it started, for its uptime.
   pub since: Option<SystemTime>,
+  /// The live's preview (16:9).
+  pub preview: Option<Picture>,
   pub avatar: Avatar,
 }
 
