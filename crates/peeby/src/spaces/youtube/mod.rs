@@ -19,6 +19,7 @@ pub mod save;
 pub mod search;
 pub mod settings_page;
 pub mod shorts;
+pub mod subscribe;
 pub mod tools;
 pub mod watch;
 
@@ -190,6 +191,7 @@ impl YouTubeSpace {
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
     bell::reset(cx);
+    subscribe::reset(cx);
     let unseen = inbox::inbox(cx);
     cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
     inbox::reset(cx.weak_entity(), cx);
@@ -233,6 +235,7 @@ impl YouTubeSpace {
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
     bell::reset(cx);
+    subscribe::reset(cx);
     inbox::reset(cx.weak_entity(), cx);
     self.client = client;
     // Every page holds the old client: each tab starts over, rebuilt when it shows.

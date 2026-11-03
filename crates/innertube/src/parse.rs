@@ -9,8 +9,9 @@
 //! - a playlist's videos: video `lockupViewModel`s, or `playlistVideoRenderer`s for "Watch
 //!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
 //!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists);
-//! - a subscribed channel's bell: `subscriptionNotificationToggleButtonRenderer` in the
-//!   `subscribeButtonRenderer` of the watch page's owner and of `FEchannels` entries;
+//! - a channel's subscribe button (`subscribeButtonRenderer` of the watch page's owner and of
+//!   `FEchannels` entries): `subscribed`, its `subscribeEndpoint`, its `unsubscribeEndpoint`
+//!   inside a confirmation dialog, and the bell, a `subscriptionNotificationToggleButtonRenderer`;
 //! - the notifications inbox (`FEnotifications_inbox`): `notificationRenderer`s in
 //!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`;
 //! - search results (`search`): `videoRenderer`s and `channelRenderer`s in an
@@ -29,7 +30,8 @@ use crate::models::{
   ChatMessage, ChatRun, Comment, CommentPage, Feed, LikeParams, LikeStatus, LinkTarget, Live,
   LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
   NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
-  SearchResult, ShortsPage, Storyboard, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
+  SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem,
+  WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -118,6 +120,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     like_params,
     likes,
     likes_liked,
+    subscription: parse_subscription(&secondary["subscribeButton"]),
     notifications: parse_notification_bell(&secondary["subscribeButton"]),
     live_chat,
     chapters: parse_chapters(response),
@@ -256,15 +259,36 @@ fn parse_chat_message(r: &Value) -> Option<ChatMessage> {
   })
 }
 
-/// The notification bell of a subscribe button: `None` signed out or not subscribed (the
-/// button then carries a bell anyway, for after a subscription). The current level is the icon
-/// of the state `currentStateId` names; the options are the menu items calling
+/// A subscribe button's state and the params of its endpoints.
+fn parse_subscription(subscribe_button: &Value) -> Option<Subscription> {
+  let button = subscribe_button.get("subscribeButtonRenderer")?;
+  let params = |key: &str| {
+    find_key(button, key).and_then(|endpoint| endpoint["params"].as_str().map(str::to_owned))
+  };
+  Some(Subscription {
+    subscribed: button["subscribed"] == true,
+    subscribe_params: params("subscribeEndpoint"),
+    unsubscribe_params: params("unsubscribeEndpoint"),
+  })
+}
+
+/// The state `subscription/subscribe` or `subscription/unsubscribe` answers for `channel_id`
+/// (its `updateSubscribeButtonAction`).
+pub fn parse_subscribed(response: &Value, channel_id: &str) -> Option<bool> {
+  let mut actions = Vec::new();
+  find_all(response, "updateSubscribeButtonAction", &mut actions);
+  actions
+    .into_iter()
+    .find(|a| a["channelId"] == channel_id)
+    .and_then(|a| a["subscribed"].as_bool())
+}
+
+/// The notification bell of a subscribe button, there even when the user is not subscribed
+/// (for after a subscription) or signed out. The current level is the icon of the state
+/// `currentStateId` names; the options are the menu items calling
 /// `modifyChannelNotificationPreferenceEndpoint` (not "Se désabonner").
 fn parse_notification_bell(subscribe_button: &Value) -> Option<ChannelNotifications> {
   let button = &subscribe_button["subscribeButtonRenderer"];
-  if button["subscribed"] != true {
-    return None;
-  }
   let toggle = find_key(button, "subscriptionNotificationToggleButtonRenderer")?;
   let level = toggle["states"]
     .as_array()?
@@ -472,7 +496,11 @@ fn parse_channel(c: &Value) -> Option<Channel> {
     handle: non_empty(text(&c["subscriberCountText"])).filter(|h| h.starts_with('@')),
     subscribers: non_empty(text(&c["videoCountText"])),
     avatar: thumbnails(&c["thumbnail"]["thumbnails"]),
-    notifications: parse_notification_bell(&c["subscribeButton"]),
+    // A search result's channel carries a bell for after a subscription: not one to show.
+    notifications: parse_subscription(&c["subscribeButton"])
+      .is_some_and(|s| s.subscribed)
+      .then(|| parse_notification_bell(&c["subscribeButton"]))
+      .flatten(),
   })
 }
 

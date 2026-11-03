@@ -27,7 +27,7 @@ use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, tf, theme};
 
 use super::points::PointsView;
-use super::{Nav, Route, cards, chat, play, progress, replay};
+use super::{Nav, Route, cards, chat, follow, play, progress, replay};
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
 
@@ -57,6 +57,8 @@ struct Header {
   avatar: Option<String>,
   /// Category, viewers, uptime (a live); views and date (a VOD, a clip).
   line: Option<String>,
+  /// Whether the account follows the channel; `None` without an auth-token.
+  followed: Option<bool>,
 }
 
 pub struct WatchView {
@@ -403,7 +405,9 @@ impl WatchView {
                 cards::views(video.view_count),
                 cards::date(video.created_at)
               )),
+              followed: None,
             });
+            this.load_followed(cx);
             let title: SharedString = video.title.into();
             this.nav.set_title(cx.entity_id(), title.clone(), cx);
             let muted = play::muted(&video.muted_segments);
@@ -524,7 +528,9 @@ impl WatchView {
                 cards::views(clip.view_count),
                 cards::date(clip.created_at)
               )),
+              followed: None,
             });
+            this.load_followed(cx);
             let title: SharedString = clip.title.into();
             this.nav.set_title(cx.entity_id(), title.clone(), cx);
             this.player.update(cx, |p, cx| p.set_title(title, cx));
@@ -597,8 +603,38 @@ impl WatchView {
       login: channel.login,
       avatar: channel.avatar_url,
       line,
+      followed: channel.followed,
     });
     cx.notify();
+  }
+
+  /// Reads whether the account follows the header's channel, for a VOD's or a clip's header
+  /// (a live's comes with its channel). Nothing without an auth-token.
+  fn load_followed(&mut self, cx: &mut Context<Self>) {
+    let login = match &self.header {
+      Some(header) if !header.login.is_empty() && self.client.signed_in() => header.login.clone(),
+      _ => return,
+    };
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.channel(&login).await });
+    self
+      ._tasks
+      .push(cx.spawn(async move |this, cx| match fetch.await {
+        Some(Ok(channel)) => {
+          this
+            .update(cx, |this, cx| {
+              if let Some(header) = &mut this.header
+                && header.login == channel.login
+              {
+                header.followed = channel.followed;
+                cx.notify();
+              }
+            })
+            .ok();
+        }
+        Some(Err(e)) => tracing::warn!("Twitch follow: {e}"),
+        None => {}
+      }));
   }
 
   fn header(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -669,6 +705,13 @@ impl WatchView {
           )
           .children(line.map(|l| div().text_sm().text_color(theme::muted()).child(l))),
       )
+      .when(!header.login.is_empty(), |el| {
+        el.child(follow::follow_button(
+          "watch",
+          &header.login,
+          header.followed,
+        ))
+      })
       .children(self.points.clone())
   }
 }

@@ -231,6 +231,18 @@ fn offline_channel() {
   assert_eq!(channel.login, "twitch");
   assert!(channel.live.is_none());
   assert!(!channel.title.is_empty());
+  // Anonymous: no `self`, so the follow is unknown.
+  assert_eq!(channel.followed, None);
+}
+
+#[test]
+fn followed_channel() {
+  // With the auth-token: `self.follower` holds the follow, null when not followed.
+  let followed = gql::parse_channel(&json("gql_channel_followed.json")).unwrap();
+  assert_eq!(followed.followed, Some(true));
+  let other = gql::parse_channel(&json("gql_channel_not_followed.json")).unwrap();
+  assert_eq!(other.login, "squeezie");
+  assert_eq!(other.followed, Some(false));
 }
 
 #[test]

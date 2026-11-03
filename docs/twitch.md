@@ -171,6 +171,11 @@ Two credentials, for different things. Both are secrets, under the same rules as
 Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the user's auth-token
 (the same answers both ways, unless said):
 
+- **Follows**: `user(login) { self { follower { followedAt } } }` reads whether the auth-token's account
+  follows a channel (`self` null anonymous, `follower` null when not followed); `currentUser { follows }` answers
+  nothing. **`followUser` and `unfollowUser` answer `failed integrity check`** (`IntegrityCheckFailed`), anonymous
+  and with the auth-token (one no-op `unfollowUser` of a channel not followed), and Helix has had no follow
+  endpoint since 2021: the follow button opens twitch.tv (`spaces::twitch::follow`), never routed around.
 - **Answers in full** (no integrity token): `users(ids: [...])` and `user(login)` (`description`,
   `profileImageURL(width)`, `offlineImageURL`, `roles { isPartner }`), `searchUsers(userQuery, first: 20)`
   and `searchCategories(query, first: 20)` (their second page too), `searchFor(userQuery, platform: "web")`,

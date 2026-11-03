@@ -1,0 +1,39 @@
+{
+  "actions": [
+    {
+      "clickTrackingParams": "CAAQ2oYDIhMI3s-vyLTslwMVS21PBB1kzjDzygEEj1qcMQ==",
+      "removeFromGuideSectionAction": {
+        "guideEntryId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+        "handlerData": "GUIDE_ACTION_REMOVE_FROM_SUBSCRIPTIONS"
+      }
+    },
+    {
+      "clickTrackingParams": "CAAQ2oYDIhMI3s-vyLTslwMVS21PBB1kzjDzygEEj1qcMQ==",
+      "updateSubscribeButtonAction": {
+        "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+        "subscribed": false
+      }
+    }
+  ],
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgMygB",
+              "subscribed": false
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        }
+      ],
+      "timestamp": {
+        "nanos": 342786968,
+        "seconds": "1793729892"
+      }
+    }
+  },
+  "trackingParams": "CAAQ2oYDIhMI3s-vyLTslwMVS21PBB1kzjDzygEEj1qcMQ=="
+}

@@ -81,8 +81,12 @@ fn watch_page() {
   ] {
     assert!(page.like_params.get(status).is_some(), "{status:?}");
   }
-  // Not subscribed: the subscribe button carries a bell for later, which is not the channel's.
-  assert_eq!(page.notifications, None);
+  // Signed out, not subscribed: the button still carries its subscribe params and a bell for
+  // after a subscription.
+  let subscription = page.subscription.as_ref().unwrap();
+  assert!(!subscription.subscribed);
+  assert!(subscription.params(true).is_some());
+  assert!(page.notifications.is_some());
 
   assert_eq!(page.related.len(), 20);
   let related = &page.related[0];
@@ -99,12 +103,36 @@ fn watch_page() {
 }
 
 #[test]
+fn subscribe_answers_carry_the_new_state() {
+  let channel = "UCuAXFkgsw1L7xaCfnd5JJOw";
+  let subscribe = fixture("subscription_subscribe.json");
+  assert_eq!(innertube::parse_subscribed(&subscribe, channel), Some(true));
+  assert_eq!(innertube::parse_subscribed(&subscribe, "UCother"), None);
+  let unsubscribe = fixture("subscription_unsubscribe.json");
+  assert_eq!(
+    innertube::parse_subscribed(&unsubscribe, channel),
+    Some(false)
+  );
+}
+
+#[test]
 fn signed_in_watch_page_has_the_channel_bell() {
   let page = parse_watch("0-k6i8tBwAU", &fixture("next_signed_in.json"));
   assert_eq!(page.channel_id.as_deref(), Some("UCQeRaTukNYft1_6AZPACnog"));
   // The like button's count, liked or not (YouTube rounds both the same here).
   assert_eq!(page.likes.as_deref(), Some("4,2\u{a0}k"));
   assert_eq!(page.likes_liked.as_deref(), Some("4,2\u{a0}k"));
+  let subscription = page.subscription.as_ref().unwrap();
+  assert!(subscription.subscribed);
+  assert_eq!(
+    subscription.params(true),
+    Some("EgIIAxgAIgswLWs2aTh0QndBVQ%3D%3D")
+  );
+  // The unsubscribe params sit in the confirmation dialog.
+  assert_eq!(
+    subscription.params(false),
+    Some("CgIIAxILMC1rNmk4dEJ3QVUYAA%3D%3D")
+  );
   let bell = page.notifications.unwrap();
   assert_eq!(bell.level, NotificationLevel::All);
   let levels = bell.options.iter().map(|(l, _)| *l).collect::<Vec<_>>();

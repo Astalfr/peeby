@@ -1,4 +1,4 @@
-//! A channel's page: its header (`user`), its live when on air (GQL `Channel`), then its
+//! A channel's page: its header (`user`) with the follow button, its live when on air (GQL `Channel`), then its
 //! past broadcasts (`videos?type=archive`, with the account's resume positions as progress bars
 //! and their game chapters, each playing the VOD from there)
 //! or its most viewed clips (`clips`), in two tabs.
@@ -18,7 +18,7 @@ use ui::picture;
 use ui::theme;
 
 use super::browse::load;
-use super::{Nav, Route, cards};
+use super::{Nav, Route, cards, follow};
 
 /// VODs and clips listed, as many as before with Helix.
 const LIST: u32 = 40;
@@ -258,7 +258,12 @@ impl Render for ChannelView {
                     .child(user.description.clone()),
                 )
               }),
-          ),
+          )
+          .child(follow::follow_button(
+            "channel",
+            &user.login,
+            loaded.channel.as_ref().and_then(|c| c.followed),
+          )),
       )
       .children(live)
       .child(

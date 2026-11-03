@@ -1,0 +1,397 @@
+{
+  "actions": [
+    {
+      "addToGuideSectionAction": {
+        "handlerData": "GUIDE_ACTION_ADD_TO_SUBSCRIPTIONS",
+        "items": [
+          {
+            "guideEntryRenderer": {
+              "accessibility": {
+                "accessibilityData": {
+                  "label": "Rick Astley"
+                }
+              },
+              "entryData": {
+                "guideEntryData": {
+                  "guideEntryId": "UCuAXFkgsw1L7xaCfnd5JJOw"
+                }
+              },
+              "formattedTitle": {
+                "simpleText": "Rick Astley"
+              },
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                  "canonicalBaseUrl": "/@RickAstleyYT"
+                },
+                "clickTrackingParams": "CA0QtSwYByITCJq00se07JcDFUmTfAYdaUojG8oBBI9anDE=",
+                "commandMetadata": {
+                  "webCommandMetadata": {
+                    "apiUrl": "/youtubei/v1/browse",
+                    "rootVe": 3611,
+                    "url": "/@RickAstleyYT",
+                    "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                  }
+                }
+              },
+              "thumbnail": {
+                "thumbnails": [
+                  {
+                    "url": "https://yt3.ggpht.com/_ShEGOdg-t5YGJse14Ooq6FYBZqX_QSlhaTNjG06miYusm5lWm1UroLyVxnYtahADfRTVLtuVQ=s88-c-k-c0x00ffffff-no-rj"
+                  }
+                ]
+              },
+              "trackingParams": "CA0QtSwYByITCJq00se07JcDFUmTfAYdaUojGw=="
+            }
+          }
+        ]
+      },
+      "clickTrackingParams": "CAAQ2YYDIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ=="
+    },
+    {
+      "clickTrackingParams": "CAAQ2YYDIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ==",
+      "openPopupAction": {
+        "popup": {
+          "notificationActionRenderer": {
+            "responseText": {
+              "runs": [
+                {
+                  "text": "Abonnement ajouté"
+                }
+              ]
+            },
+            "trackingParams": "CAwQuWoiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+          }
+        },
+        "popupType": "TOAST"
+      }
+    },
+    {
+      "clickTrackingParams": "CAAQ2YYDIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ==",
+      "runAttestationCommand": {
+        "engagementType": "ENGAGEMENT_TYPE_SUBSCRIBE",
+        "ids": [
+          {
+            "externalChannelId": "UCuAXFkgsw1L7xaCfnd5JJOw"
+          }
+        ]
+      }
+    },
+    {
+      "clickTrackingParams": "CAAQ2YYDIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ==",
+      "updateSubscribeButtonAction": {
+        "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+        "subscribed": true
+      }
+    }
+  ],
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgMygB",
+              "subscribed": true
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgjAEoAQ%3D%3D",
+          "payload": {
+            "subscriptionNotificationStateEntity": {
+              "key": "EhhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cgjAEoAQ%3D%3D",
+              "state": "SUBSCRIPTION_NOTIFICATION_STATE_OCCASIONAL"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        }
+      ],
+      "timestamp": {
+        "nanos": 845835176,
+        "seconds": "1793729890"
+      }
+    }
+  },
+  "newNotificationButton": {
+    "subscriptionNotificationToggleButtonRenderer": {
+      "command": {
+        "clickTrackingParams": "CAEQl_kBIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ==",
+        "commandExecutorCommand": {
+          "commands": [
+            {
+              "clickTrackingParams": "CAEQl_kBIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ==",
+              "openPopupAction": {
+                "popup": {
+                  "menuPopupRenderer": {
+                    "items": [
+                      {
+                        "menuServiceItemRenderer": {
+                          "icon": {
+                            "iconType": "NOTIFICATIONS_ACTIVE"
+                          },
+                          "isSelected": false,
+                          "serviceEndpoint": {
+                            "clickTrackingParams": "CAgQ67UEGAQiEwiatNLHtOyXAxVJk3wGHWlKIxsyHFBSRUZFUkVOQ0VfQUxMX05PVElGSUNBVElPTlPKAQSPWpwx",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                "sendPost": true
+                              }
+                            },
+                            "modifyChannelNotificationPreferenceEndpoint": {
+                              "params": "ChhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cSAggCGAAgBFITCgIIAxILZFF3NHc5V2dYY1EYAA%3D%3D"
+                            }
+                          },
+                          "text": {
+                            "simpleText": "Toutes"
+                          },
+                          "trackingParams": "CAgQ67UEGAQiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                        }
+                      },
+                      {
+                        "menuServiceItemRenderer": {
+                          "icon": {
+                            "iconType": "NOTIFICATIONS_NONE"
+                          },
+                          "isSelected": true,
+                          "serviceEndpoint": {
+                            "clickTrackingParams": "CAcQ7LUEGAUiEwiatNLHtOyXAxVJk3wGHWlKIxsyElBSRUZFUkVOQ0VfREVGQVVMVMoBBI9anDE=",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                "sendPost": true
+                              }
+                            },
+                            "modifyChannelNotificationPreferenceEndpoint": {
+                              "params": "ChhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cSAggBGAAgBFITCgIIAxILZFF3NHc5V2dYY1EYAA%3D%3D"
+                            }
+                          },
+                          "text": {
+                            "simpleText": "Personnalisées"
+                          },
+                          "trackingParams": "CAcQ7LUEGAUiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                        }
+                      },
+                      {
+                        "menuServiceItemRenderer": {
+                          "icon": {
+                            "iconType": "NOTIFICATIONS_OFF"
+                          },
+                          "isSelected": false,
+                          "serviceEndpoint": {
+                            "clickTrackingParams": "CAYQ7bUEGAYiEwiatNLHtOyXAxVJk3wGHWlKIxsyG1BSRUZFUkVOQ0VfTk9fTk9USUZJQ0FUSU9OU8oBBI9anDE=",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                "sendPost": true
+                              }
+                            },
+                            "modifyChannelNotificationPreferenceEndpoint": {
+                              "params": "ChhVQ3VBWEZrZ3N3MUw3eGFDZm5kNUpKT3cSAggDGAAgBFITCgIIAxILZFF3NHc5V2dYY1EYAA%3D%3D"
+                            }
+                          },
+                          "text": {
+                            "simpleText": "Aucune"
+                          },
+                          "trackingParams": "CAYQ7bUEGAYiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                        }
+                      },
+                      {
+                        "menuServiceItemRenderer": {
+                          "icon": {
+                            "iconType": "PERSON_MINUS"
+                          },
+                          "serviceEndpoint": {
+                            "clickTrackingParams": "CAIQ24sKGAciEwiatNLHtOyXAxVJk3wGHWlKIxvKAQSPWpwx",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "sendPost": true
+                              }
+                            },
+                            "signalServiceEndpoint": {
+                              "actions": [
+                                {
+                                  "clickTrackingParams": "CAIQ24sKGAciEwiatNLHtOyXAxVJk3wGHWlKIxvKAQSPWpwx",
+                                  "openPopupAction": {
+                                    "popup": {
+                                      "confirmDialogRenderer": {
+                                        "cancelButton": {
+                                          "buttonRenderer": {
+                                            "accessibility": {
+                                              "label": "Annuler"
+                                            },
+                                            "isDisabled": false,
+                                            "size": "SIZE_DEFAULT",
+                                            "style": "STYLE_TEXT",
+                                            "text": {
+                                              "runs": [
+                                                {
+                                                  "text": "Annuler"
+                                                }
+                                              ]
+                                            },
+                                            "trackingParams": "CAQQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                                          }
+                                        },
+                                        "confirmButton": {
+                                          "buttonRenderer": {
+                                            "accessibility": {
+                                              "label": "Se désabonner"
+                                            },
+                                            "isDisabled": false,
+                                            "serviceEndpoint": {
+                                              "clickTrackingParams": "CAUQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxsyGnN1YnNjcmliZS1iZWxsLXJlcGxhY2VtZW50ygEEj1qcMQ==",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "unsubscribeEndpoint": {
+                                                "channelIds": [
+                                                  "UCuAXFkgsw1L7xaCfnd5JJOw"
+                                                ],
+                                                "params": "CgIIAxILZFF3NHc5V2dYY1EYAA%3D%3D"
+                                              }
+                                            },
+                                            "size": "SIZE_DEFAULT",
+                                            "style": "STYLE_BLUE_TEXT",
+                                            "text": {
+                                              "runs": [
+                                                {
+                                                  "text": "Se désabonner"
+                                                }
+                                              ]
+                                            },
+                                            "trackingParams": "CAUQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                                          }
+                                        },
+                                        "dialogMessages": [
+                                          {
+                                            "runs": [
+                                              {
+                                                "text": "Se désabonner de "
+                                              },
+                                              {
+                                                "text": "Rick Astley"
+                                              },
+                                              {
+                                                "text": " ?"
+                                              }
+                                            ]
+                                          }
+                                        ],
+                                        "primaryIsCancel": false,
+                                        "trackingParams": "CAMQxjgiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                                      }
+                                    },
+                                    "popupType": "DIALOG"
+                                  }
+                                }
+                              ],
+                              "signal": "CLIENT_SIGNAL"
+                            }
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Se désabonner"
+                              }
+                            ]
+                          },
+                          "trackingParams": "CAIQ24sKGAciEwiatNLHtOyXAxVJk3wGHWlKIxs="
+                        }
+                      }
+                    ]
+                  }
+                },
+                "popupType": "DROPDOWN"
+              }
+            }
+          ]
+        }
+      },
+      "currentStateId": 3,
+      "secondaryIcon": {
+        "iconType": "EXPAND_MORE"
+      },
+      "states": [
+        {
+          "nextStateId": 2,
+          "state": {
+            "buttonRenderer": {
+              "accessibility": {
+                "label": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Rick Astley."
+              },
+              "accessibilityData": {
+                "accessibilityData": {
+                  "label": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Rick Astley."
+                }
+              },
+              "icon": {
+                "iconType": "NOTIFICATIONS_ACTIVE"
+              },
+              "isDisabled": false,
+              "size": "SIZE_DEFAULT",
+              "style": "STYLE_TEXT",
+              "trackingParams": "CAsQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+            }
+          },
+          "stateId": 2
+        },
+        {
+          "nextStateId": 3,
+          "state": {
+            "buttonRenderer": {
+              "accessibility": {
+                "label": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne Rick Astley."
+              },
+              "accessibilityData": {
+                "accessibilityData": {
+                  "label": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne Rick Astley."
+                }
+              },
+              "icon": {
+                "iconType": "NOTIFICATIONS_NONE"
+              },
+              "isDisabled": false,
+              "size": "SIZE_DEFAULT",
+              "style": "STYLE_TEXT",
+              "trackingParams": "CAoQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+            }
+          },
+          "stateId": 3
+        },
+        {
+          "nextStateId": 0,
+          "state": {
+            "buttonRenderer": {
+              "accessibility": {
+                "label": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Rick Astley."
+              },
+              "accessibilityData": {
+                "accessibilityData": {
+                  "label": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Rick Astley."
+                }
+              },
+              "icon": {
+                "iconType": "NOTIFICATIONS_OFF"
+              },
+              "isDisabled": false,
+              "size": "SIZE_DEFAULT",
+              "style": "STYLE_TEXT",
+              "trackingParams": "CAkQ8FsiEwiatNLHtOyXAxVJk3wGHWlKIxs="
+            }
+          },
+          "stateId": 0
+        }
+      ],
+      "targetId": "notification-bell",
+      "trackingParams": "CAEQl_kBIhMImrTSx7TslwMVSZN8Bh1pSiMb"
+    }
+  },
+  "trackingParams": "CAAQ2YYDIhMImrTSx7TslwMVSZN8Bh1pSiMbygEEj1qcMQ=="
+}

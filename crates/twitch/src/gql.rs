@@ -173,6 +173,8 @@ pub struct Channel {
   pub title: String,
   /// The live, when the channel is on air.
   pub live: Option<Live>,
+  /// Whether the viewer follows the channel (`self.follower`); `None` without an auth-token.
+  pub followed: Option<bool>,
 }
 
 /// A channel's live.
@@ -188,7 +190,7 @@ pub struct Live {
 
 const CHANNEL_QUERY: &str = "query Channel($login: String!) { user(login: $login) { id login \
   displayName profileImageURL(width: 70) broadcastSettings { title } stream { id type viewersCount \
-  createdAt game { id displayName } } } }";
+  createdAt game { id displayName } } self { follower { followedAt } } } }";
 
 /// The request for `login`'s channel and live.
 pub fn channel_request(login: &str) -> Value {
@@ -224,6 +226,10 @@ pub fn parse_channel(answer: &Value) -> Result<Channel> {
     avatar_url: user["profileImageURL"].as_str().map(str::to_owned),
     title: text(&user["broadcastSettings"]["title"]),
     live,
+    // `self` is null without an auth-token, `follower` null when not followed.
+    followed: user["self"]
+      .is_object()
+      .then(|| user["self"]["follower"].is_object()),
   })
 }
 

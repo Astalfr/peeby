@@ -1,0 +1,22 @@
+{
+  "data": {
+    "user": {
+      "id": "200000001",
+      "login": "followed_1",
+      "displayName": "Followed1",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/REDACTED-profile_image-70x70.png",
+      "broadcastSettings": {
+        "title": "REDACTED"
+      },
+      "stream": null,
+      "self": {
+        "follower": {
+          "followedAt": "2024-01-01T00:00:00Z"
+        }
+      }
+    }
+  },
+  "extensions": {
+    "operationName": "Channel"
+  }
+}

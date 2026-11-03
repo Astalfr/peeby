@@ -1,5 +1,5 @@
 //! Shorts page: YouTube's Shorts one at a time, as on youtube.com/shorts. The Short fills the
-//! page's height in a 9:16 player, its title and channel under it; on its right, the like,
+//! page's height in a 9:16 player, its title and channel (with its subscribe button) under it; on its right, the like,
 //! dislike, comments, save and "watch as a video" buttons; at the page's right edge, the
 //! previous and next arrows. The comments open in a panel beside the Short and stay open from
 //! one Short to the next.
@@ -37,7 +37,7 @@ use crate::spaces::youtube::convert::{self, error_text};
 use crate::spaces::youtube::history::{self, Reporter};
 use crate::spaces::youtube::rating::{self, Rating};
 use crate::spaces::youtube::watch::load_stream;
-use crate::spaces::youtube::{Nav, Route, prefetch, save};
+use crate::spaces::youtube::{Nav, Route, prefetch, save, subscribe};
 use ui::assets::Icon;
 use ui::i18n::t;
 use ui::images::Images;
@@ -338,6 +338,21 @@ impl ShortView {
       id,
       name: page.channel.clone().unwrap_or_default(),
     });
+    // Outside the channel's row, whose click opens the channel.
+    let subscribe = page
+      .channel_id
+      .as_deref()
+      .zip(page.subscription.as_ref())
+      .map(|(channel_id, subscription)| {
+        subscribe::subscribe_button(
+          &format!("short-{}", self.video_id),
+          channel_id,
+          page.channel.as_deref().unwrap_or_default(),
+          subscription,
+          true,
+          cx,
+        )
+      });
     v_flex()
       .w(width)
       .h(px(INFO_HEIGHT))
@@ -345,29 +360,35 @@ impl ShortView {
       .gap_1()
       .child(
         h_flex()
-          .id("short-channel")
-          .group("short-channel")
-          .gap_2()
+          .gap_3()
           .items_center()
-          .text_sm()
-          .font_weight(FontWeight::SEMIBOLD)
-          .when_some(channel, |el, route| {
-            let nav = self.nav.clone();
-            el.cursor_pointer()
-              .on_aux_click(middle_click({
-                let (nav, route) = (nav.clone(), route.clone());
-                move |cx| nav.open_in_new_tab(route.clone(), None, cx)
-              }))
-              .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
-          })
-          .children(avatar)
           .child(
-            div()
-              .min_w_0()
-              .truncate()
-              .group_hover("short-channel", |s| s.text_color(theme::accent_hover()))
-              .child(page.channel.clone().unwrap_or_default()),
-          ),
+            h_flex()
+              .id("short-channel")
+              .group("short-channel")
+              .gap_2()
+              .items_center()
+              .text_sm()
+              .font_weight(FontWeight::SEMIBOLD)
+              .when_some(channel, |el, route| {
+                let nav = self.nav.clone();
+                el.cursor_pointer()
+                  .on_aux_click(middle_click({
+                    let (nav, route) = (nav.clone(), route.clone());
+                    move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+                  }))
+                  .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
+              })
+              .children(avatar)
+              .child(
+                div()
+                  .min_w_0()
+                  .truncate()
+                  .group_hover("short-channel", |s| s.text_color(theme::accent_hover()))
+                  .child(page.channel.clone().unwrap_or_default()),
+              ),
+          )
+          .children(subscribe),
       )
       .child(div().text_sm().line_clamp(1).child(page.title.clone()))
       .into_any_element()

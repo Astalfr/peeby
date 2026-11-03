@@ -109,7 +109,10 @@ pub struct WatchPage {
   pub likes: Option<String>,
   /// See [`WatchPage::likes`].
   pub likes_liked: Option<String>,
-  /// The channel's notification bell, when the user is subscribed to it.
+  /// The channel's subscribe button; `None` when the page has none.
+  pub subscription: Option<Subscription>,
+  /// The channel's notification bell. The subscribe button carries one even while the user is
+  /// not subscribed, for after a subscription: show it only while subscribed.
   pub notifications: Option<ChannelNotifications>,
   /// Token of a live's chat ([`crate::Client::live_chat`]); `None` for a video or a finished
   /// live's replay.
@@ -254,6 +257,29 @@ pub enum LikeStatus {
   Like,
   /// Disliked ("Je n'aime pas").
   Dislike,
+}
+
+/// A channel's subscribe button (`subscribeButtonRenderer`): whether the user is subscribed and
+/// what its endpoints send.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Subscription {
+  /// Whether the user is subscribed (`false` signed out).
+  pub subscribed: bool,
+  /// `params` of its `subscribeEndpoint`.
+  pub subscribe_params: Option<String>,
+  /// `params` of its `unsubscribeEndpoint` (in the confirmation dialog).
+  pub unsubscribe_params: Option<String>,
+}
+
+impl Subscription {
+  /// The params of the endpoint subscribing (`true`) or unsubscribing.
+  pub fn params(&self, subscribe: bool) -> Option<&str> {
+    if subscribe {
+      self.subscribe_params.as_deref()
+    } else {
+      self.unsubscribe_params.as_deref()
+    }
+  }
 }
 
 /// The `params` of the watch page's `likeEndpoint`s, one per status they set.

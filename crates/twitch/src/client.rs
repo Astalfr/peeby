@@ -71,6 +71,11 @@ impl Client {
     }
   }
 
+  /// Whether the client plays as the user's account (it has the auth-token).
+  pub fn signed_in(&self) -> bool {
+    self.auth_token.is_some()
+  }
+
   fn client_id(&self) -> String {
     // A poisoned lock only means a writer panicked mid-assignment of a `String`: the value is
     // still a whole string, so it is used as is.

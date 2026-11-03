@@ -1,4 +1,4 @@
-//! Watch page: the player (autoplay), title, channel and its notification bell, like and dislike buttons (counts from
+//! Watch page: the player (autoplay), title, channel with its subscribe button and notification bell, like and dislike buttons (counts from
 //! Return YouTube Dislike), description, comments and related videos. In fullscreen only the player is shown;
 //! in theater mode (`Settings::theater`) the player spans the page above the two columns.
 //!
@@ -37,7 +37,7 @@ use crate::spaces::youtube::history::{self, Reporter};
 use crate::spaces::youtube::queue::{Queue, QueueEvent};
 use crate::spaces::youtube::rating::{self, Rating};
 use crate::spaces::youtube::{Nav, Route};
-use crate::spaces::youtube::{bell, chat, prefetch, save, tools};
+use crate::spaces::youtube::{bell, chat, prefetch, save, subscribe, tools};
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
 use ui::chat::{ChatPanel, watch_layout};
@@ -763,16 +763,25 @@ impl WatchView {
             page
               .channel_id
               .as_deref()
-              .zip(page.notifications.as_ref())
-              .map(|(channel_id, notifications)| {
+              .zip(page.subscription.as_ref())
+              .map(|(channel_id, subscription)| {
                 let key = format!("watch-{}", self.video_id);
-                h_flex().h(px(40.)).items_center().child(bell::bell_button(
-                  &key,
-                  channel_id,
-                  notifications,
-                  false,
-                  cx,
-                ))
+                let subscribed = subscribe::is_subscribed(channel_id, subscription, cx);
+                h_flex()
+                  .h(px(40.))
+                  .gap_1()
+                  .items_center()
+                  .child(subscribe::subscribe_button(
+                    &key,
+                    channel_id,
+                    page.channel.as_deref().unwrap_or_default(),
+                    subscription,
+                    false,
+                    cx,
+                  ))
+                  .children(page.notifications.as_ref().filter(|_| subscribed).map(
+                    |notifications| bell::bell_button(&key, channel_id, notifications, false, cx),
+                  ))
               }),
           )
           .child(div().flex_1())

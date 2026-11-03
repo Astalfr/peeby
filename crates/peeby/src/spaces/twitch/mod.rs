@@ -13,6 +13,7 @@ pub mod browse;
 pub mod cards;
 pub mod channel;
 pub mod chat;
+pub mod follow;
 pub mod following;
 pub mod login;
 pub mod play;

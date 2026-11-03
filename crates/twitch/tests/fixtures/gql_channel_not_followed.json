@@ -1,0 +1,20 @@
+{
+  "data": {
+    "user": {
+      "id": "52130765",
+      "login": "squeezie",
+      "displayName": "Squeezie",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/1939615e-a34d-4fab-a035-8c3d8ffae278-profile_image-70x70.png",
+      "broadcastSettings": {
+        "title": "découverte de la nouvelle mini-saison Fortnite (collaboration commerciale) !Fortnite"
+      },
+      "stream": null,
+      "self": {
+        "follower": null
+      }
+    }
+  },
+  "extensions": {
+    "operationName": "Channel"
+  }
+}
