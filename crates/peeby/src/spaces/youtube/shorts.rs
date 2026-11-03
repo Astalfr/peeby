@@ -285,12 +285,15 @@ impl ShortView {
       )
       .child(
         div()
+          .id("short-save")
           .size(px(ACTION_SIZE))
           .flex()
           .items_center()
           .justify_center()
           .rounded_full()
           .bg(theme::surface())
+          // Its popover's list of playlists scrolls: not to another Short.
+          .on_scroll(|_, _, cx| cx.stop_propagation())
           .child(save::watch_menu_button(&self.video_id)),
       )
       .child({
@@ -407,8 +410,11 @@ impl ShortView {
       }))
       .child(self.comments.clone());
     v_flex()
+      .id("short-comments-panel")
       .w(px(COMMENTS_WIDTH))
       .h(height)
+      // The wheel scrolls the comments; it would move to another Short on the page.
+      .on_scroll(|_, _, cx| cx.stop_propagation())
       .flex_none()
       .rounded(theme::RADIUS_LG)
       .overflow_hidden()
@@ -880,12 +886,9 @@ impl Render for ShortsView {
       .items_start()
       .justify_center()
       .capture_key_down(cx.listener(Self::on_key))
-      .child(
-        div()
-          .id("shorts-wheel")
-          .on_scroll(cx.listener(Self::on_wheel))
-          .child(shorts),
-      )
+      // Anywhere on the page but the comments panel, which keeps its wheel.
+      .on_scroll(cx.listener(Self::on_wheel))
+      .child(shorts)
       .children(panel)
       .child(
         div()
