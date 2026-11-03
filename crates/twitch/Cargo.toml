@@ -18,6 +18,8 @@ tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "
 # The chat (step 9), agreed with the user on 2026-11-01.
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "native-tls"] }
 tracing = "0.1"
+chrono = "0.4.45"
+rand = "0.10.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

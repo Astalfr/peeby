@@ -651,3 +651,11 @@ pub fn parse_viewed(answer: &Value) -> Result<()> {
   }
   Ok(())
 }
+
+/// The request for a VOD's info: `broadcastType` is `ARCHIVE` or `HIGHLIGHT`, `seekPreviewsURL` is
+/// the storyboard's JSON, `owner.login` the channel's login.
+pub fn video_request(id: &str) -> Value {
+  json!({
+    "query": format!(r#"query {{ video(id: "{}") {{ broadcastType, createdAt, seekPreviewsURL, owner {{ login }} }} }}"#, id),
+  })
+}

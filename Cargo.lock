@@ -6797,7 +6797,9 @@ dependencies = [
 name = "twitch"
 version = "0.2.0"
 dependencies = [
+ "chrono",
  "futures-util",
+ "rand 0.10.3",
  "reqwest",
  "serde_json",
  "thiserror 2.0.21",

@@ -15,6 +15,7 @@ pub mod bttv;
 pub mod chat;
 mod client;
 mod error;
+mod fallback;
 pub mod gql;
 pub mod helix;
 pub mod points;

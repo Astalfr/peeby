@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
+use tracing::info;
 
 use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
@@ -29,7 +30,7 @@ pub struct Master {
 /// Twitch client. Cheap to clone; clones share the Client-ID.
 #[derive(Clone)]
 pub struct Client {
-  http: reqwest::Client,
+  pub(crate) http: reqwest::Client,
   /// The web Client-ID for GQL, refreshed by [`Client::refresh_client_id`].
   client_id: Arc<RwLock<String>>,
   /// The web `auth-token`, sent to GQL as `Authorization: OAuth …` (a full-access secret).
@@ -100,10 +101,16 @@ impl Client {
   /// The answer to a GQL request (a `gql::*_request`), with the auth-token when there is one;
   /// public for the fixtures' capture.
   pub async fn gql(&self, body: &Value) -> Result<Value> {
+    self.gql_with_client_id(body, &self.client_id()).await
+  }
+
+  /// The answer to a GQL request (a `gql::*_request`), with the auth-token when there is one;
+  /// public for the fixtures' capture.
+  pub async fn gql_with_client_id(&self, body: &Value, client_id: &str) -> Result<Value> {
     let mut request = self
       .http
       .post("https://gql.twitch.tv/gql")
-      .header("Client-ID", self.client_id())
+      .header("Client-ID", client_id)
       .json(body);
     if let Some(token) = &self.auth_token {
       request = request.header("Authorization", format!("OAuth {token}"));
@@ -333,6 +340,7 @@ impl Client {
     codecs: &[Codec],
     version: Version,
   ) -> Result<Master> {
+    info!("usher {version:?} master for {target:?} with codecs {codecs:?} and token {token:?}");
     let url = usher::master_url(target, token, codecs, version, nonce())?;
     let response = self
       .http
@@ -344,7 +352,11 @@ impl Client {
     let status = response.status().as_u16();
     let text = response.text().await?;
     if status != 200 {
-      return Err(usher::parse_error(status, &text, target));
+      let error = usher::parse_error(status, &text, target);
+      if let Ok(master) = crate::fallback::fallback(&error, self, target, version).await {
+        return Ok(master);
+      }
+      return Err(error);
     }
     let variants = usher::variants(&text);
     if variants.is_empty() {
@@ -353,6 +365,10 @@ impl Client {
         detail: "no variant in the master".into(),
       });
     }
+    info!(
+      "usher {version:?} master for {target:?} variants: {:?} text: {}",
+      variants, text
+    );
     Ok(Master {
       version,
       text,
@@ -406,9 +422,6 @@ impl Client {
     };
     let main = async {
       let token = self.playback_token(target, main_type).await?;
-      if token.subscriber_only() {
-        return Err(Error::SubscriberOnly);
-      }
       self.master(target, &token, codecs).await
     };
     let (main, backup) = tokio::join!(main, backup);

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./crates/twitch/src/fallback.rs)"
+    ]
+  }
+}
