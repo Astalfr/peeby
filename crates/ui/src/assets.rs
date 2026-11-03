@@ -94,7 +94,7 @@ icons! {
   Gift => "gift",
   Speaker => "speaker",
   Plus => "plus",
-  Shorts => "smartphone",
+  Shorts => "shorts",
 }
 
 macro_rules! files {

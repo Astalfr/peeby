@@ -89,6 +89,7 @@ Discreet and short; nothing loops except skeletons and spinners. The one excepti
 | Jellyfin banner | The next backdrop cross-fades over the previous one, the text slides in from the left; it turns every 8 s, not while hovered | 700 ms, 350 ms |
 | Row arrows | Scroll by 80 % of the row's width, easing out | 280 ms |
 | Page change | Fades in and rises 8 px (not the watch and Shorts pages: the video surface is an external texture, and leaving fullscreen would replay it) | 200 ms |
+| Next or previous Short | The Short leaving and the new one slide together by the page's height (up for the next one, down for the previous one); the one leaving is paused, the new one already plays; none in fullscreen | 300 ms, ease out |
 | Loading | gpui-component skeletons shaped like the content (grid cards, title and channel, related cards), a spinner at the end of a list | — |
 | Busy button, list end | `ui::loader`: a faint ring with a round-capped arc turning inside it, stretching to 270° then shrinking to 12° as it turns (Material style), drawn on a canvas from a shared clock | 1.4 s per stretch, 2 s per turn |
 | Skeleton to content | `motion::crossfade` on the feeds, Jellyfin's home and title pages | 300 ms |

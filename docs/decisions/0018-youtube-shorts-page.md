@@ -34,13 +34,15 @@ token), and VISIONOS serves its HLS like any video (1080×1920 VP9 in the smoke 
 - One `ShortView` per Short, with its own `PlayerView`, built when it shows and dropped (with its
   last history ping) when the next one shows, as the queue does for playlists. The next Short's
   stream is resolved ahead (`prefetch::warm`); more of the sequence loads when 3 are left.
-- A Short loops at its end (`PlayerView::replay`), never plays "up next"; theater mode is not
-  offered (`PlayerView::offer_theater`). The like count is YouTube's own (the like button's
+- A Short loops at its end (`PlayerView::replay`), never plays "up next"; neither theater mode
+  (`PlayerView::offer_theater`) nor speed changes (`PlayerView::offer_speed`: no speed menu, no
+  2× while held) are offered. The like count is YouTube's own (the like button's
   title, untoggled and toggled): Return YouTube Dislike is not asked for Shorts, which a user
   swipes through faster than its 100 requests a minute allow.
 - The wheel (one Short per gesture: a new one starts after 250 ms without events), the up and
   down arrows (caught before the player, where they set the volume) and two arrow buttons move
-  through the sequence. The comments open in a panel beside the Short and stay open from one
+  through the sequence, with a slide as on YouTube (both Shorts move together by the page's
+  height for 300 ms; the one leaving is paused and kept until the slide ends). The comments open in a panel beside the Short and stay open from one
   Short to the next.
 - The code the watch page and the Shorts page share moved out of `watch.rs`: the comments
   (`comments.rs`, `CommentSection`, with the links of comments and descriptions), the rating

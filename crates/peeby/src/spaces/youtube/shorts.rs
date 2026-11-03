@@ -11,14 +11,17 @@
 //! end, as on YouTube.
 //!
 //! The wheel, the up and down arrows (before the player, which would set the volume) and the
-//! arrow buttons move through the Shorts.
+//! arrow buttons move through the Shorts. The move slides, as on YouTube: the Short leaving goes
+//! off the page (up for the next one, down for the previous one), paused, while the new one comes
+//! in from the other side and already plays.
 
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, Entity, EventEmitter, FontWeight, KeyDownEvent, Pixels, ScrollEvent,
-  ScrollHandle, SharedString, Subscription, Window, div, px,
+  Animation, AnimationExt, AnyElement, App, Context, Entity, EventEmitter, FontWeight,
+  KeyDownEvent, Pixels, ScrollEvent, ScrollHandle, SharedString, Subscription, Window, div,
+  ease_out_quint, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -59,6 +62,8 @@ const ARROWS_WIDTH: f32 = 40.;
 /// A new wheel gesture starts after this long without wheel events: one gesture (a trackpad
 /// swipe and its inertia, a burst of notches) moves by one Short.
 const WHEEL_GAP: Duration = Duration::from_millis(250);
+/// Length of the slide from one Short to the next.
+const SLIDE: Duration = theme::SLOW;
 /// The next page of Shorts loads when this few are left after the current one.
 const LOAD_AHEAD: usize = 3;
 
@@ -109,6 +114,7 @@ impl ShortView {
     let player = cx.new(|cx| {
       let mut player = PlayerView::new(prefs, false, cx);
       player.offer_theater(false, cx);
+      player.offer_speed(false, cx);
       player.set_covered(covered);
       player
     });
@@ -538,7 +544,21 @@ pub struct ShortsView {
   covered: bool,
   /// The last wheel event, for [`WHEEL_GAP`].
   last_wheel: Option<Instant>,
+  /// The slide running, if any.
+  slide: Option<Slide>,
+  /// Counts the slides: each one gets its own animation id.
+  slides: usize,
   _subscription: Option<Subscription>,
+}
+
+/// A slide from one Short to the next ([`SLIDE`]).
+struct Slide {
+  /// The Short leaving, paused; dropped when the slide ends.
+  from: Entity<ShortView>,
+  /// Toward the next Short (the Shorts move up), else the previous one (down).
+  forward: bool,
+  /// Its number in [`ShortsView::slides`].
+  id: usize,
 }
 
 impl ShortsView {
@@ -555,6 +575,8 @@ impl ShortsView {
       comments_open: false,
       covered: false,
       last_wheel: None,
+      slide: None,
+      slides: 0,
       _subscription: None,
     };
     view.load(cx);
@@ -684,7 +706,35 @@ impl ShortsView {
       return self.load(cx);
     }
     self.index = index;
+    let from = self.current.take();
     self.show(window, cx);
+    if let Some(from) = from.filter(|_| !window.is_fullscreen()) {
+      self.start_slide(from, by > 0, cx);
+    }
+  }
+
+  /// Slides `from` off the page and the new Short in; `from` goes when the slide ends.
+  fn start_slide(&mut self, from: Entity<ShortView>, forward: bool, cx: &mut Context<Self>) {
+    from.update(cx, |short, cx| {
+      short
+        .player
+        .update(cx, |player, _| player.set_covered(true));
+    });
+    self.slides += 1;
+    let id = self.slides;
+    self.slide = Some(Slide { from, forward, id });
+    cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(SLIDE).await;
+      this
+        .update(cx, |this, cx| {
+          if this.slide.as_ref().is_some_and(|slide| slide.id == id) {
+            this.slide = None;
+            cx.notify();
+          }
+        })
+        .ok();
+    })
+    .detach();
   }
 
   fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -794,10 +844,37 @@ impl Render for ShortsView {
       short.size = size;
       comments_open.then(|| short.comments_panel(height, cx))
     });
+    // The Short coming in, and the one leaving above or below it while the slide runs. Both
+    // move by the page's height, so that they leave and enter from off the page.
+    let distance = f32::from(window.viewport_size().height - theme::TITLE_BAR_HEIGHT);
+    let shorts = match &self.slide {
+      Some(slide) => {
+        let sign = if slide.forward { 1. } else { -1. };
+        // A page away from the new one: where it was when the slide starts, off the page when
+        // it ends.
+        let leaving = div()
+          .absolute()
+          .top(px(-sign * distance))
+          .left_0()
+          .child(slide.from.clone());
+        div()
+          .relative()
+          .child(short)
+          .child(leaving)
+          .with_animation(
+            SharedString::from(format!("short-slide-{}", slide.id)),
+            Animation::new(SLIDE).with_easing(ease_out_quint()),
+            move |el, t| el.top(px(sign * distance * (1. - t))),
+          )
+          .into_any_element()
+      }
+      None => short.into_any_element(),
+    };
     h_flex()
       .id("shorts")
       .size_full()
       .relative()
+      .overflow_hidden()
       .p(px(GAP))
       .gap(px(GAP))
       .items_start()
@@ -807,7 +884,7 @@ impl Render for ShortsView {
         div()
           .id("shorts-wheel")
           .on_scroll(cx.listener(Self::on_wheel))
-          .child(short),
+          .child(shorts),
       )
       .children(panel)
       .child(

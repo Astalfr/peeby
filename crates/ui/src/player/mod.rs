@@ -210,6 +210,9 @@ pub struct PlayerView {
   theater: bool,
   /// The page offers theater mode (button and T); not a page whose player is vertical.
   theater_offered: bool,
+  /// The page offers speed changes (the menu, and 2× while held); not a page of short looping
+  /// videos.
+  speed_offered: bool,
   layout: Layout,
   /// Second line of the title (episode, year), shown in the full-window layout.
   subtitle: SharedString,
@@ -344,6 +347,7 @@ impl PlayerView {
       focus: cx.focus_handle(),
       theater,
       theater_offered: true,
+      speed_offered: true,
       layout: Layout::Embedded,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
@@ -571,6 +575,12 @@ impl PlayerView {
     cx.notify();
   }
 
+  /// Whether the page offers speed changes (the menu, and 2× while held); it does by default.
+  pub fn offer_speed(&mut self, offered: bool, cx: &mut Context<Self>) {
+    self.speed_offered = offered;
+    cx.notify();
+  }
+
   /// Plays or pauses. A live paused for a while resumes at its live edge, as Twitch's player:
   /// mpv restarts on the current quality (about 0.7 s, the last frame staying on screen). A DVR
   /// live resumes where it was paused, as YouTube's.
@@ -597,7 +607,8 @@ impl PlayerView {
       this
         .update(cx, |this, cx| {
           this.hold_task = None;
-          if this.hold.is_some() && !this.paused && !this.is_live() && this.player.is_some() {
+          let can_speed = this.speed_offered && !this.is_live();
+          if this.hold.is_some() && !this.paused && can_speed && this.player.is_some() {
             this.fast = true;
             this.with_player(|p| p.set_speed(HOLD_SPEED));
             cx.notify();
@@ -1962,7 +1973,7 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Subtitles, cx))),
         )
       })
-      .when(!self.is_live(), |row| {
+      .when(!self.is_live() && self.speed_offered, |row| {
         row.child(
           self
             .control_button("speed-menu", cx)
