@@ -263,7 +263,10 @@ impl PointsView {
               .predictions
               .iter()
               .any(|p| p.status == PredictionStatus::Active || this.shown(p))
-            || this.polls.iter().any(|p| !p.ended)
+            || this
+              .polls
+              .iter()
+              .any(|p| !p.ended || this.ended_left(&p.id).is_some())
           {
             cx.notify();
           }
@@ -291,12 +294,14 @@ impl PointsView {
   fn load_polls(&mut self, cx: &mut Context<Self>) {
     if let Backend::Fake(fake) = &self.backend {
       self.polls = fake.borrow().polls();
+      self.note_ended();
       self.fold_gone();
       cx.notify();
     }
   }
 
-  /// Notes when the predictions that ended lately were first read ended; forgets the others.
+  /// Notes when the predictions and polls that ended lately were first read ended; forgets the
+  /// others.
   fn note_ended(&mut self) {
     let now = now_millis();
     let recently = i64::try_from(ENDED_RECENTLY.as_millis()).unwrap_or(i64::MAX);
@@ -305,6 +310,14 @@ impl PointsView {
       .iter()
       .filter(|p| p.status.ended() && p.ended_at.is_some_and(|end| now - end < recently))
       .map(|p| p.id.as_str())
+      // A poll without its end's time ended when first read so.
+      .chain(
+        self
+          .polls
+          .iter()
+          .filter(|p| p.ended && p.ended_at.is_none_or(|end| now - end < recently))
+          .map(|p| p.id.as_str()),
+      )
       .collect();
     self.ended_seen.retain(|id, _| ended.contains(&id.as_str()));
     for id in ended {
@@ -318,11 +331,13 @@ impl PointsView {
   /// Whether `p` is pinned now: a running one always, an ended one for [`ENDED_SHOWN`] after it
   /// was first read ended, if it ended lately.
   fn shown(&self, p: &Prediction) -> bool {
-    !p.status.ended()
-      || self
-        .ended_seen
-        .get(&p.id)
-        .is_some_and(|seen| seen.elapsed() < ENDED_SHOWN)
+    !p.status.ended() || self.ended_left(&p.id).is_some()
+  }
+
+  /// The share left of an ended item's [`ENDED_SHOWN`], 1 to 0; `None` once over (or not ended).
+  fn ended_left(&self, id: &str) -> Option<f32> {
+    let elapsed = self.ended_seen.get(id)?.elapsed();
+    (elapsed < ENDED_SHOWN).then(|| 1. - elapsed.as_secs_f32() / ENDED_SHOWN.as_secs_f32())
   }
 
   /// Folds the pinned item that is gone.
@@ -1095,16 +1110,23 @@ impl PointsView {
           title: p.title.clone().into(),
           status: prediction_status(p).into(),
           body: open.then(|| self.prediction_body(p, cx)),
-          time_left: (p.status == PredictionStatus::Active)
-            .then(|| {
-              let length = i64::try_from(p.window_seconds).ok()? * 1000;
-              polls::share_left(p.created_at?, length, now)
-            })
-            .flatten(),
+          // The bets' time, then the result's.
+          time_left: match p.status {
+            PredictionStatus::Active => i64::try_from(p.window_seconds)
+              .ok()
+              .zip(p.created_at)
+              .and_then(|(window, start)| polls::share_left(start, window * 1000, now)),
+            PredictionStatus::Locked => None,
+            PredictionStatus::Resolved | PredictionStatus::Canceled => self.ended_left(&p.id),
+          },
         });
       }
     }
-    for poll in &self.polls {
+    for poll in self
+      .polls
+      .iter()
+      .filter(|p| !p.ended || self.ended_left(&p.id).is_some())
+    {
       let open = self.unfolded.is(&poll.id);
       items.push(Pinned {
         id: poll.id.clone().into(),
@@ -1114,7 +1136,8 @@ impl PointsView {
         title: poll.title.clone().into(),
         status: poll.status(now).into(),
         body: open.then(|| self.poll_body(poll, cx)),
-        time_left: poll.time_left(now),
+        // The votes' time, then the result's.
+        time_left: poll.time_left(now).or_else(|| self.ended_left(&poll.id)),
       });
     }
     items

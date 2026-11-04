@@ -44,7 +44,8 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
     share the stack (`ui::chat::pinned_stack`), and only one card is unfolded at a time, so a
     prediction and a poll never cover the chat together. An ended one stays 20 s with its result
     (the winner, the viewer's gain or loss, or "canceled"), read from `resolvedPredictionEvents`;
-    a line along each bar's bottom edge shows the time left to bet.
+    a line along each bar's bottom edge shows the time left to bet, then the time left for the
+    result to show (a poll's alike).
   Without the auth-token, or on a channel without points, nothing shows (polls excepted, which
   every viewer sees).
 - **Spending** takes two clicks: the button turns into "Confirmer". A reward that asks for a text

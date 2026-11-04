@@ -20,6 +20,8 @@ pub struct Poll {
   pub duration_seconds: u64,
   /// Ended: the votes are final.
   pub ended: bool,
+  /// When it ended, Unix milliseconds, when known.
+  pub ended_at: Option<i64>,
   /// The viewer's choice, by id.
   pub voted: Option<String>,
 }
@@ -123,6 +125,7 @@ mod tests {
       started_at: 0,
       duration_seconds: 60,
       ended: false,
+      ended_at: None,
       voted: None,
     }
   }

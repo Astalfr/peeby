@@ -200,7 +200,7 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - Refusal codes for spends.
     - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling;
       an ended one stays pinned 20 s with its result, as on a live.
-    - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays), removing.
+    - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays 20 s), removing.
       They show with the points off too.
 
 ## Catalog through GQL instead of Helix

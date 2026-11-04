@@ -141,14 +141,16 @@ impl FakePoints {
       started_at: now_millis(),
       duration_seconds: duration,
       ended: false,
+      ended_at: None,
       voted: None,
     });
   }
 
-  /// Ends the first poll taking votes: its result stays shown.
+  /// Ends the first poll taking votes: its result stays shown for a while ([`ENDED_SHOWN`]).
   pub fn end_poll(&mut self) {
     if let Some(poll) = self.polls.iter_mut().find(|p| !p.ended) {
       poll.ended = true;
+      poll.ended_at = Some(now_millis());
     }
   }
 
@@ -347,12 +349,16 @@ impl FakePoints {
     self
       .predictions
       .retain(|p| !p.status.ended() || p.ended_at.is_some_and(|end| now - end < shown_for));
+    self
+      .polls
+      .retain(|p| !p.ended || p.ended_at.is_some_and(|end| now - end < shown_for));
     for poll in &mut self.polls {
       if poll.ended {
         continue;
       }
       if poll.remaining(now) == Some(0) {
         poll.ended = true;
+        poll.ended_at = Some(now);
         continue;
       }
       if self.voters {
