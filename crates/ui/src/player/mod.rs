@@ -57,8 +57,14 @@ const LIVE_RESUME_AFTER: Duration = Duration::from_secs(1);
 /// mpv reporting the end further than this from the duration: a stream stopped short (its
 /// segments stopped coming), not the end of the video.
 const EARLY_END_MARGIN: f64 = 10.0;
-/// A second early end within this time of a reload is not reloaded again: it fails.
-const EARLY_END_RETRY: Duration = Duration::from_secs(60);
+/// A second early end or stall within this time of a reload is not reloaded again: an early
+/// end fails, a stall waits.
+const RELOAD_RETRY: Duration = Duration::from_secs(60);
+/// A seekable video still buffering after this is stuck, not slow: a failed transfer (often
+/// right after a pause, on a connection the server closed) can leave mpv's video demuxer
+/// reading ahead without end while nothing more is decoded. A new mpv from the same position
+/// plays again.
+const STALL_AFTER: Duration = Duration::from_secs(10);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// Width of the storyboard frame shown over the seek bar.
@@ -319,8 +325,11 @@ pub struct PlayerView {
   live_tick: Option<Task<()>>,
   /// A message over the picture from the page, e.g. why it waits (an ad removed from a live).
   notice: Option<SharedString>,
-  /// When the stream was last reloaded after ending early ([`EARLY_END_MARGIN`]).
-  early_end_reload: Option<Instant>,
+  /// When the stream was last reloaded after ending early ([`EARLY_END_MARGIN`]) or stalling
+  /// ([`STALL_AFTER`]).
+  last_reload: Option<Instant>,
+  /// Reloads the stream if buffering lasts [`STALL_AFTER`].
+  stall_task: Option<Task<()>>,
   _events: Option<Task<()>>,
 }
 
@@ -413,7 +422,8 @@ impl PlayerView {
       live_info: None,
       live_tick: None,
       notice: None,
-      early_end_reload: None,
+      last_reload: None,
+      stall_task: None,
       _events: None,
     }
   }
@@ -974,9 +984,14 @@ impl PlayerView {
           self.paused_since = paused.then(Instant::now);
         }
         self.paused = paused;
+        // Paused while stuck: the wait starts over on resume.
+        self.watch_stall(cx);
         self.show_controls(cx);
       }
-      Event::Buffering(buffering) => self.buffering = buffering,
+      Event::Buffering(buffering) => {
+        self.buffering = buffering;
+        self.watch_stall(cx);
+      }
       Event::Muted(muted) => self.muted = muted,
       Event::Tracks(tracks) => self.on_tracks(tracks, cx),
       Event::Chapters(chapters) => self.on_chapters(chapters),
@@ -1012,39 +1027,71 @@ impl PlayerView {
     !self.is_live() && self.duration > 0.0 && self.position < self.duration - EARLY_END_MARGIN
   }
 
-  /// Restarts mpv on the playing quality from the current position, once: a second early end
-  /// soon after stops playback with an error rather than skipping to the next video.
+  /// Stops playback with an error rather than skipping to the next video, unless a reload
+  /// plays again.
   fn reload_after_early_end(&mut self, cx: &mut Context<Self>) {
+    let (position, duration) = (self.position, self.duration);
+    if self.reload_here(cx) {
+      tracing::warn!("stream ended at {position:.0} s of {duration:.0} s: reloading");
+      return;
+    }
+    tracing::warn!("stream ended at {position:.0} s of {duration:.0} s");
+    self.fail(
+      t(
+        "Playback stopped: the stream ended before the video.",
+        "Lecture interrompue : le flux s'est arrêté avant la fin de la vidéo.",
+      )
+      .into(),
+      cx,
+    );
+  }
+
+  /// Starts or stops the timer that reloads a video stuck buffering ([`STALL_AFTER`]). A live
+  /// waits on its edge, and a paused video's buffering is no stall.
+  fn watch_stall(&mut self, cx: &mut Context<Self>) {
+    if !self.buffering || self.paused || !self.started || self.is_live() || !self.can_seek() {
+      self.stall_task = None;
+      return;
+    }
+    if self.stall_task.is_some() {
+      return;
+    }
+    self.stall_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(STALL_AFTER).await;
+      this
+        .update(cx, |this, cx| {
+          this.stall_task = None;
+          if !this.buffering || this.paused {
+            return;
+          }
+          let position = this.position;
+          if this.reload_here(cx) {
+            tracing::warn!("stalled at {position:.0} s: reloading");
+          } else {
+            tracing::warn!("stalled at {position:.0} s, reloaded less than a minute ago");
+          }
+        })
+        .ok();
+    }));
+  }
+
+  /// Restarts mpv on the playing quality from the current position, unless it was already
+  /// reloaded less than [`RELOAD_RETRY`] ago; whether it did.
+  fn reload_here(&mut self, cx: &mut Context<Self>) -> bool {
+    let recent = self
+      .last_reload
+      .is_some_and(|at| at.elapsed() < RELOAD_RETRY);
     let options = self.source.as_ref().map(|source| {
       self
         .quality
         .and_then(|i| source.qualities.get(i))
         .map_or_else(|| source.options.clone(), |q| q.options.clone())
     });
-    let retried = self
-      .early_end_reload
-      .is_some_and(|at| at.elapsed() < EARLY_END_RETRY);
-    let Some(options) = options.filter(|_| !retried) else {
-      tracing::warn!(
-        "stream ended at {:.0} s of {:.0} s",
-        self.position,
-        self.duration
-      );
-      return self.fail(
-        t(
-          "Playback stopped: the stream ended before the video.",
-          "Lecture interrompue : le flux s'est arrêté avant la fin de la vidéo.",
-        )
-        .into(),
-        cx,
-      );
+    let Some(options) = options.filter(|_| !recent) else {
+      return false;
     };
-    tracing::warn!(
-      "stream ended at {:.0} s of {:.0} s: reloading",
-      self.position,
-      self.duration
-    );
-    self.early_end_reload = Some(Instant::now());
+    self.last_reload = Some(Instant::now());
+    self.stall_task = None;
     let options = StartOptions {
       start_seconds: self.position,
       ..options
@@ -1054,6 +1101,7 @@ impl PlayerView {
     }
     self.captions_added.clear();
     self.start_with(options, Instant::now(), cx);
+    true
   }
 
   fn with_player(&self, f: impl FnOnce(&Player)) {

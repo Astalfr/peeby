@@ -55,6 +55,8 @@ mpv runs with `keep-open=yes`, so at the end it pauses on the last frame and nev
 
 An `eof-reached` more than 10 s before the duration (`EARLY_END_MARGIN`) is not the end: one of the streams stopped (a YouTube variant's video, or its separate audio rendition), so the other one played on alone, or a seek went past the point where it stopped. The player then restarts mpv on the same quality from the current position. If it ends early again within a minute of that restart, playback stops with an error. It never moves on to the next video or marks the item watched.
 
+A seekable video that keeps buffering (`paused-for-cache`) for 10 s while it plays (`STALL_AFTER`) is stuck, not slow. This was seen after a pause: the server had closed the connection, the next transfer failed, and from then on mpv's video demuxer read ahead without end while nothing more was decoded. The player restarts mpv on the same quality from the current position. If it stalls again within a minute of a restart, the player leaves it buffering. Lives are not watched: they wait on their edge.
+
 ## Audio and subtitles carried across episodes
 
 When the user changes tracks, the page records the choice for the series, for the rest of the session (`Browser::remember_tracks`). The next episode of that series starts with the stream in the same language, preferably with the same title and forced flag. This keeps `Full` subtitles from turning back into `Signs & Songs`. When the file has no match, the server defaults apply. Those follow the user's language settings on the server.
