@@ -30,7 +30,9 @@ Options considered:
 - `ui::i18n` holds the interface's language (`Lang::En`, `Lang::Fr`) in a process-wide atomic,
   readable without a context, and offers `t`, `tf!` and `Lang::pick`. English is the default.
 - The setting is `interface_language` in `settings.toml` (`en`, `fr`; unknown codes mean
-  English), chosen in the gear's Général section. It is applied before the UI starts; a change
+  English), chosen in the gear's Général section. On the first start (no `settings.toml` yet)
+  it follows Windows' display language (`GetUserDefaultUILanguage`): French for any French,
+  English for any other; it is saved with the settings' next write. It is applied before the UI starts; a change
   sets it and calls `App::refresh_windows`. Texts a page keeps in its state (a status, a loaded
   error) follow on its next load.
 - It is not YouTube's content language (`language`/`region`, the `hl`/`gl` of InnerTube),

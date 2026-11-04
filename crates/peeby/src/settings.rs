@@ -413,6 +413,13 @@ impl Settings {
         tracing::warn!("{}: {e}", path.display());
         Self::default()
       }),
+      // First start: the interface follows Windows' display language.
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self {
+        interface_language: os_lang(crate::desktop::sys::ui_primary_language())
+          .code()
+          .into(),
+        ..Self::default()
+      },
       Err(_) => Self::default(),
     }
   }
@@ -458,6 +465,17 @@ impl Settings {
     let path = settings_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
     let text = toml::to_string(self).map_err(std::io::Error::other)?;
     write_atomically(&path, &text)
+  }
+}
+
+/// The interface's language for Windows' primary display language (a `PRIMARYLANGID`):
+/// French for `LANG_FRENCH`, English otherwise.
+fn os_lang(primary: u16) -> ui::i18n::Lang {
+  const LANG_FRENCH: u16 = 0x0c;
+  if primary == LANG_FRENCH {
+    ui::i18n::Lang::Fr
+  } else {
+    ui::i18n::Lang::En
   }
 }
 
@@ -579,6 +597,13 @@ pub fn delete_cookies() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
   use super::Settings;
+
+  #[test]
+  fn first_start_follows_windows_language() {
+    assert_eq!(super::os_lang(0x0c), ui::i18n::Lang::Fr);
+    assert_eq!(super::os_lang(0x09), ui::i18n::Lang::En);
+    assert_eq!(super::os_lang(0x07), ui::i18n::Lang::En);
+  }
 
   #[test]
   fn partial_file_takes_defaults() {

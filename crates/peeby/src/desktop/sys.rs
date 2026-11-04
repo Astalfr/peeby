@@ -1,6 +1,6 @@
 //! Win32 calls of the desktop integration (ADR 0020): the main window's visibility, the
 //! single instance's pipe, and the double click and screen of the notification area's icon;
-//! and DPAPI, which encrypts the cookie jar (ADR 0022). The only `unsafe` of the `peeby` crate,
+//! DPAPI, which encrypts the cookie jar (ADR 0022); and Windows' display language (ADR 0014). The only `unsafe` of the `peeby` crate,
 //! each block with its `// SAFETY:`.
 
 use std::fs::File;
@@ -11,6 +11,7 @@ use std::time::Duration;
 use windows::Win32::Foundation::{
   E_INVALIDARG, ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, HWND, LocalFree, POINT,
 };
+use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
 use windows::Win32::Security::Cryptography::{
   CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
@@ -52,6 +53,13 @@ pub fn show(hwnd: isize) {
     };
     let _ = ShowWindow(hwnd, command);
   }
+}
+
+/// The primary language of Windows' display language for the user (`PRIMARYLANGID` of
+/// `GetUserDefaultUILanguage`), e.g. `0x0c` for French.
+pub fn ui_primary_language() -> u16 {
+  // SAFETY: no arguments; it only reads a setting.
+  unsafe { GetUserDefaultUILanguage() & 0x3ff }
 }
 
 /// The longest time between the two clicks of a double click (the user's mouse setting).
