@@ -2,8 +2,13 @@
 //! the message field with its emote and emoji picker, and under it the space's own element on the
 //! left (a service's points) and "Send" on the right. A message leaves as
 //! [`ChatPanelEvent::Send`]: the space sends it, the panel knows no protocol.
+//!
+//! In the field, a known emote's code followed by a space (picked or typed) shows as its image: an
+//! atomic token whose text stays the code, so that what is sent is unchanged. Emoji are text.
 
+use std::collections::HashMap;
 use std::ops::Range;
+use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
@@ -11,7 +16,9 @@ use gpui::{
   Window, div, px, uniform_list,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
+use gpui_component::input::{
+  InlineToken, InlineTokenContext, Input, InputEvent, InputState, Textarea, TextareaState,
+};
 use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 
@@ -29,8 +36,10 @@ const PER_ROW: usize = 8;
 const CELL: f32 = 38.;
 /// Height of the picker's grid.
 const PICKER_HEIGHT: f32 = 300.;
+/// Side of the picker's button.
+const PICKER_BUTTON_SIZE: f32 = 31.;
 /// Room kept at the field's right for the picker's button.
-const PICKER_BUTTON: f32 = 36.;
+const PICKER_BUTTON: f32 = PICKER_BUTTON_SIZE + 8.;
 /// The length counter shows from this share of the limit on.
 const COUNTER_FROM: f32 = 0.8;
 
@@ -82,6 +91,8 @@ pub(super) struct Composer {
   input: Option<Entity<TextareaState>>,
   search: Option<Entity<InputState>>,
   groups: Vec<EmoteGroup>,
+  /// The groups' emotes by code, the first group's winning: what the field draws as images.
+  known: Rc<HashMap<SharedString, Emote>>,
   footer: Option<AnyView>,
   state: Composing,
   tab: Tab,
@@ -89,6 +100,8 @@ pub(super) struct Composer {
   rows: Vec<Row>,
   /// The picked item under the pointer, named at the picker's bottom.
   hovered: Option<SharedString>,
+  /// The picker is open (the popover follows it: a pick closes it).
+  picker_open: bool,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -99,11 +112,13 @@ impl Composer {
       input: None,
       search: None,
       groups: Vec::new(),
+      known: Rc::default(),
       footer: None,
       state: Composing::Waiting(t("Connecting to chat…", "Connexion au chat…").into()),
       tab: Tab::default(),
       rows: Vec::new(),
       hovered: None,
+      picker_open: false,
       _subscriptions: Vec::new(),
     }
   }
@@ -160,6 +175,32 @@ fn emoji_rows() -> Vec<Row> {
 
 /// The text to insert for a picked `item` after `before` (the field's text): spaced from what
 /// precedes it, a space after.
+/// The words of `text` to show as emotes: those `known` and followed by a space (a word still
+/// being typed may grow), outside the `taken` ranges (tokens already). Byte ranges, in order.
+fn emote_words(
+  text: &str,
+  taken: &[Range<usize>],
+  known: impl Fn(&str) -> bool,
+) -> Vec<Range<usize>> {
+  let mut words = Vec::new();
+  let mut start = 0;
+  for (at, c) in text.char_indices() {
+    if c == ' ' {
+      let range = start..at;
+      if !range.is_empty()
+        && known(&text[range.clone()])
+        && !taken
+          .iter()
+          .any(|t| t.start < range.end && range.start < t.end)
+      {
+        words.push(range);
+      }
+      start = at + 1;
+    }
+  }
+  words
+}
+
 fn insertion(before: &str, item: &str) -> String {
   let lead = if before.is_empty() || before.ends_with(' ') {
     ""
@@ -190,6 +231,13 @@ impl ChatPanel {
   /// The emotes the picker offers, by group.
   pub fn set_emotes(&mut self, groups: Vec<EmoteGroup>, cx: &mut Context<Self>) {
     if let Some(composer) = &mut self.composer {
+      let mut known = HashMap::new();
+      for emote in groups.iter().flat_map(|g| &g.emotes) {
+        known
+          .entry(emote.name.clone())
+          .or_insert_with(|| emote.clone());
+      }
+      composer.known = Rc::new(known);
       composer.groups = groups;
       composer.make_rows(cx);
       cx.notify();
@@ -238,8 +286,53 @@ impl ChatPanel {
       let text = insertion(&state.value(), &item);
       state.insert(text, window, cx);
     });
-    // `insert` emits no change: "Send" is enabled here.
+    // `insert` emits no change: the emote becomes a token, and "Send" is enabled, here.
+    self.show_emotes(window, cx);
+    // A pick closes the picker and goes back to the field, after the popover gives the focus
+    // back to its button.
+    if let Some(composer) = &mut self.composer {
+      composer.picker_open = false;
+      composer.hovered = None;
+    }
+    window.defer(cx, move |window, cx| {
+      input.update(cx, |input, cx| input.focus(window, cx));
+    });
     cx.notify();
+  }
+
+  /// Turns the field's complete emote codes into tokens drawn as their image.
+  fn show_emotes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(composer) = &self.composer else {
+      return;
+    };
+    let Some(input) = composer.input.clone() else {
+      return;
+    };
+    let known = composer.known.clone();
+    if known.is_empty() {
+      return;
+    }
+    input.update(cx, |state, cx| {
+      let text = state.value();
+      let taken: Vec<Range<usize>> = state.tokens().iter().map(|t| t.range()).collect();
+      let words = emote_words(&text, &taken, |w| known.contains_key(w));
+      if words.is_empty() {
+        return;
+      }
+      // A replacement leaves the cursor at the code's end, before the space that follows it:
+      // the selection goes back where it was (the text keeps its length).
+      let selection = state.selected_range();
+      // From the end: a replacement keeps the ranges before it (the same text in either case).
+      for range in words.into_iter().rev() {
+        let code = text[range.clone()].to_owned();
+        let token = InlineToken::new(code.clone(), code);
+        // A range the field refuses stays plain text.
+        state
+          .replace_range_with_token(range, token, window, cx)
+          .ok();
+      }
+      state.set_selected_range(selection, cx);
+    });
   }
 
   fn set_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
@@ -290,7 +383,10 @@ impl ChatPanel {
         window,
         |this, _, event: &InputEvent, window, cx| match event {
           InputEvent::PressEnter { .. } => this.submit(window, cx),
-          InputEvent::Change => cx.notify(),
+          InputEvent::Change => {
+            this.show_emotes(window, cx);
+            cx.notify();
+          }
           _ => {}
         },
       ));
@@ -321,22 +417,34 @@ impl ChatPanel {
       Composing::Waiting(text) | Composing::Off(text) => Some(text.clone()),
     };
     let footer = composer.footer.clone();
+    let known = composer.known.clone();
     let this = cx.entity().downgrade();
     let opened = this.clone();
     let picker = Popover::new("chat-picker")
       .anchor(Anchor::BottomRight)
+      .open(composer.picker_open)
       .on_open_change(move |open, window, cx| {
-        if *open {
-          opened
-            .update(cx, |this, cx| this.focus_search(window, cx))
-            .ok();
-        }
+        let open = *open;
+        opened
+          .update(cx, |this, cx| {
+            if let Some(composer) = &mut this.composer {
+              composer.picker_open = open;
+            }
+            if open {
+              this.focus_search(window, cx);
+            }
+            cx.notify();
+          })
+          .ok();
       })
       .trigger(
+        // A small button (24 px, its icon 14) made 30 % larger: the button sizes its own icon,
+        // so the icon is a child.
         Button::new("chat-picker-open")
           .ghost()
-          .small()
-          .icon(Icon::Smile)
+          .with_size(px(PICKER_BUTTON_SIZE))
+          .size(px(PICKER_BUTTON_SIZE))
+          .child(gpui_component::Icon::new(Icon::Smile).size(px(18.)))
           .disabled(off)
           .tooltip(t("Emotes and emoji", "Emotes et emoji")),
       )
@@ -371,6 +479,7 @@ impl ChatPanel {
             .relative()
             .child(
               Textarea::new(&input)
+                .token(move |token, window, cx| emote_token(&known, token, window, cx))
                 .small()
                 .pr(px(PICKER_BUTTON))
                 .disabled(off),
@@ -525,6 +634,30 @@ impl ChatPanel {
   }
 }
 
+/// A token of the field: its emote's image, a line high (its code if it is not known any more).
+fn emote_token(
+  known: &HashMap<SharedString, Emote>,
+  token: &InlineTokenContext,
+  window: &mut Window,
+  cx: &mut gpui::App,
+) -> AnyElement {
+  let code = token.token().text().clone();
+  let Some(emote) = known.get(&code) else {
+    return div().child(code).into_any_element();
+  };
+  let height = f32::from(token.line_height()).max(1.);
+  let scale = window.scale_factor();
+  let images = cx.try_global::<Images>().cloned();
+  emote_stack(std::iter::once(emote), height, |picture: &Picture, w, h| {
+    let images = images.as_ref()?;
+    let url = picture.url((w * scale).round() as u32, (h * scale).round() as u32)?;
+    images.0.update(cx, |store, cx| store.get(&url, cx))
+  })
+  .rounded(px(2.))
+  .when(token.is_selected(), |el| el.bg(theme::accent_soft()))
+  .into_any_element()
+}
+
 /// A picker cell showing `content`: a click inserts `item`, the pointer names it.
 fn cell(
   id: ElementId,
@@ -568,6 +701,18 @@ mod tests {
       aspect: 1.,
       overlay: false,
     }
+  }
+
+  #[test]
+  fn complete_emote_words_are_found() {
+    let known = |w: &str| matches!(w, "Pog" | "KEKW");
+    let text = "so Pog KEKW Pogs Pog";
+    // The last `Pog` is still being typed; `KEKW` is a token already.
+    let kekw = 7..11;
+    let found = emote_words(text, std::slice::from_ref(&kekw), known);
+    assert_eq!((found.len(), found.first()), (1, Some(&(3..6))));
+    assert_eq!(emote_words("Pog  Pog ", &[], known), [0..3, 5..8]);
+    assert!(emote_words("", &[], known).is_empty());
   }
 
   #[test]
