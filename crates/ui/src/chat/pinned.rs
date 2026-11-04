@@ -1,6 +1,6 @@
 //! What a channel pins over its chat, as Twitch does with its predictions and polls: a stack of
 //! bars at the top of the message list, drawn over the messages (the list keeps its layout and
-//! its following). A bar shows its kind, its title and its state in a line; a click unfolds its
+//! its following), a line along each one's bottom edge for the time it has left. A bar shows its kind, its title and its state in a line; a click unfolds its
 //! card under it and folds the others, so that two items never cover the chat together. The
 //! space keeps which one is open ([`Unfolded`]) and builds the open one's body; new items come
 //! folded.
@@ -17,6 +17,8 @@ use crate::theme;
 /// Height of the stack at most, as a share of the message list's: the newest lines stay in
 /// sight.
 const MAX_SHARE: f32 = 0.7;
+/// Height of the time-left line along an item's bottom edge, logical pixels.
+const TIME_LINE: f32 = 3.;
 
 /// One pinned item.
 pub struct Pinned {
@@ -34,6 +36,9 @@ pub struct Pinned {
   pub status: SharedString,
   /// The card, for the open item only (`None` folded).
   pub body: Option<AnyElement>,
+  /// The share of its time left (1 at its start, 0 at its end), drawn as a line along its bottom
+  /// edge; `None` once it no longer counts down (closed, ended).
+  pub time_left: Option<f32>,
 }
 
 /// Which item is unfolded, by id: held by the space across its reloads.
@@ -168,6 +173,20 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
             .child(item.title),
         )
         .child(body)
+    }))
+    // Last, under the card too: its bottom edge.
+    .children(item.time_left.map(|left| {
+      div()
+        .flex_none()
+        .h(px(TIME_LINE))
+        .w_full()
+        .bg(theme::surface_hover())
+        .child(
+          div()
+            .h_full()
+            .w(relative(left.clamp(0., 1.)))
+            .bg(item.accent),
+        )
     }))
     .into_any_element()
 }

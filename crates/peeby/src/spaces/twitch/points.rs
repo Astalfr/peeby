@@ -841,8 +841,11 @@ impl PointsView {
                   Button::new(ElementId::Name(
                     format!("twitch-bet-{}-{}", p.id, outcome.id).into(),
                   ))
-                  .xsmall()
-                  .when(confirming, |b| b.primary())
+                  .small()
+                  .icon(Icon::Points)
+                  // Filled in the accent, and amber while it waits for its confirmation.
+                  .when(!confirming, |b| b.primary())
+                  .when(confirming, |b| b.warning())
                   .label(if confirming {
                     let amount = cards::grouped(pending_amount);
                     tf!("Confirm {amount}", "Confirmer {amount}")
@@ -912,8 +915,8 @@ impl PointsView {
       .into_any_element()
   }
 
-  /// A poll's card: its choices with their share of the votes, a vote button on each while it
-  /// takes votes and the viewer has not voted.
+  /// A poll's card: its choices with their share of the votes; while it takes votes and the
+  /// viewer has not voted, a click on a choice (lit up under the pointer) votes for it.
   fn poll_body(&self, poll: &Poll, cx: &mut Context<Self>) -> AnyElement {
     let total = poll.total();
     let open = !poll.ended && poll.voted.is_none();
@@ -931,79 +934,90 @@ impl PointsView {
       let mine = poll.voted.as_deref() == Some(choice.id.as_str());
       let won = winner.as_deref() == Some(choice.id.as_str());
       let (poll_id, choice_id) = (poll.id.clone(), choice.id.clone());
-      choices = choices.child(
-        v_flex()
-          .gap_0p5()
-          .child(
-            h_flex()
-              .gap_2()
-              .items_center()
-              .child(
-                div()
-                  .flex_1()
-                  .min_w_0()
-                  .text_sm()
-                  .truncate()
-                  .when(won, |el| el.font_weight(FontWeight::SEMIBOLD))
-                  .child(choice.title.clone()),
-              )
-              .when(mine, |row| {
-                row.child(
-                  gpui_component::Icon::new(Icon::Check)
-                    .size(px(14.))
-                    .text_color(theme::accent()),
+      // While it takes the viewer's vote, the whole choice is the button.
+      let votable = open && !self.voting;
+      choices =
+        choices.child(
+          v_flex()
+            .id(ElementId::Name(
+              format!("twitch-vote-{}-{}", poll.id, choice.id).into(),
+            ))
+            .gap_0p5()
+            .px_2()
+            .py_1p5()
+            .rounded(theme::RADIUS)
+            .when(mine, |el| el.bg(theme::surface_hover()))
+            .when(votable, |el| {
+              el.cursor_pointer()
+                .hover(|s| s.bg(theme::surface_hover()))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                  this.vote(poll_id.clone(), choice_id.clone(), cx)
+                }))
+            })
+            .child(
+              h_flex()
+                .gap_2()
+                .items_center()
+                .child(
+                  div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_sm()
+                    .truncate()
+                    .when(won, |el| el.font_weight(FontWeight::SEMIBOLD))
+                    .child(choice.title.clone()),
                 )
-              })
-              .child(
-                div()
-                  .text_xs()
-                  .text_color(theme::muted())
-                  .child(percent(format!("{:.0}", share * 100.0))),
-              )
-              .when(open, |row| {
-                row.child(
-                  Button::new(ElementId::Name(
-                    format!("twitch-vote-{}-{}", poll.id, choice.id).into(),
-                  ))
-                  .xsmall()
-                  .label(t("Vote", "Voter"))
-                  .disabled(self.voting)
-                  .on_click(cx.listener(move |this, _, _, cx| {
-                    this.vote(poll_id.clone(), choice_id.clone(), cx)
-                  })),
-                )
-              }),
-          )
-          .child(
-            div()
-              .h(px(3.))
-              .w_full()
-              .rounded_full()
-              .bg(theme::surface_hover())
-              .child(
-                div()
-                  .h_full()
-                  .rounded_full()
-                  .w(gpui::relative(share as f32))
-                  .bg(if won || mine {
-                    theme::accent()
-                  } else {
-                    theme::muted()
-                  }),
-              ),
-          )
-          .child(div().text_xs().text_color(theme::subtle()).child({
-            let votes = cards::grouped(choice.votes);
-            if cards::plural(choice.votes) {
-              format!("{votes} votes")
-            } else {
-              format!("{votes} vote")
-            }
-          })),
-      );
+                .when(mine, |row| {
+                  row.child(
+                    gpui_component::Icon::new(Icon::Check)
+                      .size(px(14.))
+                      .text_color(theme::accent()),
+                  )
+                })
+                .child(
+                  div()
+                    .text_xs()
+                    .text_color(theme::muted())
+                    .child(percent(format!("{:.0}", share * 100.0))),
+                ),
+            )
+            .child(
+              div()
+                .h(px(3.))
+                .w_full()
+                .rounded_full()
+                // Not the hover's color: the track stays visible under the pointer.
+                .bg(theme::border())
+                .child(
+                  div()
+                    .h_full()
+                    .rounded_full()
+                    .w(gpui::relative(share as f32))
+                    .bg(if won || mine {
+                      theme::accent()
+                    } else {
+                      theme::muted()
+                    }),
+                ),
+            )
+            .child(div().text_xs().text_color(theme::subtle()).child({
+              let votes = cards::grouped(choice.votes);
+              if cards::plural(choice.votes) {
+                format!("{votes} votes")
+              } else {
+                format!("{votes} vote")
+              }
+            })),
+        );
     }
     v_flex()
       .gap_2()
+      .when(open, |el| {
+        el.child(div().text_xs().text_color(theme::muted()).child(t(
+          "Click a choice to vote.",
+          "Cliquez sur un choix pour voter.",
+        )))
+      })
       .child(choices)
       .children(
         self
@@ -1017,6 +1031,7 @@ impl PointsView {
   /// What is pinned over the chat: the predictions (with points), then the polls.
   fn pinned(&self, cx: &mut Context<Self>) -> Vec<Pinned> {
     let mut items = Vec::new();
+    let now = polls::now_millis();
     if !self.off && self.points.is_some() {
       for p in &self.predictions {
         let open = self.unfolded.is(&p.id);
@@ -1028,10 +1043,15 @@ impl PointsView {
           title: p.title.clone().into(),
           status: prediction_status(p).into(),
           body: open.then(|| self.prediction_body(p, cx)),
+          time_left: (p.status == PredictionStatus::Active)
+            .then(|| {
+              let length = i64::try_from(p.window_seconds).ok()? * 1000;
+              polls::share_left(p.created_at?, length, now)
+            })
+            .flatten(),
         });
       }
     }
-    let now = polls::now_millis();
     for poll in &self.polls {
       let open = self.unfolded.is(&poll.id);
       items.push(Pinned {
@@ -1042,6 +1062,7 @@ impl PointsView {
         title: poll.title.clone().into(),
         status: poll.status(now).into(),
         body: open.then(|| self.poll_body(poll, cx)),
+        time_left: poll.time_left(now),
       });
     }
     items

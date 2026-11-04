@@ -42,6 +42,15 @@ impl Poll {
     Some(((end - now_millis) / 1000).max(0))
   }
 
+  /// The share of its time left, 1 to 0; `None` once ended.
+  pub fn time_left(&self, now_millis: i64) -> Option<f32> {
+    if self.ended {
+      return None;
+    }
+    let length = i64::try_from(self.duration_seconds).ok()? * 1000;
+    share_left(self.started_at, length, now_millis)
+  }
+
   /// Every vote.
   pub fn total(&self) -> u64 {
     self.choices.iter().map(|c| c.votes).sum()
@@ -83,6 +92,11 @@ impl Poll {
   }
 }
 
+/// The share left of `length` ms started at `start`, at `now` (Unix milliseconds), 1 to 0.
+pub fn share_left(start: i64, length: i64, now: i64) -> Option<f32> {
+  (length > 0).then(|| ((start + length - now) as f32 / length as f32).clamp(0., 1.))
+}
+
 pub fn now_millis() -> i64 {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -119,9 +133,12 @@ mod tests {
     assert_eq!(p.remaining(20_000), Some(40));
     assert_eq!(p.remaining(90_000), Some(0));
     assert_eq!(p.status(20_000), "Voting open · 0:40");
+    assert_eq!(p.time_left(15_000), Some(0.75));
+    assert_eq!(p.time_left(70_000), Some(0.));
     p.voted = Some("1".into());
     assert_eq!(p.status(20_000), "Voted · 0:40");
     p.ended = true;
+    assert_eq!(p.time_left(15_000), None);
     assert_eq!(p.total(), 8);
     assert_eq!(p.status(0), "Ended · “c1” wins");
     assert_eq!(poll(&[2, 2]).winner(), None);
