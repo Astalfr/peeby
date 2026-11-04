@@ -164,11 +164,19 @@ fn frame_at(image: &RenderImage, elapsed: Duration) -> usize {
 
 /// Height kept above and below the visible messages, laid out ahead of a scroll.
 const OVERDRAW: f32 = 400.;
+/// How far a new line slides in from the right, logical pixels.
+const ENTER_SLIDE: f32 = 10.;
+/// How long a new line takes to slide and fade in.
+const ENTER: Duration = theme::NORMAL;
+/// Lines arriving together beyond this many (the history on joining) show at once.
+const ENTER_MAX_BATCH: usize = 30;
 
 /// The chat panel: see the module documentation. Its page feeds it with [`ChatPanel::push`]. It
 /// draws no background nor frame: its container does (`watch_layout`).
 pub struct ChatPanel {
   messages: VecDeque<ChatMessage>,
+  /// When each of `messages` arrived, for its entrance; `None` shows it at once.
+  arrived: VecDeque<Option<Instant>>,
   /// Arrived while scrolled up, shown on resuming.
   held: VecDeque<ChatMessage>,
   list: ListState,
@@ -187,6 +195,7 @@ impl ChatPanel {
     list.set_follow_mode(FollowMode::Tail);
     Self {
       messages: VecDeque::new(),
+      arrived: VecDeque::new(),
       held: VecDeque::new(),
       list,
       modes: Vec::new(),
@@ -229,6 +238,7 @@ impl ChatPanel {
         }
         ChatEvent::Clear => {
           self.messages.clear();
+          self.arrived.clear();
           self.held.clear();
           self.list.reset(0);
           added = 0;
@@ -238,6 +248,8 @@ impl ChatPanel {
       }
     }
     if added > 0 {
+      let enter = (added <= ENTER_MAX_BATCH).then(Instant::now);
+      self.arrived.extend(std::iter::repeat_n(enter, added));
       let end = self.messages.len();
       self.list.splice(end - added..end - added, added);
     }
@@ -257,6 +269,8 @@ impl ChatPanel {
     let count = self.held.len();
     let start = self.messages.len();
     self.messages.append(&mut self.held);
+    // Shown at once: they come in together, where the list jumps to.
+    self.arrived.extend(std::iter::repeat_n(None, count));
     self.list.splice(start..start, count);
   }
 
@@ -266,6 +280,7 @@ impl ChatPanel {
     let extra = self.messages.len().saturating_sub(MAX_MESSAGES);
     if extra > 0 {
       self.messages.drain(..extra);
+      self.arrived.drain(..extra);
       self.list.splice(0..extra, 0);
     }
   }
@@ -291,6 +306,19 @@ impl ChatPanel {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> AnyElement {
+    // A new line fades in sliding a few pixels from the right (none with reduced motion).
+    let enter = match self.arrived.get(ix).copied().flatten() {
+      Some(arrived) if !cx.reduce_motion() => {
+        let t = (arrived.elapsed().as_secs_f32() / ENTER.as_secs_f32()).min(1.);
+        if t < 1. {
+          window.request_animation_frame();
+        } else if let Some(slot) = self.arrived.get_mut(ix) {
+          *slot = None;
+        }
+        1. - (1. - t).powi(3)
+      }
+      _ => 1.,
+    };
     let Some(message) = self.messages.get(ix) else {
       return div().into_any_element();
     };
@@ -419,7 +447,12 @@ impl ChatPanel {
       .w_full()
       .px_3()
       .py(px(3.))
-      .hover(|s| s.bg(theme::foreground().opacity(0.04)));
+      .hover(|s| s.bg(theme::foreground().opacity(0.04)))
+      .when(enter < 1., |el| {
+        el.relative()
+          .left(px(ENTER_SLIDE * (1. - enter)))
+          .opacity(enter)
+      });
     match &message.kind {
       MessageKind::Notice(text) => item
         .child(

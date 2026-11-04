@@ -86,6 +86,7 @@ Discreet and short; nothing loops except skeletons and spinners. The one excepti
 | Sidebar hover card | Fades in sliding 6 px toward its entry, and out sliding away (`motion::tween`, none with reduced motion) | 150 ms |
 | Space change | The accent and every color it tints (backgrounds, surfaces, gpui-component's theme) move from the old space's to the new one's, ease in-out (`theme::transition_accent`, at once with reduced motion) | 1 s |
 | List of lives (notification area) | The panel (a transparent window, rounded) fades in rising 16 px from the taskbar; a tab's underline grows from its middle while the other's shrinks, its list slides 24 px in from the side of the tab it came from; the rows fade in sliding 32 px from the right, 30 ms apart (the first 10); a hovered row takes the soft tint of its tab's space accent, its channel name the accent. None with reduced motion | 300 ms, 200 ms |
+| Chat line | A new line fades in sliding 10 px from the right, easing out; not the history arriving on joining (more than 30 lines at once) nor the held lines on resuming, none with reduced motion | 200 ms |
 | Seek bar hover | The track thickens, and the hovered chapter's piece grows taller, easing out (`motion::tween`) | 150 ms |
 | Image load | The image fades in over its BlurHash (Jellyfin) or the flat surface | 200 ms |
 | Jellyfin banner | The next backdrop cross-fades over the previous one, the text slides in from the left; it turns every 8 s, not while hovered | 700 ms, 350 ms |
