@@ -148,6 +148,7 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
   v_flex()
     .when(open, |el| el.flex_shrink(1.).min_h_0())
     .when(!open, |el| el.flex_none())
+    .relative()
     .rounded(theme::RADIUS)
     .bg(theme::surface())
     .border_1()
@@ -174,20 +175,47 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
         )
         .child(body)
     }))
-    // Last, under the card too: its bottom edge.
-    .children(item.time_left.map(|left| {
-      div()
-        .flex_none()
-        .h(px(TIME_LINE))
-        .w_full()
-        .bg(theme::surface_hover())
-        .child(
-          div()
-            .h_full()
-            .w(relative(left.clamp(0., 1.)))
-            .bg(item.accent),
-        )
-    }))
+    // Room for the time line, under the card too: drawn over its bottom edge.
+    .when(item.time_left.is_some(), |el| el.pb(px(TIME_LINE)))
+    .children(item.time_left.map(|left| time_line(left, item.accent)))
+    .into_any_element()
+}
+
+/// The time-left line: the bottom border of a layer over the whole item, rounded as its inside
+/// so that the line follows the frame's corners (GPUI clips to rectangles, and a line 3 px high
+/// cannot round itself to an 8 px corner). The share left is that layer cut on the right, which a
+/// rectangle does: the track under it, then the accent over the share left.
+fn time_line(left: f32, accent: Hsla) -> AnyElement {
+  // Inside the item's 1 px border.
+  let inner = theme::RADIUS - px(1.);
+  let edge = |color: Hsla| {
+    div()
+      .absolute()
+      .top_0()
+      .bottom_0()
+      .left_0()
+      .rounded(inner)
+      .border_b(px(TIME_LINE))
+      .border_color(color)
+  };
+  let left = left.clamp(0., 1.);
+  div()
+    .absolute()
+    .inset_0()
+    .child(edge(theme::surface_hover()).right_0())
+    .when(left > 0., |el| {
+      el.child(
+        div()
+          .absolute()
+          .top_0()
+          .bottom_0()
+          .left_0()
+          .w(relative(left))
+          .overflow_hidden()
+          // As wide as the item, so that its corners are the item's.
+          .child(edge(accent).w(relative(1. / left))),
+      )
+    })
     .into_any_element()
 }
 
