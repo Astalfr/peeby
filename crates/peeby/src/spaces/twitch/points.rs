@@ -24,6 +24,8 @@ use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 use ui::assets::Icon;
 use ui::i18n::t;
+use ui::images::Images;
+use ui::picture::{self, Picture};
 use ui::player::PlayerView;
 use ui::{runtime, tf, theme};
 
@@ -37,6 +39,8 @@ const WATCHED_EVERY: Duration = Duration::from_secs(60);
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
 /// How long a first click waits for its confirmation.
 const CONFIRM_FOR: Duration = Duration::from_secs(8);
+/// Side of the channel's points icon in the balance, logical pixels (as the default icon).
+const POINTS_ICON: f32 = 14.;
 /// Twitch's smallest bet.
 const MIN_BET: u64 = 10;
 /// The bet amounts offered, as shares of the balance in percent.
@@ -424,9 +428,20 @@ impl PointsView {
     (balance * self.share / 100).max(MIN_BET).min(balance)
   }
 
-  fn balance_chip(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  fn balance_chip(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let points = self.points.clone().unwrap_or_default();
     let name = points.name.clone().unwrap_or_else(|| "points".into());
+    let label = format!("{} {name}", cards::grouped(points.balance));
+    // The channel's own icon for its points once loaded, else the default one.
+    let icon = points.icon.clone().and_then(|url| {
+      picture::logo(
+        &Picture::sized(move |_, _| url.clone()),
+        POINTS_ICON,
+        POINTS_ICON,
+        window,
+        cx,
+      )
+    });
     let this = cx.entity().downgrade();
     let closed = this.clone();
     // Under the chat's field: it opens upward.
@@ -452,8 +467,16 @@ impl PointsView {
         Button::new("twitch-points-balance")
           .small()
           .ghost()
-          .icon(Icon::Points)
-          .label(format!("{} {name}", cards::grouped(points.balance)))
+          .map(|button| match icon {
+            Some(icon) => button.child(
+              h_flex()
+                .gap_1()
+                .items_center()
+                .child(icon)
+                .child(label.clone()),
+            ),
+            None => button.icon(Icon::Points).label(label.clone()),
+          })
           .tooltip(t(
             "Channel Points · rewards",
             "Points de chaîne · récompenses",
@@ -781,7 +804,7 @@ impl PointsView {
     h_flex()
       .gap_1()
       .items_center()
-      .child(self.balance_chip(cx))
+      .child(self.balance_chip(window, cx))
       .when(claim.is_some(), |row| {
         row.child(
           Button::new("twitch-points-bonus")
@@ -838,6 +861,10 @@ pub struct PointsFooter {
 impl PointsFooter {
   pub fn new(points: Entity<PointsView>, cx: &mut Context<Self>) -> Self {
     cx.observe(&points, |_, _, cx| cx.notify()).detach();
+    // The channel's points icon, once loaded.
+    if let Some(images) = cx.try_global::<Images>().cloned() {
+      cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
+    }
     Self { points }
   }
 }
