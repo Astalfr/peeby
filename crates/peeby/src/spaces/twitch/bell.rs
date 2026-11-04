@@ -189,22 +189,22 @@ pub fn toasts(events: Vec<Event>, avatars: &Avatars, nav: WeakEntity<TwitchSpace
 
 /// A Windows notification's title and lines.
 fn toast_text(event: &Event) -> (String, String) {
-  let body = match event.change {
-    Change::Live => [event.title.as_str(), event.category.as_str()]
-      .into_iter()
-      .filter(|s| !s.is_empty())
-      .collect::<Vec<_>>()
-      .join("\n"),
-    // The category is in the headline.
-    Change::Category => event.title.clone(),
-  };
-  (headline(event), body)
+  // The category is in the headline.
+  (headline(event), event.title.clone())
 }
 
-/// "X is live", "X switched to Y".
+/// "X is live in Y", "X switched to Y".
 fn headline(event: &Event) -> String {
   match event.change {
-    Change::Live => tf!("{} is live", "{} est en direct", event.name),
+    Change::Live if event.category.is_empty() => {
+      tf!("{} is live", "{} est en direct", event.name)
+    }
+    Change::Live => tf!(
+      "{} is live in {}",
+      "{} est en direct dans {}",
+      event.name,
+      event.category
+    ),
     Change::Category => tf!(
       "{} switched to {}",
       "{} est passé sur {}",
@@ -516,7 +516,7 @@ mod tests {
     };
     assert_eq!(
       toast_text(&event),
-      ("A is live".into(), "Title\nChess".into())
+      ("A is live in Chess".into(), "Title".into())
     );
     event.change = Change::Category;
     assert_eq!(
