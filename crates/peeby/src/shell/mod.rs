@@ -68,7 +68,9 @@ enum Request {
     after: Option<TabId>,
     focus: bool,
   },
-  Settings,
+  Settings {
+    reveal: bool,
+  },
 }
 
 /// The window's root view.
@@ -83,7 +85,10 @@ pub struct Shell {
   opened_from: Option<(TabId, TabId)>,
   /// The settings page (gear), made for the tab whose history shows it; made again when
   /// another tab shows its own.
-  settings: Option<(TabId, AnyView)>,
+  settings: Option<(TabId, Entity<SettingsView>)>,
+  /// The space whose part the settings page shows next, unfolded and scrolled to (a sign-in
+  /// request).
+  reveal: Option<usize>,
   mini: Option<Mini>,
   /// The opening animation over the window, until it ends.
   splash: Option<Splash>,
@@ -134,7 +139,7 @@ impl Shell {
           let request = match *event {
             SpaceEvent::Activate(tab) => Request::Activate(tab),
             SpaceEvent::Opened { tab, after, focus } => Request::Add { tab, after, focus },
-            SpaceEvent::OpenSettings => Request::Settings,
+            SpaceEvent::OpenSettings { reveal } => Request::Settings { reveal },
           };
           let shell = shell.clone();
           // Deferred: the event comes from inside the window (a click), which cannot be
@@ -148,7 +153,9 @@ impl Shell {
                     Request::Add { tab, after, focus } => {
                       shell.add_tab(index, tab, after, focus, window, cx)
                     }
-                    Request::Settings => shell.open_settings(Some(index), window, cx),
+                    Request::Settings { reveal } => {
+                      shell.open_settings(Some(index), reveal, window, cx)
+                    }
                   })
                   .ok();
               })
@@ -206,6 +213,7 @@ impl Shell {
       active: None,
       opened_from: None,
       settings: None,
+      reveal: None,
       mini: None,
       splash: (splash && !cx.reduce_motion()).then(Splash::new),
       card: None,
@@ -483,9 +491,25 @@ impl Shell {
   }
 
   /// The gear, or a request of space `from`: the settings page in a tab of its own, after the
-  /// tab shown, or the tab that already shows it. A video playing goes to the mini-player.
-  fn open_settings(&mut self, from: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+  /// tab shown, or the tab that already shows it. A video playing goes to the mini-player. With
+  /// `reveal`, the page shows `from`'s part, unfolded and scrolled to.
+  fn open_settings(
+    &mut self,
+    from: Option<usize>,
+    reveal: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if reveal {
+      self.reveal = from;
+    }
     if self.in_settings(cx) {
+      // Already shown: revealed now; not built yet: when it is.
+      if let Some((_, view)) = &self.settings
+        && let Some(space) = self.reveal.take()
+      {
+        view.update(cx, |view, cx| view.reveal(space, cx));
+      }
       return;
     }
     let open = self
@@ -498,6 +522,7 @@ impl Shell {
       return;
     }
     let Some(current) = self.active else {
+      self.reveal = None;
       return;
     };
     let space = from
@@ -511,12 +536,19 @@ impl Shell {
   fn settings_view(&mut self, cx: &mut Context<Self>) -> Option<AnyView> {
     let tab = self.active?;
     match &self.settings {
-      Some((id, view)) if *id == tab.id => Some(view.clone()),
+      Some((id, view)) if *id == tab.id => Some(view.clone().into()),
       _ => {
         let spaces = self.spaces.clone();
-        let view: AnyView = cx.new(|cx| SettingsView::new(spaces, tab.space, cx)).into();
+        let reveal = self.reveal.take();
+        let view = cx.new(|cx| {
+          let mut view = SettingsView::new(spaces, tab.space, cx);
+          if let Some(space) = reveal {
+            view.reveal(space, cx);
+          }
+          view
+        });
         self.settings = Some((tab.id, view.clone()));
-        Some(view)
+        Some(view.into())
       }
     }
   }
@@ -695,7 +727,9 @@ impl Shell {
                 .icon(Icon::Settings)
                 .tooltip(t("Settings", "Réglages"))
                 .when(in_settings, |b| b.selected(true))
-                .on_click(cx.listener(|this, _, window, cx| this.open_settings(None, window, cx))),
+                .on_click(
+                  cx.listener(|this, _, window, cx| this.open_settings(None, false, window, cx)),
+                ),
             ),
         ),
     )

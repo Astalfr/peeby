@@ -596,9 +596,10 @@ pub enum SpaceEvent {
     after: Option<TabId>,
     focus: bool,
   },
-  /// Open the settings in a tab of their own (a page's "import cookies" button, the account
-  /// entry).
-  OpenSettings,
+  /// Open the settings in a tab of their own: the account entry, a page's "Sign in" button.
+  /// With `reveal`, the space's part is unfolded and scrolled to (its account comes first),
+  /// where the space may flash its sign-in ([`ui::widgets::flash`]).
+  OpenSettings { reveal: bool },
 }
 
 /// A service's part of the app: its tabs, their pages, the sidebar entries and what they play.

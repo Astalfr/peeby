@@ -45,8 +45,8 @@ pub fn rate<V: 'static>(
 ) {
   if !client.signed_in() {
     let note = Notification::info(t(
-      "Sign in to rate videos: import your cookies from the Account page.",
-      "Connectez-vous pour noter les vidéos : importez vos cookies depuis la page Compte.",
+      "To rate videos, sign in to YouTube in the settings.",
+      "Pour noter les vidéos, connectez-vous à YouTube dans les réglages.",
     ));
     return window.push_notification(note, cx);
   }

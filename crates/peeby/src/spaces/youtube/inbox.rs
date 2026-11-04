@@ -585,8 +585,8 @@ impl InboxPanel {
 fn inbox_error(error: &Error) -> String {
   match error {
     Error::SignInRequired | Error::NotLoggedIn => t(
-      "Sign in to see your notifications: import your cookies from the Account page.",
-      "Connectez-vous pour voir vos notifications : importez vos cookies depuis la page Compte.",
+      "To see your notifications, sign in to YouTube in the settings.",
+      "Pour voir vos notifications, connectez-vous à YouTube dans les réglages.",
     )
     .into(),
     e => tf!(

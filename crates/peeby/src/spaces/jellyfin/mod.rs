@@ -623,7 +623,7 @@ impl Space for JellyfinSpace {
 
   fn open_entry(&mut self, tab: TabId, id: &str, window: &mut Window, cx: &mut Context<Self>) {
     match id {
-      "account" => cx.emit(SpaceEvent::OpenSettings),
+      "account" => cx.emit(SpaceEvent::OpenSettings { reveal: true }),
       "sign-out" => self.log_out(cx),
       _ => {
         if let Some(route) = Self::entry_route(id) {

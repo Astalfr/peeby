@@ -12,10 +12,13 @@ use crate::spaces::youtube::YouTubeSpace;
 use crate::spaces::youtube::account::AccountView;
 use ui::form::{OnClick, choices, row, section, toggle};
 use ui::i18n::t;
+use ui::widgets::Flash;
 
-/// The part: `account` then the start page, the content language and the quality.
+/// The part: `account` (under `flash`) then the start page, the content language and the
+/// quality.
 pub fn part(
   account: Entity<AccountView>,
+  flash: Flash,
   _window: &mut Window,
   cx: &mut gpui::Context<YouTubeSpace>,
 ) -> AnyElement {
@@ -54,7 +57,7 @@ pub fn part(
   });
   v_flex()
     .gap_8()
-    .child(account)
+    .child(flash.wrap("youtube-account-flash", account, cx))
     .child(section(
       t("Content and playback", "Contenu et lecture"),
       vec![

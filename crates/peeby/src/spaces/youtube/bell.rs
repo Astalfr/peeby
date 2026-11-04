@@ -221,8 +221,8 @@ fn set_level(
 fn bell_error(error: &Error) -> String {
   match error {
     Error::SignInRequired => t(
-      "Sign in to set notifications: import your cookies from the Account page.",
-      "Connectez-vous pour régler les notifications : importez vos cookies depuis la page Compte.",
+      "To set notifications, sign in to YouTube in the settings.",
+      "Pour régler les notifications, connectez-vous à YouTube dans les réglages.",
     )
     .into(),
     e => tf!(

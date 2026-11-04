@@ -64,17 +64,17 @@ fn signed_out(nav: &Nav) -> AnyElement {
       "Connectez-vous pour voir vos playlists",
     ),
     t(
-      "Import the cookies of a YouTube session from the Account page.",
-      "Importez les cookies d'une session YouTube depuis la page Compte.",
+      "Peeby needs your YouTube account to show them.",
+      "Peeby a besoin de votre compte YouTube pour les afficher.",
     ),
   )
   .child(
     h_flex().pt_2().child(
       Button::new("to-account")
         .primary()
-        .label(t("Import cookies", "Importer des cookies"))
+        .label(t("Sign in", "Se connecter"))
         .on_click(move |_, _, cx| {
-          nav.update(cx, |app, cx| app.open_settings(cx)).ok();
+          nav.update(cx, |app, cx| app.sign_in(cx)).ok();
         }),
     ),
   )

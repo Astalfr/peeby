@@ -257,8 +257,8 @@ fn edit(
 fn save_error(error: &Error, adding: bool) -> String {
   match error {
     Error::SignInRequired => t(
-      "Sign in to edit your playlists: import your cookies from the Account page.",
-      "Connectez-vous pour modifier vos playlists : importez vos cookies depuis la page Compte.",
+      "To edit your playlists, sign in to YouTube in the settings.",
+      "Pour modifier vos playlists, connectez-vous à YouTube dans les réglages.",
     )
     .into(),
     e if adding => tf!(

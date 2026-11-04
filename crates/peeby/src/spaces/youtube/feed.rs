@@ -407,10 +407,8 @@ impl FeedView {
       (State::Expired, _, _) => (
         t("Session expired", "Session expirée").to_owned(),
         t(
-          "YouTube no longer recognizes the session's cookies. Import new ones from the \
-           Account page.",
-          "YouTube ne reconnaît plus les cookies de la session. Importez-en de nouveaux depuis \
-           la page Compte.",
+          "YouTube no longer recognizes the session. Sign in again.",
+          "YouTube ne reconnaît plus la session. Reconnectez-vous.",
         )
         .to_owned(),
       ),
@@ -421,10 +419,8 @@ impl FeedView {
         )
         .to_owned(),
         t(
-          "YouTube no longer shows recommendations without an account. Import the cookies of \
-           a YouTube session from the Account page.",
-          "YouTube n'affiche plus de recommandations sans compte. Importez les cookies d'une \
-           session YouTube depuis la page Compte.",
+          "YouTube no longer shows recommendations without an account.",
+          "YouTube n'affiche plus de recommandations sans compte.",
         )
         .to_owned(),
       ),
@@ -480,9 +476,9 @@ impl FeedView {
         h_flex().pt_2().child(
           Button::new("to-account")
             .primary()
-            .label(t("Import cookies", "Importer des cookies"))
+            .label(t("Sign in", "Se connecter"))
             .on_click(move |_, _, cx| {
-              nav.update(cx, |app, cx| app.open_settings(cx)).ok();
+              nav.update(cx, |app, cx| app.sign_in(cx)).ok();
             }),
         ),
       )

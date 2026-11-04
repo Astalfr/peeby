@@ -496,8 +496,13 @@ impl Render for SettingsView {
       .max_height
       .unwrap_or(play::DEFAULT_HEIGHT);
     let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
+    let flash = self
+      .nav
+      .upgrade()
+      .map(|nav| nav.read(cx).account_flash())
+      .unwrap_or_default();
     let sections = vec![
-      self.account_section(cx),
+      flash.wrap("twitch-account-flash", self.account_section(cx), cx),
       self.followed_section(cx),
       notifications_section(cx),
       playback_section(max_height, low_latency),

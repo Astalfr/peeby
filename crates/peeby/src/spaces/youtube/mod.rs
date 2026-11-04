@@ -36,6 +36,7 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::player::PlayerView;
 use ui::theme::Accent;
+use ui::widgets::Flash;
 use ui::{runtime, theme};
 
 use crate::settings;
@@ -183,6 +184,8 @@ pub struct YouTubeSpace {
   tabs: Tabs<Route>,
   /// The account part of the settings page, made the first time they open.
   account: Option<Entity<AccountView>>,
+  /// The account's flash in the settings, after a page's "Sign in".
+  account_flash: Flash,
   /// The subscribed channels on air, for the notification area's list.
   live: lives::Live,
 }
@@ -225,6 +228,7 @@ impl YouTubeSpace {
       client,
       tabs,
       account: None,
+      account_flash: Flash::default(),
       live: lives::Live::default(),
     }
   }
@@ -473,9 +477,10 @@ impl YouTubeSpace {
     self.tabs.get(tab)?.page()?.view.clone()
   }
 
-  /// Asks the shell for the settings page (where the account is).
-  pub fn open_settings(&mut self, cx: &mut Context<Self>) {
-    cx.emit(SpaceEvent::OpenSettings);
+  /// A page's "Sign in": the settings page, scrolled to the account, which flashes.
+  pub fn sign_in(&mut self, cx: &mut Context<Self>) {
+    self.account_flash.start();
+    cx.emit(SpaceEvent::OpenSettings { reveal: true });
   }
 
   /// The route of a sidebar entry.
@@ -628,7 +633,7 @@ impl Space for YouTubeSpace {
       .account
       .get_or_insert_with(|| cx.new(|_| AccountView::new(nav, signed_in)))
       .clone();
-    Some(settings_page::part(account, window, cx))
+    Some(settings_page::part(account, self.account_flash, window, cx))
   }
 
   fn notifications(

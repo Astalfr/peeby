@@ -42,6 +42,7 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::player::PlayerView;
 use ui::theme::Accent;
+use ui::widgets::Flash;
 use ui::{runtime, theme};
 
 use crate::settings::Settings;
@@ -242,6 +243,8 @@ pub struct TwitchSpace {
   login_message: Option<SharedString>,
   /// Its part of the settings page, made the first time it shows.
   settings: Option<Entity<SettingsView>>,
+  /// The account's flash in the settings, after the sidebar's "Sign in".
+  account_flash: Flash,
   _login_subscription: Option<Subscription>,
 }
 
@@ -271,6 +274,7 @@ impl TwitchSpace {
       login: None,
       login_message: None,
       settings: None,
+      account_flash: Flash::default(),
       _login_subscription: None,
     };
     space.set_auth_token(secrets.auth_token, cx);
@@ -683,6 +687,11 @@ impl TwitchSpace {
   }
 
   /// Whether a web `auth-token` is saved.
+  /// The account's flash in the settings.
+  pub fn account_flash(&self) -> Flash {
+    self.account_flash
+  }
+
   pub fn has_auth_token(&self) -> bool {
     self.auth_token.is_some()
   }
@@ -937,7 +946,13 @@ impl Space for TwitchSpace {
 
   fn open_entry(&mut self, tab: TabId, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
     match id {
-      "account" => cx.emit(SpaceEvent::OpenSettings),
+      "account" => {
+        // Signed out, the entry is "Sign in": the account flashes.
+        if !self.has_auth_token() {
+          self.account_flash.start();
+        }
+        cx.emit(SpaceEvent::OpenSettings { reveal: true });
+      }
       "sign-out" => self.log_out(cx),
       _ => {
         if let Some(route) = Self::entry_route(id) {

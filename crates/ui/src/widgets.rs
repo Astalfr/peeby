@@ -1,7 +1,12 @@
-//! Small shared pieces: page title, centered notices, the loader and list-end helpers.
+//! Small shared pieces: page title, centered notices, the loader, list-end helpers and the
+//! flash that shows where a request led.
 
 use gpui::prelude::*;
-use gpui::{FontWeight, SharedString, Window, div, px};
+use std::time::{Duration, Instant};
+
+use gpui::{
+  Animation, AnimationExt, AnyElement, App, ElementId, FontWeight, SharedString, Window, div, px,
+};
 use gpui_component::{IconNamed, h_flex, v_flex};
 
 use crate::theme;
@@ -172,4 +177,59 @@ pub fn near_scroll_end(handle: &gpui::ScrollHandle) -> bool {
   let max = f32::from(handle.max_offset().y);
   let scrolled = -f32::from(handle.offset().y);
   max - scrolled < 1200.
+}
+
+/// How long a [`Flash`] lasts: two pulses.
+const FLASH: Duration = Duration::from_millis(1600);
+/// A request older than this no longer flashes: a page shown again later (the settings left
+/// and opened again) does not replay it.
+const FLASH_WINDOW: Duration = Duration::from_millis(2500);
+
+/// A highlight of the place a request led to (the account a "Sign in" button opened the
+/// settings on): [`Flash::start`] asks for it, [`Flash::wrap`] draws it twice in the accent
+/// around the element, then nothing.
+#[derive(Clone, Copy, Default)]
+pub struct Flash {
+  generation: u64,
+  started: Option<Instant>,
+}
+
+impl Flash {
+  /// Flashes again, from the next render.
+  pub fn start(&mut self) {
+    self.generation += 1;
+    self.started = Some(Instant::now());
+  }
+
+  /// `element`, under the flash while it lasts; as it is with reduced motion. `id` is unique on
+  /// the page.
+  pub fn wrap(&self, id: &'static str, element: impl IntoElement, cx: &App) -> AnyElement {
+    let recent = self.started.is_some_and(|at| at.elapsed() < FLASH_WINDOW);
+    if !recent || cx.reduce_motion() {
+      return element.into_any_element();
+    }
+    // A new id for each request: an animation plays once per id.
+    let id = ElementId::NamedInteger(id.into(), self.generation);
+    let glow = div()
+      .absolute()
+      .top(px(-10.))
+      .bottom(px(-10.))
+      .left(px(-12.))
+      .right(px(-12.))
+      .rounded(theme::RADIUS_LG)
+      .border_2()
+      .border_color(theme::accent())
+      .bg(theme::accent_soft())
+      .opacity(0.)
+      .with_animation(id, Animation::new(FLASH), |el, t| {
+        // Two pulses, the second a little weaker.
+        let pulse = (t * std::f32::consts::TAU).sin().abs() * (1. - 0.35 * t);
+        el.opacity(pulse)
+      });
+    div()
+      .relative()
+      .child(element)
+      .child(glow)
+      .into_any_element()
+  }
 }

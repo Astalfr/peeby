@@ -189,8 +189,8 @@ fn set_subscribed(
 fn subscribe_error(error: &Error, subscribe: bool) -> String {
   match error {
     Error::SignInRequired => t(
-      "Sign in to subscribe: import your cookies from the Account page.",
-      "Connectez-vous pour vous abonner : importez vos cookies depuis la page Compte.",
+      "To subscribe, sign in to YouTube in the settings.",
+      "Pour vous abonner, connectez-vous à YouTube dans les réglages.",
     )
     .into(),
     e if subscribe => tf!(

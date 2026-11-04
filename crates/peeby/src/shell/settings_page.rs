@@ -4,7 +4,7 @@
 //! `settings.toml`; most apply to the next video or the next visit of a page.
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, FontWeight, Subscription, Task, Window, div, px};
+use gpui::{AnyElement, Context, FontWeight, ScrollHandle, Subscription, Task, Window, div, px};
 use gpui_component::button::Button;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Icon, IconName, Sizable, h_flex, v_flex};
@@ -24,8 +24,13 @@ pub struct SettingsView {
   spaces: Vec<SpaceHandle>,
   /// Every space in the tabs' order, for the startup tabs.
   in_order: Vec<SpaceInfo>,
+  /// The index in the tabs' order of each of `spaces`.
+  order: Vec<usize>,
   /// Whether each space's part is unfolded.
   unfolded: Vec<bool>,
+  scroll: ScrollHandle,
+  /// The part (an index in `spaces`) to scroll to at the next render.
+  scroll_to: Option<usize>,
   cache_size: Option<u64>,
   clearing: bool,
   _subscriptions: Vec<Subscription>,
@@ -37,9 +42,12 @@ impl SettingsView {
   /// The page with `spaces`, `active` the one open behind it.
   pub fn new(mut spaces: Vec<SpaceHandle>, active: usize, cx: &mut Context<Self>) -> Self {
     let in_order = spaces.iter().map(|space| space.info(cx)).collect();
+    let mut order: Vec<usize> = (0..spaces.len()).collect();
     if active < spaces.len() {
       let open = spaces.remove(active);
       spaces.insert(0, open);
+      order.remove(active);
+      order.insert(0, active);
     }
     let unfolded = (0..spaces.len()).map(|i| i == 0).collect();
     let mut subscriptions = vec![cx.observe_global::<Settings>(|_, cx| cx.notify())];
@@ -56,7 +64,10 @@ impl SettingsView {
     let mut view = Self {
       spaces,
       in_order,
+      order,
       unfolded,
+      scroll: ScrollHandle::new(),
+      scroll_to: None,
       cache_size: None,
       clearing: false,
       _subscriptions: subscriptions,
@@ -73,6 +84,19 @@ impl SettingsView {
     };
     view.measure_cache(cx);
     view
+  }
+
+  /// Unfolds the part of space `index` (in the tabs' order) and scrolls to it: its account
+  /// comes first (a sign-in request).
+  pub fn reveal(&mut self, index: usize, cx: &mut Context<Self>) {
+    let Some(at) = self.order.iter().position(|&i| i == index) else {
+      return;
+    };
+    if let Some(unfolded) = self.unfolded.get_mut(at) {
+      *unfolded = true;
+    }
+    self.scroll_to = Some(at);
+    cx.notify();
   }
 
   fn measure_cache(&mut self, cx: &mut Context<Self>) {
@@ -515,40 +539,56 @@ impl Render for SettingsView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let settings = Settings::get(cx).clone();
     let players = ui::player::running(cx);
-    let parts: Vec<AnyElement> = self
-      .spaces
-      .clone()
-      .iter()
-      .enumerate()
-      .filter_map(|(index, space)| {
-        let info = space.info(cx);
-        // Built in its accent too, for the colors read while building it.
-        let part = theme::with_accent(info.accent, cx, |cx| space.settings(window, cx))?;
-        Some(self.space_part(index, info.name, info.accent, part, cx))
-      })
-      .collect();
-    v_flex()
-      .id("settings")
+    // The page's blocks are the scrolled element's own children, so that a part can be
+    // scrolled to by its index.
+    let mut blocks: Vec<AnyElement> = vec![
+      page_title(t("Settings", "Réglages")).into_any_element(),
+      general_section(&settings, &self.in_order),
+      player_section(&settings.player),
+    ];
+    for (index, space) in self.spaces.clone().iter().enumerate() {
+      let info = space.info(cx);
+      // Built in its accent too, for the colors read while building it.
+      let Some(part) = theme::with_accent(info.accent, cx, |cx| space.settings(window, cx)) else {
+        continue;
+      };
+      if self.scroll_to == Some(index) {
+        self.scroll_to = None;
+        self.scroll.scroll_to_top_of_item(blocks.len());
+      }
+      blocks.push(self.space_part(index, info.name, info.accent, part, cx));
+    }
+    blocks.extend([
+      self.storage_section(cx),
+      debug_section(&players),
+      about_section(),
+      div()
+        .text_xs()
+        .text_color(theme::subtle())
+        .child(t(
+          "Changes are saved at once.",
+          "Les changements sont enregistrés aussitôt.",
+        ))
+        .into_any_element(),
+    ]);
+    div()
       .size_full()
-      .overflow_y_scrollbar()
+      .relative()
       .child(
         v_flex()
-          .w_full()
-          .max_w(px(920.))
+          .id("settings")
+          .size_full()
+          .overflow_y_scroll()
+          .track_scroll(&self.scroll)
           .px_8()
           .py_6()
           .gap_8()
-          .child(page_title(t("Settings", "Réglages")))
-          .child(general_section(&settings, &self.in_order))
-          .child(player_section(&settings.player))
-          .children(parts)
-          .child(self.storage_section(cx))
-          .child(debug_section(&players))
-          .child(about_section())
-          .child(div().text_xs().text_color(theme::subtle()).child(t(
-            "Changes are saved at once.",
-            "Les changements sont enregistrés aussitôt.",
-          ))),
+          .children(
+            blocks
+              .into_iter()
+              .map(|block| div().w_full().max_w(px(920.)).child(block)),
+          ),
       )
+      .vertical_scrollbar(&self.scroll)
   }
 }
