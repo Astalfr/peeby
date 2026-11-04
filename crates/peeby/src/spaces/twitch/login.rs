@@ -1,13 +1,14 @@
-//! The card connecting the followed channels, the "Suivies" page while Helix is not connected:
-//! Twitch's Device Code Grant (the rest of the space needs no sign-in). A click asks for a code, shows it large and opens twitch.tv/activate in the browser; the card polls
+//! The "Suivies" page's cards. Signed out, [`AccountCard`] offers the web sign-in (ADR 0017)
+//! first. Signed in, while Helix is not connected, [`LoginView`] connects the followed channels:
+//! Twitch's Device Code Grant (the rest of the space needs no Helix). A click asks for a code, shows it large and opens twitch.tv/activate in the browser; the card polls
 //! until the user approves there (docs/twitch-plan.md step 5). No password goes through Peeby.
 
 use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, Context, EventEmitter, FontWeight, SharedString, Task, Window, div,
-  ease_out_quint, px,
+  Animation, AnimationExt, Context, Entity, EventEmitter, FontWeight, SharedString, Task,
+  WeakEntity, Window, div, ease_out_quint, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, Disableable, h_flex, v_flex};
@@ -16,7 +17,8 @@ use twitch::auth::{Auth, DeviceCode, Poll, Session, Validation};
 use ui::i18n::t;
 use ui::{assets, runtime, theme};
 
-use super::session;
+use super::sign_in::SignIn;
+use super::{TwitchSpace, session};
 
 /// Emitted once the user approved: the Helix session and who they are.
 pub struct SignedIn(pub Session, pub Validation);
@@ -184,7 +186,6 @@ pub fn describe(error: &Error) -> SharedString {
 
 impl Render for LoginView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let danger = cx.theme().danger;
     let body = match &self.waiting {
       Some(waiting) => {
         let url = waiting.url.clone();
@@ -240,53 +241,168 @@ impl Render for LoginView {
         ),
     };
 
-    div()
-      .id("twitch-login")
-      .size_full()
-      .overflow_y_scroll()
-      .flex()
-      .items_center()
-      .justify_center()
-      .p_8()
+    frame(
+      "twitch-login",
+      t(
+        "Connect your followed channels",
+        "Connectez vos chaînes suivies",
+      ),
+      body,
+      self.error.clone(),
+      window,
+      cx,
+    )
+  }
+}
+
+/// The "Suivies" page's card, centered: Twitch's logo and name, `subtitle`, `body`, then `error`.
+fn frame(
+  id: &'static str,
+  subtitle: &'static str,
+  body: impl IntoElement,
+  error: Option<SharedString>,
+  window: &mut Window,
+  cx: &mut gpui::App,
+) -> impl IntoElement {
+  let danger = cx.theme().danger;
+  div()
+    .id(id)
+    .size_full()
+    .overflow_y_scroll()
+    .flex()
+    .items_center()
+    .justify_center()
+    .p_8()
+    .child(
+      v_flex()
+        .w(px(420.))
+        .p_8()
+        .gap_6()
+        .rounded(theme::RADIUS_LG)
+        .bg(theme::surface())
+        .border_1()
+        .border_color(theme::border())
+        .shadow_lg()
+        .with_animation(
+          id,
+          Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
+          |el, t| el.opacity(t).top(px(12. * (1. - t))),
+        )
+        .child(
+          v_flex()
+            .gap_1()
+            .child(
+              h_flex()
+                .gap_3()
+                .items_center()
+                .child(assets::logo(40., window, cx))
+                .child(
+                  div()
+                    .text_size(px(30.))
+                    .font_weight(FontWeight::BOLD)
+                    .child("Twitch"),
+                ),
+            )
+            .child(div().text_color(theme::muted()).child(subtitle)),
+        )
+        .child(body)
+        .when_some(error, |el, error| {
+          el.child(div().text_sm().text_color(danger).child(error))
+        }),
+    )
+}
+
+/// "Suivies" before the account is signed in (or while Twitch rejects its token): the web
+/// sign-in first (ADR 0017), since the followed channels' connection is only offered after it.
+pub struct AccountCard {
+  nav: WeakEntity<TwitchSpace>,
+  sign_in: Entity<SignIn>,
+  /// The saved token was rejected by Twitch.
+  refused: bool,
+}
+
+impl AccountCard {
+  pub fn new(
+    nav: WeakEntity<TwitchSpace>,
+    sign_in: Entity<SignIn>,
+    refused: bool,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    cx.observe(&sign_in, |_, _, cx| cx.notify()).detach();
+    Self {
+      nav,
+      sign_in,
+      refused,
+    }
+  }
+}
+
+impl Render for AccountCard {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let (busy, waiting, outcome) = {
+      let sign_in = self.sign_in.read(cx);
+      (sign_in.busy(), sign_in.waiting(), sign_in.outcome())
+    };
+    let error = match outcome {
+      Some((message, false)) => Some(message),
+      _ if self.refused => Some(
+        t(
+          "Twitch rejects the saved sign-in. Sign in again.",
+          "Twitch refuse la connexion enregistrée. Reconnectez-vous.",
+        )
+        .into(),
+      ),
+      _ => None,
+    };
+    let body = v_flex()
+      .gap_3()
+      .child(div().text_sm().text_color(theme::muted()).child(if waiting {
+        t(
+          "Sign in in the window that opened. It closes by itself once you are signed in.",
+          "Connectez-vous dans la fenêtre qui s'est ouverte. Elle se ferme d'elle-même une fois            connecté.",
+        )
+      } else {
+        t(
+          "Sign in on twitch.tv, in a window Peeby opens: your password goes to Twitch only.            Videos then play as your account (where you stopped in VODs, channel points, Turbo            and subscriptions), and your followed channels can be connected here.",
+          "Connectez-vous sur twitch.tv, dans une fenêtre que Peeby ouvre : votre mot de passe            ne va qu'à Twitch. Les vidéos se lisent alors avec votre compte (reprise des VOD,            points de chaîne, Turbo et abonnements), et vos chaînes suivies peuvent être            connectées ici.",
+        )
+      }))
       .child(
-        v_flex()
-          .w(px(420.))
-          .p_8()
-          .gap_6()
-          .rounded(theme::RADIUS_LG)
-          .bg(theme::surface())
-          .border_1()
-          .border_color(theme::border())
-          .shadow_lg()
-          .with_animation(
-            "twitch-login-card",
-            Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
-            |el, t| el.opacity(t).top(px(12. * (1. - t))),
+        h_flex()
+          .gap_2()
+          .child(
+            Button::new("twitch-web-sign-in")
+              .primary()
+              .label(if waiting {
+                t("Waiting for the sign-in…", "En attente de la connexion…")
+              } else {
+                t("Sign in to Twitch…", "Se connecter à Twitch…")
+              })
+              .loading(busy)
+              .disabled(busy)
+              .on_click(cx.listener(|this, _, _, cx| {
+                this.sign_in.update(cx, |sign_in, cx| sign_in.open(cx))
+              })),
           )
           .child(
-            v_flex()
-              .gap_1()
-              .child(
-                h_flex()
-                  .gap_3()
-                  .items_center()
-                  .child(assets::logo(40., window, cx))
-                  .child(
-                    div()
-                      .text_size(px(30.))
-                      .font_weight(FontWeight::BOLD)
-                      .child("Twitch"),
-                  ),
-              )
-              .child(div().text_color(theme::muted()).child(t(
-                "Connect your followed channels",
-                "Connectez vos chaînes suivies",
-              ))),
-          )
-          .child(body)
-          .when_some(self.error.clone(), |el, error| {
-            el.child(div().text_sm().text_color(danger).child(error))
-          }),
-      )
+            Button::new("twitch-paste-token")
+              .ghost()
+              .label(t("Paste a token…", "Coller un jeton…"))
+              .on_click(cx.listener(|this, _, _, cx| {
+                this
+                  .nav
+                  .update(cx, |space, cx| space.reveal_account(cx))
+                  .ok();
+              })),
+          ),
+      );
+    frame(
+      "twitch-account",
+      t("Sign in to your account", "Connectez-vous à votre compte"),
+      body,
+      error,
+      window,
+      cx,
+    )
   }
 }

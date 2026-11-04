@@ -3,8 +3,9 @@
 //! plays as the user's account (points, VOD positions, subscriber-only VODs) and names the account
 //! entry. Helix is optional and only for the followed channels (GQL refuses them to raw queries),
 //! and the catalog's backup: its session is refreshed one at a time, validated at startup and
-//! every hour, as Twitch requires. A history of pages per tab (ADR 0015, ADR 0019): "Suivies" (the Helix card
-//! until connected), "Parcourir" or the search, then categories and lives. With Helix, the
+//! every hour, as Twitch requires; it is offered and used only once the account is signed in.
+//! A history of pages per tab (ADR 0015, ADR 0019): "Suivies" (the account's sign-in card, then
+//! the Helix card until connected), "Parcourir" or the search, then categories and lives. With Helix, the
 //! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
 //! the meantime show in the bell ([`bell`]).
 
@@ -23,6 +24,7 @@ pub mod replay;
 pub mod search;
 pub mod session;
 pub mod settings_page;
+pub mod sign_in;
 pub mod watch;
 
 use std::time::{Duration, SystemTime};
@@ -53,10 +55,11 @@ use browse::{BrowseView, CategoryView};
 use cards::Avatars;
 use channel::ChannelView;
 use following::FollowingView;
-use login::{LoginView, SignedIn};
+use login::{AccountCard, LoginView, SignedIn};
 use search::SearchView;
 use session::Secrets;
 use settings_page::SettingsView;
+use sign_in::SignIn;
 use watch::{Kind, WatchView};
 
 /// The space's id in the settings (`SpaceInfo::id`).
@@ -231,6 +234,14 @@ pub struct TwitchSpace {
   auth_token: Option<String>,
   /// Who `auth_token` belongs to, once Twitch answered.
   account: Option<gql::Account>,
+  /// Twitch answered that `auth_token` is not signed in (revoked, expired): the space is signed
+  /// out until a new one. Unreachable, the token counts as valid (it was checked when saved).
+  token_refused: bool,
+  /// The web sign-in, shared by the settings and the "Suivies" card; made when first needed.
+  sign_in: Option<Entity<SignIn>>,
+  /// A saved Helix refresh token left unspent while there is no auth-token: the followed channels
+  /// need the account's sign-in first, so it is restored once a token arrives.
+  parked_refresh: Option<String>,
   _account: Option<Task<()>>,
   /// GQL and usher, for playback, the account's data and the channels' headers.
   client: Option<twitch::Client>,
@@ -267,6 +278,9 @@ impl TwitchSpace {
       state: State::SignedOut,
       auth_token: None,
       account: None,
+      token_refused: false,
+      sign_in: None,
+      parked_refresh: None,
       _account: None,
       client: None,
       catalog: None,
@@ -290,8 +304,14 @@ impl TwitchSpace {
         }
       }));
     }
+    // The followed channels come after the account's sign-in: without an auth-token, a saved
+    // Helix session waits for one.
     if let Some(refresh) = secrets.refresh {
-      space.restore(refresh, cx);
+      if space.auth_token.is_some() {
+        space.restore(refresh, cx);
+      } else {
+        space.parked_refresh = Some(refresh);
+      }
     }
     let shown = pending.is_some();
     if !shown && !Settings::get(cx).opens_at_startup(ID) {
@@ -312,12 +332,37 @@ impl TwitchSpace {
     space
   }
 
-  /// A new tab's page: "Suivies" with Helix (or while it is being restored), else "Parcourir".
+  /// A new tab's page: "Suivies" with Helix (or while it is being restored) and the account
+  /// signed in, else "Parcourir".
   fn home(&self) -> Route {
     match self.state {
-      State::SignedOut => Route::Browse,
-      State::Restoring | State::SignedIn(_) => Route::Following,
+      State::Restoring | State::SignedIn(_) if self.account_signed_in() => Route::Following,
+      _ => Route::Browse,
     }
+  }
+
+  /// The account is signed in: an auth-token is saved and Twitch did not reject it. The followed
+  /// channels (Helix) are offered and shown only then.
+  pub fn account_signed_in(&self) -> bool {
+    self.auth_token.is_some() && !self.token_refused
+  }
+
+  /// The space's web sign-in.
+  pub fn sign_in(&mut self, cx: &mut Context<Self>) -> Entity<SignIn> {
+    let nav = cx.weak_entity();
+    self
+      .sign_in
+      .get_or_insert_with(|| cx.new(|_| SignIn::new(nav)))
+      .clone()
+  }
+
+  /// Opens the settings on the account, which flashes while signed out (the sidebar's "Sign
+  /// in", the card's "Paste a token").
+  pub fn reveal_account(&mut self, cx: &mut Context<Self>) {
+    if !self.account_signed_in() {
+      self.account_flash.start();
+    }
+    cx.emit(SpaceEvent::OpenSettings { reveal: true });
   }
 
   fn helix(&self) -> Option<Helix> {
@@ -332,6 +377,12 @@ impl TwitchSpace {
   fn helix_changed(&mut self, cx: &mut Context<Self>) {
     let helix = self.helix();
     self.catalog = self.catalog.as_ref().map(|c| c.with_helix(helix));
+    self.following_changed(cx);
+  }
+
+  /// The "Suivies" pages of the tabs are made again when they show (Helix or the account's
+  /// sign-in changed); the other pages stay.
+  fn following_changed(&mut self, cx: &mut Context<Self>) {
     for tab in self.tabs.iter_mut() {
       for page in tab.pages_mut() {
         if page.route == Route::Following {
@@ -342,8 +393,16 @@ impl TwitchSpace {
     cx.notify();
   }
 
-  /// "Suivies" in `tab`: the followed channels, the connecting note, or the Helix card.
+  /// "Suivies" in `tab`: the account's sign-in card while signed out, then the followed
+  /// channels, the connecting note, or the Helix card.
   fn following_view(&mut self, tab: TabId, cx: &mut Context<Self>) -> Option<AnyView> {
+    if !self.account_signed_in() {
+      let (nav, sign_in, refused) = (cx.weak_entity(), self.sign_in(cx), self.token_refused);
+      return Some(
+        cx.new(|cx| AccountCard::new(nav, sign_in, refused, cx))
+          .into(),
+      );
+    }
     Some(match &self.state {
       State::SignedIn(signed) => {
         let nav = Nav::new(cx.weak_entity(), tab);
@@ -514,8 +573,13 @@ impl TwitchSpace {
     self.sign_out(None, cx);
   }
 
-  /// "Se déconnecter": forgets the auth-token and disconnects Helix.
+  /// "Se déconnecter": forgets the auth-token and disconnects Helix (which needs it).
   pub fn log_out(&mut self, cx: &mut Context<Self>) {
+    if self.parked_refresh.take().is_some() {
+      cx.background_executor()
+        .spawn(async { session::forget_refresh() })
+        .detach();
+    }
     if self.auth_token.is_some() {
       cx.background_executor()
         .spawn(async { session::forget_auth_token() })
@@ -713,6 +777,7 @@ impl TwitchSpace {
       .as_ref()
       .map(|client| Catalog::new(client).with_helix(helix));
     self.account = None;
+    self.token_refused = false;
     self._account = match (&self.client, &token) {
       (Some(client), Some(_)) => {
         let fetch = runtime::spawn(cx, {
@@ -727,6 +792,11 @@ impl TwitchSpace {
                 this.account = Some(account);
                 cx.notify();
               }
+              Some(Err(Error::NotLoggedIn)) => {
+                tracing::warn!("Twitch rejects the saved auth-token");
+                this.token_refused = true;
+                this.following_changed(cx);
+              }
               Some(Err(e)) => tracing::warn!("Twitch auth-token account: {e}"),
               None => {}
             })
@@ -736,7 +806,14 @@ impl TwitchSpace {
       _ => None,
     };
     self.auth_token = token;
-    cx.notify();
+    // A saved Helix session waited for the account's sign-in.
+    if self.auth_token.is_some()
+      && matches!(self.state, State::SignedOut)
+      && let Some(refresh) = self.parked_refresh.take()
+    {
+      self.restore(refresh, cx);
+    }
+    self.following_changed(cx);
   }
 
   fn render_login(&mut self, cx: &mut Context<Self>) -> Entity<LoginView> {
@@ -946,13 +1023,8 @@ impl Space for TwitchSpace {
 
   fn open_entry(&mut self, tab: TabId, id: &str, _window: &mut Window, cx: &mut Context<Self>) {
     match id {
-      "account" => {
-        // Signed out, the entry is "Sign in": the account flashes.
-        if !self.has_auth_token() {
-          self.account_flash.start();
-        }
-        cx.emit(SpaceEvent::OpenSettings { reveal: true });
-      }
+      // Signed out, the entry is "Sign in": the account flashes.
+      "account" => self.reveal_account(cx),
       "sign-out" => self.log_out(cx),
       _ => {
         if let Some(route) = Self::entry_route(id) {
@@ -981,6 +1053,9 @@ impl Space for TwitchSpace {
   }
 
   fn unseen(&self, _cx: &App) -> Option<usize> {
+    if !self.account_signed_in() {
+      return None;
+    }
     match &self.state {
       State::SignedIn(signed) => Some(signed.bell.unseen()),
       _ => None,
@@ -996,6 +1071,9 @@ impl Space for TwitchSpace {
     let State::SignedIn(signed) = &self.state else {
       return None;
     };
+    if !self.account_signed_in() {
+      return None;
+    }
     Some(bell::panel(
       cx.weak_entity(),
       popover,
@@ -1008,6 +1086,15 @@ impl Space for TwitchSpace {
   }
 
   fn lives(&self, _cx: &App) -> Option<Lives> {
+    if !self.account_signed_in() {
+      return Some(Lives::Unavailable(
+        t(
+          "Sign in to Twitch (Following page) to see the followed channels on air.",
+          "Connectez-vous à Twitch (page Suivies) pour voir les chaînes suivies en direct.",
+        )
+        .into(),
+      ));
+    }
     let signed = match &self.state {
       State::Restoring => return Some(Lives::Loading),
       State::SignedOut => {
@@ -1055,9 +1142,10 @@ impl Space for TwitchSpace {
 
   fn settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
     let nav = cx.weak_entity();
+    let sign_in = self.sign_in(cx);
     let view = self
       .settings
-      .get_or_insert_with(|| cx.new(|cx| SettingsView::new(nav, window, cx)))
+      .get_or_insert_with(|| cx.new(|cx| SettingsView::new(nav, sign_in, window, cx)))
       .clone();
     Some(view.into_any_element())
   }

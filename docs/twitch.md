@@ -191,6 +191,13 @@ Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the
   with a valid auth-token (`currentUser { id }` answers). `personalSections(FOLLOWED_SECTION)` answers
   the popular section instead. Twitch's own pages send headers Peeby does not have (a device id);
   making them up is routing around a bot check, so this stops here: **the follows need Helix**.
+- **Probed again on 2026-11-04** (auth-token, web Client-ID): raw `currentUser { follows(first, order) }`
+  and `followedLiveUsers(first)` still answer `service error`, even with a single field; another
+  user's `user(login) { follows }` answers an empty list (follows are private). Twitch-Channel-Points-Miner's
+  persisted `ChannelFollows` (hash `eecf8152…`) answers **`failed integrity check`**: closed, not routed
+  around. Its persisted `PersonalSections(FOLLOWED_SECTION)` answers the popular section, as the raw one.
+  Anonymous `users(ids:) { stream { id viewersCount game { id } } }` does tell who is on air: with the
+  list of follows known, the live readings need no Helix.
 - Used by `twitch::catalog::Catalog` (ADR 0016), with Helix as its backup when connected;
   fixtures `gql_catalog_*.json` (`twitch_capture -- catalog`), counts in `smoke`. The same image
   templates as Helix's (`{width}x{height}`), the same badge URLs (`/1`, `/2`, `/3`), and

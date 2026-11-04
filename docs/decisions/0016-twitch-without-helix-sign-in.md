@@ -32,11 +32,16 @@ Peeby's pages only ever used one page of each list, but "Parcourir" (two pages, 
   user's account and carries the points and VOD positions, as before. The settings page asks for it
   first ("Compte"); "Se déconnecter" in the sidebar forgets it and disconnects Helix.
 - **Helix is optional**, for the followed channels only ("Suivies", the sidebar's lives, the bell),
-  connected from the "Suivies" page, which shows the Device Code card until then. When connected,
+  connected from the "Suivies" page, which shows the Device Code card until then. Since
+  2026-11-04 (the user), it comes after the account: signed out (no auth-token, or one Twitch
+  rejects), "Suivies" shows the web sign-in card (ADR 0017) instead, the sidebar's lives and the
+  bell stay off, and a saved Helix session is restored only once an auth-token is there. Signing
+  out of the account disconnects Helix too. When connected,
   it is also the catalog's backup: a GQL failure (integrity check, a GQL error, an unexpected
   answer) asks Helix instead. Its session keeps ADR 0010's rules (single-use refresh tokens,
   validated every hour); its expiry only takes the followed channels away.
-- A new tab opens on "Suivies" with Helix (or while its session is restored), else on "Parcourir".
+- A new tab opens on "Suivies" with Helix (or while its session is restored) and the account
+  signed in, else on "Parcourir".
 
 ## Consequences
 
@@ -46,5 +51,8 @@ Peeby's pages only ever used one page of each list, but "Parcourir" (two pages, 
   The Helix backup covers that for connected users; the others lose the catalog until Peeby
   updates. Fixtures (`gql_catalog_*.json`) and `smoke` watch for it.
 - Signed in with the auth-token only, there is no "Suivies" list. Revisit if a raw GQL query for
-  the follows is found that needs no integrity token, or if Twitch closes the catalog's queries.
+  the follows is found that needs no integrity token, or if Twitch closes the catalog's queries
+  (probed again on 2026-11-04, still none: [twitch.md](../twitch.md#catalog-through-gql-instead-of-helix)).
+- A user who had connected Helix without the auth-token loses "Suivies" until they sign in to
+  the account (their Helix session is kept, unspent, and comes back then).
 - Supersedes ADR 0010's third answer ("Sign-in required").
