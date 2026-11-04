@@ -164,6 +164,22 @@ impl Shell {
         shell.close_mini(cx);
       }
     }));
+    // F5 and Ctrl+R refresh the page, as in a browser. Observed after dispatch, so they work
+    // whatever has the focus (or nothing); only in this window, and not in fullscreen, which
+    // belongs to the player.
+    let main = window.window_handle().window_id();
+    subscriptions.push(cx.observe_keystrokes(move |shell, event, window, cx| {
+      let keystroke = &event.keystroke;
+      let m = &keystroke.modifiers;
+      let refresh = match keystroke.key.as_str() {
+        "f5" => !m.control && !m.alt && !m.shift && !m.platform,
+        "r" => m.control && !m.alt && !m.shift && !m.platform,
+        _ => false,
+      };
+      if refresh && window.window_handle().window_id() == main && !window.is_fullscreen() {
+        shell.reload(cx);
+      }
+    }));
     let mut tabs: Vec<TabRef> = spaces
       .iter()
       .enumerate()
@@ -505,6 +521,17 @@ impl Shell {
     }
   }
 
+  /// The refresh button: the page shown is built again (its data read again), or the settings
+  /// page made again.
+  fn reload(&mut self, cx: &mut Context<Self>) {
+    if self.in_settings(cx) {
+      self.settings = None;
+    } else if let Some((tab, space)) = self.current() {
+      space.clone().reload(tab, cx);
+    }
+    cx.notify();
+  }
+
   /// Back one entry in the tab's history.
   fn back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some((tab, space)) = self.current() {
@@ -618,6 +645,11 @@ impl Shell {
       .disabled(!can_go_forward)
       .tooltip(t("Forward", "Suivant"))
       .on_click(cx.listener(|this, _, window, cx| this.forward(window, cx)));
+    let reload = Button::new("reload")
+      .ghost()
+      .icon(Icon::Refresh)
+      .tooltip(t("Refresh (F5)", "Actualiser (F5)"))
+      .on_click(cx.listener(|this, _, _, cx| this.reload(cx)));
     TitleBar::new().h(theme::TITLE_BAR_HEIGHT).child(
       h_flex()
         .h_full()
@@ -626,7 +658,7 @@ impl Shell {
         .items_center()
         // The bar is a window drag area; occluding the controls keeps their clicks.
         .child(div().occlude().child(menu))
-        .child(h_flex().occlude().child(back).child(forward))
+        .child(h_flex().occlude().child(back).child(forward).child(reload))
         .child(mark(window, cx))
         // The bar's empty part, right of "+", still drags the window: a flex row, so the occluding
         // wrapper is as wide as the tabs (a block child would stretch over the whole part).

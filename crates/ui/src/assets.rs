@@ -49,6 +49,7 @@ icons! {
   Muted => "volume-x",
   Back10 => "rotate-ccw",
   Forward10 => "rotate-cw",
+  Refresh => "refresh-cw",
   ArrowLeft => "arrow-left",
   ArrowRight => "arrow-right",
   Home => "house",

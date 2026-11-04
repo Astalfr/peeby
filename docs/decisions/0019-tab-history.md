@@ -48,6 +48,10 @@ moves a playing video to the mini-player (ADR 0008) instead of pausing it.
   mini-player, as any tab switch does. A page opened from the settings (a sign-in) comes after
   them in their tab, and a session change (`Tab::reset`) keeps a tab on the settings there. The
   settings page is made each time it shows.
+- The top bar's refresh button (and F5, Ctrl+R: `observe_keystrokes`, so whatever has the
+  focus; not in fullscreen) drops the view of the page shown (`Tab::reload`,
+  `Space::reload`): the space builds it again from its route at the next render, as after
+  "back" and "forward", so its data is read again; on the settings, the shell makes them again.
 - The mouse's side buttons do nothing in fullscreen, which belongs to the player.
 - `Space` has `type Route`, `history`/`history_mut` and a `cover` hook; `can_go_back`,
   `can_go_forward`, `back`, `forward`, `settings_tab` and `settings_shown` are provided once

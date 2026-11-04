@@ -412,6 +412,18 @@ impl<R> Tab<R> {
     true
   }
 
+  /// Drops the view of the page shown, built again at the next render (the refresh button):
+  /// its data is read again, a player on it starts over. `false` when nothing was built.
+  pub fn reload(&mut self) -> bool {
+    match self.current_mut() {
+      Some(page) if page.view.is_some() => {
+        page.view = None;
+        true
+      }
+      _ => false,
+    }
+  }
+
   /// Goes forward one entry, built when it shows. `false` at the last entry.
   pub fn forward(&mut self) -> bool {
     if !self.can_go_forward() {
@@ -666,6 +678,13 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
     cx.notify();
   }
 
+  /// Builds the page `tab` shows again (the refresh button).
+  fn reload(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    if self.history_mut().get_mut(tab).is_some_and(Tab::reload) {
+      cx.notify();
+    }
+  }
+
   /// Opens a tab of the space on the settings page alone (the gear, a page's request).
   fn settings_tab(&mut self, cx: &mut Context<Self>) -> TabId {
     let id = self.history_mut().add_settings();
@@ -761,6 +780,8 @@ pub trait AnySpace {
   fn forward(&self, tab: TabId, cx: &mut App);
   /// See [`Space::settings_tab`].
   fn settings_tab(&self, cx: &mut App) -> TabId;
+  /// See [`Space::reload`].
+  fn reload(&self, tab: TabId, cx: &mut App);
   /// See [`Space::settings_shown`].
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool;
   /// See [`Space::searchable`].
@@ -851,6 +872,10 @@ impl<T: Space> AnySpace for Entity<T> {
 
   fn settings_tab(&self, cx: &mut App) -> TabId {
     self.update(cx, |space, cx| space.settings_tab(cx))
+  }
+
+  fn reload(&self, tab: TabId, cx: &mut App) {
+    self.update(cx, |space, cx| space.reload(tab, cx));
   }
 
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool {
@@ -1020,6 +1045,16 @@ mod tests {
     // Not on the settings: the history starts over.
     assert_eq!(routes(&tabs, settings), vec!["home"]);
     assert!(!tab(&mut tabs, settings).can_go_back());
+  }
+
+  #[test]
+  fn reload_needs_a_built_page() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home"], None);
+    // Not built yet (or on the settings): nothing to reload.
+    assert!(!tab(&mut tabs, id).reload());
+    let settings = tabs.add_settings();
+    assert!(!tab(&mut tabs, settings).reload());
   }
 
   #[test]
