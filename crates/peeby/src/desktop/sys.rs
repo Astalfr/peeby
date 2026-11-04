@@ -1,14 +1,20 @@
 //! Win32 calls of the desktop integration (ADR 0020): the main window's visibility, the
-//! single instance's pipe, and the double click and screen of the notification area's icon. The only `unsafe` of the `peeby` crate, each block with its
-//! `// SAFETY:`.
+//! single instance's pipe, and the double click and screen of the notification area's icon;
+//! and DPAPI, which encrypts the cookie jar (ADR 0022). The only `unsafe` of the `peeby` crate,
+//! each block with its `// SAFETY:`.
 
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::time::Duration;
 
-use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HWND, POINT};
+use windows::Win32::Foundation::{
+  E_INVALIDARG, ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, HWND, LocalFree, POINT,
+};
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+use windows::Win32::Security::Cryptography::{
+  CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
+};
 use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
   ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
@@ -187,4 +193,86 @@ fn create_pipe(name: &str, first: bool) -> windows::core::Result<HANDLE> {
     return Err(windows::core::Error::from_thread());
   }
   Ok(handle)
+}
+
+/// Encrypts `data` with DPAPI for the current Windows user: only this user, on this machine,
+/// can decrypt it ([`unprotect`] with the same `entropy`). For the cookie jar (ADR 0022).
+pub fn protect(data: &[u8], entropy: &[u8]) -> windows::core::Result<Vec<u8>> {
+  let input = blob(data)?;
+  let entropy = blob(entropy)?;
+  let mut output = CRYPT_INTEGER_BLOB::default();
+  // SAFETY: `input` and `entropy` point into slices that outlive the call, which only reads
+  // them. On success `output` holds a buffer DPAPI allocated, copied then freed by `take`.
+  unsafe {
+    CryptProtectData(
+      &input,
+      PCWSTR::null(),
+      Some(&entropy),
+      None,
+      None,
+      CRYPTPROTECT_UI_FORBIDDEN,
+      &mut output,
+    )?;
+    Ok(take(output))
+  }
+}
+
+/// Decrypts what [`protect`] gave, for the same user and `entropy`.
+pub fn unprotect(data: &[u8], entropy: &[u8]) -> windows::core::Result<Vec<u8>> {
+  let input = blob(data)?;
+  let entropy = blob(entropy)?;
+  let mut output = CRYPT_INTEGER_BLOB::default();
+  // SAFETY: as in `protect`; no description is asked for.
+  unsafe {
+    CryptUnprotectData(
+      &input,
+      None,
+      Some(&entropy),
+      None,
+      None,
+      CRYPTPROTECT_UI_FORBIDDEN,
+      &mut output,
+    )?;
+    Ok(take(output))
+  }
+}
+
+/// A DPAPI view of `bytes`, which DPAPI only reads (hence the `cast_mut`).
+fn blob(bytes: &[u8]) -> windows::core::Result<CRYPT_INTEGER_BLOB> {
+  Ok(CRYPT_INTEGER_BLOB {
+    cbData: u32::try_from(bytes.len()).map_err(|_| windows::core::Error::from(E_INVALIDARG))?,
+    pbData: bytes.as_ptr().cast_mut(),
+  })
+}
+
+/// Copies a buffer DPAPI returned, then frees it.
+///
+/// # Safety
+/// `blob` must come from a successful `CryptProtectData`/`CryptUnprotectData` and not be used
+/// afterwards.
+unsafe fn take(blob: CRYPT_INTEGER_BLOB) -> Vec<u8> {
+  if blob.pbData.is_null() {
+    return Vec::new();
+  }
+  // SAFETY: DPAPI wrote `cbData` bytes at `pbData` (the caller's contract).
+  let bytes = unsafe { std::slice::from_raw_parts(blob.pbData, blob.cbData as usize) }.to_vec();
+  // SAFETY: the buffer was allocated with `LocalAlloc` by DPAPI, which leaves freeing it to us.
+  unsafe {
+    let _ = LocalFree(Some(HLOCAL(blob.pbData.cast())));
+  }
+  bytes
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{protect, unprotect};
+
+  #[test]
+  fn dpapi_round_trip() {
+    let secret = b".youtube.com\tTRUE\t/\tTRUE\t0\tSID\tvalue\n";
+    let sealed = protect(secret, b"entropy").unwrap();
+    assert!(!sealed.windows(5).any(|w| w == b"value"));
+    assert_eq!(unprotect(&sealed, b"entropy").unwrap(), secret);
+    assert!(unprotect(&sealed, b"other").is_err());
+  }
 }

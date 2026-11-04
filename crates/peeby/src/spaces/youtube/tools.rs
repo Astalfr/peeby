@@ -16,6 +16,8 @@ const FORMAT: &str = "bv*[protocol=m3u8_native][height<=?1080]+ba[protocol=m3u8_
 const UPDATE_EVERY: Duration = Duration::from_secs(24 * 3600);
 /// `CREATE_NO_WINDOW`: no console window flashes when yt-dlp runs.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// The plain copy of the cookies given to yt-dlp, in its cache folder.
+const COOKIE_COPY: &str = "cookies.txt";
 
 /// Folder with `yt-dlp.exe` and `deno.exe`: `tools/` next to the executable in a
 /// release, else `third_party/yt-dlp/` of the source tree (`scripts/fetch-tools.ps1`).
@@ -31,7 +33,7 @@ fn tools_dir() -> Option<PathBuf> {
 }
 
 /// Player options that let yt-dlp resolve `video_id`, or `None` if yt-dlp is not bundled.
-/// Blocking (copies the cookie file): call it off the UI thread.
+/// Blocking (writes the cookies' copy): call it off the UI thread.
 pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
   let dir = tools_dir()?;
   let cache = cache_dir()?;
@@ -46,11 +48,12 @@ pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
   if deno.exists() {
     raw_options.push(format!("js-runtimes=deno:{}", deno.display()));
   }
-  // yt-dlp writes the cookie jar back when it exits: give it a copy, never the user's file.
-  if let Some(cookies) = crate::settings::cookies_path().filter(|p| p.exists()) {
-    let copy = cache.join("cookies.txt");
-    match std::fs::copy(&cookies, &copy) {
-      Ok(_) => raw_options.push(format!("cookies={}", copy.display())),
+  // yt-dlp reads a plain jar and writes it back when it exits: give it a plain copy, never the
+  // session's (encrypted) file. The copy is deleted at the next start and on sign-out (ADR 0022).
+  if let Some(cookies) = crate::settings::load_cookies() {
+    let copy = cache.join(COOKIE_COPY);
+    match std::fs::write(&copy, cookies.to_netscape()) {
+      Ok(()) => raw_options.push(format!("cookies={}", copy.display())),
       Err(e) => tracing::warn!("cookies for yt-dlp: {e}"),
     }
   }
@@ -64,6 +67,20 @@ pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
     readahead_secs: Some(super::convert::READAHEAD_SECS),
     ..Default::default()
   })
+}
+
+/// Deletes the plain copy of the cookies given to yt-dlp, if one is left. Blocking.
+pub fn remove_cookie_copy() {
+  let Some(copy) = dirs::cache_dir().map(|d| d.join("peeby").join("yt-dlp").join(COOKIE_COPY))
+  else {
+    return;
+  };
+  match std::fs::remove_file(&copy) {
+    Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+      tracing::warn!("cookies for yt-dlp: {e}");
+    }
+    _ => {}
+  }
 }
 
 /// yt-dlp's cache folder in the app's profile, created if needed.

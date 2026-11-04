@@ -238,7 +238,7 @@ impl YouTubeSpace {
       original_titles,
       ..
     } = Settings::get(cx).clone();
-    let client = match Client::new(cookies, settings::cookies_path(), &language, &region) {
+    let client = match Client::new(cookies, Some(settings::cookie_saver()), &language, &region) {
       Ok(client) => client.with_original_titles(original_titles),
       Err(e) => return tracing::error!("cannot create the HTTP client: {e}"),
     };

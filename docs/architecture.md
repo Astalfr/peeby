@@ -53,7 +53,7 @@ The Twitch space's playback path:
 ## Startup
 
 1. `peeby --login <service>` runs the sign-in window only and exits, before anything below (ADR 0017).
-1. Before the UI starts: `settings::load_cookies()` reads `%APPDATA%\peeby\cookies.txt` (or `PEEBY_COOKIES`), and `jellyfin::session::restore` reads the Jellyfin token from the Credential Manager (both blocking, both small).
+1. Before the UI starts: `settings::load_cookies()` reads and decrypts `%APPDATA%\peeby\cookies.dat` (or `PEEBY_COOKIES`; DPAPI, [ADR 0022](decisions/0022-encrypted-cookie-jar.md)), and `jellyfin::session::restore` reads the Jellyfin token from the Credential Manager (both blocking, both small).
 2. In the background: `Client::refresh_client_version()` reads the current WEB `clientVersion` and a `visitorData` from the page's ytcfg; yt-dlp updates itself.
 3. YouTube's Home loads `FEwhat_to_watch` (its response also carries a `visitorData`, kept for the stream resolver); Jellyfin's Home loads if a session was restored, else its tab shows the login page.
 
@@ -121,7 +121,7 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 | Data | Location |
 |---|---|
 | Settings: the interface language (`interface_language`, `ui::i18n`), YouTube's (start page, content language, region, original titles, quality, layouts, theater), the volume, `[player]` (shared player settings, the audio output picked in the top bar), `[jellyfin]` (server, user, device id, playback, home) | `%APPDATA%\peeby\settings.toml`, `settings::Settings` global |
-| YouTube session cookies | `%APPDATA%\peeby\cookies.txt` ([ADR 0004](decisions/0004-cookie-session.md)) |
+| YouTube session cookies | `%APPDATA%\peeby\cookies.dat`, encrypted with DPAPI ([ADR 0004](decisions/0004-cookie-session.md), [ADR 0022](decisions/0022-encrypted-cookie-jar.md)) |
 | Jellyfin access token | Windows Credential Manager, service `peeby`, account `<server URL>\|<user id>` ([ADR 0009](decisions/0009-jellyfin-12-single-account.md)) |
 | Image cache | `%LOCALAPPDATA%\peeby\images\` |
 | Peeby's log (`logs`: what goes to stderr, without colors, one file per launch, created at its first line; UTC times; `RUST_LOG` sets the filter, info by default, and debug writes stream URLs into it) and mpv's opt-in logs, both deleted after 7 days | `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log`, `mpv-<ms>.log` |

@@ -20,11 +20,12 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
 - Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt] [subscriptions]`
-  (give it a copy of the cookies while Peeby runs: both write the rotated cookies back)
+  (the jar is encrypted, ADR 0022: give the examples a plain copy from `cargo run -p peeby -- --export-cookies > copy.txt`
+  (`peeby.exe` for the release profile's), never committed nor logged; both write the rotated cookies back)
 - Jellyfin live tests (ignored by default): set `$env:PEEBY_TEST_SERVER`, `PEEBY_TEST_USER`, `PEEBY_TEST_PASSWORD`,
   then `cargo test -p jellyfin-api --test live -- --ignored --nocapture`
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
-  (PowerShell: `"$env:APPDATA\peeby\cookies.txt"`; `%APPDATA%` only works in cmd)
+  (an exported copy, as for `home`)
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
@@ -48,8 +49,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Playback starts within about 1–2 s of the click. Streams come from the VISIONOS client as HLS (ADR 0003).
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
-- Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.txt`
-  (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004.
+- Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.dat`,
+  encrypted with DPAPI (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004 and 0022.
+  Never write them in clear on disk, except the copy yt-dlp needs (deleted at start and sign-out).
 - YouTube rotates session cookies through `Set-Cookie`: every signed-in request goes through `Client::send` /
   `keep_rotated_cookies`, which writes the jar back. Ignoring them invalidates the session within about an hour.
   Never give the user's file to yt-dlp (it rewrites it): give it a copy.

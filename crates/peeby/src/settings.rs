@@ -3,7 +3,8 @@
 //!
 //! The cookies are a whole browser cookie jar (dozens of values, several KB): too large for the
 //! Windows Credential Manager, which holds Jellyfin's single token (ADR 0009). They live in a file
-//! under the user's profile instead (`%APPDATA%\peeby\cookies.txt`), never in logs.
+//! under the user's profile instead (`%APPDATA%\peeby\cookies.dat`, encrypted with DPAPI,
+//! ADR 0022), never in logs.
 //!
 //! A debug build has a profile of its own ([`PROFILE`]), so that it runs next to the release
 //! one without sharing its cookie jar or its single-use Twitch refresh token.
@@ -465,7 +466,7 @@ fn settings_path() -> Option<PathBuf> {
 }
 
 /// Writes next to `path` then renames, so a crash never leaves a truncated file.
-fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+fn write_atomically(path: &std::path::Path, text: impl AsRef<[u8]>) -> std::io::Result<()> {
   if let Some(dir) = path.parent() {
     std::fs::create_dir_all(dir)?;
   }
@@ -474,20 +475,52 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
   std::fs::rename(&temporary, path)
 }
 
-/// `PEEBY_COOKIES`, else `%APPDATA%\peeby\cookies.txt` (`peeby-dev` for a debug build).
+/// DPAPI's entropy for the cookie jar: another program that decrypts this user's DPAPI data
+/// does not get the jar without it (ADR 0022).
+const JAR_ENTROPY: &[u8] = b"peeby youtube cookie jar";
+
+/// `PEEBY_COOKIES`, else `%APPDATA%\peeby\cookies.dat` (`peeby-dev` for a debug build): the
+/// cookie jar encrypted with DPAPI for the current Windows user (ADR 0022).
 pub fn cookies_path() -> Option<PathBuf> {
   std::env::var_os("PEEBY_COOKIES")
     .map(PathBuf::from)
-    .or_else(|| dirs::config_dir().map(|d| d.join(PROFILE).join("cookies.txt")))
+    .or_else(|| dirs::config_dir().map(|d| d.join(PROFILE).join("cookies.dat")))
 }
 
-/// Loads the session cookies, if a file is there. A broken file is logged and ignored, so the
-/// app still starts signed out.
+/// The plain `cookies.txt` of before ADR 0022, encrypted into [`cookies_path`] then deleted.
+fn plain_cookies_path() -> Option<PathBuf> {
+  if std::env::var_os("PEEBY_COOKIES").is_some() {
+    return None;
+  }
+  dirs::config_dir().map(|d| d.join(PROFILE).join("cookies.txt"))
+}
+
+/// Loads the session cookies, if a jar is there. A broken one is logged and ignored, so the
+/// app still starts signed out. A plain jar (the former `cookies.txt`, or a plain file given
+/// with `PEEBY_COOKIES`) is encrypted on the way. Blocking.
 pub fn load_cookies() -> Option<Cookies> {
+  if let Some(plain) = plain_cookies_path().filter(|p| p.exists()) {
+    migrate_plain_cookies(&plain);
+  }
   let path = cookies_path()?;
-  let text = std::fs::read_to_string(&path).ok()?;
-  match Cookies::from_netscape(&text) {
-    Ok(cookies) => Some(cookies),
+  let bytes = std::fs::read(&path).ok()?;
+  let (text, plain) = match crate::desktop::sys::unprotect(&bytes, JAR_ENTROPY) {
+    Ok(text) => (text, false),
+    Err(_) => (bytes, true),
+  };
+  let cookies = String::from_utf8(text)
+    .map_err(|_| innertube::Error::Cookies("neither plain text nor encrypted for this user".into()))
+    .and_then(|text| Cookies::from_netscape(&text));
+  match cookies {
+    Ok(cookies) => {
+      if plain {
+        match save_cookies(&cookies) {
+          Ok(()) => tracing::info!("{}: plain cookie jar encrypted", path.display()),
+          Err(e) => tracing::warn!("{}: cannot encrypt the cookie jar: {e}", path.display()),
+        }
+      }
+      Some(cookies)
+    }
     Err(e) => {
       tracing::warn!("{}: {e}", path.display());
       None
@@ -495,10 +528,52 @@ pub fn load_cookies() -> Option<Cookies> {
   }
 }
 
-/// Saves imported cookies as the session file. Blocking.
+/// Encrypts the former plain `cookies.txt` into [`cookies_path`], unless a jar is already
+/// there, then deletes it: from then on the cookies exist in clear only in memory.
+fn migrate_plain_cookies(plain: &std::path::Path) {
+  let encrypted = cookies_path().is_some_and(|p| p.exists());
+  if !encrypted {
+    let cookies = std::fs::read_to_string(plain)
+      .map_err(|e| e.to_string())
+      .and_then(|text| Cookies::from_netscape(&text).map_err(|e| e.to_string()))
+      .and_then(|cookies| save_cookies(&cookies).map_err(|e| e.to_string()));
+    if let Err(e) = cookies {
+      // Kept: a jar that cannot be moved stays where the user can still find it.
+      return tracing::warn!("{}: cannot encrypt the cookie jar: {e}", plain.display());
+    }
+    tracing::info!("{}: cookie jar encrypted", plain.display());
+  }
+  if let Err(e) = std::fs::remove_file(plain) {
+    tracing::warn!(
+      "{}: cannot delete the plain cookie jar: {e}",
+      plain.display()
+    );
+  }
+}
+
+/// Saves the session's cookies, encrypted. Blocking.
 pub fn save_cookies(cookies: &Cookies) -> std::io::Result<()> {
   let path = cookies_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
-  write_atomically(&path, &cookies.to_netscape())
+  let sealed = crate::desktop::sys::protect(cookies.to_netscape().as_bytes(), JAR_ENTROPY)
+    .map_err(std::io::Error::other)?;
+  write_atomically(&path, sealed)
+}
+
+/// Where the client saves the rotated cookies: [`save_cookies`].
+pub fn cookie_saver() -> innertube::SaveCookies {
+  std::sync::Arc::new(save_cookies)
+}
+
+/// Deletes the session's cookies (signing out), and the former plain jar if it is still there.
+/// Blocking.
+pub fn delete_cookies() -> std::io::Result<()> {
+  for path in [cookies_path(), plain_cookies_path()].into_iter().flatten() {
+    match std::fs::remove_file(&path) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+      _ => {}
+    }
+  }
+  Ok(())
 }
 
 #[cfg(test)]

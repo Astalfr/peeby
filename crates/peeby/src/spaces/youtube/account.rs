@@ -173,10 +173,8 @@ impl AccountView {
   }
 
   fn sign_out(&mut self, cx: &mut Context<Self>) {
-    if let Some(path) = settings::cookies_path()
-      && let Err(e) = std::fs::remove_file(&path)
-      && e.kind() != std::io::ErrorKind::NotFound
-    {
+    super::tools::remove_cookie_copy();
+    if let Err(e) = settings::delete_cookies() {
       self.status = Status::Failed(
         tf!(
           "Cannot delete the cookies: {e}",

@@ -56,10 +56,24 @@ struct State {
   titles: HashMap<String, Option<String>>,
 }
 
-/// Session cookies and the file the rotated values are written back to.
+/// Saves the whole jar when YouTube rotates a value ([`Client::new`]). Blocking: it runs on the
+/// network runtime, the jar being small.
+pub type SaveCookies = Arc<dyn Fn(&Cookies) -> std::io::Result<()> + Send + Sync>;
+
+/// A [`SaveCookies`] that writes a plain Netscape file at `path` (next to it then renamed, so a
+/// crash never leaves a truncated jar). The app encrypts its own jar instead (peeby ADR 0022).
+pub fn save_to_file(path: PathBuf) -> SaveCookies {
+  Arc::new(move |cookies| {
+    let temporary = path.with_extension("txt.tmp");
+    std::fs::write(&temporary, cookies.to_netscape())?;
+    std::fs::rename(&temporary, &path)
+  })
+}
+
+/// Session cookies and where the rotated values are saved.
 struct Session {
   cookies: Mutex<Cookies>,
-  file: Option<PathBuf>,
+  save: Option<SaveCookies>,
 }
 
 /// InnerTube client. Cheap to clone; clones share the session state.
@@ -76,11 +90,11 @@ pub struct Client {
 impl Client {
   /// A client, signed in when `cookies` are given. `hl`/`gl` pick the language and region of
   /// texts and recommendations (e.g. `fr`, `FR`). YouTube rotates some cookies in its
-  /// responses: when `cookie_file` is given, the updated jar is written back to it, otherwise
-  /// the session is invalidated after a while.
+  /// responses: when `save` is given, it gets the updated jar, otherwise the session is
+  /// invalidated after a while.
   pub fn new(
     cookies: Option<Cookies>,
-    cookie_file: Option<PathBuf>,
+    save: Option<SaveCookies>,
     hl: &str,
     gl: &str,
   ) -> Result<Self> {
@@ -92,7 +106,7 @@ impl Client {
       session: cookies.map(|cookies| {
         Arc::new(Session {
           cookies: Mutex::new(cookies),
-          file: cookie_file,
+          save,
         })
       }),
       language: Arc::new((hl.to_owned(), gl.to_owned())),
@@ -641,14 +655,10 @@ impl Client {
       return;
     }
     tracing::debug!("session cookies rotated");
-    if let Some(file) = &session.file {
-      // Written next to the file then renamed, so a crash never leaves a truncated jar.
-      let temporary = file.with_extension("txt.tmp");
-      let written = std::fs::write(&temporary, cookies.to_netscape())
-        .and_then(|()| std::fs::rename(&temporary, file));
-      if let Err(e) = written {
-        tracing::warn!("cannot save the rotated cookies: {e}");
-      }
+    if let Some(save) = &session.save
+      && let Err(e) = save(&cookies)
+    {
+      tracing::warn!("cannot save the rotated cookies: {e}");
     }
   }
 

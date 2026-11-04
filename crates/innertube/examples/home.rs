@@ -17,8 +17,13 @@ async fn main() {
     Cookies::from_netscape(&text).unwrap_or_else(|e| fail(&e.to_string()))
   });
   // Rotated cookies are written back, as the app does.
-  let client =
-    Client::new(cookies, path.map(Into::into), "fr", "FR").unwrap_or_else(|e| fail(&e.to_string()));
+  let client = Client::new(
+    cookies,
+    path.map(|p| innertube::save_to_file(p.into())),
+    "fr",
+    "FR",
+  )
+  .unwrap_or_else(|e| fail(&e.to_string()));
   if let Err(e) = client.refresh_client_version().await {
     eprintln!("warning: {e}");
   }

@@ -21,8 +21,13 @@ async fn main() {
   });
   let signed_in = cookies.is_some();
   // Rotated cookies are written back, as the app does.
-  let client =
-    Client::new(cookies, path.map(Into::into), "fr", "FR").unwrap_or_else(|e| fail(&e.to_string()));
+  let client = Client::new(
+    cookies,
+    path.map(|p| innertube::save_to_file(p.into())),
+    "fr",
+    "FR",
+  )
+  .unwrap_or_else(|e| fail(&e.to_string()));
   let mut failures = 0;
   let mut check = |name: &str, result: Result<String, innertube::Error>| match result {
     Ok(summary) => println!("ok    {name:<20} {summary}"),

@@ -42,7 +42,7 @@ mod models;
 mod parse;
 
 pub use auth::Cookies;
-pub use client::{Client, VISIONOS_USER_AGENT, hls_manifest_url};
+pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
 pub use error::Error;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,

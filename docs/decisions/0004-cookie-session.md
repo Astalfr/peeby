@@ -10,7 +10,7 @@ Anonymous Home has been empty since 2024 (verified: `logged_in=0`, empty grid, "
 ## Decision
 
 - The user exports youtube.com cookies (Netscape `cookies.txt`) from a **private** window, then closes it so the browser does not rotate them, and imports the file from the app's account page. The import is checked with a Home request (`logged_in=1`) before it replaces the session file; a rejected file changes nothing. "Se déconnecter" deletes the file.
-- The file lives at `%APPDATA%\peeby\cookies.txt`, or `PEEBY_COOKIES` (`%APPDATA%\peebtube\` before the rename to Peeby, ADR 0007; not migrated). A cookie jar is several KB with dozens of values, too large for the Windows Credential Manager that peeby uses for its token.
+- The file lives at `%APPDATA%\peeby\cookies.txt` (encrypted in `cookies.dat` since [ADR 0022](0022-encrypted-cookie-jar.md)), or `PEEBY_COOKIES` (`%APPDATA%\peebtube\` before the rename to Peeby, ADR 0007; not migrated). A cookie jar is several KB with dozens of values, too large for the Windows Credential Manager that peeby uses for its token.
 - WEB requests send `Cookie`, `X-Goog-AuthUser: 0` and `Authorization: SAPISIDHASH … SAPISID1PHASH … SAPISID3PHASH …`.
 - With cookies, a response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
 

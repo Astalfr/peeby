@@ -36,7 +36,7 @@ WebView2's cookie manager (HttpOnly ones included):
   stdout and exits: YouTube's youtube.com cookies as a Netscape file, Twitch's `auth-token`. Exit
   codes: 0 signed in, 2 closed by the user, 3 unavailable.
 - **Checked like a manual import.** The session goes through the same check as before (YouTube:
-  a Home request with `logged_in=1`, then `cookies.txt`; Twitch: the token's shape and
+  a Home request with `logged_in=1`, then the cookie jar, encrypted since [ADR 0022](0022-encrypted-cookie-jar.md); Twitch: the token's shape and
   `currentUser`, then the Credential Manager): a refused session changes nothing.
 - **Read once, then closed.** InPrivate, with its profile in a temporary folder deleted on
   exit, so nothing keeps rotating the cookies after Peeby took them (the private window of

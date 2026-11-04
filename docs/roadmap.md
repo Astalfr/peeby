@@ -13,6 +13,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
 | **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
 
+## Encrypted cookie jar
+
+- Done (2026-11-04): the YouTube jar is encrypted with DPAPI for the Windows user in `cookies.dat`; the former plain `cookies.txt` is encrypted then deleted at the first start, yt-dlp gets a plain copy deleted at the next start and on sign-out, and `peeby --export-cookies` gives the examples a plain copy ([ADR 0022](decisions/0022-encrypted-cookie-jar.md)). Checked: DPAPI round trip (unit test), a plain jar given with `PEEBY_COOKIES` encrypted in place then exported unchanged. **Not verified:** the migration of the real `cookies.txt` and a rotation in the app (the next run of Peeby).
+
 ## Log file
 
 - Done (2026-11-03): Peeby writes its log to `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log` as well as stderr: a release build has no console, so its warnings were lost (a Twitch live's Windows notification went missing with no trace; `build` or `Show` failed in `desktop::toast`). One file per launch, created at its first line by a thread of its own, a panic logged and flushed, deleted after 7 days with mpv's logs. Checked with a debug run: the file holds the stderr lines.

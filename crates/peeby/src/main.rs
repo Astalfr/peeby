@@ -36,6 +36,11 @@ fn main() {
   if let Some(code) = web_sign_in::child_from_args() {
     std::process::exit(code);
   }
+  // `peeby --export-cookies`: the jar in clear on stdout, for the innertube examples (ADR 0022).
+  if std::env::args().nth(1).as_deref() == Some(EXPORT_COOKIES) {
+    std::process::exit(export_cookies());
+  }
+  std::thread::spawn(tools::remove_cookie_copy);
   // One Peeby at a time (ADR 0020): two would rewrite the same cookie jar and spend the same
   // Twitch refresh token. A next launch hands its arguments to the first one and ends.
   let args: Vec<String> = std::env::args().skip(1).collect();
@@ -87,7 +92,7 @@ fn main() {
       None
     }
   };
-  let client = match innertube::Client::new(cookies, settings::cookies_path(), &hl, &gl) {
+  let client = match innertube::Client::new(cookies, Some(settings::cookie_saver()), &hl, &gl) {
     Ok(client) => client.with_original_titles(prefs.original_titles),
     Err(e) => {
       tracing::error!("cannot create the HTTP client: {e}");
@@ -195,6 +200,31 @@ fn main() {
         cx.activate(true);
       }
     });
+}
+
+/// The argument that writes the cookie jar in clear on stdout and ends.
+const EXPORT_COOKIES: &str = "--export-cookies";
+
+/// Writes the session's cookie jar (Netscape format, in clear) on stdout: the jar is encrypted
+/// for this Windows user (ADR 0022) and the innertube examples read a plain one. Exit code 0,
+/// or 1 without a session.
+fn export_cookies() -> i32 {
+  use std::io::Write as _;
+  let Some(cookies) = settings::load_cookies() else {
+    tracing::error!("no session cookies to export");
+    return 1;
+  };
+  let mut stdout = std::io::stdout();
+  match stdout
+    .write_all(cookies.to_netscape().as_bytes())
+    .and_then(|()| stdout.flush())
+  {
+    Ok(()) => 0,
+    Err(e) => {
+      tracing::error!("cannot write the cookies: {e}");
+      1
+    }
+  }
 }
 
 /// The YouTube videos among a launch's arguments (`peeby <url-or-id>…`), the last one on top
