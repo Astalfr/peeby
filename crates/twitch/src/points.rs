@@ -380,7 +380,7 @@ pub fn parse_predict(answer: &Value) -> Result<()> {
   parse_spend(answer, "makePrediction")
 }
 
-fn parse_spend(answer: &Value, key: &str) -> Result<()> {
+pub(crate) fn parse_spend(answer: &Value, key: &str) -> Result<()> {
   if let Some(error) = gql_error(answer) {
     return Err(error);
   }

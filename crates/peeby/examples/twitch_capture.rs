@@ -17,6 +17,10 @@
 //! predictions and their winner (guessed names, checked against GQL's validation), then saves the
 //! app's own predictions request's answer as `gql_predictions_resolved.json`; it reads, never
 //! writes.
+//! `-- polls-scan [--watch [minutes]]` lists which of the top lives (global, French, English) have a poll on screen; `-- poll <login>` saves
+//! that channel's poll (`twitch::polls::poll_request`) as `gql_poll.json`, and an anonymous vote's
+//! refusal (made-up ids) as `gql_vote_unauthenticated.json`; `-- gql-probe <query>
+//! [login]` sends one query and prints GQL's messages and the data. All three are anonymous.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -48,6 +52,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "chat-login") {
     let channel = args.get(i + 1).cloned();
     return twitch::block_on(check_chat_login(channel))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "polls-scan") {
+    // `--watch [minutes]`: again every 2 minutes until a poll is found and saved.
+    let watch = args.get(i + 1).is_some_and(|a| a == "--watch");
+    let minutes = args
+      .get(i + 2)
+      .and_then(|m| m.parse::<u64>().ok())
+      .unwrap_or(60);
+    return twitch::block_on(async move {
+      let until = std::time::Instant::now() + std::time::Duration::from_secs(minutes * 60);
+      loop {
+        let found = scan_polls().await?;
+        if let Some(login) = found.filter(|_| watch) {
+          return capture_poll(login).await;
+        }
+        if !watch || std::time::Instant::now() >= until {
+          return Ok(());
+        }
+        // A command-line tool alone on its runtime: blocking it a while harms nothing.
+        std::thread::sleep(std::time::Duration::from_secs(120));
+      }
+    })?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "poll") {
+    let login = args.get(i + 1).ok_or("poll <login>")?.clone();
+    return twitch::block_on(capture_poll(login))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "gql-probe") {
+    let query = args.get(i + 1).ok_or("gql-probe <query> [login]")?.clone();
+    let login = args.get(i + 2).cloned().unwrap_or_default();
+    return twitch::block_on(gql_probe(query, login))?;
   }
   if let Some(i) = args.iter().position(|a| a == "predictions-ended") {
     let login = args.get(i + 1).ok_or("predictions-ended <login>")?.clone();
@@ -353,6 +388,123 @@ const ENDED_FIELDS: &[&str] = &[
   "winningOutcome { id title }",
   "endedBy { login }",
 ];
+
+/// The top lives (global, French, English) with a poll on screen, anonymous: prints their logins
+/// and the poll's status.
+async fn scan_polls() -> Result<Option<String>, Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  // 30 at most a page: the top lives, then the top French and English ones.
+  let mut pages = Vec::new();
+  for options in [
+    "",
+    ", options: { languages: [FR] }",
+    ", options: { languages: [EN] }",
+  ] {
+    let query = format!(
+      "query {{ streams(first: 30{options}) {{ edges {{ node {{ broadcaster {{ login }} }} }} }} }}"
+    );
+    pages.push(client.gql(&json!({ "query": query })).await?);
+  }
+  let mut logins: Vec<String> = pages
+    .iter()
+    .flat_map(|page| {
+      page["data"]["streams"]["edges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    })
+    .filter_map(|e| {
+      e["node"]["broadcaster"]["login"]
+        .as_str()
+        .map(str::to_owned)
+    })
+    // Logins are letters, digits and `_`: safe inside the query.
+    .filter(|l| l.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+    .collect();
+  logins.sort();
+  logins.dedup();
+  println!("{} lives", logins.len());
+  let mut first: Option<String> = None;
+  // GQL takes 15 root aliases at most.
+  for chunk in logins.chunks(15) {
+    let fields: Vec<String> = chunk
+      .iter()
+      .enumerate()
+      .map(|(i, login)| {
+        format!("u{i}: user(login: \"{login}\") {{ login viewablePoll {{ status }} }}")
+      })
+      .collect();
+    let answer = client
+      .gql(&json!({ "query": format!("query {{ {} }}", fields.join(" ")) }))
+      .await?;
+    for i in 0..chunk.len() {
+      let user = &answer["data"][format!("u{i}")];
+      if let Some(status) = user["viewablePoll"]["status"].as_str() {
+        let login = user["login"].as_str().unwrap_or_default().to_owned();
+        println!("{login}: {status}");
+        // An active one first: its votes still move.
+        if first.is_none() || status == "ACTIVE" {
+          first = Some(login);
+        }
+      }
+    }
+  }
+  println!("poll found: {}", if first.is_some() { "yes" } else { "no" });
+  Ok(first)
+}
+
+/// `login`'s poll answer to `twitch::polls::poll_request`, anonymous, saved without its request
+/// ids as `gql_poll.json` (the channel's public poll; the user id is the channel's).
+async fn capture_poll(login: String) -> Result<(), Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  let mut answer = client.gql(&twitch::polls::poll_request(&login)).await?;
+  for error in answer["errors"].as_array().into_iter().flatten() {
+    println!("error: {}", error["message"].as_str().unwrap_or_default());
+  }
+  let poll = &answer["data"]["user"]["viewablePoll"];
+  if poll.is_null() {
+    println!("{login}: no poll on screen");
+    return Ok(());
+  }
+  println!(
+    "{login}: {} · {} choices",
+    poll["status"].as_str().unwrap_or_default(),
+    poll["choices"].as_array().map_or(0, Vec::len)
+  );
+  if let Some(map) = answer.as_object_mut() {
+    map.remove("extensions");
+  }
+  let path = Path::new(FIXTURES).join("gql_poll.json");
+  std::fs::write(&path, serde_json::to_string_pretty(&answer)? + "\n")?;
+  println!("saved {}", path.display());
+  // A vote's answer, anonymous with made-up ids: Twitch refuses it before anything happens.
+  let mut vote = client
+    .gql(&twitch::polls::vote_request("none", "none", "0", "none"))
+    .await?;
+  if let Some(map) = vote.as_object_mut() {
+    map.remove("extensions");
+  }
+  let path = Path::new(FIXTURES).join("gql_vote_unauthenticated.json");
+  std::fs::write(&path, serde_json::to_string_pretty(&vote)? + "\n")?;
+  println!("saved {}", path.display());
+  Ok(())
+}
+
+/// Sends one GQL `query` anonymous (`$login` as its variable) and prints GQL's messages and the
+/// data: for finding a field's shape, since introspection is disabled. Anonymous: only public
+/// data comes back.
+async fn gql_probe(query: String, login: String) -> Result<(), Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  let answer = client
+    .gql(&json!({ "query": query, "variables": { "login": login } }))
+    .await?;
+  for error in answer["errors"].as_array().into_iter().flatten() {
+    println!("error: {}", error["message"].as_str().unwrap_or_default());
+  }
+  let data = serde_json::to_string(&answer["data"])?;
+  println!("data: {}", data.chars().take(1500).collect::<String>());
+  Ok(())
+}
 
 /// Looks for how GQL gives `login`'s ended predictions and their winner, anonymous (no secret is
 /// read, nothing is written): prints which guessed fields exist (the schema's own error messages,

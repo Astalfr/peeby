@@ -37,7 +37,8 @@ window. Playback aims to start within 1–2 s of the click.
 - Browse, categories, search, channel pages, lives, VODs and clips.
 - Ads removed by a local playlist proxy, low latency, HEVC/AV1 above 1080p when offered.
 - Live chat with Twitch, 7TV and BTTV emotes and badges. With the web `auth-token`, you can also
-  write in the chat and use channel points: balance, rewards, predictions.
+  write in the chat and use channel points: balance, rewards, predictions. Predictions and polls
+  are pinned over the chat, as on Twitch.
 - The followed channels in the sidebar and notifications when they go live (optional Helix
   connection).
 

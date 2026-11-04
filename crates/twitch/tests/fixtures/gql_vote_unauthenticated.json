@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "message": "unauthenticated",
+      "path": [
+        "voteInPoll"
+      ],
+      "extensions": {
+        "code": "Unauthenticated"
+      }
+    }
+  ],
+  "data": {
+    "voteInPoll": null
+  }
+}

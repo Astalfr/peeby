@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
-use crate::{points, spade};
+use crate::{points, polls, spade};
 
 /// VODs per [`Client::vod_positions`] or [`Client::vod_chapters_many`] request: GQL allows 15
 /// aliased root fields in a query (checked 2026-11-02).
@@ -312,6 +312,24 @@ impl Client {
   pub async fn predictions(&self, login: &str) -> Result<Vec<points::Prediction>> {
     let answer = self.gql(&points::predictions_request(login)).await?;
     points::parse_predictions(&answer)
+  }
+
+  /// `login`'s poll on screen, if any (anonymous: it needs no auth-token).
+  pub async fn poll(&self, login: &str) -> Result<Option<polls::Poll>> {
+    let answer = self.gql(&polls::poll_request(login)).await?;
+    polls::parse_poll(&answer)
+  }
+
+  /// A free vote by `user_id` (the auth-token's account) for `choice_id` in `poll_id`.
+  pub async fn vote(
+    &self,
+    poll_id: &str,
+    choice_id: &str,
+    user_id: &str,
+    vote_id: &str,
+  ) -> Result<()> {
+    let request = polls::vote_request(poll_id, choice_id, user_id, vote_id);
+    polls::parse_vote(&self.gql(&request).await?)
   }
 
   /// Redeems `reward` on `channel_id`: spends the viewer's points.

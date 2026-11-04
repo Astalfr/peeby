@@ -95,14 +95,14 @@ impl FakePoints {
     let Some(poll) = self.polls.iter_mut().find(|p| p.id == poll && !p.ended) else {
       return refused("NOT_FOUND");
     };
-    if poll.voted.is_some() {
+    if !poll.votable(choice) {
       return refused("ALREADY_VOTED");
     }
     let Some(chosen) = poll.choices.iter_mut().find(|c| c.id == choice) else {
       return refused("NOT_FOUND");
     };
     chosen.votes += 1;
-    poll.voted = Some(choice.to_owned());
+    poll.voted.push(choice.to_owned());
     Ok(())
   }
 
@@ -142,7 +142,10 @@ impl FakePoints {
       duration_seconds: duration,
       ended: false,
       ended_at: None,
-      voted: None,
+      voted: Vec::new(),
+      // The long one takes several choices, as some channels' do.
+      multichoice: choices > 2,
+      subscriber_only: false,
     });
   }
 
@@ -472,15 +475,12 @@ mod tests {
       voters: false,
       ..FakePoints::default()
     };
-    points.start_poll(4, 60);
+    points.start_poll(2, 60);
     let poll = points.polls()[0].clone();
-    assert_eq!(poll.choices.len(), 4);
-    assert!(points.vote(&poll.id, &poll.choices[2].id).is_ok());
-    assert!(points.vote(&poll.id, &poll.choices[1].id).is_err());
-    assert_eq!(
-      points.polls()[0].voted.as_deref(),
-      Some(poll.choices[2].id.as_str())
-    );
+    assert_eq!(poll.choices.len(), 2);
+    assert!(points.vote(&poll.id, &poll.choices[1].id).is_ok());
+    assert!(points.vote(&poll.id, &poll.choices[0].id).is_err());
+    assert_eq!(points.polls()[0].voted, [poll.choices[1].id.clone()]);
     points.end_poll();
     assert!(points.vote(&poll.id, &poll.choices[0].id).is_err());
     assert!(points.polls()[0].ended);

@@ -114,7 +114,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   - `twitch::points`: raw GQL reads and spends. 7 tests on 5 new fixtures.
   - On a live's header: the balance, refreshed every minute; the channel's rewards in a popover; its predictions with odds and a countdown, refreshed every 20 s.
   - 2026-11-04: an ended prediction stays pinned 20 s with its winner and the viewer's result (`resolvedPredictionEvents`, a new fixture and test).
-  - 2026-11-04 (the user's request): the predictions moved over the chat, as on Twitch: folded bars at the top of the messages, one card unfolded at a time, shared with the polls (`twitch::polls`'s display, fed only by the fake chat until Twitch's source is captured).
+  - 2026-11-04 (the user's request): the predictions moved over the chat, as on Twitch: folded bars at the top of the messages, one card unfolded at a time, shared with the polls.
+  - 2026-11-04 (the user's request): a live's polls from Twitch (`twitch::polls`: `viewablePoll` read every 10 s anonymous, `voteInPoll` with the auth-token; 3 fixtures, 4 tests). A real vote is still to be tried with the user.
   - Spending takes a second click. A reward can ask for a text; a bet takes a share of the balance.
   - The bonus chest is shown, but claimed on twitch.tv: its mutation fails Twitch's integrity check.
   - Watching earns points: the balance did not move in 20 minutes without it (the user's measurement), so Peeby now reports each minute the live plays, as the web player does (`twitch::spade`; 3 more tests, 2 trimmed fixtures).

@@ -50,6 +50,8 @@ const POINTS_EVERY: Duration = Duration::from_secs(60);
 const WATCHED_EVERY: Duration = Duration::from_secs(60);
 /// How often the predictions are read again (a bet window is often 2 to 5 minutes).
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
+/// How often the poll is read again (a poll often lasts 1 to 5 minutes).
+const POLLS_EVERY: Duration = Duration::from_secs(10);
 /// How long an ended prediction stays pinned with its result, as on Twitch, from when Peeby
 /// first reads it ended (the predictions are read every [`PREDICTIONS_EVERY`]).
 pub const ENDED_SHOWN: Duration = Duration::from_secs(20);
@@ -162,8 +164,12 @@ pub struct PointsView {
   outcome: Option<(SharedString, bool)>,
   /// That outcome is a bet's (shown in the prediction's card; a reward's in its popover).
   outcome_of_bet: bool,
-  /// The channel's polls (only the fake chat's for now, see [`super::polls`]).
+  /// The channel's polls ([`super::polls`]).
   polls: Vec<Poll>,
+  /// The choices the viewer voted for, by poll id: Twitch does not give them back.
+  voted: HashMap<String, Vec<String>>,
+  /// The last poll reading failed (the next failures log at debug).
+  polls_failing: bool,
   /// The pinned item unfolded over the chat.
   unfolded: Unfolded,
   /// A vote is on its way.
@@ -199,6 +205,8 @@ impl PointsView {
       outcome: None,
       outcome_of_bet: false,
       polls: Vec::new(),
+      voted: HashMap::new(),
+      polls_failing: false,
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
@@ -231,6 +239,16 @@ impl PointsView {
           None => return,
         }
         cx.background_executor().timer(PREDICTIONS_EVERY).await;
+      }
+    }));
+    // The poll, with or without points: every viewer sees it.
+    view._tasks.push(cx.spawn(async move |this, cx| {
+      loop {
+        let Ok(load) = this.update(cx, |this, cx| this.load_polls(cx)) else {
+          return;
+        };
+        load.await;
+        cx.background_executor().timer(POLLS_EVERY).await;
       }
     }));
     // A minute watched, after each minute played.
@@ -286,17 +304,65 @@ impl PointsView {
     self.off = false;
     self.load_points(cx).detach();
     self.load_predictions(cx).detach();
-    self.load_polls(cx);
+    self.load_polls(cx).detach();
   }
 
-  /// The channel's polls: the fake chat's; none on Twitch yet (its source is not captured).
-  #[cfg(debug_assertions)]
-  fn load_polls(&mut self, cx: &mut Context<Self>) {
-    if let Backend::Fake(fake) = &self.backend {
-      self.polls = fake.borrow().polls();
-      self.note_ended();
-      self.fold_gone();
-      cx.notify();
+  /// The channel's poll on screen: Twitch's (anonymous; a failed reading keeps the last one), or
+  /// the fake chat's.
+  fn load_polls(&mut self, cx: &mut Context<Self>) -> Task<()> {
+    let client = match &self.backend {
+      Backend::Twitch(client) => client.clone(),
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => {
+        self.polls = fake.borrow().polls();
+        self.polls_read(cx);
+        return Task::ready(());
+      }
+    };
+    let login = self.login.clone();
+    let fetch = runtime::spawn(cx, async move { client.poll(&login).await });
+    cx.spawn(async move |this, cx| {
+      let Some(result) = fetch.await else {
+        return;
+      };
+      this
+        .update(cx, |this, cx| {
+          match result {
+            Ok(poll) => {
+              this.polls = poll
+                .into_iter()
+                .map(|poll| {
+                  let voted = this.voted.get(&poll.id).cloned().unwrap_or_default();
+                  Poll::from_twitch(poll, voted)
+                })
+                .collect();
+              this.polls_failing = false;
+            }
+            Err(e) if this.polls_failing => tracing::debug!("Twitch poll: {e}"),
+            Err(e) => {
+              tracing::warn!("Twitch poll: {e}");
+              this.polls_failing = true;
+            }
+          }
+          this.polls_read(cx);
+        })
+        .ok();
+    })
+  }
+
+  /// The polls were read: the ended ones' time is noted, a gone one folds.
+  fn polls_read(&mut self, cx: &mut Context<Self>) {
+    self.note_ended();
+    self.fold_gone();
+    cx.notify();
+  }
+
+  /// Whether the viewer can vote: with the auth-token's account on Twitch.
+  fn can_vote(&self) -> bool {
+    match &self.backend {
+      Backend::Twitch(_) => self.points.as_ref().is_some_and(|p| p.viewer_id.is_some()),
+      #[cfg(debug_assertions)]
+      Backend::Fake(_) => true,
     }
   }
 
@@ -357,12 +423,17 @@ impl PointsView {
       return;
     }
     let send: Later<()> = match &self.backend {
-      // Unreachable while Twitch's polls are not read: none shows.
-      Backend::Twitch(_) => {
-        tracing::debug!("Twitch poll vote ({poll}, {choice}): polls are not read from Twitch yet");
-        Box::pin(std::future::ready(Some(Err(twitch::Error::Refused(
-          "POLLS_NOT_SUPPORTED".into(),
-        )))))
+      Backend::Twitch(client) => {
+        // The choices only show as votable with it.
+        let Some(user) = self.points.as_ref().and_then(|p| p.viewer_id.clone()) else {
+          return;
+        };
+        let (client, poll, choice) = (client.clone(), poll.clone(), choice.clone());
+        // 32 hex digits, new for each vote, as a spend's transaction id.
+        let vote_id = uuid::Uuid::new_v4().simple().to_string();
+        Box::pin(runtime::spawn(cx, async move {
+          client.vote(&poll, &choice, &user, &vote_id).await
+        }))
       }
       #[cfg(debug_assertions)]
       Backend::Fake(fake) => {
@@ -370,6 +441,7 @@ impl PointsView {
           fake.clone(),
           cx.background_executor().timer(FAKE_SPEND_DELAY),
         );
+        let (poll, choice) = (poll.clone(), choice.clone());
         Box::pin(async move {
           wait.await;
           Some(fake.borrow_mut().vote(&poll, &choice))
@@ -384,12 +456,25 @@ impl PointsView {
       this
         .update(cx, |this, cx| {
           this.voting = false;
-          if let Some(Err(e)) = result {
-            tracing::warn!("Twitch poll vote: {e}");
-            this.vote_error = Some(refusal(&e).into());
+          match result {
+            Some(Ok(())) => {
+              // Twitch does not give it back: kept for the session.
+              this
+                .voted
+                .entry(poll.clone())
+                .or_default()
+                .push(choice.clone());
+              if let Some(shown) = this.polls.iter_mut().find(|p| p.id == poll) {
+                shown.voted.push(choice);
+              }
+            }
+            Some(Err(e)) => {
+              tracing::warn!("Twitch poll vote: {e}");
+              this.vote_error = Some(refusal(&e).into());
+            }
+            None => {}
           }
-          #[cfg(debug_assertions)]
-          this.load_polls(cx);
+          this.load_polls(cx).detach();
           cx.notify();
         })
         .ok();
@@ -986,7 +1071,8 @@ impl PointsView {
   /// viewer has not voted, a click on a choice (lit up under the pointer) votes for it.
   fn poll_body(&self, poll: &Poll, cx: &mut Context<Self>) -> AnyElement {
     let total = poll.total();
-    let open = !poll.ended && poll.voted.is_none();
+    let can_vote = self.can_vote();
+    let open = can_vote && poll.choices.iter().any(|c| poll.votable(&c.id));
     let winner = poll
       .ended
       .then(|| poll.winner().map(|c| c.id.clone()))
@@ -998,11 +1084,11 @@ impl PointsView {
       } else {
         0.0
       };
-      let mine = poll.voted.as_deref() == Some(choice.id.as_str());
+      let mine = poll.voted.iter().any(|c| c == &choice.id);
       let won = winner.as_deref() == Some(choice.id.as_str());
       let (poll_id, choice_id) = (poll.id.clone(), choice.id.clone());
       // While it takes the viewer's vote, the whole choice is the button.
-      let votable = open && !self.voting;
+      let votable = can_vote && poll.votable(&choice.id) && !self.voting;
       choices =
         choices.child(
           v_flex()
@@ -1080,9 +1166,27 @@ impl PointsView {
     v_flex()
       .gap_2()
       .when(open, |el| {
+        el.child(div().text_xs().text_color(theme::muted()).child(
+          match (poll.multichoice, poll.subscriber_only) {
+            (true, _) => t(
+              "Click the choices to vote for: several are allowed.",
+              "Cliquez sur les choix pour lesquels voter : plusieurs sont permis.",
+            ),
+            (false, true) => t(
+              "Click a choice to vote (subscribers only).",
+              "Cliquez sur un choix pour voter (abonnés uniquement).",
+            ),
+            (false, false) => t(
+              "Click a choice to vote.",
+              "Cliquez sur un choix pour voter.",
+            ),
+          },
+        ))
+      })
+      .when(!can_vote && !poll.ended, |el| {
         el.child(div().text_xs().text_color(theme::muted()).child(t(
-          "Click a choice to vote.",
-          "Cliquez sur un choix pour voter.",
+          "Add the Twitch site token in the settings to vote.",
+          "Ajoutez le jeton du site Twitch dans les réglages pour voter.",
         )))
       })
       .child(choices)

@@ -344,9 +344,25 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     last ended one, hours old or not. Peeby asks for the newest one in the same query as the
     others and pins it with its winner for 20 s from when it first reads it ended, only if it
     ended in the last 2 minutes.
-  - **Polls: not captured yet [?].** Peeby shows them over the chat beside the predictions
-    (`spaces::twitch::polls`), but only the fake chat fills them. Before reading a live's polls, save
-    a redacted answer from the query that gives them, then write its parser (CLAUDE.md).
+  - **Polls**, checked on 2026-11-04, anonymous (`twitch_capture -- gql-probe`, `-- polls-scan
+    --watch`, `-- poll <login>`; introspection is disabled, so the fields were found from GQL's
+    validation messages):
+    - `user(login) { viewablePoll }` (not on `Channel`) is the poll on screen, null without one:
+      `id title status startedAt endedAt durationSeconds remainingDurationMilliseconds totalVoters
+      votes { total } choices { id title totalVoters votes { total base bits communityPoints } }
+      settings { communityPointsVotes bitsVotes { isEnabled cost } subscriberOnly multichoice {
+      isEnabled } }`. Seen: `ACTIVE`, then `COMPLETED` with `endedAt`; a completed poll stays
+      viewable a while. It answers anonymous, so Peeby reads it every 10 s, with or without the
+      auth-token.
+    - `self` (`PollSelfEdge`, `PollChoiceSelfEdge`) answers none of about 30 guessed fields: the
+      viewer's own votes are not read back, Peeby remembers those it sent for the session.
+    - `voteInPoll(input: { pollID, choiceID, voteID, userID })` votes and answers
+      `{ error { code } }`; anonymous, Twitch answers `unauthenticated` before anything happens.
+      `tokens: { bits, channelPoints }` would be a paid vote: Peeby never sends it. A real vote
+      was **not** tried (it writes from the account): whether it passes Twitch's integrity check is
+      **[?]**.
+    - The top lives page holds 30 at most (`streams(first: 30)`, `options: { languages: [FR] }`),
+      and a query takes 15 root aliases at most.
   - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
     automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
 - **Spends, raw mutations** (checked with made-up ids, so nothing was spent):
@@ -381,7 +397,8 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   `community-points-user-v1.<id>`, `predictions-channel-v1.<id>`) **[src]**. Whether PubSub still
   serves them is **[?]**. Peeby polls instead.
 - Fixtures: `gql_points_context.json` (balance replaced by 12345), `gql_predictions_active.json`,
-  `gql_predictions_locked.json`, `gql_predictions_resolved.json` (anonymous, request ids removed), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
+  `gql_predictions_locked.json`, `gql_predictions_resolved.json`, `gql_poll.json`,
+  `gql_poll_completed.json`, `gql_vote_unauthenticated.json` (anonymous, request ids removed), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
   Request ids are redacted. Rewards and predictions are the channels' public data.
 
 ## Checked live on 2026-11-01

@@ -20,6 +20,7 @@ mod fallback;
 pub mod gql;
 pub mod helix;
 pub mod points;
+pub mod polls;
 mod proxy;
 pub mod seventv;
 pub mod spade;

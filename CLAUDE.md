@@ -36,7 +36,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   variants with every codec and the auth-token and saves its master redacted, without spending the refresh token;
   `-- master-scan` lists the top lives offering HEVC/AV1; `-- positions <vod-id>…` saves the account's resume
   positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
-  the auth-token signs in to IRC, sending nothing; `-- predictions-ended <login>` probes, anonymous,
+  the auth-token signs in to IRC, sending nothing; `-- polls-scan [--watch [min]]` finds a top live with a poll and `-- poll <login>`
+  saves it, anonymous; `-- gql-probe '<query>' [login]` prints GQL's validation messages (introspection is
+  off); `-- predictions-ended <login>` probes, anonymous,
   the GQL fields of ended predictions and saves the app's predictions answer)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Fake Twitch chat with every chat feature, nothing sent to Twitch (debug builds): "Faux chat" in the Twitch
@@ -130,6 +132,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Chat: emote ranges count code points (`char`s), never byte or UTF-16 offsets. Chat fixtures are public
   channels' lines with every chatter renamed (`viewerN`, as long as the name it replaces, so that ranges
   still fit), mentions and quoted replies included.
+- Voting in a poll (`voteInPoll`) writes from the account: ask before a vote test. Never send `tokens`
+  (a vote paid with bits or points).
 - Channel points (ADR 0012): every spend (reward, bet) waits for a second click and never happens on its
   own. `claimCommunityPoints` fails Twitch's integrity check: never route around it (another Client-ID,
   minted integrity tokens); the bonus is claimed on twitch.tv. `minute-watched` (spade) is sent only for

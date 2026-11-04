@@ -1,7 +1,8 @@
-//! A channel's polls, pinned over its chat beside its predictions (`points::PointsView`). Only
-//! the debug builds' fake chat fills them for now: Twitch's source for a live's polls is not
-//! captured yet (CLAUDE.md: a saved response before its parser), so a live shows none.
-//! Polls are seen by every viewer, with or without points; a free vote takes one click.
+//! A channel's polls, pinned over its chat beside its predictions (`points::PointsView`): a
+//! live's from Twitch (`twitch::polls`, read every 10 s, anonymous), or the fake chat's. Polls
+//! are seen by every viewer, with or without points; a free vote takes one click and needs the
+//! auth-token. Twitch does not give the viewer's own votes back: Peeby remembers those it sent
+//! for the session.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,8 +23,12 @@ pub struct Poll {
   pub ended: bool,
   /// When it ended, Unix milliseconds, when known.
   pub ended_at: Option<i64>,
-  /// The viewer's choice, by id.
-  pub voted: Option<String>,
+  /// The viewer's choices, by id.
+  pub voted: Vec<String>,
+  /// A viewer may vote for several choices.
+  pub multichoice: bool,
+  /// Only subscribers vote.
+  pub subscriber_only: bool,
 }
 
 /// One answer of a poll.
@@ -35,6 +40,38 @@ pub struct Choice {
 }
 
 impl Poll {
+  /// A live's poll from Twitch, with the choices the viewer voted for.
+  pub fn from_twitch(poll: twitch::polls::Poll, voted: Vec<String>) -> Self {
+    Self {
+      id: poll.id,
+      title: poll.title,
+      choices: poll
+        .choices
+        .into_iter()
+        .map(|c| Choice {
+          id: c.id,
+          title: c.title,
+          votes: c.votes,
+        })
+        .collect(),
+      started_at: poll.started_at.unwrap_or(0),
+      duration_seconds: poll.duration_seconds,
+      ended: !poll.active,
+      ended_at: poll.ended_at,
+      voted,
+      multichoice: poll.multichoice,
+      subscriber_only: poll.subscriber_only,
+    }
+  }
+
+  /// Whether `choice` can take the viewer's vote: the poll runs, and they have not voted yet (for
+  /// it, when several choices are allowed).
+  pub fn votable(&self, choice: &str) -> bool {
+    !self.ended
+      && !self.voted.iter().any(|c| c == choice)
+      && (self.voted.is_empty() || self.multichoice)
+  }
+
   /// Seconds left to vote; `None` once ended.
   pub fn remaining(&self, now_millis: i64) -> Option<i64> {
     if self.ended {
@@ -84,7 +121,7 @@ impl Poll {
       },
       Some(left) => {
         let left = ui::player::format_time(left as f64);
-        if self.voted.is_some() {
+        if !self.voted.is_empty() {
           tf!("Voted · {left}", "A voté · {left}")
         } else {
           tf!("Voting open · {left}", "Vote ouvert · {left}")
@@ -126,7 +163,9 @@ mod tests {
       duration_seconds: 60,
       ended: false,
       ended_at: None,
-      voted: None,
+      voted: Vec::new(),
+      multichoice: false,
+      subscriber_only: false,
     }
   }
 
@@ -138,7 +177,10 @@ mod tests {
     assert_eq!(p.status(20_000), "Voting open · 0:40");
     assert_eq!(p.time_left(15_000), Some(0.75));
     assert_eq!(p.time_left(70_000), Some(0.));
-    p.voted = Some("1".into());
+    p.voted = vec!["1".into()];
+    assert!(!p.votable("0"));
+    p.multichoice = true;
+    assert!(p.votable("0") && !p.votable("1"));
     assert_eq!(p.status(20_000), "Voted · 0:40");
     p.ended = true;
     assert_eq!(p.time_left(15_000), None);

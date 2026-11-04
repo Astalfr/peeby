@@ -1,0 +1,71 @@
+{
+  "data": {
+    "user": {
+      "id": "100590241",
+      "viewablePoll": {
+        "id": "a06589b9-97ed-44b2-ac54-b52a9942965b",
+        "title": "Après le challenge vous allez vous laver ?",
+        "status": "COMPLETED",
+        "startedAt": "2026-11-04T20:31:12.242779507Z",
+        "endedAt": "2026-11-04T20:34:12.242779507Z",
+        "durationSeconds": 180,
+        "remainingDurationMilliseconds": 0,
+        "totalVoters": 44,
+        "votes": {
+          "total": 44
+        },
+        "choices": [
+          {
+            "id": "e3a6baff-5239-46bd-9670-f7d3f4f72a88",
+            "title": "Oui",
+            "totalVoters": 5,
+            "votes": {
+              "total": 5,
+              "base": 5,
+              "bits": 0,
+              "communityPoints": 0
+            }
+          },
+          {
+            "id": "baceb402-ab1a-4f70-aa79-0d0df4a65d17",
+            "title": "Non",
+            "totalVoters": 8,
+            "votes": {
+              "total": 8,
+              "base": 8,
+              "bits": 0,
+              "communityPoints": 0
+            }
+          },
+          {
+            "id": "5fd6426f-99db-49c3-bf99-aeb9b768c703",
+            "title": "Hmmm je sens pas, pk ?",
+            "totalVoters": 31,
+            "votes": {
+              "total": 31,
+              "base": 31,
+              "bits": 0,
+              "communityPoints": 0
+            }
+          }
+        ],
+        "settings": {
+          "communityPointsVotes": {
+            "isEnabled": false,
+            "cost": 0
+          },
+          "bitsVotes": {
+            "isEnabled": false,
+            "cost": 0
+          },
+          "subscriberOnly": {
+            "isEnabled": false
+          },
+          "multichoice": {
+            "isEnabled": true
+          }
+        }
+      }
+    }
+  }
+}
