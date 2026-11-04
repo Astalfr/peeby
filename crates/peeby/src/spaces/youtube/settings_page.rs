@@ -84,8 +84,8 @@ pub fn part(
         row(
           t("Original titles", "Titres originaux"),
           t(
-            "Titles in the video's own language, as its channel wrote them, instead of the ones              YouTube translates into the content language. Each video takes one more request.",
-            "Titres dans la langue de la vidéo, tels que sa chaîne les a écrits, plutôt que              ceux que YouTube traduit dans la langue du contenu. Chaque vidéo demande une              requête de plus.",
+            "Titles in the video's own language, as its channel wrote them, instead of the ones YouTube translates into the content language. Each video takes one more request.",
+            "Titres dans la langue de la vidéo, tels que sa chaîne les a écrits, plutôt que ceux que YouTube traduit dans la langue du contenu. Chaque vidéo demande une requête de plus.",
           ),
           toggle("original-titles", settings.original_titles, move |on, cx| {
             Settings::update(cx, |s| s.original_titles = on);
@@ -114,8 +114,8 @@ pub fn part(
           "youtube-notify-video",
           t("New video", "Nouvelle vidéo"),
           t(
-            "What YouTube sends for the channels whose bell is on (All or Personalized),              Shorts included. Signed in; checked every three minutes.",
-            "Ce qu'envoie YouTube pour les chaînes dont la cloche est activée (Toutes ou              Personnalisées), Shorts compris. Connecté ; relevé toutes les trois minutes.",
+            "What YouTube sends for the channels whose bell is on (All or Personalized), Shorts included. Signed in; checked every three minutes.",
+            "Ce qu'envoie YouTube pour les chaînes dont la cloche est activée (Toutes ou Personnalisées), Shorts compris. Connecté ; relevé toutes les trois minutes.",
           ),
           |n| &mut n.youtube_video,
           cx,

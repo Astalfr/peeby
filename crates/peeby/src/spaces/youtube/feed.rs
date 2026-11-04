@@ -443,8 +443,8 @@ impl FeedView {
           .clone()
           .unwrap_or_else(|| t("No history", "Aucun historique").into()),
         t(
-          "The videos watched on this account appear here, unless the watch history is turned            off.",
-          "Les vidéos regardées sur ce compte apparaissent ici, sauf si l'historique des vidéos            regardées est désactivé.",
+          "The videos watched on this account appear here, unless the watch history is turned off.",
+          "Les vidéos regardées sur ce compte apparaissent ici, sauf si l'historique des vidéos regardées est désactivé.",
         )
         .to_owned(),
       ),

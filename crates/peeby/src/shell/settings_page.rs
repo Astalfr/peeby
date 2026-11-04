@@ -208,8 +208,8 @@ fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
       row(
         t("Keep running in the background", "Rester en arrière-plan"),
         t(
-          "Closing the window keeps Peeby in the notification area, for the notifications;            its icon's menu quits. Off, closing the window quits.",
-          "Fermer la fenêtre garde Peeby dans la zone de notification, pour les notifications ;            le menu de son icône le ferme. Désactivé, fermer la fenêtre quitte Peeby.",
+          "Closing the window keeps Peeby in the notification area, for the notifications; its icon's menu quits. Off, closing the window quits.",
+          "Fermer la fenêtre garde Peeby dans la zone de notification, pour les notifications ; le menu de son icône le ferme. Désactivé, fermer la fenêtre quitte Peeby.",
         ),
         toggle("close-to-tray", settings.close_to_tray, |v, cx| {
           Settings::update(cx, |s| s.close_to_tray = v)

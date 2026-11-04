@@ -359,12 +359,18 @@ impl Render for AccountCard {
       .child(div().text_sm().text_color(theme::muted()).child(if waiting {
         t(
           "Sign in in the window that opened. It closes by itself once you are signed in.",
-          "Connectez-vous dans la fenêtre qui s'est ouverte. Elle se ferme d'elle-même une fois            connecté.",
+          "Connectez-vous dans la fenêtre qui s'est ouverte. Elle se ferme d'elle-même une fois \
+           connecté.",
         )
       } else {
         t(
-          "Sign in on twitch.tv, in a window Peeby opens: your password goes to Twitch only.            Videos then play as your account (where you stopped in VODs, channel points, Turbo            and subscriptions), and your followed channels can be connected here.",
-          "Connectez-vous sur twitch.tv, dans une fenêtre que Peeby ouvre : votre mot de passe            ne va qu'à Twitch. Les vidéos se lisent alors avec votre compte (reprise des VOD,            points de chaîne, Turbo et abonnements), et vos chaînes suivies peuvent être            connectées ici.",
+          "Sign in on twitch.tv, in a window Peeby opens: your password goes to Twitch only. \
+           Videos then play as your account (where you stopped in VODs, channel points, Turbo \
+           and subscriptions), and your followed channels can be connected here.",
+          "Connectez-vous sur twitch.tv, dans une fenêtre que Peeby ouvre : votre mot de passe \
+           ne va qu'à Twitch. Les vidéos se lisent alors avec votre compte (reprise des VOD, \
+           points de chaîne, Turbo et abonnements), et vos chaînes suivies peuvent être \
+           connectées ici.",
         )
       }))
       .child(

@@ -316,8 +316,8 @@ fn notifications_section(cx: &gpui::App) -> AnyElement {
         "twitch-notify-live",
         t("A followed channel goes live", "Une chaîne suivie passe en direct"),
         t(
-          "In Peeby's bell, and as a Windows notification with the channel's picture. Needs            the followed channels' connection.",
-          "Dans la cloche de Peeby, et en notification Windows avec l'image de la chaîne.            Demande la connexion des chaînes suivies.",
+          "In Peeby's bell, and as a Windows notification with the channel's picture. Needs the followed channels' connection.",
+          "Dans la cloche de Peeby, et en notification Windows avec l'image de la chaîne. Demande la connexion des chaînes suivies.",
         ),
         |n| &mut n.twitch_live,
         cx,
