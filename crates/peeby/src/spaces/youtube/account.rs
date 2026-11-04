@@ -315,98 +315,101 @@ impl Render for AccountView {
               )
             }),
         )
-        .child(
-          v_flex()
-            .gap_4()
-            .p_5()
-            .rounded(theme::RADIUS_LG)
-            .border_1()
-            .border_color(theme::border())
-            .text_sm()
-            .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
-              "Sign in with your Google account",
-              "Se connecter avec son compte Google",
-            )))
-            .child(div().text_color(theme::muted()).child(t(
-              "A window opens on Google's sign-in page. Your password goes to Google only: Peeby \
+        // Signed in: the ways to sign in are hidden until "Sign out" (an expired session too).
+        .when(!self.signed_in, |el| {
+          el.child(
+            v_flex()
+              .gap_4()
+              .p_5()
+              .rounded(theme::RADIUS_LG)
+              .border_1()
+              .border_color(theme::border())
+              .text_sm()
+              .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
+                "Sign in with your Google account",
+                "Se connecter avec son compte Google",
+              )))
+              .child(div().text_color(theme::muted()).child(t(
+                "A window opens on Google's sign-in page. Your password goes to Google only: Peeby \
                keeps the session cookies once you are signed in, then closes the window.",
-              "Une fenêtre s'ouvre sur la page de connexion de Google. Votre mot de passe ne va \
+                "Une fenêtre s'ouvre sur la page de connexion de Google. Votre mot de passe ne va \
                qu'à Google : Peeby garde les cookies de la session une fois connecté, puis ferme \
                la fenêtre.",
-            )))
-            .child(
-              h_flex().child(
-                Button::new("sign-in")
-                  .primary()
-                  .label(if waiting {
-                    t("Waiting for the sign-in…", "En attente de la connexion…")
-                  } else if checking {
-                    t("Checking…", "Vérification…")
-                  } else {
-                    t("Sign in to YouTube…", "Se connecter à YouTube…")
-                  })
-                  .loading(busy)
-                  .disabled(busy)
-                  .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+              )))
+              .child(
+                h_flex().child(
+                  Button::new("sign-in")
+                    .primary()
+                    .label(if waiting {
+                      t("Waiting for the sign-in…", "En attente de la connexion…")
+                    } else if checking {
+                      t("Checking…", "Vérification…")
+                    } else {
+                      t("Sign in to YouTube…", "Se connecter à YouTube…")
+                    })
+                    .loading(busy)
+                    .disabled(busy)
+                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+                ),
               ),
-            ),
-        )
-        .child(
-          v_flex()
-            .gap_4()
-            .p_5()
-            .rounded(theme::RADIUS_LG)
-            .border_1()
-            .border_color(theme::border())
-            .text_sm()
-            .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
-              "Or import the cookies of youtube.com by hand (Netscape format)",
-              "Ou importer les cookies de youtube.com à la main (format Netscape)",
-            )))
-            .child(
-              v_flex()
-                .gap_3()
-                .text_color(theme::muted())
-                .child(step(
-                  1,
-                  t(
-                    "Open a private browsing window and sign in to YouTube.",
-                    "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
-                  ),
-                ))
-                .child(step(
-                  2,
-                  t(
-                    "In the same tab, go to youtube.com/robots.txt, then export the cookies \
+          )
+          .child(
+            v_flex()
+              .gap_4()
+              .p_5()
+              .rounded(theme::RADIUS_LG)
+              .border_1()
+              .border_color(theme::border())
+              .text_sm()
+              .child(div().font_weight(FontWeight::SEMIBOLD).child(t(
+                "Or import the cookies of youtube.com by hand (Netscape format)",
+                "Ou importer les cookies de youtube.com à la main (format Netscape)",
+              )))
+              .child(
+                v_flex()
+                  .gap_3()
+                  .text_color(theme::muted())
+                  .child(step(
+                    1,
+                    t(
+                      "Open a private browsing window and sign in to YouTube.",
+                      "Ouvrez une fenêtre de navigation privée et connectez-vous à YouTube.",
+                    ),
+                  ))
+                  .child(step(
+                    2,
+                    t(
+                      "In the same tab, go to youtube.com/robots.txt, then export the cookies \
                      with the \"Get cookies.txt LOCALLY\" extension.",
-                    "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
+                      "Dans le même onglet, allez sur youtube.com/robots.txt, puis exportez les \
                      cookies avec l'extension « Get cookies.txt LOCALLY ».",
-                  ),
-                ))
-                .child(step(
-                  3,
-                  t(
-                    "Close the private window without signing out, then import the file here.",
-                    "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
+                    ),
+                  ))
+                  .child(step(
+                    3,
+                    t(
+                      "Close the private window without signing out, then import the file here.",
+                      "Fermez la fenêtre privée sans vous déconnecter, puis importez le fichier \
                      ici.",
-                  ),
-                )),
-            )
-            .child(div().text_xs().text_color(theme::subtle()).child(t(
-              "Peeby keeps the cookies up to date when YouTube renews them. This file \
+                    ),
+                  )),
+              )
+              .child(div().text_xs().text_color(theme::subtle()).child(t(
+                "Peeby keeps the cookies up to date when YouTube renews them. This file \
                  gives access to your account: do not share it.",
-              "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
+                "Peeby garde les cookies à jour quand YouTube les renouvelle. Ce fichier \
                  donne accès à votre compte : ne le partagez pas.",
-            )))
-            .child(
-              h_flex().child(
-                Button::new("import")
-                  .label(t("Import cookies.txt…", "Importer cookies.txt…"))
-                  .disabled(busy)
-                  .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),
+              )))
+              .child(
+                h_flex().child(
+                  Button::new("import")
+                    .label(t("Import cookies.txt…", "Importer cookies.txt…"))
+                    .disabled(busy)
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_file(cx))),
+                ),
               ),
-            ),
-        )
+          )
+        })
         .children(message.map(|(text, color)| div().text_color(color).child(text))),
     )
   }
