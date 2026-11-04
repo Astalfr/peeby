@@ -11,7 +11,7 @@ use gpui::{
   Window, div, px, uniform_list,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 
@@ -29,6 +29,8 @@ const PER_ROW: usize = 8;
 const CELL: f32 = 38.;
 /// Height of the picker's grid.
 const PICKER_HEIGHT: f32 = 300.;
+/// Room kept at the field's right for the picker's button.
+const PICKER_BUTTON: f32 = 36.;
 /// The length counter shows from this share of the limit on.
 const COUNTER_FROM: f32 = 0.8;
 
@@ -77,7 +79,7 @@ pub(super) struct Composer {
   /// The longest message, in `char`s.
   max_chars: usize,
   /// Made at the first render (it needs the window), as the search field.
-  input: Option<Entity<InputState>>,
+  input: Option<Entity<TextareaState>>,
   search: Option<Entity<InputState>>,
   groups: Vec<EmoteGroup>,
   footer: Option<AnyView>,
@@ -240,13 +242,32 @@ impl ChatPanel {
     cx.notify();
   }
 
-  fn set_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
+  fn set_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(composer) = &mut self.composer {
       composer.tab = tab;
       composer.hovered = None;
       composer.make_rows(cx);
       cx.notify();
     }
+    self.focus_search(window, cx);
+  }
+
+  /// Puts the cursor in the picker's search, on the emotes' tab (the only one with a search).
+  /// Deferred: the popover takes the focus for its content as it opens.
+  fn focus_search(&self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(composer) = &self.composer else {
+      return;
+    };
+    let Some(search) = composer
+      .search
+      .clone()
+      .filter(|_| composer.tab == Tab::Emotes)
+    else {
+      return;
+    };
+    window.defer(cx, move |window, cx| {
+      search.update(cx, |search, cx| search.focus(window, cx));
+    });
   }
 
   /// The writing area, under the messages; `None` without a composer.
@@ -258,7 +279,11 @@ impl ChatPanel {
     let composer = self.composer.as_mut()?;
     if composer.input.is_none() {
       let input = cx.new(|cx| {
-        InputState::new(window, cx).placeholder(t("Send a message", "Envoyer un message"))
+        // Two lines high; Enter sends (Shift+Enter's line break leaves as a space).
+        TextareaState::new(window, cx)
+          .rows(2)
+          .submit_on_enter(true)
+          .placeholder(t("Send a message", "Envoyer un message"))
       });
       composer._subscriptions.push(cx.subscribe_in(
         &input,
@@ -297,12 +322,20 @@ impl ChatPanel {
     };
     let footer = composer.footer.clone();
     let this = cx.entity().downgrade();
+    let opened = this.clone();
     let picker = Popover::new("chat-picker")
       .anchor(Anchor::BottomRight)
+      .on_open_change(move |open, window, cx| {
+        if *open {
+          opened
+            .update(cx, |this, cx| this.focus_search(window, cx))
+            .ok();
+        }
+      })
       .trigger(
         Button::new("chat-picker-open")
           .ghost()
-          .xsmall()
+          .small()
           .icon(Icon::Smile)
           .disabled(off)
           .tooltip(t("Emotes and emoji", "Emotes et emoji")),
@@ -332,7 +365,18 @@ impl ChatPanel {
         .border_t_1()
         .border_color(theme::border())
         .children(hint.map(|hint| div().text_xs().text_color(theme::muted()).child(hint)))
-        .child(Input::new(&input).small().disabled(off).suffix(picker))
+        .child(
+          // The picker's button inside the field, at its top right; the text keeps clear of it.
+          div()
+            .relative()
+            .child(
+              Textarea::new(&input)
+                .small()
+                .pr(px(PICKER_BUTTON))
+                .disabled(off),
+            )
+            .child(div().absolute().top_1().right_1().child(picker)),
+        )
         .child(
           h_flex()
             .gap_2()
@@ -343,6 +387,7 @@ impl ChatPanel {
               Button::new("chat-send")
                 .primary()
                 .small()
+                .px_4()
                 .label(t("Send", "Envoyer"))
                 .disabled(!ready || length == 0 || length > max)
                 .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
@@ -366,7 +411,7 @@ impl ChatPanel {
         .when(tab == which, |b| b.primary())
         .when(tab != which, |b| b.ghost())
         .label(label)
-        .on_click(cx.listener(move |this, _, _, cx| this.set_tab(which, cx)))
+        .on_click(cx.listener(move |this, _, window, cx| this.set_tab(which, window, cx)))
     };
     let grid = if empty {
       div()
