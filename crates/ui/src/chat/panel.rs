@@ -170,6 +170,20 @@ const ENTER_SLIDE: f32 = 10.;
 const ENTER: Duration = theme::NORMAL;
 /// Lines arriving together beyond this many (the history on joining) show at once.
 const ENTER_MAX_BATCH: usize = 30;
+/// Time constant of the glide toward the newest line: the distance left shrinks by e every
+/// this long, so a line rises in about 3 of them, and a fast chat scrolls steadily.
+const GLIDE_TAU: f32 = 0.06;
+/// The glide never lags further behind the newest line than this, logical pixels: the rest is
+/// jumped at once.
+const GLIDE_MAX_LAG: f32 = 160.;
+
+/// A smooth scroll toward the end of the list, see [`ChatPanel::glide`].
+struct Glide {
+  /// The previous frame, for the step's length.
+  last: Instant,
+  /// Frames in a row that found nothing left to scroll.
+  idle: u8,
+}
 
 /// The chat panel: see the module documentation. Its page feeds it with [`ChatPanel::push`]. It
 /// draws no background nor frame: its container does (`watch_layout`).
@@ -180,6 +194,9 @@ pub struct ChatPanel {
   /// Arrived while scrolled up, shown on resuming.
   held: VecDeque<ChatMessage>,
   list: ListState,
+  /// Following, but scrolling smoothly to the newest lines instead of jumping there: the
+  /// list's own following is paused meanwhile, and comes back on reaching the end.
+  glide: Option<Glide>,
   modes: Vec<SharedString>,
   status: Option<SharedString>,
   title: SharedString,
@@ -193,11 +210,19 @@ impl ChatPanel {
     }
     let list = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
     list.set_follow_mode(FollowMode::Tail);
+    // The wheel takes over from a glide (the list's own scrolls do not call this).
+    let panel = cx.entity().downgrade();
+    list.set_scroll_handler(move |_, _, cx| {
+      if let Some(panel) = panel.upgrade() {
+        panel.update(cx, |panel, _| panel.glide = None);
+      }
+    });
     Self {
       messages: VecDeque::new(),
       arrived: VecDeque::new(),
       held: VecDeque::new(),
       list,
+      glide: None,
       modes: Vec::new(),
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
       title: t("Live chat", "Chat du live").into(),
@@ -213,7 +238,7 @@ impl ChatPanel {
   /// Applies a batch of events: give it everything that arrived since the last frame, so that
   /// the list is spliced once.
   pub fn push(&mut self, events: impl IntoIterator<Item = ChatEvent>, cx: &mut Context<Self>) {
-    let following = self.list.is_following_tail();
+    let following = self.following();
     if following {
       self.resume_held();
     }
@@ -241,6 +266,8 @@ impl ChatPanel {
           self.arrived.clear();
           self.held.clear();
           self.list.reset(0);
+          self.list.set_follow_mode(FollowMode::Tail);
+          self.glide = None;
           added = 0;
         }
         ChatEvent::State(modes) => self.modes = modes,
@@ -249,6 +276,15 @@ impl ChatPanel {
     }
     if added > 0 {
       let enter = (added <= ENTER_MAX_BATCH).then(Instant::now);
+      // Glide to them (the history on joining is jumped to): pausing before the splice keeps
+      // the lines on screen where they are, the glide then brings the new ones up.
+      if enter.is_some() && !cx.reduce_motion() && self.glide.is_none() {
+        self.list.pause_following_tail();
+        self.glide = Some(Glide {
+          last: Instant::now(),
+          idle: 0,
+        });
+      }
       self.arrived.extend(std::iter::repeat_n(enter, added));
       let end = self.messages.len();
       self.list.splice(end - added..end - added, added);
@@ -293,9 +329,52 @@ impl ChatPanel {
     }
   }
 
+  /// Whether new lines join the list: following its end, or gliding to it.
+  fn following(&self) -> bool {
+    self.glide.is_some() || self.list.is_following_tail()
+  }
+
+  /// One frame of the glide: a step toward the end, easing out. It ends when the list
+  /// follows its end again, which it does on its own on reaching it.
+  fn step_glide(&mut self, window: &mut Window) {
+    let Some(glide) = self.glide.as_mut() else {
+      return;
+    };
+    if self.list.is_following_tail() {
+      self.glide = None;
+      return;
+    }
+    let now = Instant::now();
+    let dt = now.duration_since(glide.last).as_secs_f32().min(0.05);
+    glide.last = now;
+    let end = self.list.max_offset_for_scrollbar().y;
+    let at = -self.list.scroll_px_offset_for_scrollbar().y;
+    let left = f32::from(end - at);
+    if left <= 0.5 {
+      // Lines just spliced are measured by the next layout: nothing is left before it. Two
+      // frames in a row with nothing left end the glide.
+      glide.idle += 1;
+      if glide.idle >= 2 {
+        self.glide = None;
+        self.list.set_follow_mode(FollowMode::Tail);
+        return;
+      }
+      if left > 0. {
+        self.list.scroll_by(px(left));
+      }
+    } else {
+      glide.idle = 0;
+      let lag = (left - GLIDE_MAX_LAG).max(0.);
+      let step = (left - lag) * (1. - (-dt / GLIDE_TAU).exp());
+      self.list.scroll_by(px(lag + step.max(0.5).min(left - lag)));
+    }
+    window.request_animation_frame();
+  }
+
   fn resume(&mut self, cx: &mut Context<Self>) {
     self.resume_held();
     self.trim();
+    self.glide = None;
     self.list.set_follow_mode(FollowMode::Tail);
     cx.notify();
   }
@@ -490,8 +569,9 @@ impl ChatPanel {
 }
 
 impl Render for ChatPanel {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let following = self.list.is_following_tail();
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    self.step_glide(window);
+    let following = self.following();
     let held = self.held.len();
     // The room's modes behind an "i" on the right, shown on hover: several do not fit beside the
     // title.
@@ -582,13 +662,15 @@ impl Render for ChatPanel {
           .relative()
           .flex_1()
           .min_h_0()
+          // Around the list rather than on it: the glide aims at the end from its items' height,
+          // which leaves out the list's own padding.
+          .py_1()
           .child(
             list(
               self.list.clone(),
               cx.processor(|this, ix, window, cx| this.render_message(ix, window, cx)),
             )
-            .size_full()
-            .py_1(),
+            .size_full(),
           )
           .when(empty && self.status.is_none(), |el| {
             el.child(
