@@ -104,6 +104,9 @@ struct Signed {
   user: Option<User>,
 }
 
+/// The space's id in the settings (`SpaceInfo::id`).
+pub const ID: &str = "jellyfin";
+
 pub struct JellyfinSpace {
   signed: Option<Signed>,
   /// The login page while signed out; built at the next render (it needs the window).
@@ -130,8 +133,8 @@ impl JellyfinSpace {
     }
   }
 
-  /// The space with one tab, on the saved session (`client`, restored before the UI started),
-  /// else on the login page.
+  /// The space on the saved session (`client`, restored before the UI started), else on the
+  /// login page; with one tab when the settings open one at startup.
   pub fn new(client: Option<Client>, cx: &mut Context<Self>) -> Self {
     // Avatars and the pages' images arrive through the image store.
     if let Some(images) = cx.try_global::<Images>().cloned() {
@@ -152,8 +155,10 @@ impl JellyfinSpace {
       leave_fullscreen: false,
       _login_subscription: None,
     };
-    let first = space.tabs.add(Vec::new(), None);
-    space.tabs.show(first);
+    if Settings::get(cx).opens_at_startup(ID) {
+      let first = space.tabs.add(Vec::new(), None);
+      space.tabs.show(first);
+    }
     if let Some(client) = client {
       space.sign_in(client, cx);
     }
@@ -507,6 +512,7 @@ impl Space for JellyfinSpace {
 
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
+      id: ID,
       name: "Jellyfin".into(),
       icon: include_bytes!("icon.svg"),
       accent: Self::accent(),

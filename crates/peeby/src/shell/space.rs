@@ -24,6 +24,8 @@ use ui::theme::Accent;
 /// How a space shows in the tabs.
 #[derive(Clone)]
 pub struct SpaceInfo {
+  /// Stable id, e.g. `youtube`, as the settings name the space (`startup_tabs`).
+  pub id: &'static str,
   /// Tab label, e.g. `YouTube`.
   pub name: SharedString,
   /// The service's logo on the tab: a colored SVG with a square view box.
@@ -351,16 +353,6 @@ impl<R> Tab<R> {
     self.push_entry(Entry::Page(page));
   }
 
-  /// Shows the settings page after the entry shown, unless they already show; `true` when
-  /// they were added.
-  pub fn push_settings(&mut self) -> bool {
-    if self.settings_shown() {
-      return false;
-    }
-    self.push_entry(Entry::Settings);
-    true
-  }
-
   fn push_entry(&mut self, entry: Entry<R>) {
     if !self.entries.is_empty() {
       self.entries.truncate(self.current + 1);
@@ -449,12 +441,23 @@ impl<R> Tab<R> {
     }
   }
 
-  /// Starts the history over on `routes`, the last one shown, each built when it shows.
+  /// Starts the history over on `routes`, the last one shown, each built when it shows. A tab
+  /// on the settings stays there (a sign-in from the settings): `routes` go before them, except
+  /// in the settings' own tab, which keeps them alone.
   pub fn reset(&mut self, routes: Vec<R>) {
-    self.entries = routes
-      .into_iter()
-      .map(|route| Entry::Page(Page::unbuilt(route)))
-      .collect();
+    let settings = self.settings_shown();
+    let settings_tab = settings && self.current == 0;
+    self.entries = if settings_tab {
+      Vec::new()
+    } else {
+      routes
+        .into_iter()
+        .map(|route| Entry::Page(Page::unbuilt(route)))
+        .collect()
+    };
+    if settings {
+      self.entries.push(Entry::Settings);
+    }
     if self.entries.len() > MAX_ENTRIES {
       self.entries.drain(..self.entries.len() - MAX_ENTRIES);
     }
@@ -494,6 +497,17 @@ impl<R> Tabs<R> {
       page.title = label;
     }
     self.list.push(tab);
+    id
+  }
+
+  /// A new tab on the settings page alone (the gear always opens them in a tab of their own).
+  pub fn add_settings(&mut self) -> TabId {
+    let id = TabId::next();
+    self.list.push(Tab {
+      id,
+      entries: vec![Entry::Settings],
+      current: 0,
+    });
     id
   }
 
@@ -570,7 +584,8 @@ pub enum SpaceEvent {
     after: Option<TabId>,
     focus: bool,
   },
-  /// Open the settings (a page's "import cookies" button, the account entry).
+  /// Open the settings in a tab of their own (a page's "import cookies" button, the account
+  /// entry).
   OpenSettings,
 }
 
@@ -651,16 +666,11 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
     cx.notify();
   }
 
-  /// Shows the settings page in `tab`, as an entry of its history. The page under it is not
-  /// covered: the shell moves a playing video to the mini-player.
-  fn push_settings(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    if self
-      .history_mut()
-      .get_mut(tab)
-      .is_some_and(Tab::push_settings)
-    {
-      cx.notify();
-    }
+  /// Opens a tab of the space on the settings page alone (the gear, a page's request).
+  fn settings_tab(&mut self, cx: &mut Context<Self>) -> TabId {
+    let id = self.history_mut().add_settings();
+    cx.notify();
+    id
   }
 
   /// Whether `tab` shows the settings page.
@@ -749,8 +759,8 @@ pub trait AnySpace {
   fn can_go_forward(&self, tab: TabId, cx: &App) -> bool;
   /// See [`Space::forward`].
   fn forward(&self, tab: TabId, cx: &mut App);
-  /// See [`Space::push_settings`].
-  fn push_settings(&self, tab: TabId, cx: &mut App);
+  /// See [`Space::settings_tab`].
+  fn settings_tab(&self, cx: &mut App) -> TabId;
   /// See [`Space::settings_shown`].
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool;
   /// See [`Space::searchable`].
@@ -839,8 +849,8 @@ impl<T: Space> AnySpace for Entity<T> {
     self.update(cx, |space, cx| space.forward(tab, cx));
   }
 
-  fn push_settings(&self, tab: TabId, cx: &mut App) {
-    self.update(cx, |space, cx| space.push_settings(tab, cx));
+  fn settings_tab(&self, cx: &mut App) -> TabId {
+    self.update(cx, |space, cx| space.settings_tab(cx))
   }
 
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool {
@@ -975,29 +985,41 @@ mod tests {
   }
 
   #[test]
-  fn the_settings_are_an_entry_of_the_history() {
+  fn the_settings_open_in_a_tab_of_their_own() {
     let mut tabs: Tabs<&str> = Tabs::default();
-    let id = tabs.add(vec!["watch"], None);
-    assert!(tab(&mut tabs, id).push_settings());
-    assert!(!tab(&mut tabs, id).push_settings());
+    let id = tabs.add_settings();
     let t = tabs.get(id).unwrap();
     assert!(t.settings_shown());
+    assert!(!t.can_go_back());
     assert!(t.current().is_none());
+    assert!(t.page().is_none());
     assert!(t.section(|_| true).is_none());
-    // The page under the settings keeps its player.
-    assert_eq!(t.page().map(|p| p.route), Some("watch"));
     let name = |route: &&str| route.to_string().into();
     assert_eq!(tabs.title(id, name).as_deref(), Some("Settings"));
-    tab(&mut tabs, id).push(Page::unbuilt("home"));
+    // A page opened from the settings comes after them.
+    tab(&mut tabs, id).push(Page::unbuilt("sign-in"));
     tab(&mut tabs, id).back();
     assert!(tabs.get(id).unwrap().settings_shown());
-    tab(&mut tabs, id).back();
-    assert!(tab(&mut tabs, id).forward_to_settings());
-    // The next video of a queue replaces the page under the settings, which stay shown.
     tab(&mut tabs, id).forward();
-    tab(&mut tabs, id).replace(Page::unbuilt("next"));
-    assert!(tabs.get(id).unwrap().settings_shown());
-    assert_eq!(routes(&tabs, id), vec!["next"]);
+    tab(&mut tabs, id).back();
+    // A session change keeps them alone in their tab.
+    tab(&mut tabs, id).reset(vec!["home"]);
+    let t = tabs.get(id).unwrap();
+    assert!(t.settings_shown() && !t.can_go_back() && !t.can_go_forward());
+  }
+
+  #[test]
+  fn a_reset_keeps_the_settings_shown() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home", "watch"], None);
+    tab(&mut tabs, id).reset(vec!["home"]);
+    assert!(!tabs.get(id).unwrap().settings_shown());
+    let settings = tabs.add_settings();
+    tab(&mut tabs, settings).push(Page::unbuilt("watch"));
+    tab(&mut tabs, settings).reset(vec!["home"]);
+    // Not on the settings: the history starts over.
+    assert_eq!(routes(&tabs, settings), vec!["home"]);
+    assert!(!tab(&mut tabs, settings).can_go_back());
   }
 
   #[test]

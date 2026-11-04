@@ -1,9 +1,10 @@
 //! The window's root: a top bar shared by every space (menu button, back and forward, logo, the
 //! open tabs and "+" to open one of any space, search, audio output, notifications, settings),
 //! the sidebar with the entries of the tab's space, and the tab's current page in the content
-//! panel: the space's, or the settings page, an entry of the tab's history like the others.
-//! Switching tabs or opening the settings while a video plays moves it to the mini-player, a
-//! window of its own above the others (docs/design.md, ADR 0008, ADR 0015, ADR 0019).
+//! panel: the space's, or the settings page, which opens in a tab of its own (an entry of its
+//! history, which pages opened from there follow). Switching tabs or opening the settings
+//! while a video plays moves it to the mini-player, a window of its own above the others
+//! (docs/design.md, ADR 0008, ADR 0015, ADR 0019).
 
 pub mod lives;
 mod mini_player;
@@ -147,7 +148,7 @@ impl Shell {
                     Request::Add { tab, after, focus } => {
                       shell.add_tab(index, tab, after, focus, window, cx)
                     }
-                    Request::Settings => shell.open_settings(window, cx),
+                    Request::Settings => shell.open_settings(Some(index), window, cx),
                   })
                   .ok();
               })
@@ -163,7 +164,7 @@ impl Shell {
         shell.close_mini(cx);
       }
     }));
-    let tabs: Vec<TabRef> = spaces
+    let mut tabs: Vec<TabRef> = spaces
       .iter()
       .enumerate()
       .flat_map(|(space, handle)| {
@@ -173,6 +174,16 @@ impl Shell {
           .map(move |id| TabRef { space, id })
       })
       .collect();
+    // No space opened one (none chosen to start with, or only a service that is unavailable):
+    // the first space's.
+    if tabs.is_empty()
+      && let Some(first) = spaces.first()
+    {
+      tabs.push(TabRef {
+        space: 0,
+        id: first.new_tab(cx),
+      });
+    }
     let mut shell = Self {
       spaces,
       tabs,
@@ -455,16 +466,29 @@ impl Shell {
     cx.notify();
   }
 
-  /// The gear, or a space's request: the settings page as the next entry of the tab's history.
-  fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+  /// The gear, or a request of space `from`: the settings page in a tab of its own, after the
+  /// tab shown, or the tab that already shows it. A video playing goes to the mini-player.
+  fn open_settings(&mut self, from: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
     if self.in_settings(cx) {
       return;
     }
-    self.leave_page(window, cx);
-    if let Some((tab, space)) = self.current() {
-      space.clone().push_settings(tab, cx);
+    let open = self
+      .tabs
+      .iter()
+      .find(|t| self.spaces[t.space].settings_shown(t.id, cx))
+      .copied();
+    if let Some(tab) = open {
+      self.activate(tab.id, window, cx);
+      return;
     }
-    cx.notify();
+    let Some(current) = self.active else {
+      return;
+    };
+    let space = from
+      .filter(|&s| s < self.spaces.len())
+      .unwrap_or(current.space);
+    let id = self.spaces[space].settings_tab(cx);
+    self.add_tab(space, id, Some(current.id), true, window, cx);
   }
 
   /// The settings page of the tab shown, made for it if needed.
@@ -639,7 +663,7 @@ impl Shell {
                 .icon(Icon::Settings)
                 .tooltip(t("Settings", "Réglages"))
                 .when(in_settings, |b| b.selected(true))
-                .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
+                .on_click(cx.listener(|this, _, window, cx| this.open_settings(None, window, cx))),
             ),
         ),
     )
@@ -684,6 +708,14 @@ impl Shell {
             }))
         });
         let tooltip = title.clone();
+        // The settings' tab has the gear rather than the service's logo.
+        let icon = if space.settings_shown(tab.id, cx) {
+          gpui_component::Icon::new(Icon::Settings)
+            .size(px(16.))
+            .into_any_element()
+        } else {
+          assets::color_svg(info.icon, 18., window, cx).into_any_element()
+        };
         h_flex()
           .id(group.clone())
           .group(group.clone())
@@ -728,7 +760,11 @@ impl Shell {
           .child(
             div()
               .flex_none()
-              .child(assets::color_svg(info.icon, 18., window, cx)),
+              .size(px(18.))
+              .flex()
+              .items_center()
+              .justify_center()
+              .child(icon),
           )
           .child(div().flex_1().min_w_0().truncate().child(title))
           .children(close)

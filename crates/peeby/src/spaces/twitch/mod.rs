@@ -58,6 +58,8 @@ use session::Secrets;
 use settings_page::SettingsView;
 use watch::{Kind, WatchView};
 
+/// The space's id in the settings (`SpaceInfo::id`).
+pub const ID: &str = "twitch";
 /// Twitch requires validating the token every hour.
 const VALIDATE_EVERY: Duration = Duration::from_secs(3600);
 /// How often the sidebar's live channels are read again.
@@ -253,9 +255,9 @@ impl TwitchSpace {
     }
   }
 
-  /// The space with one tab and the secrets read before the UI started: a saved refresh token is
-  /// exchanged in the background. `pending` (from the command line) opens in the first tab at
-  /// once, and shows the tab.
+  /// The space and the secrets read before the UI started: a saved refresh token is exchanged in
+  /// the background. One tab when the settings open one at startup, or for `pending` (from the
+  /// command line), which opens in it at once and shows it.
   pub fn new(auth: Auth, secrets: Secrets, pending: Option<Route>, cx: &mut Context<Self>) -> Self {
     let mut space = Self {
       auth,
@@ -288,6 +290,9 @@ impl TwitchSpace {
       space.restore(refresh, cx);
     }
     let shown = pending.is_some();
+    if !shown && !Settings::get(cx).opens_at_startup(ID) {
+      return space;
+    }
     let pages = std::iter::once(space.home()).chain(pending).collect();
     let first = space.tabs.add(pages, None);
     space.tabs.show(first);
@@ -604,7 +609,8 @@ impl TwitchSpace {
   /// Opens `route` from a notification: in the tab of the space last shown, else in a new one,
   /// and shows it.
   pub fn open_from_notification(&mut self, route: Route, cx: &mut Context<Self>) {
-    match self.tabs.shown() {
+    // Not over the settings' tab: a tab of its own then.
+    match self.tabs.shown().filter(|&tab| !self.settings_shown(tab)) {
       Some(tab) => {
         cx.emit(SpaceEvent::Activate(tab));
         self.open(tab, route, cx);
@@ -785,6 +791,7 @@ impl Space for TwitchSpace {
 
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
+      id: ID,
       name: "Twitch".into(),
       icon: include_bytes!("icon.svg"),
       accent: Self::accent(),

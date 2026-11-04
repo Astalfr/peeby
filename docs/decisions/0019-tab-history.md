@@ -40,15 +40,17 @@ moves a playing video to the mini-player (ADR 0008) instead of pausing it.
   entries.
 - The sidebar lights the last top-level page (the sidebar's, the search) up to the page shown,
   nothing on the settings.
-- The settings page is an entry of the tab's history (`Space::push_settings`), drawn by the shell
-  (`Space::settings_shown`). The tab is named "Settings" while it shows them. The page under them
-  is not covered: the shell moves its playing video to the mini-player, which keeps showing that
-  page's player (`Tab::page`). A page opened from the settings covers it (it pauses) and the
-  mini-player closes, as it does whenever its tab shows a page again. The mini-player's "back to
-  the page" goes back from the settings. The settings page is made each time it shows.
+- The settings page is an entry of a tab's history, drawn by the shell (`Space::settings_shown`).
+  Since 2026-11-04 the gear (and a page's `SpaceEvent::OpenSettings`) opens it in a tab of its
+  own, right after the tab shown (`Space::settings_tab`, `Tabs::add_settings`: a history of the
+  settings alone, so no "back"), or shows the tab that already has them; the tab is named
+  "Settings" and has the gear as its icon. Leaving the tab shown moves its playing video to the
+  mini-player, as any tab switch does. A page opened from the settings (a sign-in) comes after
+  them in their tab, and a session change (`Tab::reset`) keeps a tab on the settings there. The
+  settings page is made each time it shows.
 - The mouse's side buttons do nothing in fullscreen, which belongs to the player.
 - `Space` has `type Route`, `history`/`history_mut` and a `cover` hook; `can_go_back`,
-  `can_go_forward`, `back`, `forward`, `push_settings` and `settings_shown` are provided once
+  `can_go_forward`, `back`, `forward`, `settings_tab` and `settings_shown` are provided once
   for every space.
 - The top bar has a forward button next to back, and the mouse's side buttons go back and
   forward.

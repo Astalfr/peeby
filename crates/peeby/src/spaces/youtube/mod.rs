@@ -175,6 +175,9 @@ impl Nav {
   }
 }
 
+/// The space's id in the settings (`SpaceInfo::id`).
+pub const ID: &str = "youtube";
+
 pub struct YouTubeSpace {
   client: Client,
   tabs: Tabs<Route>,
@@ -186,7 +189,8 @@ pub struct YouTubeSpace {
 
 impl YouTubeSpace {
   /// The space with one tab on its start page (`Route::start`), then on `initial_videos` in
-  /// order (command-line URLs or ids).
+  /// order (command-line URLs or ids), shown; without videos, only if the settings open a tab of
+  /// the space at startup.
   pub fn new(client: Client, initial_videos: Vec<String>, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
@@ -199,11 +203,24 @@ impl YouTubeSpace {
     cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
     inbox::reset(cx.weak_entity(), cx);
     let mut tabs = Tabs::default();
-    let pages = std::iter::once(Route::start(cx))
-      .chain(initial_videos.into_iter().map(Route::Watch))
-      .collect();
-    let first = tabs.add(pages, None);
-    tabs.show(first);
+    let videos = !initial_videos.is_empty();
+    if videos || Settings::get(cx).opens_at_startup(ID) {
+      let pages = std::iter::once(Route::start(cx))
+        .chain(initial_videos.into_iter().map(Route::Watch))
+        .collect();
+      let first = tabs.add(pages, None);
+      tabs.show(first);
+      if videos {
+        // Shown even after the tabs of other spaces; after the shell has subscribed to the
+        // space's events.
+        cx.spawn(async move |this, cx| {
+          this
+            .update(cx, |_, cx| cx.emit(SpaceEvent::Activate(first)))
+            .ok();
+        })
+        .detach();
+      }
+    }
     Self {
       client,
       tabs,
@@ -376,7 +393,8 @@ impl YouTubeSpace {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) {
-    match self.tabs.shown() {
+    // Not over the settings' tab: a tab of its own then.
+    match self.tabs.shown().filter(|&tab| !self.settings_shown(tab)) {
       Some(tab) => {
         cx.emit(SpaceEvent::Activate(tab));
         self.open(tab, route, window, cx);
@@ -481,6 +499,7 @@ impl Space for YouTubeSpace {
 
   fn info(&self) -> SpaceInfo {
     SpaceInfo {
+      id: ID,
       name: "YouTube".into(),
       icon: include_bytes!("icon.svg"),
       accent: Accent::red(),

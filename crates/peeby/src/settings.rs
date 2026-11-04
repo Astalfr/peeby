@@ -112,6 +112,9 @@ pub struct Settings {
   pub close_to_tray: bool,
   /// Peeby starts with Windows, in the notification area (the `Run` key holds it, ADR 0020).
   pub start_with_windows: bool,
+  /// The spaces (`SpaceInfo::id`) that open a tab when Peeby starts. With none of them
+  /// available, the first space opens one.
+  pub startup_tabs: Vec<String>,
 }
 
 /// `[notifications]`: where each kind shows (ADR 0020).
@@ -381,6 +384,7 @@ impl Default for Settings {
       notifications: Notifications::default(),
       close_to_tray: true,
       start_with_windows: false,
+      startup_tabs: vec!["youtube".into()],
     }
   }
 }
@@ -410,6 +414,11 @@ impl Settings {
       }),
       Err(_) => Self::default(),
     }
+  }
+
+  /// Whether space `id` opens a tab when Peeby starts.
+  pub fn opens_at_startup(&self, id: &str) -> bool {
+    self.startup_tabs.iter().any(|s| s == id)
   }
 
   /// The interface's language.
@@ -514,6 +523,8 @@ mod tests {
     assert_eq!(settings.jellyfin.server_url, None);
     assert!(settings.close_to_tray && !settings.start_with_windows);
     assert!(settings.notifications.twitch_category.windows);
+    assert_eq!(settings.startup_tabs, vec!["youtube"]);
+    assert!(settings.opens_at_startup("youtube") && !settings.opens_at_startup("twitch"));
     let again: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
     assert_eq!(settings, again);
   }

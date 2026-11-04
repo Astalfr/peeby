@@ -8,7 +8,7 @@ use gpui::{AnyElement, Context, FontWeight, Subscription, Task, Window, div, px}
 use gpui_component::button::Button;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Icon, IconName, Sizable, h_flex, v_flex};
-use ui::form::{chips, format_size, row, section, toggle};
+use ui::form::{OnClick, chips, choices, format_size, row, section, toggle};
 use ui::i18n::{Lang, t};
 use ui::player::{Owner, RunningPlayer, format_step, format_time};
 use ui::theme::Accent;
@@ -17,11 +17,13 @@ use ui::{images, tf, theme};
 
 use crate::desktop;
 use crate::settings::{Delivery, Notifications, Player, Settings};
-use crate::shell::space::SpaceHandle;
+use crate::shell::space::{SpaceHandle, SpaceInfo};
 
 pub struct SettingsView {
   /// The open space first, then the others in the sidebar's order.
   spaces: Vec<SpaceHandle>,
+  /// Every space in the tabs' order, for the startup tabs.
+  in_order: Vec<SpaceInfo>,
   /// Whether each space's part is unfolded.
   unfolded: Vec<bool>,
   cache_size: Option<u64>,
@@ -34,6 +36,7 @@ pub struct SettingsView {
 impl SettingsView {
   /// The page with `spaces`, `active` the one open behind it.
   pub fn new(mut spaces: Vec<SpaceHandle>, active: usize, cx: &mut Context<Self>) -> Self {
+    let in_order = spaces.iter().map(|space| space.info(cx)).collect();
     if active < spaces.len() {
       let open = spaces.remove(active);
       spaces.insert(0, open);
@@ -52,6 +55,7 @@ impl SettingsView {
     }
     let mut view = Self {
       spaces,
+      in_order,
       unfolded,
       cache_size: None,
       clearing: false,
@@ -113,7 +117,30 @@ fn set_language(lang: Lang, cx: &mut gpui::App) {
   cx.refresh_windows();
 }
 
-fn general_section(settings: &Settings) -> AnyElement {
+/// The startup tabs: a chip per space, those that open a tab lit; a click adds or removes one,
+/// never the last.
+fn startup_tabs(settings: &Settings, spaces: &[SpaceInfo]) -> impl IntoElement {
+  let options: Vec<(String, bool, OnClick)> = spaces
+    .iter()
+    .map(|info| {
+      let id = info.id;
+      let on = settings.opens_at_startup(id);
+      let on_click: OnClick = Box::new(move |_, cx| {
+        Settings::update(cx, |s| {
+          if !s.opens_at_startup(id) {
+            s.startup_tabs.push(id.to_owned());
+          } else if s.startup_tabs.len() > 1 {
+            s.startup_tabs.retain(|t| t != id);
+          }
+        })
+      });
+      (info.name.to_string(), on, on_click)
+    })
+    .collect();
+  choices("startup-tabs", options)
+}
+
+fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
   let languages = Lang::ALL.map(|l| (l, l.name().to_owned())).to_vec();
   section(
     t("General", "Général"),
@@ -132,6 +159,15 @@ fn general_section(settings: &Settings) -> AnyElement {
           &settings.interface_lang(),
           set_language,
         ),
+      )
+      .into_any_element(),
+      row(
+        t("Startup tabs", "Onglets au démarrage"),
+        t(
+          "The services that open a tab when Peeby starts.",
+          "Les services qui ouvrent un onglet au démarrage de Peeby.",
+        ),
+        startup_tabs(settings, spaces),
       )
       .into_any_element(),
       row(
@@ -503,7 +539,7 @@ impl Render for SettingsView {
           .py_6()
           .gap_8()
           .child(page_title(t("Settings", "Réglages")))
-          .child(general_section(&settings))
+          .child(general_section(&settings, &self.in_order))
           .child(player_section(&settings.player))
           .children(parts)
           .child(self.storage_section(cx))
