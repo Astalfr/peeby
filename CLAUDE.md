@@ -36,7 +36,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   variants with every codec and the auth-token and saves its master redacted, without spending the refresh token;
   `-- master-scan` lists the top lives offering HEVC/AV1; `-- positions <vod-id>…` saves the account's resume
   positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
-  the auth-token signs in to IRC, sending nothing)
+  the auth-token signs in to IRC, sending nothing; `-- predictions-ended <login>` probes, anonymous,
+  the GQL fields of ended predictions and saves the app's predictions answer)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Fake Twitch chat with every chat feature, nothing sent to Twitch (debug builds): "Faux chat" in the Twitch
   sidebar, or `cargo run -p peeby -- --fake-chat` (docs/twitch.md, "Fake chat")

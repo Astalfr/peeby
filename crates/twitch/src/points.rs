@@ -13,9 +13,11 @@ use crate::gql::gql_error;
 const CONTEXT_QUERY: &str = "query ChannelPoints($login: String!) { currentUser { id }   user(login: $login) { id stream { id } channel { self { communityPoints { balance availableClaim { id }   activeMultipliers { factor } } } communityPointsSettings { isEnabled name image { url url2x }   customRewards { id title cost prompt backgroundColor isEnabled isPaused isInStock isSubOnly   isUserInputRequired cooldownExpiresAt image { url url2x } defaultImage { url url2x } } } } } }";
 
 const PREDICTIONS_QUERY: &str = "query Predictions($login: String!) { channel(name: $login) { \
-  activePredictionEvents { ...E } lockedPredictionEvents { ...E } } } fragment E on \
-  PredictionEvent { id title status createdAt predictionWindowSeconds outcomes { id title color \
-  totalPoints totalUsers } self { prediction { points outcome { id } } } }";
+  activePredictionEvents { ...E } lockedPredictionEvents { ...E } \
+  resolvedPredictionEvents(first: 1) { edges { node { ...E } } } } } fragment E on \
+  PredictionEvent { id title status createdAt predictionWindowSeconds endedAt \
+  winningOutcome { id } outcomes { id title color totalPoints totalUsers } \
+  self { prediction { points outcome { id } } } }";
 
 const REDEEM_MUTATION: &str = "mutation Redeem($input: RedeemCommunityPointsCustomRewardInput!) { \
   redeemCommunityPointsCustomReward(input: $input) { error { code } redemption { id } } }";
@@ -80,7 +82,7 @@ pub struct Prediction {
   pub id: String,
   /// Question.
   pub title: String,
-  /// `ACTIVE` takes bets; `LOCKED` waits for its result.
+  /// `ACTIVE` takes bets; `LOCKED` waits for its result; then resolved or canceled.
   pub status: PredictionStatus,
   /// Start, milliseconds since the epoch.
   pub created_at: Option<i64>,
@@ -90,9 +92,13 @@ pub struct Prediction {
   pub outcomes: Vec<Outcome>,
   /// The viewer's bet, when they placed one: the outcome's id and the points.
   pub bet: Option<(String, u64)>,
+  /// The winning outcome's id, once resolved.
+  pub winner: Option<String>,
+  /// When it was resolved or canceled, milliseconds since the epoch.
+  pub ended_at: Option<i64>,
 }
 
-/// Whether a prediction still takes bets.
+/// Where a prediction stands.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PredictionStatus {
   /// Bets are open.
@@ -100,6 +106,30 @@ pub enum PredictionStatus {
   Active,
   /// Bets are closed, the result is not known yet.
   Locked,
+  /// Ended with a winner ([`Prediction::winner`]): its bets shared the points.
+  Resolved,
+  /// Canceled: every bet came back.
+  Canceled,
+}
+
+impl PredictionStatus {
+  /// Resolved or canceled.
+  pub fn ended(self) -> bool {
+    matches!(self, Self::Resolved | Self::Canceled)
+  }
+}
+
+impl Prediction {
+  /// What `points` bet on the winner bring back: their share of every point bet (`None` before
+  /// the result, or for a bet on another outcome).
+  pub fn payout(&self, outcome: &str, points: u64) -> Option<u64> {
+    let winner = self.winner.as_deref().filter(|w| *w == outcome)?;
+    let total: u64 = self.outcomes.iter().map(|o| o.points).sum();
+    let won = self.outcomes.iter().find(|o| o.id == winner)?.points;
+    (won > 0).then(|| {
+      u64::try_from(u128::from(points) * u128::from(total) / u128::from(won)).unwrap_or(u64::MAX)
+    })
+  }
 }
 
 /// One answer of a prediction.
@@ -200,7 +230,10 @@ fn reward(r: &Value) -> Option<Reward> {
   })
 }
 
-/// The request for `login`'s open and locked predictions.
+/// The request for `login`'s open and locked predictions, and the last ended one (resolved or
+/// canceled, newest first: `resolvedPredictionEvents` is a connection).
+/// `resolvedPredictionEvents`, `endedAt` and `winningOutcome` checked on 2026-11-04, anonymous
+/// (`twitch_capture -- predictions-ended`).
 pub fn predictions_request(login: &str) -> Value {
   json!({
     "operationName": "Predictions",
@@ -231,6 +264,27 @@ pub fn parse_predictions(answer: &Value) -> Result<Vec<Prediction>> {
   };
   let mut predictions = list("activePredictionEvents", PredictionStatus::Active);
   predictions.extend(list("lockedPredictionEvents", PredictionStatus::Locked));
+  // The last ended one, by its own status (a result still pending reads as locked).
+  predictions.extend(
+    channel["resolvedPredictionEvents"]["edges"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .take(1)
+      .filter_map(|edge| {
+        let node = &edge["node"];
+        let status = match node["status"].as_str() {
+          Some("RESOLVED") => PredictionStatus::Resolved,
+          Some("CANCELED" | "CANCELLED") => PredictionStatus::Canceled,
+          _ => PredictionStatus::Locked,
+        };
+        prediction(node, status)
+      })
+      // Not again when it is still listed as locked.
+      .filter(|ended| !ended.status.ended() || ended.ended_at.is_some()),
+  );
+  let mut seen = std::collections::HashSet::new();
+  predictions.retain(|p| seen.insert(p.id.clone()));
   Ok(predictions)
 }
 
@@ -263,6 +317,8 @@ fn prediction(p: &Value, status: PredictionStatus) -> Option<Prediction> {
     window_seconds: p["predictionWindowSeconds"].as_u64().unwrap_or(0),
     outcomes,
     bet,
+    winner: p["winningOutcome"]["id"].as_str().map(str::to_owned),
+    ended_at: p["endedAt"].as_str().and_then(crate::time::epoch_millis),
   })
 }
 

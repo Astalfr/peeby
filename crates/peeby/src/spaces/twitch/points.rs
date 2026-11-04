@@ -18,6 +18,7 @@
 
 #[cfg(debug_assertions)]
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -49,6 +50,12 @@ const POINTS_EVERY: Duration = Duration::from_secs(60);
 const WATCHED_EVERY: Duration = Duration::from_secs(60);
 /// How often the predictions are read again (a bet window is often 2 to 5 minutes).
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
+/// How long an ended prediction stays pinned with its result, as on Twitch, from when Peeby
+/// first reads it ended (the predictions are read every [`PREDICTIONS_EVERY`]).
+pub const ENDED_SHOWN: Duration = Duration::from_secs(20);
+/// An ended prediction is shown only when it ended this recently: Twitch always gives the last
+/// one, hours old or not.
+const ENDED_RECENTLY: Duration = Duration::from_secs(120);
 /// How long a first click waits for its confirmation.
 const CONFIRM_FOR: Duration = Duration::from_secs(8);
 /// Side of the channel's points icon in the balance, logical pixels (as the default icon).
@@ -163,6 +170,9 @@ pub struct PointsView {
   voting: bool,
   /// The last vote failed: why.
   vote_error: Option<SharedString>,
+  /// When each recently ended prediction was first read ended, by id: it shows for
+  /// [`ENDED_SHOWN`] from then.
+  ended_seen: HashMap<String, Instant>,
   /// The text of a reward that asks for one (made at the first render: it needs the window).
   input: Option<Entity<InputState>>,
   _tasks: Vec<Task<()>>,
@@ -192,6 +202,7 @@ impl PointsView {
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
+      ended_seen: HashMap::new(),
       input: None,
       _tasks: Vec::new(),
     };
@@ -251,7 +262,7 @@ impl PointsView {
             || this
               .predictions
               .iter()
-              .any(|p| p.status == PredictionStatus::Active)
+              .any(|p| p.status == PredictionStatus::Active || this.shown(p))
             || this.polls.iter().any(|p| !p.ended)
           {
             cx.notify();
@@ -283,6 +294,35 @@ impl PointsView {
       self.fold_gone();
       cx.notify();
     }
+  }
+
+  /// Notes when the predictions that ended lately were first read ended; forgets the others.
+  fn note_ended(&mut self) {
+    let now = now_millis();
+    let recently = i64::try_from(ENDED_RECENTLY.as_millis()).unwrap_or(i64::MAX);
+    let ended: Vec<&str> = self
+      .predictions
+      .iter()
+      .filter(|p| p.status.ended() && p.ended_at.is_some_and(|end| now - end < recently))
+      .map(|p| p.id.as_str())
+      .collect();
+    self.ended_seen.retain(|id, _| ended.contains(&id.as_str()));
+    for id in ended {
+      self
+        .ended_seen
+        .entry(id.to_owned())
+        .or_insert_with(Instant::now);
+    }
+  }
+
+  /// Whether `p` is pinned now: a running one always, an ended one for [`ENDED_SHOWN`] after it
+  /// was first read ended, if it ended lately.
+  fn shown(&self, p: &Prediction) -> bool {
+    !p.status.ended()
+      || self
+        .ended_seen
+        .get(&p.id)
+        .is_some_and(|seen| seen.elapsed() < ENDED_SHOWN)
   }
 
   /// Folds the pinned item that is gone.
@@ -456,6 +496,7 @@ impl PointsView {
           match result {
             Ok(predictions) => {
               this.predictions = predictions;
+              this.note_ended();
               this.fold_gone();
             }
             Err(e) => tracing::warn!("Twitch predictions: {e}"),
@@ -792,6 +833,7 @@ impl PointsView {
   fn prediction_body(&self, p: &Prediction, cx: &mut Context<Self>) -> AnyElement {
     let total: u64 = p.outcomes.iter().map(|o| o.points).sum();
     let open = p.status == PredictionStatus::Active && p.bet.is_none();
+    let canceled = p.status == PredictionStatus::Canceled;
     let amount = self.bet_amount();
     let balance = self.points.as_ref().map_or(0, |p| p.balance);
     let mut outcomes = v_flex().gap_1();
@@ -809,6 +851,7 @@ impl PointsView {
       };
       let confirming = self.confirming(&spend);
       let pending_amount = self.confirm.as_ref().map_or(amount, |p| p.amount);
+      let won = p.winner.as_deref() == Some(outcome.id.as_str());
       outcomes = outcomes.child(
         v_flex()
           .gap_0p5()
@@ -829,8 +872,17 @@ impl PointsView {
                   .min_w_0()
                   .text_sm()
                   .truncate()
+                  .when(won, |el| el.font_weight(FontWeight::SEMIBOLD))
+                  .when(canceled, |el| el.text_color(theme::muted()))
                   .child(outcome.title.clone()),
               )
+              .when(won, |row| {
+                row.child(
+                  gpui_component::Icon::new(Icon::Check)
+                    .size(px(14.))
+                    .text_color(outcome_color(&outcome.color)),
+                )
+              })
               .child(div().text_xs().text_color(theme::muted()).child(format!(
                 "{}{}",
                 percent(format!("{:.0}", share * 100.0)),
@@ -1033,7 +1085,7 @@ impl PointsView {
     let mut items = Vec::new();
     let now = polls::now_millis();
     if !self.off && self.points.is_some() {
-      for p in &self.predictions {
+      for p in self.predictions.iter().filter(|p| self.shown(p)) {
         let open = self.unfolded.is(&p.id);
         items.push(Pinned {
           id: p.id.clone().into(),
@@ -1071,13 +1123,45 @@ impl PointsView {
 
 /// A prediction's state in a few words, for its bar (folded, it is all that shows).
 fn prediction_status(p: &Prediction) -> String {
+  let title_of = |id: &str| {
+    p.outcomes
+      .iter()
+      .find(|o| o.id == id)
+      .map_or(String::new(), |o| o.title.clone())
+  };
   match (p.status, &p.bet) {
+    (PredictionStatus::Resolved, bet) => {
+      let winner = p.winner.as_deref().map(title_of).unwrap_or_default();
+      let result = match bet {
+        Some((outcome, points)) => match p.payout(outcome, *points) {
+          Some(payout) => {
+            let payout = points_text(payout);
+            tf!(" · you win {payout}", " · vous gagnez {payout}")
+          }
+          None => {
+            let points = points_text(*points);
+            tf!(" · you lose {points}", " · vous perdez {points}")
+          }
+        },
+        None => String::new(),
+      };
+      tf!(
+        "Ended · “{winner}” wins{result}",
+        "Terminée · « {winner} » l'emporte{result}"
+      )
+    }
+    (PredictionStatus::Canceled, Some((_, points))) => {
+      let points = points_text(*points);
+      tf!(
+        "Canceled · your {points} came back",
+        "Annulée · vos {points} sont rendus"
+      )
+    }
+    (PredictionStatus::Canceled, None) => {
+      t("Canceled · bets refunded", "Annulée · paris remboursés").into()
+    }
     (_, Some((outcome, points))) => {
-      let title = p
-        .outcomes
-        .iter()
-        .find(|o| &o.id == outcome)
-        .map_or("", |o| o.title.as_str());
+      let title = title_of(outcome);
       let points = points_text(*points);
       let state = if p.status == PredictionStatus::Locked {
         t(" · closed", " · clos")

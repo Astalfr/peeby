@@ -13,6 +13,10 @@
 //! (saved `auth-token`) and saves the answer as `gql_vod_positions.json`; it reads, never writes.
 //! `-- chat-login [login]` signs in to a channel's chat (the user's own by default) with the saved
 //! `auth-token` and prints whether Twitch accepted it (ADR 0023); it never sends a message.
+//! `-- predictions-ended <login>` looks, anonymous, for the GQL fields that give a channel's ended
+//! predictions and their winner (guessed names, checked against GQL's validation), then saves the
+//! app's own predictions request's answer as `gql_predictions_resolved.json`; it reads, never
+//! writes.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -44,6 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "chat-login") {
     let channel = args.get(i + 1).cloned();
     return twitch::block_on(check_chat_login(channel))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "predictions-ended") {
+    let login = args.get(i + 1).ok_or("predictions-ended <login>")?.clone();
+    return twitch::block_on(capture_ended_predictions(login))?;
   }
   if args.iter().any(|a| a == "catalog") {
     return twitch::block_on(capture_catalog())?;
@@ -327,6 +335,124 @@ async fn capture_badges(helix: &Helix) -> Result<(), Box<dyn std::error::Error>>
   let mut channel = helix.get("chat/badges", &[("broadcaster_id", &id)]).await?;
   trim_badges(&mut channel, |_| true);
   save("helix_badges_channel.json", &channel)?;
+  Ok(())
+}
+
+/// Fields of `Channel` that may list a channel's ended predictions, tried in turn (Twitch's
+/// schema is not documented: these are guesses, which GQL's validation answers).
+const ENDED_LISTS: &[&str] = &[
+  "resolvedPredictionEvents",
+  "predictionEvents",
+  "recentPredictionEvents",
+  "lastPredictionEvents",
+];
+/// Fields of `PredictionEvent` that may give an ended one's result, tried one by one.
+const ENDED_FIELDS: &[&str] = &[
+  "endedAt",
+  "lockedAt",
+  "winningOutcome { id title }",
+  "endedBy { login }",
+];
+
+/// Looks for how GQL gives `login`'s ended predictions and their winner, anonymous (no secret is
+/// read, nothing is written): prints which guessed fields exist (the schema's own error messages,
+/// which name no one), then saves the answer to `twitch::points::predictions_request` (the app's
+/// query, anonymous: no `self`) without its request ids as `gql_predictions_resolved.json`, and
+/// prints what the parser reads in it. Run it on a channel that resolved a prediction lately.
+async fn capture_ended_predictions(login: String) -> Result<(), Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  let ask = |query: String| {
+    let client = client.clone();
+    let login = login.clone();
+    async move {
+      client
+        .gql(&json!({ "query": query, "variables": { "login": login } }))
+        .await
+    }
+  };
+  // The schema's messages only: they name fields, never a user.
+  let errors = |answer: &Value| -> Vec<String> {
+    answer["errors"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .filter_map(|e| e["message"].as_str().map(str::to_owned))
+      .collect()
+  };
+  let introspection =
+    ask("query { __type(name: \"Channel\") { fields { name } } }".to_owned()).await?;
+  let named: Vec<&str> = introspection["data"]["__type"]["fields"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|f| f["name"].as_str())
+    .filter(|name| name.to_ascii_lowercase().contains("prediction"))
+    .collect();
+  if named.is_empty() {
+    println!(
+      "introspection: closed or no prediction field ({:?})",
+      errors(&introspection)
+    );
+  } else {
+    println!("introspection: Channel's prediction fields: {named:?}");
+  }
+  let mut found = None;
+  'lists: for list in ENDED_LISTS {
+    for args in ["(first: 3)", ""] {
+      let query = format!(
+        "query Ended($login: String!) {{ channel(name: $login) {{ {list}{args} {{ edges {{ node {{ id title status }} }} }} }} }}"
+      );
+      let answer = ask(query).await?;
+      let problems = errors(&answer);
+      if problems.is_empty() && !answer["data"]["channel"].is_null() {
+        let events = &answer["data"]["channel"][list]["edges"];
+        let count = events.as_array().map_or(0, Vec::len);
+        println!("{list}{args}: exists, {count} events");
+        found = Some(format!("{list}{args}"));
+        break 'lists;
+      }
+      println!("{list}{args}: {problems:?}");
+    }
+  }
+  let Some(list) = found else {
+    println!("no list of ended predictions among the guesses: try the ones the messages suggest");
+    return Ok(());
+  };
+  for field in ENDED_FIELDS {
+    let query = format!(
+      "query Ended($login: String!) {{ channel(name: $login) {{ {list} {{ edges {{ node {{ id {field} }} }} }} }} }}"
+    );
+    let problems = errors(&ask(query).await?);
+    println!(
+      "{field}: {}",
+      if problems.is_empty() {
+        "exists".to_owned()
+      } else {
+        format!("{problems:?}")
+      }
+    );
+  }
+  let mut answer = client
+    .gql(&twitch::points::predictions_request(&login))
+    .await?;
+  let problems = errors(&answer);
+  if !problems.is_empty() {
+    println!("the app's query failed: {problems:?}");
+    return Ok(());
+  }
+  for (status, title) in twitch::points::parse_predictions(&answer)?
+    .iter()
+    .map(|p| (p.status, p.winner.is_some()))
+  {
+    println!("read: {status:?}, winner known: {title}");
+  }
+  // Request ids, as the other GQL fixtures.
+  if let Some(map) = answer.as_object_mut() {
+    map.remove("extensions");
+  }
+  let path = Path::new(FIXTURES).join("gql_predictions_resolved.json");
+  std::fs::write(&path, serde_json::to_string_pretty(&answer)? + "\n")?;
+  println!("saved {}", path.display());
   Ok(())
 }
 

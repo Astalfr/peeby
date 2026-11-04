@@ -1,0 +1,42 @@
+{
+  "data": {
+    "channel": {
+      "activePredictionEvents": [],
+      "lockedPredictionEvents": [],
+      "resolvedPredictionEvents": {
+        "edges": [
+          {
+            "node": {
+              "id": "c23ca723-2528-46c9-88c8-dbff105d506d",
+              "title": "MAP 5 : M8 WIN WORLD CHAMP??",
+              "status": "RESOLVED",
+              "createdAt": "2026-11-01T21:51:33.538734248Z",
+              "predictionWindowSeconds": 600,
+              "endedAt": "2026-11-01T22:52:20.96100635Z",
+              "winningOutcome": {
+                "id": "9d9eae5e-d8cf-4117-8893-a48e53a671cd"
+              },
+              "outcomes": [
+                {
+                  "id": "5df268c0-fddb-4f5c-8333-1f5933dde5b9",
+                  "title": "Bien sur que OUI ",
+                  "color": "BLUE",
+                  "totalPoints": 16317441,
+                  "totalUsers": 2237
+                },
+                {
+                  "id": "9d9eae5e-d8cf-4117-8893-a48e53a671cd",
+                  "title": "non",
+                  "color": "PINK",
+                  "totalPoints": 8389741,
+                  "totalUsers": 392
+                }
+              ],
+              "self": null
+            }
+          }
+        ]
+      }
+    }
+  }
+}

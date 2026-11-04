@@ -1018,7 +1018,7 @@ impl FakeChatView {
           ],
         ),
         Self::line(
-          t("The first one", "La première"),
+          t("The running one", "Celle en cours"),
           vec![
             self.button(
               "prediction-lock",

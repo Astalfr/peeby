@@ -113,6 +113,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 - Channel points (2026-11-02, [ADR 0012](decisions/0012-twitch-channel-points.md); the bonus is claimed on twitch.tv until the user decides), with the web auth-token:
   - `twitch::points`: raw GQL reads and spends. 7 tests on 5 new fixtures.
   - On a live's header: the balance, refreshed every minute; the channel's rewards in a popover; its predictions with odds and a countdown, refreshed every 20 s.
+  - 2026-11-04: an ended prediction stays pinned 20 s with its winner and the viewer's result (`resolvedPredictionEvents`, a new fixture and test).
   - 2026-11-04 (the user's request): the predictions moved over the chat, as on Twitch: folded bars at the top of the messages, one card unfolded at a time, shared with the polls (`twitch::polls`'s display, fed only by the fake chat until Twitch's source is captured).
   - Spending takes a second click. A reward can ask for a text; a bet takes a share of the balance.
   - The bonus chest is shown, but claimed on twitch.tv: its mutation fails Twitch's integrity check.

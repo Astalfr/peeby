@@ -198,7 +198,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - Every kind of reward: with a text to write, subscribers only, unavailable, cooling down,
       unaffordable.
     - Refusal codes for spends.
-    - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling.
+    - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling;
+      an ended one stays pinned 20 s with its result, as on a live.
     - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays), removing.
       They show with the points off too.
 
@@ -335,6 +336,14 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   - `channel(name) { activePredictionEvents lockedPredictionEvents }` gives the predictions
     (`status`, `createdAt`, `predictionWindowSeconds`, `outcomes { totalPoints totalUsers color }`,
     `self { prediction { points outcome } }`).
+  - **Ended predictions**, checked on 2026-11-04, anonymous (`twitch_capture -- predictions-ended
+    <login>`): `channel(name) { resolvedPredictionEvents(first: N) }` is a connection
+    (`edges { node }`, newest first) of `PredictionEvent`s with `status` (`RESOLVED`; canceled
+    ones are expected as `CANCELED` **[?]**), `endedAt`, `lockedAt` and `winningOutcome { id title }`.
+    `endedBy` is a union (`PredictionEventActor`). Introspection is disabled. It always gives the
+    last ended one, hours old or not. Peeby asks for the newest one in the same query as the
+    others and pins it with its winner for 20 s from when it first reads it ended, only if it
+    ended in the last 2 minutes.
   - **Polls: not captured yet [?].** Peeby shows them over the chat beside the predictions
     (`spaces::twitch::polls`), but only the fake chat fills them. Before reading a live's polls, save
     a redacted answer from the query that gives them, then write its parser (CLAUDE.md).
@@ -372,7 +381,7 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   `community-points-user-v1.<id>`, `predictions-channel-v1.<id>`) **[src]**. Whether PubSub still
   serves them is **[?]**. Peeby polls instead.
 - Fixtures: `gql_points_context.json` (balance replaced by 12345), `gql_predictions_active.json`,
-  `gql_predictions_locked.json`, `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
+  `gql_predictions_locked.json`, `gql_predictions_resolved.json` (anonymous, request ids removed), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
   Request ids are redacted. Rewards and predictions are the channels' public data.
 
 ## Checked live on 2026-11-01

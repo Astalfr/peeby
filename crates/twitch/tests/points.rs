@@ -210,3 +210,34 @@ fn decode(text: &str) -> Vec<u8> {
   }
   out
 }
+
+#[test]
+fn the_last_ended_prediction_is_read_with_its_winner() {
+  let mut answer = json("gql_predictions_resolved.json");
+  let list = points::parse_predictions(&answer).unwrap();
+  assert_eq!(list.len(), 1);
+  let p = &list[0];
+  assert_eq!(p.status, PredictionStatus::Resolved);
+  assert!(p.status.ended());
+  assert_eq!(p.title, "MAP 5 : M8 WIN WORLD CHAMP??");
+  assert_eq!(p.ended_at, Some(1_793_573_540_961));
+  let winner = p.winner.clone().unwrap();
+  assert_eq!(p.outcomes[1].id, winner);
+  assert_eq!(p.outcomes[1].title, "non");
+  // A bet on the winner gets its share of every point; on the other outcome, nothing.
+  let total: u64 = p.outcomes.iter().map(|o| o.points).sum();
+  let won = p.outcomes[1].points;
+  assert_eq!(p.payout(&winner, won), Some(total));
+  assert_eq!(p.payout(&p.outcomes[0].id, 100), None);
+  // Canceled ones read as such; a result still pending, as locked.
+  let node = &mut answer["data"]["channel"]["resolvedPredictionEvents"]["edges"][0]["node"];
+  node["status"] = json!("CANCELED");
+  node["winningOutcome"] = Value::Null;
+  let list = points::parse_predictions(&answer).unwrap();
+  assert_eq!(list[0].status, PredictionStatus::Canceled);
+  assert_eq!(list[0].winner, None);
+  answer["data"]["channel"]["resolvedPredictionEvents"]["edges"][0]["node"]["status"] =
+    json!("RESOLVE_PENDING");
+  let list = points::parse_predictions(&answer).unwrap();
+  assert_eq!(list[0].status, PredictionStatus::Locked);
+}

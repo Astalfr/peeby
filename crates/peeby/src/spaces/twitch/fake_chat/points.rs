@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use twitch::points::{Outcome, Points, Prediction, PredictionStatus, Reward};
 use ui::chat::fake::Rng;
 
-use super::super::points::Order;
+use super::super::points::{ENDED_SHOWN, Order};
 use super::super::polls::{Choice, Poll};
 use super::SCHEME;
 
@@ -287,6 +287,8 @@ impl FakePoints {
       created_at: Some(now_millis()),
       window_seconds: window,
       bet: None,
+      winner: None,
+      ended_at: None,
     });
   }
 
@@ -301,37 +303,50 @@ impl FakePoints {
     }
   }
 
-  /// Ends the first prediction with its answer `winner`: a bet on it pays its share of every
-  /// point bet.
-  pub fn resolve(&mut self, winner: usize) {
-    if self.predictions.is_empty() {
-      return;
-    }
-    let p = self.predictions.remove(0);
-    let total: u64 = p.outcomes.iter().map(|o| o.points).sum();
-    if let (Some((outcome, amount)), Some(won)) = (&p.bet, p.outcomes.get(winner))
-      && &won.id == outcome
-      && won.points > 0
-    {
-      self.balance += amount * total / won.points;
-    }
+  /// The first prediction not ended yet.
+  fn running(&mut self) -> Option<&mut Prediction> {
+    self.predictions.iter_mut().find(|p| !p.status.ended())
   }
 
-  /// Cancels the first prediction: its bet comes back.
-  pub fn cancel(&mut self) {
-    if self.predictions.is_empty() {
+  /// Ends the first running prediction with its answer `winner`: a bet on it pays its share of
+  /// every point bet. It stays shown with its result for a while ([`ENDED_SHOWN`]).
+  pub fn resolve(&mut self, winner: usize) {
+    let Some(p) = self.running() else {
       return;
-    }
-    let p = self.predictions.remove(0);
-    if let Some((_, amount)) = p.bet {
-      self.balance += amount;
-    }
+    };
+    let Some(won) = p.outcomes.get(winner).map(|o| o.id.clone()) else {
+      return;
+    };
+    p.status = PredictionStatus::Resolved;
+    p.winner = Some(won);
+    p.ended_at = Some(now_millis());
+    let payout = p
+      .bet
+      .as_ref()
+      .and_then(|(outcome, amount)| p.payout(outcome, *amount));
+    self.balance += payout.unwrap_or(0);
+  }
+
+  /// Cancels the first running prediction: its bet comes back.
+  pub fn cancel(&mut self) {
+    let Some(p) = self.running() else {
+      return;
+    };
+    p.status = PredictionStatus::Canceled;
+    p.ended_at = Some(now_millis());
+    let refund = p.bet.as_ref().map_or(0, |(_, amount)| *amount);
+    self.balance += refund;
   }
 
   /// A second goes by: the bets and votes of an elapsed window close, and fake bettors and voters
   /// join the others.
   pub fn tick(&mut self) {
     let now = now_millis();
+    // Ended ones go once shown long enough, as Twitch stops returning them.
+    let shown_for = i64::try_from(ENDED_SHOWN.as_millis()).unwrap_or(i64::MAX);
+    self
+      .predictions
+      .retain(|p| !p.status.ended() || p.ended_at.is_some_and(|end| now - end < shown_for));
     for poll in &mut self.polls {
       if poll.ended {
         continue;
@@ -407,7 +422,16 @@ mod tests {
     points.resolve(0);
     // 100 of 400 points: the whole 400.
     assert_eq!(points.balance, 1_300);
-    assert!(points.predictions().is_ok_and(|p| p.is_empty()));
+    // Still shown, with its winner.
+    let ended = points.predictions().expect("the predictions");
+    assert_eq!(ended[0].status, PredictionStatus::Resolved);
+    assert_eq!(
+      ended[0].winner.as_deref(),
+      Some(ended[0].outcomes[0].id.as_str())
+    );
+    // Resolving again does nothing: it has ended.
+    points.resolve(1);
+    assert_eq!(points.balance, 1_300);
   }
 
   #[test]
@@ -423,6 +447,11 @@ mod tests {
     assert!(points.spend(&order).is_ok());
     points.cancel();
     assert_eq!(points.balance, 500);
+    assert!(
+      points
+        .predictions()
+        .is_ok_and(|p| p[0].status == PredictionStatus::Canceled)
+    );
     points.refuse = Some("COOLDOWN");
     let reward = points.reward_list().remove(0);
     assert!(matches!(
