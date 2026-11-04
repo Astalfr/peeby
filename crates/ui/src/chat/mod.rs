@@ -4,6 +4,7 @@
 //! IRC or InnerTube: a space owns the connection and feeds the panel.
 
 mod emoji;
+pub mod fake;
 mod layout;
 mod panel;
 

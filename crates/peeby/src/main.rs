@@ -233,12 +233,22 @@ fn youtube_videos(args: &[String]) -> Vec<String> {
   args
     .iter()
     .filter(|arg| !arg.contains("twitch.tv/"))
+    // Eleven characters a video id could have.
+    .filter(|arg| *arg != FAKE_CHAT)
     .filter_map(|arg| spaces::youtube::video_id(arg).map(str::to_owned))
     .collect()
 }
 
-/// The Twitch page among a launch's arguments: a live, a VOD or a clip.
+/// `peeby --fake-chat` (debug builds): opens the Twitch space's fake chat.
+const FAKE_CHAT: &str = "--fake-chat";
+
+/// The Twitch page among a launch's arguments: a live, a VOD or a clip (or the fake chat in a
+/// debug build).
 fn twitch_route(args: &[String]) -> Option<spaces::twitch::Route> {
+  #[cfg(debug_assertions)]
+  if args.iter().any(|arg| arg == FAKE_CHAT) {
+    return Some(spaces::twitch::Route::FakeChat);
+  }
   args
     .iter()
     .find_map(|arg| spaces::twitch::Route::from_url(arg))

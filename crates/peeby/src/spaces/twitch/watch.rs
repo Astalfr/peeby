@@ -27,7 +27,7 @@ use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, tf, theme};
 
-use super::points::{PointsFooter, PointsView};
+use super::points::{Backend, PointsFooter, PointsView};
 use super::{Nav, Route, cards, chat, follow, play, progress, replay};
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
@@ -178,7 +178,7 @@ impl WatchView {
         let client = view.client.clone();
         let login_ = login.clone();
         let player = view.player.downgrade();
-        let points = cx.new(|cx| PointsView::new(login_, client, player, cx));
+        let points = cx.new(|cx| PointsView::new(login_, Backend::Twitch(client), player, cx));
         // The balance and its rewards under the chat's field, the predictions in the header.
         let footer = cx.new(|cx| PointsFooter::new(points.clone(), cx));
         panel.update(cx, |p, cx| p.set_footer(footer.into(), cx));

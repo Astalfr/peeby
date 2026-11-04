@@ -38,6 +38,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
   the auth-token signs in to IRC, sending nothing)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
+- Fake Twitch chat with every chat feature, nothing sent to Twitch (debug builds): "Faux chat" in the Twitch
+  sidebar, or `cargo run -p peeby -- --fake-chat` (docs/twitch.md, "Fake chat")
 - Sign-in window alone (ADR 0017): `cargo run -p peeby -- --login youtube|twitch` writes the session (a
   cookie jar, the auth-token) on stdout: redirect it to a file, never into a log or a shared terminal
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`

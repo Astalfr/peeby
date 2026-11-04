@@ -175,6 +175,30 @@ Two credentials, for different things. Both are secrets, under the same rules as
 - **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
   tag, deleted messages, 7TV, badges; FFZ dropped (the user's choice). BTTV added on 2026-11-02 (the user
   asked: its global `D:` is common in chats).
+- **Fake chat** (debug builds only, `crates/peeby/src/spaces/twitch/fake_chat/`): "Faux chat" at the
+  bottom of the Twitch sidebar, or `cargo run -p peeby -- --fake-chat`. It tests the chat column
+  without a channel, an account or the network:
+  - Generated lines are raw IRC (tags escaped, `char` emote ranges). They go through
+    `twitch::chat::irc::parse` and `chat::event`, as a live's do.
+  - Fake 7TV/BTTV words (animated, wide, zero-width), badges and the points icon are drawn in memory
+    (`ui::chat::fake::Squares`, under `fake-chat://`). Only Twitch's own emotes, off by default,
+    load from Twitch's CDN.
+  - Controls on the left:
+    - Feed: the interval (one message every 10, 5 or 2 s, up to 300 a second), bursts sent `BATCH` at a
+      time, the connection state.
+    - Content: emotes, badges, colors (dark ones included), mentions (of the viewer too), links, emoji,
+      long lines, `/me`, highlighted messages.
+    - Events: subs, gifts, raids, deletions, timeouts, a cleared chat, server notices.
+    - The room's modes, sent as `ROOMSTATE` deltas.
+    - Writing: the field's state, and what a sent message gets back: an echo, a refusal `msg-id`, or
+      "not sent". The real 20 per 30 s limit applies.
+  - Points and predictions are `points::PointsView` on `Backend::Fake`. It reads and spends a local
+    state that never reports `minute-watched`:
+    - The balance and a bonus chest.
+    - Every kind of reward: with a text to write, subscribers only, unavailable, cooling down,
+      unaffordable.
+    - Refusal codes for spends.
+    - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling.
 
 ## Catalog through GQL instead of Helix
 

@@ -9,7 +9,6 @@
 // The example reports its timings on the console on purpose.
 #![allow(clippy::print_stderr)]
 
-use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -20,11 +19,12 @@ use gpui::{
 };
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
+use ui::chat::fake::{Rng, Squares};
 use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatPanel, ChatPanelEvent, Composing, Emote, EmoteGroup,
   Fragment, MessageKind, split_text,
 };
-use ui::images::{self, Download, Fetch};
+use ui::images;
 use ui::picture::Picture;
 use ui::{assets, theme};
 
@@ -70,110 +70,37 @@ const NAMES: &[&str] = &[
   "huit",
 ];
 
-/// Draws emotes and badges: `chat://emote/<n>?w=..&h=..` is a colored square, as PNG;
-/// `chat://anim/…` a square that blinks (a GIF); `chat://over/…` a ring drawn over an emote.
-struct Squares;
-
-impl Fetch for Squares {
-  fn fetch(&self, url: &str) -> Download {
-    let seed = url
-      .bytes()
-      .fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
-    let (animated, over) = (
-      url.starts_with("chat://anim/"),
-      url.starts_with("chat://over/"),
-    );
-    Box::pin(async move {
-      if animated || over {
-        let mut bytes = Vec::new();
-        {
-          let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
-          encoder
-            .set_repeat(image::codecs::gif::Repeat::Infinite)
-            .map_err(|e| e.to_string())?;
-          for step in 0..4u32 {
-            let frame = image::RgbaImage::from_fn(56, 56, |x, y| {
-              let ring = (x as i32 - 28).pow(2) + (y as i32 - 28).pow(2);
-              if over {
-                let radius = 8 + step as i32 * 5;
-                let on = (ring - radius * radius).abs() < 60;
-                image::Rgba(if on { [255, 255, 0, 255] } else { [0, 0, 0, 0] })
-              } else {
-                let shade = 60 + step as u8 * 60;
-                image::Rgba([shade, (seed >> 8) as u8, 255 - shade, 255])
-              }
-            });
-            let delay = image::Delay::from_numer_denom_ms(150, 1);
-            encoder
-              .encode_frame(image::Frame::from_parts(frame, 0, 0, delay))
-              .map_err(|e| e.to_string())?;
-          }
-        }
-        return Ok(bytes);
-      }
-      let mut image = image::RgbaImage::new(56, 56);
-      let color = [
-        (seed >> 16) as u8,
-        (seed >> 8) as u8,
-        seed as u8 | 0x40,
-        255,
-      ];
-      for (x, y, px) in image.enumerate_pixels_mut() {
-        let edge = x < 4 || y < 4 || x > 51 || y > 51;
-        *px = image::Rgba(if edge { [255, 255, 255, 255] } else { color });
-      }
-      let mut bytes = Vec::new();
-      image
-        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
-        .map_err(|e| e.to_string())?;
-      Ok(bytes)
-    })
-  }
-}
-
-/// A small pseudo-random generator, so that the example needs no crate.
-struct Rng(u64);
-
-impl Rng {
-  fn next(&mut self, below: usize) -> usize {
-    self.0 ^= self.0 << 13;
-    self.0 ^= self.0 >> 7;
-    self.0 ^= self.0 << 17;
-    (self.0 % below as u64) as usize
-  }
-}
-
 fn picture(path: String) -> Picture {
   Picture::sized(move |w, h| format!("chat://{path}?w={w}&h={h}"))
 }
 
 fn message(n: u64, rng: &mut Rng) -> ChatMessage {
-  let name = NAMES[rng.next(NAMES.len())];
+  let name = NAMES[rng.below(NAMES.len())];
   let colors: [Option<Hsla>; 4] = [
     None,
     Some(gpui::rgb(0x0000ff).into()),
     Some(gpui::rgb(0x9acd32).into()),
     Some(gpui::rgb(0xff69b4).into()),
   ];
-  let badges = (0..rng.next(3))
+  let badges = (0..rng.below(3))
     .map(|b| Badge {
       title: "Badge".into(),
       picture: picture(format!("badge/{b}")),
     })
     .collect();
   let mut fragments = Vec::new();
-  for _ in 0..1 + rng.next(24) {
-    match rng.next(12) {
+  for _ in 0..1 + rng.below(24) {
+    match rng.below(12) {
       0 | 1 => {
-        let kind = match rng.next(8) {
+        let kind = match rng.below(8) {
           0 => "anim",
           1 if !fragments.is_empty() => "over",
           _ => "emote",
         };
         fragments.push(Fragment::Emote(Emote {
           name: "Kappa".into(),
-          picture: picture(format!("{kind}/{}", rng.next(20))),
-          aspect: if kind == "emote" && rng.next(4) == 0 {
+          picture: picture(format!("{kind}/{}", rng.below(20))),
+          aspect: if kind == "emote" && rng.below(4) == 0 {
             2.
           } else {
             1.
@@ -181,14 +108,14 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
           overlay: kind == "over",
         }));
       }
-      2 if rng.next(4) == 0 => {
-        fragments.extend(split_text(&format!("@{} ", NAMES[rng.next(NAMES.len())])))
+      2 if rng.below(4) == 0 => {
+        fragments.extend(split_text(&format!("@{} ", NAMES[rng.below(NAMES.len())])))
       }
-      3 if rng.next(8) == 0 => {
+      3 if rng.below(8) == 0 => {
         fragments.extend(split_text("https://example.com/un/lien/assez/long "))
       }
       _ => fragments.push(Fragment::Text(
-        format!("{} ", WORDS[rng.next(WORDS.len())]).into(),
+        format!("{} ", WORDS[rng.below(WORDS.len())]).into(),
       )),
     }
   }
@@ -197,12 +124,12 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
     Some(Author {
       id: name.into(),
       name: name.into(),
-      color: colors[rng.next(colors.len())],
+      color: colors[rng.below(colors.len())],
       badges,
     }),
     fragments,
   );
-  message.kind = match rng.next(40) {
+  message.kind = match rng.below(40) {
     0 => MessageKind::Action,
     1 => MessageKind::Highlighted,
     2 => MessageKind::Notice(format!("{name} s'est abonné pour 12 mois !").into()),
@@ -292,7 +219,7 @@ fn main() {
         .detach();
         let feed = panel.downgrade();
         cx.spawn(async move |cx| {
-          let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+          let mut rng = Rng::new(0x9e37_79b9_7f4a_7c15);
           let mut n = 0u64;
           let started = Instant::now();
           feed

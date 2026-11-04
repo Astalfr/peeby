@@ -11,6 +11,9 @@
 //!
 //! With the auth-token, [`start_writer`] signs in a second connection that sends what the viewer
 //! writes (ADR 0023); the reader shows those messages when Twitch relays them to it.
+//!
+//! The debug builds' fake chat (`super::fake_chat`) feeds its generated lines through the same
+//! conversions ([`event`], [`writer_event`]).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -33,20 +36,20 @@ use ui::picture::Picture;
 use ui::{runtime, tf};
 
 /// Updates given to the panel at most at once, so that a burst does not stall a frame.
-const BATCH: usize = 200;
+pub(super) const BATCH: usize = 200;
 
 /// 7TV and BTTV emotes by the word they replace.
-type Words = HashMap<String, Emote>;
+pub(super) type Words = HashMap<String, Emote>;
 /// Badges by set and version.
-type Badges = HashMap<(String, String), Rc<helix::Badge>>;
+pub(super) type Badges = HashMap<(String, String), Rc<helix::Badge>>;
 
 /// What a channel adds to its messages.
 #[derive(Default)]
 pub(super) struct Extras {
-  words: Words,
-  badges: Badges,
+  pub(super) words: Words,
+  pub(super) badges: Badges,
   /// The 7TV and BTTV sets as the picker shows them: the channel's first.
-  picker: Vec<EmoteGroup>,
+  pub(super) picker: Vec<EmoteGroup>,
 }
 
 /// The sets loaded in this session: the global ones under `""`, a channel's under its Twitch user
@@ -251,7 +254,7 @@ where
   })
 }
 /// The panel's event for a connection's update, `room` keeping the merged modes.
-fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEvent> {
+pub(super) fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEvent> {
   Some(match update {
     Update::Status(Status::Connecting) => {
       ChatEvent::Status(Some(t("Connecting to chat…", "Connexion au chat…").into()))
@@ -282,14 +285,14 @@ fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEv
 }
 
 /// A line of Twitch itself in the chat, with `text`.
-fn notice_line(id: &str, text: String) -> ChatEvent {
+pub(super) fn notice_line(id: &str, text: String) -> ChatEvent {
   let mut notice = ChatMessage::new(format!("notice-{id}"), None, Vec::new());
   notice.kind = MessageKind::Notice(text.into());
   ChatEvent::Message(notice)
 }
 
 /// What a `NOTICE`'s `msg-id` tells the viewer; an unknown one shows as is.
-fn notice_text(id: &str) -> String {
+pub(super) fn notice_text(id: &str) -> String {
   let text = match id {
     "msg_slowmode" => t(
       "Slow mode: wait before sending another message.",
@@ -354,11 +357,7 @@ pub fn start_writer(
   cx: &mut App,
 ) -> Option<(Task<()>, Subscription)> {
   if !client.signed_in() {
-    let off = t(
-      "Add the Twitch site token in the settings to chat.",
-      "Ajoutez le jeton du site Twitch dans les réglages pour discuter.",
-    );
-    panel.update(cx, |p, cx| p.set_composing(Composing::Off(off.into()), cx));
+    panel.update(cx, |p, cx| p.set_composing(no_token(), cx));
     return None;
   }
   let writer: Rc<RefCell<Option<Writer>>> = Rc::default();
@@ -367,10 +366,7 @@ pub fn start_writer(
     move |panel, event: &ChatPanelEvent, cx| {
       let ChatPanelEvent::Send(text) = event;
       if !writer.borrow().as_ref().is_some_and(|w| w.send(text)) {
-        let failed = t("The message wasn't sent.", "Le message n'est pas parti.");
-        panel.update(cx, |p, cx| {
-          p.push([notice_line("unsent", failed.into())], cx)
-        });
+        panel.update(cx, |p, cx| p.push([unsent()], cx));
       }
     }
   });
@@ -423,8 +419,27 @@ pub fn start_writer(
   Some((task, subscription))
 }
 
+/// The field's state without the auth-token.
+pub(super) fn no_token() -> Composing {
+  Composing::Off(
+    t(
+      "Add the Twitch site token in the settings to chat.",
+      "Ajoutez le jeton du site Twitch dans les réglages pour discuter.",
+    )
+    .into(),
+  )
+}
+
+/// The line shown when a message could not even be queued (empty once cleaned, queue full).
+pub(super) fn unsent() -> ChatEvent {
+  notice_line(
+    "unsent",
+    t("The message wasn't sent.", "Le message n'est pas parti.").into(),
+  )
+}
+
 /// The panel's state and line for a writer's update.
-fn writer_event(update: WriterUpdate) -> (Option<Composing>, Option<ChatEvent>) {
+pub(super) fn writer_event(update: WriterUpdate) -> (Option<Composing>, Option<ChatEvent>) {
   let waiting = |text: String| Some(Composing::Waiting(text.into()));
   match update {
     WriterUpdate::Status(WriterStatus::Connecting) => (

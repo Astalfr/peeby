@@ -9,7 +9,15 @@
 //! The bonus chest is not claimed here: Twitch's integrity check refuses its mutation outside the
 //! browser (docs/twitch.md, "Channel points"). When one waits, a button opens the channel's chat
 //! on twitch.tv, where it is claimed with a click.
+//!
+//! In debug builds, the fake chat (`super::fake_chat`) drives the same view from a local state
+//! ([`Backend::Fake`]): nothing is read from Twitch, spent or reported then.
 
+#[cfg(debug_assertions)]
+use std::cell::RefCell;
+use std::pin::Pin;
+#[cfg(debug_assertions)]
+use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
@@ -71,9 +79,37 @@ fn points_text(n: u64) -> String {
   }
 }
 
+/// Where the points come from.
+#[derive(Clone)]
+pub enum Backend {
+  /// Twitch, as the auth-token's account.
+  Twitch(twitch::Client),
+  /// The debug page's fake channel: read and spent locally, never reported.
+  #[cfg(debug_assertions)]
+  Fake(Rc<RefCell<super::fake_chat::FakePoints>>),
+}
+
+impl Backend {
+  /// Twitch's client; `None` for the fake channel.
+  fn twitch(&self) -> Option<&twitch::Client> {
+    match self {
+      Self::Twitch(client) => Some(client),
+      #[cfg(debug_assertions)]
+      Self::Fake(_) => None,
+    }
+  }
+}
+
+/// An answer on its way (from the network runtime, or ready at once from the fake state).
+type Later<T> = Pin<Box<dyn Future<Output = Option<twitch::Result<T>>>>>;
+
+/// How long the fake channel takes to answer a spend, so that the button's wait shows.
+#[cfg(debug_assertions)]
+const FAKE_SPEND_DELAY: Duration = Duration::from_millis(600);
+
 /// A spend as it is sent: a reward on a channel with the viewer's text, or a bet of points on an
 /// outcome of a prediction.
-enum Order {
+pub(super) enum Order {
   Redeem(String, Reward, Option<String>),
   Bet(String, String, u64),
 }
@@ -96,7 +132,7 @@ enum Spend {
 
 pub struct PointsView {
   login: String,
-  client: twitch::Client,
+  backend: Backend,
   /// The page's player: minutes are reported only while it plays.
   player: WeakEntity<PlayerView>,
   /// The last watch-time report failed (the next failures log at debug).
@@ -123,13 +159,13 @@ pub struct PointsView {
 impl PointsView {
   pub fn new(
     login: String,
-    client: twitch::Client,
+    backend: Backend,
     player: WeakEntity<PlayerView>,
     cx: &mut Context<Self>,
   ) -> Self {
     let mut view = Self {
       login,
-      client,
+      backend,
       player,
       report_failing: false,
       points: None,
@@ -211,9 +247,27 @@ impl PointsView {
     view
   }
 
+  /// Reads the balance and the predictions again now (the fake chat, after a change), even when
+  /// the channel had no points.
+  #[cfg(debug_assertions)]
+  pub fn reload(&mut self, cx: &mut Context<Self>) {
+    self.off = false;
+    self.load_points(cx).detach();
+    self.load_predictions(cx).detach();
+  }
+
   fn load_points(&mut self, cx: &mut Context<Self>) -> Task<()> {
-    let (client, login) = (self.client.clone(), self.login.clone());
-    let fetch = runtime::spawn(cx, async move { client.points(&login).await });
+    let fetch: Later<Points> = match &self.backend {
+      Backend::Twitch(client) => {
+        let (client, login) = (client.clone(), self.login.clone());
+        Box::pin(runtime::spawn(
+          cx,
+          async move { client.points(&login).await },
+        ))
+      }
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => Box::pin(std::future::ready(Some(fake.borrow().points()))),
+    };
     cx.spawn(async move |this, cx| {
       let Some(result) = fetch.await else {
         return;
@@ -241,6 +295,8 @@ impl PointsView {
     &mut self,
     cx: &mut Context<Self>,
   ) -> Option<impl Future<Output = Option<twitch::Result<()>>> + use<>> {
+    // Never for the fake channel: nobody watches a live there.
+    let client = self.backend.twitch()?;
     let points = self.points.as_ref().filter(|_| !self.off)?;
     // Only the player that started last (the one on screen or in the mini-player): one live at a
     // time.
@@ -261,7 +317,7 @@ impl PointsView {
       broadcast_id: points.broadcast_id.clone()?,
       user_id: points.viewer_id.clone()?,
     };
-    let client = self.client.clone();
+    let client = client.clone();
     Some(runtime::spawn(cx, async move {
       client.minute_watched(&event).await
     }))
@@ -296,8 +352,16 @@ impl PointsView {
   }
 
   fn load_predictions(&mut self, cx: &mut Context<Self>) -> Task<()> {
-    let (client, login) = (self.client.clone(), self.login.clone());
-    let fetch = runtime::spawn(cx, async move { client.predictions(&login).await });
+    let fetch: Later<Vec<Prediction>> = match &self.backend {
+      Backend::Twitch(client) => {
+        let (client, login) = (client.clone(), self.login.clone());
+        Box::pin(runtime::spawn(cx, async move {
+          client.predictions(&login).await
+        }))
+      }
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => Box::pin(std::future::ready(Some(fake.borrow().predictions()))),
+    };
     cx.spawn(async move |this, cx| {
       let Some(result) = fetch.await else {
         return;
@@ -339,7 +403,6 @@ impl PointsView {
     let Some(points) = self.points.clone() else {
       return;
     };
-    let client = self.client.clone();
     // 32 hex digits, new for each spend, as the web player sends.
     let transaction = uuid::Uuid::new_v4().simple().to_string();
     let (order, done): (_, SharedString) = match &spend {
@@ -374,18 +437,34 @@ impl PointsView {
         (Order::Bet(event.clone(), outcome.clone(), amount), done)
       }
     };
-    let send = runtime::spawn(cx, async move {
-      match order {
-        Order::Redeem(channel, reward, text) => {
-          client
-            .redeem(&channel, &reward, text.as_deref(), &transaction)
-            .await
-        }
-        Order::Bet(event, outcome, amount) => {
-          client.predict(&event, &outcome, amount, &transaction).await
-        }
+    let send: Later<()> = match &self.backend {
+      Backend::Twitch(client) => {
+        let client = client.clone();
+        Box::pin(runtime::spawn(cx, async move {
+          match order {
+            Order::Redeem(channel, reward, text) => {
+              client
+                .redeem(&channel, &reward, text.as_deref(), &transaction)
+                .await
+            }
+            Order::Bet(event, outcome, amount) => {
+              client.predict(&event, &outcome, amount, &transaction).await
+            }
+          }
+        }))
       }
-    });
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => {
+        let (fake, wait) = (
+          fake.clone(),
+          cx.background_executor().timer(FAKE_SPEND_DELAY),
+        );
+        Box::pin(async move {
+          wait.await;
+          Some(fake.borrow_mut().spend(&order))
+        })
+      }
+    };
     self.busy = true;
     cx.notify();
     self._tasks.push(cx.spawn(async move |this, cx| {

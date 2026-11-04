@@ -8,12 +8,16 @@
 //! the Helix card until connected), "Parcourir" or the search, then categories and lives. With Helix, the
 //! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
 //! the meantime show in the bell ([`bell`]).
+//! Debug builds add a fake chat to the sidebar ([`fake_chat`]): the live chat's features without
+//! a channel nor the network.
 
 pub mod bell;
 pub mod browse;
 pub mod cards;
 pub mod channel;
 pub mod chat;
+#[cfg(debug_assertions)]
+pub mod fake_chat;
 pub mod follow;
 pub mod following;
 pub mod login;
@@ -96,6 +100,9 @@ pub enum Route {
   Vod { id: String, start: Option<u32> },
   /// A clip, by slug.
   Clip(String),
+  /// The fake chat (debug builds).
+  #[cfg(debug_assertions)]
+  FakeChat,
 }
 
 impl Route {
@@ -131,6 +138,10 @@ impl Route {
 
   /// Sidebar pages and the search: the sidebar lights the last one up to the page shown.
   fn is_top_level(&self) -> bool {
+    #[cfg(debug_assertions)]
+    if *self == Self::FakeChat {
+      return true;
+    }
     matches!(self, Self::Following | Self::Browse | Self::Search)
   }
 
@@ -149,6 +160,8 @@ impl Route {
       Self::Channel(login) | Self::Watch(login) => login.clone().into(),
       Self::Vod { .. } => t("Video", "Vidéo").into(),
       Self::Clip(_) => "Clip".into(),
+      #[cfg(debug_assertions)]
+      Self::FakeChat => t("Fake chat", "Faux chat").into(),
     }
   }
 }
@@ -623,6 +636,11 @@ impl TwitchSpace {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<AnyView> {
+    // Needs neither the catalog nor a client: nothing of it reaches Twitch.
+    #[cfg(debug_assertions)]
+    if *route == Route::FakeChat {
+      return Some(cx.new(fake_chat::FakeChatView::new).into());
+    }
     let (catalog, client) = (self.catalog.clone()?, self.client.clone()?);
     let nav = Nav::new(cx.weak_entity(), tab);
     Some(match route {
@@ -654,6 +672,8 @@ impl TwitchSpace {
         cx.new(|cx| WatchView::new(kind, client, catalog, nav, cx))
           .into()
       }
+      #[cfg(debug_assertions)]
+      Route::FakeChat => return None,
     })
   }
 
@@ -721,6 +741,8 @@ impl TwitchSpace {
     match id {
       "following" => Some(Route::Following),
       "browse" => Some(Route::Browse),
+      #[cfg(debug_assertions)]
+      "fake-chat" => Some(Route::FakeChat),
       _ => id
         .strip_prefix("live:")
         .map(|login| Route::Watch(login.to_owned())),
@@ -979,6 +1001,12 @@ impl Space for TwitchSpace {
         )
       });
     }
+    #[cfg(debug_assertions)]
+    entries.push(MenuEntry {
+      active: root == Some(&Route::FakeChat),
+      bottom: true,
+      ..MenuEntry::new("fake-chat", t("Fake chat", "Faux chat"), Icon::Comments)
+    });
     // The auth-token's account first, else the one Helix is connected with.
     let account = match (&self.account, signed) {
       (Some(account), _) => Some((account.display_name.clone(), account.avatar_url.clone())),
