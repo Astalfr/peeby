@@ -70,10 +70,36 @@ pub async fn faces(catalog: &Catalog, ids: Vec<String>) -> (Avatars, Partners) {
   }
 }
 
-/// A picture for an image template (`{width}x{height}`).
+/// The sizes of a 16:9 image (live preview, VOD thumbnail) that Twitch's CDN keeps cached:
+/// any other one is resized on the spot, about 2 s instead of 50 ms (measured 2026-11-04).
+const LANDSCAPE: [(u32, u32); 3] = [(320, 180), (640, 360), (1920, 1080)];
+/// The cached sizes of a 3:4 box art; another one costs about 0.3 s.
+const PORTRAIT: [(u32, u32); 4] = [(52, 72), (144, 192), (188, 250), (285, 380)];
+
+/// The size to ask the CDN for an image drawn `width`×`height` device pixels: the smallest
+/// cached one that covers it, else the largest (the image is cropped to fill). The URL then no
+/// longer changes with the window's width, so the image stores keep it too.
+fn cached_size(width: u32, height: u32) -> (u32, u32) {
+  let sizes: &[(u32, u32)] = if width >= height {
+    &LANDSCAPE
+  } else {
+    &PORTRAIT
+  };
+  sizes
+    .iter()
+    .copied()
+    .find(|&(w, h)| w >= width && h >= height)
+    .or_else(|| sizes.last().copied())
+    .unwrap_or((width, height))
+}
+
+/// A picture for an image template (`{width}x{height}`), at a size the CDN keeps cached.
 pub fn template(url: &str) -> Picture {
   let url = url.to_owned();
-  Picture::sized(move |w, h| helix::sized(&url, w, h))
+  Picture::sized(move |w, h| {
+    let (w, h) = cached_size(w, h);
+    helix::sized(&url, w, h)
+  })
 }
 
 /// A live preview: Twitch's CDN keeps it for a while, so a five-minute stamp gets a fresh one
@@ -83,7 +109,10 @@ pub fn preview(url: &str) -> Picture {
     .duration_since(UNIX_EPOCH)
     .map_or(0, |d| d.as_secs() / 300);
   let url = url.to_owned();
-  Picture::sized(move |w, h| format!("{}?t={stamp}", helix::sized(&url, w, h)))
+  Picture::sized(move |w, h| {
+    let (w, h) = cached_size(w, h);
+    format!("{}?t={stamp}", helix::sized(&url, w, h))
+  })
 }
 
 /// `41770` viewers, short: `41.8K` (French: `41,8 k`).
@@ -554,7 +583,18 @@ pub fn clip_card(
 
 #[cfg(test)]
 mod tests {
-  use super::{compact, date, grouped, progress, viewers, views};
+  use super::{cached_size, compact, date, grouped, progress, viewers, views};
+
+  #[test]
+  fn images_are_asked_at_a_cached_size() {
+    assert_eq!(cached_size(487, 274), (640, 360));
+    assert_eq!(cached_size(320, 180), (320, 180));
+    assert_eq!(cached_size(100, 56), (320, 180));
+    assert_eq!(cached_size(2560, 1440), (1920, 1080));
+    assert_eq!(cached_size(150, 200), (188, 250));
+    assert_eq!(cached_size(40, 53), (52, 72));
+    assert_eq!(cached_size(600, 800), (285, 380));
+  }
 
   #[test]
   fn formats() {

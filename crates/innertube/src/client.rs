@@ -41,6 +41,8 @@ const TITLE_BATCH: usize = 32;
 const TITLES_KEPT: usize = 5000;
 /// An oEmbed lookup that takes longer keeps the translated title.
 const TITLE_TIMEOUT: Duration = Duration::from_secs(3);
+/// Longest wait for an image, from connecting to its last byte.
+const IMAGE_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Default)]
 struct State {
@@ -605,7 +607,8 @@ impl Client {
 
   /// Downloads an image (thumbnails, avatars).
   pub async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>> {
-    let response = self.http.get(url).send().await?;
+    // A stalled download would hold one of the image store's few download slots for good.
+    let response = self.http.get(url).timeout(IMAGE_TIMEOUT).send().await?;
     if !response.status().is_success() {
       return Err(Error::Status {
         status: response.status().as_u16(),

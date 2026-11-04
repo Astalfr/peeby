@@ -416,7 +416,10 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
   - 9 tests on the fixtures.
 - [x] Image templates: `helix::sized` fills `{width}x{height}` and `%{width}x%{height}`. Live previews get
       a five-minute stamp, fresh regularly while the image store still caches them. `404_processing`
-      waits for VODs (step 8)
+      waits for VODs (step 8). The cards ask for the smallest size the CDN keeps cached that covers the
+      drawn one (`cards::cached_size`: 320x180, 640x360, 1920x1080 for previews and VOD thumbnails,
+      52x72 to 285x380 for box art): any other size is resized on the spot, about 2 s instead of 50 ms,
+      and since the URL changed with the window's width, every resize downloaded the grid again
 - [x] Pages (`cards.rs` holds the shared cards):
   - **Suivies**: the followed channels on air as stream cards (preview, avatar, title, channel,
     category, viewers), widened to fill their rows, then "Hors ligne", the others as avatars and
