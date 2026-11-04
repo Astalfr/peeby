@@ -192,13 +192,15 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - The room's modes, sent as `ROOMSTATE` deltas.
     - Writing: the field's state, and what a sent message gets back: an echo, a refusal `msg-id`, or
       "not sent". The real 20 per 30 s limit applies.
-  - Points and predictions are `points::PointsView` on `Backend::Fake`. It reads and spends a local
-    state that never reports `minute-watched`:
+  - Points, predictions and polls are `points::PointsView` on `Backend::Fake`, pinned over the
+    chat as on a live. It reads and spends a local state that never reports `minute-watched`:
     - The balance and a bonus chest.
     - Every kind of reward: with a text to write, subscribers only, unavailable, cooling down,
       unaffordable.
     - Refusal codes for spends.
     - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling.
+    - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays), removing.
+      They show with the points off too.
 
 ## Catalog through GQL instead of Helix
 
@@ -333,6 +335,9 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   - `channel(name) { activePredictionEvents lockedPredictionEvents }` gives the predictions
     (`status`, `createdAt`, `predictionWindowSeconds`, `outcomes { totalPoints totalUsers color }`,
     `self { prediction { points outcome } }`).
+  - **Polls: not captured yet [?].** Peeby shows them over the chat beside the predictions
+    (`spaces::twitch::polls`), but only the fake chat fills them. Before reading a live's polls, save
+    a redacted answer from the query that gives them, then write its parser (CLAUDE.md).
   - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
     automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
 - **Spends, raw mutations** (checked with made-up ids, so nothing was spent):

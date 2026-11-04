@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyElement, App, Bounds, Context, Corners, ElementId, FollowMode, FontWeight,
+  Anchor, AnyElement, AnyView, App, Bounds, Context, Corners, ElementId, FollowMode, FontWeight,
   ImageSource, ListAlignment, ListState, ObjectFit, Pixels, RenderImage, SharedString,
   StyleRefinement, Window, canvas, div, img, list, px,
 };
@@ -207,6 +207,8 @@ pub struct ChatPanel {
   title: SharedString,
   /// The writing area, for a space that sends to its chat.
   composer: Option<composer::Composer>,
+  /// Drawn over the top of the messages: what the channel pins ([`super::pinned_stack`]).
+  pinned: Option<AnyView>,
 }
 
 impl gpui::EventEmitter<ChatPanelEvent> for ChatPanel {}
@@ -236,7 +238,15 @@ impl ChatPanel {
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
       title: t("Live chat", "Chat du live").into(),
       composer: None,
+      pinned: None,
     }
+  }
+
+  /// Draws `view` over the top of the messages, without moving them: its root is absolute
+  /// ([`super::pinned_stack`]).
+  pub fn set_pinned(&mut self, view: AnyView, cx: &mut Context<Self>) {
+    self.pinned = Some(view);
+    cx.notify();
   }
 
   /// The panel with another title than "Live chat" (a replay).
@@ -696,7 +706,8 @@ impl Render for ChatPanel {
                 .child(t("Welcome to the chat!", "Bienvenue dans le chat !")),
             )
           })
-          .children(resume),
+          .children(resume)
+          .children(self.pinned.clone()),
       )
       .children(composer)
   }

@@ -4,12 +4,13 @@
 //! conversion (`chat::event`), with fake 7TV/BTTV emotes and badges drawn in memory
 //! (`ui::chat::fake::Squares`, under [`SCHEME`]). The panel is the live's, with its field:
 //! what is sent comes back as Twitch relays it, or is refused as the controls choose
-//! (`chat::writer_event`). The channel points and predictions are `points::PointsView` on a local
-//! state ([`points::FakePoints`]): nothing is read, spent or reported on Twitch.
+//! (`chat::writer_event`). The channel points, predictions and polls are `points::PointsView` on
+//! a local state ([`points::FakePoints`]), the predictions and polls pinned over the messages as
+//! on a live: nothing is read, spent or reported on Twitch.
 //!
 //! The controls on the left set the rate of messages (and bursts), what they hold, the
 //! moderation, the channel's events, the room's modes, the connection's state, the field's state,
-//! the points, the rewards and the predictions. Only Twitch's own emotes (off by default) load
+//! the points, the rewards, the predictions and the polls. Only Twitch's own emotes (off by default) load
 //! from Twitch's CDN.
 
 mod feed;
@@ -135,7 +136,10 @@ impl FakeChatView {
       )
     });
     let footer = cx.new(|cx| PointsFooter::new(points_view.clone(), cx));
-    panel.update(cx, |p, cx| p.set_footer(footer.into(), cx));
+    panel.update(cx, |p, cx| {
+      p.set_footer(footer.into(), cx);
+      p.set_pinned(points_view.clone().into(), cx);
+    });
     let send = cx.subscribe(&panel, |this, _, event: &ChatPanelEvent, cx| {
       let ChatPanelEvent::Send(text) = event;
       this.send(text, cx);
@@ -1054,6 +1058,66 @@ impl FakeChatView {
   }
 }
 
+impl FakeChatView {
+  fn polls_card(&self, cx: &mut Context<Self>) -> AnyElement {
+    let voters = self.points.borrow().voters;
+    Self::card(
+      t("Polls", "Sondages"),
+      vec![
+        Self::line(
+          t("New", "Nouveau"),
+          vec![
+            self.button(
+              "poll-2",
+              t("2 choices · 1 min", "2 choix · 1 min").into(),
+              |this, cx| this.points_changed(|p| p.start_poll(2, 60), cx),
+              cx,
+            ),
+            self.button(
+              "poll-5",
+              t("5 choices · 20 s", "5 choix · 20 s").into(),
+              |this, cx| this.points_changed(|p| p.start_poll(5, 20), cx),
+              cx,
+            ),
+          ],
+        ),
+        Self::line(
+          t("The first one", "Le premier"),
+          vec![
+            self.button(
+              "poll-end",
+              t("End", "Terminer").into(),
+              |this, cx| this.points_changed(FakePoints::end_poll, cx),
+              cx,
+            ),
+            self.button(
+              "poll-remove",
+              t("Remove", "Retirer").into(),
+              |this, cx| this.points_changed(FakePoints::remove_poll, cx),
+              cx,
+            ),
+          ],
+        ),
+        self.switch(
+          "voters",
+          t("Other voters", "Autres votants"),
+          voters,
+          |this, on, cx| this.points_changed(|p| p.voters = on, cx),
+          cx,
+        ),
+        div()
+          .text_xs()
+          .text_color(theme::muted())
+          .child(t(
+            "Polls show even with the channel points off, as on Twitch. Refused spends refuse votes too.",
+            "Les sondages s'affichent même sans points de chaîne, comme sur Twitch. Les refus de dépenses refusent aussi les votes.",
+          ))
+          .into_any_element(),
+      ],
+    )
+  }
+}
+
 impl Render for FakeChatView {
   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let title: SharedString = t("Fake chat", "Faux chat").into();
@@ -1070,28 +1134,24 @@ impl Render for FakeChatView {
           .p_6()
           .gap_4()
           .child(
-            h_flex()
-              .gap_4()
-              .items_start()
-              .child(
-                v_flex()
-                  .flex_1()
-                  .min_w_0()
-                  .gap_1()
-                  .child(
-                    div()
-                      .text_lg()
-                      .font_weight(FontWeight::SEMIBOLD)
-                      .child(title),
-                  )
-                  .child(div().text_sm().text_color(theme::muted()).child(t(
-                    "Debug builds only: generated messages through the real parser, points and \
+            h_flex().gap_4().items_start().child(
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap_1()
+                .child(
+                  div()
+                    .text_lg()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(title),
+                )
+                .child(div().text_sm().text_color(theme::muted()).child(t(
+                  "Debug builds only: generated messages through the real parser, points and \
                      predictions kept here. Nothing goes to Twitch.",
-                    "Builds debug uniquement : des messages générés passent par le vrai parseur, \
+                  "Builds debug uniquement : des messages générés passent par le vrai parseur, \
                      les points et les prédictions restent ici. Rien ne part chez Twitch.",
-                  ))),
-              )
-              .child(self.points_view.clone()),
+                ))),
+            ),
           )
           .child(self.feed_card(cx))
           .child(self.content_card(cx))
@@ -1099,7 +1159,8 @@ impl Render for FakeChatView {
           .child(self.room_card(cx))
           .child(self.writer_card(cx))
           .child(self.points_card(cx))
-          .child(self.predictions_card(cx)),
+          .child(self.predictions_card(cx))
+          .child(self.polls_card(cx)),
       )
       .child(
         div()

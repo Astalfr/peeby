@@ -3,7 +3,7 @@
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute; the viewer writes in the chat with the auth-token, their channel points under
-//!   its field and the predictions at the header's right ([`super::points`]);
+//!   its field and the predictions and polls pinned over its messages ([`super::points`]);
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews, its muted parts and
 //!   its game chapters on the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
@@ -179,9 +179,13 @@ impl WatchView {
         let login_ = login.clone();
         let player = view.player.downgrade();
         let points = cx.new(|cx| PointsView::new(login_, Backend::Twitch(client), player, cx));
-        // The balance and its rewards under the chat's field, the predictions in the header.
+        // The balance and its rewards under the chat's field, the predictions and polls over
+        // its messages.
         let footer = cx.new(|cx| PointsFooter::new(points.clone(), cx));
-        panel.update(cx, |p, cx| p.set_footer(footer.into(), cx));
+        panel.update(cx, |p, cx| {
+          p.set_footer(footer.into(), cx);
+          p.set_pinned(points.clone().into(), cx);
+        });
         view.chat = Some(panel);
         view.points = Some(points);
         view.start_live(login, cx)
@@ -733,7 +737,6 @@ impl WatchView {
           header.followed,
         ))
       })
-      .children(self.points.clone())
   }
 }
 

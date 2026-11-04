@@ -34,12 +34,17 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
 
 - **`twitch::points`** holds the parsers and requests, tested on saved answers. It uses raw GQL
   queries and mutations with the web Client-ID and the auth-token. There is no hash to maintain.
-- **On the watch page of a live**, at the header's right (since [ADR 0023](0023-twitch-chat-sending.md),
-  the balance and its rewards sit under the chat's field; the predictions stay here):
+- **On the watch page of a live** (since [ADR 0023](0023-twitch-chat-sending.md), the balance and its
+  rewards sit under the chat's field; since 2026-11-04, the predictions are pinned over the chat):
   - the balance, under the channel's name for its points, read again every minute;
   - its rewards in a popover;
-  - its predictions, read again every 20 s, with their odds and a countdown.
-  Without the auth-token, or on a channel without points, nothing shows.
+  - its predictions, read again every 20 s, with their odds and a countdown. As on Twitch, each
+    is a bar at the top of the chat, drawn over the messages: folded by default, with its state
+    (countdown, the viewer's bet, closed). A click unfolds its card (outcomes, bets). The polls
+    share the stack (`ui::chat::pinned_stack`), and only one card is unfolded at a time, so a
+    prediction and a poll never cover the chat together.
+  Without the auth-token, or on a channel without points, nothing shows (polls excepted, which
+  every viewer sees).
 - **Spending** takes two clicks: the button turns into "Confirmer". A reward that asks for a text
   takes it in a field. A bet takes a share of the balance (10 %, 25 %, 50 %, everything), at least
   10 points. Twitch's refusals keep their code (`Error::Refused`) and read in French.

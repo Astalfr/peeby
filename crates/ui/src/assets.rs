@@ -98,6 +98,7 @@ icons! {
   Plus => "plus",
   Shorts => "shorts",
   Smile => "smile",
+  Poll => "chart-column",
 }
 
 macro_rules! files {

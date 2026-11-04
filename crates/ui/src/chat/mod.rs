@@ -1,12 +1,14 @@
 //! A live's chat, whatever the service (docs/twitch-plan.md, "Live and chat are generic"): the
 //! model a space converts its protocol into ([`ChatEvent`]s of [`ChatMessage`]s), the
-//! [`ChatPanel`] that shows them, and the watch layout with a chat column. Nothing here knows
+//! [`ChatPanel`] that shows them, what a channel pins over it ([`pinned_stack`]: predictions,
+//! polls), and the watch layout with a chat column. Nothing here knows
 //! IRC or InnerTube: a space owns the connection and feeds the panel.
 
 mod emoji;
 pub mod fake;
 mod layout;
 mod panel;
+mod pinned;
 
 use std::time::SystemTime;
 
@@ -16,6 +18,7 @@ use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
 pub use panel::{ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
+pub use pinned::{OnToggle, Pinned, Unfolded, pinned_stack};
 
 /// One line of the chat.
 #[derive(Clone)]

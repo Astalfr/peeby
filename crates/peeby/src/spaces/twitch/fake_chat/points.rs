@@ -1,6 +1,6 @@
-//! The fake channel's points and predictions, read and spent by `points::PointsView` through
-//! `Backend::Fake`: what the debug page's controls set, spends that take the points (or are
-//! refused with a chosen code), and predictions with fake bettors.
+//! The fake channel's points, predictions and polls, read and spent by `points::PointsView`
+//! through `Backend::Fake`: what the debug page's controls set, spends that take the points (or
+//! are refused with a chosen code), predictions with fake bettors, polls with fake voters.
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,6 +9,7 @@ use twitch::points::{Outcome, Points, Prediction, PredictionStatus, Reward};
 use ui::chat::fake::Rng;
 
 use super::super::points::Order;
+use super::super::polls::{Choice, Poll};
 use super::SCHEME;
 
 /// How long the "Shoutout" reward cools down once redeemed.
@@ -27,6 +28,9 @@ pub struct FakePoints {
   /// Other viewers bet on the predictions taking bets.
   pub bettors: bool,
   predictions: Vec<Prediction>,
+  /// Other viewers vote in the polls taking votes.
+  pub voters: bool,
+  polls: Vec<Poll>,
   /// Reward id → end of its cooldown, Unix milliseconds.
   cooldowns: HashMap<String, i64>,
   /// Predictions made so far, for their ids.
@@ -44,6 +48,8 @@ impl Default for FakePoints {
       refuse: None,
       bettors: true,
       predictions: Vec::new(),
+      voters: true,
+      polls: Vec::new(),
       cooldowns: HashMap::new(),
       made: 0,
       rng: Rng::new(0x5eed),
@@ -74,6 +80,83 @@ impl FakePoints {
 
   pub fn predictions(&self) -> twitch::Result<Vec<Prediction>> {
     Ok(self.predictions.clone())
+  }
+
+  pub fn polls(&self) -> Vec<Poll> {
+    self.polls.clone()
+  }
+
+  /// The viewer's free vote: one per poll, while it takes votes.
+  pub fn vote(&mut self, poll: &str, choice: &str) -> twitch::Result<()> {
+    let refused = |code: &str| Err(twitch::Error::Refused(code.into()));
+    if let Some(code) = self.refuse {
+      return refused(code);
+    }
+    let Some(poll) = self.polls.iter_mut().find(|p| p.id == poll && !p.ended) else {
+      return refused("NOT_FOUND");
+    };
+    if poll.voted.is_some() {
+      return refused("ALREADY_VOTED");
+    }
+    let Some(chosen) = poll.choices.iter_mut().find(|c| c.id == choice) else {
+      return refused("NOT_FOUND");
+    };
+    chosen.votes += 1;
+    poll.voted = Some(choice.to_owned());
+    Ok(())
+  }
+
+  /// A new poll taking votes for `duration` seconds, with `choices` answers (2 to 5).
+  pub fn start_poll(&mut self, choices: usize, duration: u64) {
+    self.made += 1;
+    let choices = choices.clamp(2, 5);
+    let (title, answers): (&str, &[&str]) = if choices == 2 {
+      ("On continue la partie ?", &["Oui", "Non"])
+    } else {
+      (
+        "Quel jeu après ? (un titre de sondage assez long pour passer sur plusieurs lignes)",
+        &[
+          "Celeste",
+          "Hades II",
+          "Outer Wilds",
+          "Un jeu au nom vraiment très long pour voir la troncature",
+          "Surprise",
+        ],
+      )
+    };
+    let id = format!("fake-poll-{}", self.made);
+    self.polls.push(Poll {
+      choices: answers
+        .iter()
+        .take(choices)
+        .enumerate()
+        .map(|(i, title)| Choice {
+          id: format!("{id}-{i}"),
+          title: (*title).to_owned(),
+          votes: 0,
+        })
+        .collect(),
+      id,
+      title: title.into(),
+      started_at: now_millis(),
+      duration_seconds: duration,
+      ended: false,
+      voted: None,
+    });
+  }
+
+  /// Ends the first poll taking votes: its result stays shown.
+  pub fn end_poll(&mut self) {
+    if let Some(poll) = self.polls.iter_mut().find(|p| !p.ended) {
+      poll.ended = true;
+    }
+  }
+
+  /// Removes the first poll, as Twitch does a while after its end.
+  pub fn remove_poll(&mut self) {
+    if !self.polls.is_empty() {
+      self.polls.remove(0);
+    }
   }
 
   /// Every case of the rewards' popover: a plain one, one with a text to write, subscribers
@@ -245,9 +328,24 @@ impl FakePoints {
     }
   }
 
-  /// A second goes by: the bets of an elapsed window close, and fake bettors join the others.
+  /// A second goes by: the bets and votes of an elapsed window close, and fake bettors and voters
+  /// join the others.
   pub fn tick(&mut self) {
     let now = now_millis();
+    for poll in &mut self.polls {
+      if poll.ended {
+        continue;
+      }
+      if poll.remaining(now) == Some(0) {
+        poll.ended = true;
+        continue;
+      }
+      if self.voters {
+        for choice in &mut poll.choices {
+          choice.votes += self.rng.below(4) as u64;
+        }
+      }
+    }
     for p in &mut self.predictions {
       if p.status != PredictionStatus::Active {
         continue;
@@ -331,6 +429,28 @@ mod tests {
       points.spend(&Order::Redeem(String::new(), reward, None)),
       Err(twitch::Error::Refused(code)) if code == "COOLDOWN"
     ));
+  }
+
+  #[test]
+  fn one_vote_per_poll_and_ended_polls_stay() {
+    let mut points = FakePoints {
+      voters: false,
+      ..FakePoints::default()
+    };
+    points.start_poll(4, 60);
+    let poll = points.polls()[0].clone();
+    assert_eq!(poll.choices.len(), 4);
+    assert!(points.vote(&poll.id, &poll.choices[2].id).is_ok());
+    assert!(points.vote(&poll.id, &poll.choices[1].id).is_err());
+    assert_eq!(
+      points.polls()[0].voted.as_deref(),
+      Some(poll.choices[2].id.as_str())
+    );
+    points.end_poll();
+    assert!(points.vote(&poll.id, &poll.choices[0].id).is_err());
+    assert!(points.polls()[0].ended);
+    points.remove_poll();
+    assert!(points.polls().is_empty());
   }
 
   #[test]

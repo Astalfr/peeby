@@ -1,7 +1,10 @@
 //! A live's channel points, with the web `auth-token` (none: nothing shows): the viewer's
 //! balance, refreshed every minute, and the channel's rewards in a popover, under the chat's field
-//! ([`PointsFooter`], ADR 0023); its predictions with their bets at the watch page header's right. Spending asks for a second click ("Confirmer", within 8 s; a
-//! bet's shows the amount it sends), since it cannot be undone.
+//! ([`PointsFooter`], ADR 0023). Its predictions with their bets, and its polls
+//! ([`super::polls`]), are pinned over the chat as Twitch does (`ui::chat::pinned_stack`): folded
+//! bars with their state, one card unfolded at a time, new ones folded. Polls show with or without
+//! points. Spending asks for a second click ("Confirmer", within 8 s; a bet's shows the amount it
+//! sends), since it cannot be undone; a free vote takes one.
 //!
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
 //! Twitch as its web player does (`twitch::spade`): without it, watching earns no points.
@@ -16,7 +19,6 @@
 #[cfg(debug_assertions)]
 use std::cell::RefCell;
 use std::pin::Pin;
-#[cfg(debug_assertions)]
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -31,6 +33,7 @@ use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 use ui::assets::Icon;
+use ui::chat::{Pinned, Unfolded, pinned_stack};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
@@ -38,6 +41,7 @@ use ui::player::PlayerView;
 use ui::{runtime, tf, theme};
 
 use super::cards;
+use super::polls::{self, Poll};
 
 /// How often the balance and the rewards are read again.
 const POINTS_EVERY: Duration = Duration::from_secs(60);
@@ -149,8 +153,16 @@ pub struct PointsView {
   share: u64,
   /// The last spend's outcome: text, and whether it went through.
   outcome: Option<(SharedString, bool)>,
-  /// That outcome is a bet's (shown under the balance; a reward's shows in its popover).
+  /// That outcome is a bet's (shown in the prediction's card; a reward's in its popover).
   outcome_of_bet: bool,
+  /// The channel's polls (only the fake chat's for now, see [`super::polls`]).
+  polls: Vec<Poll>,
+  /// The pinned item unfolded over the chat.
+  unfolded: Unfolded,
+  /// A vote is on its way.
+  voting: bool,
+  /// The last vote failed: why.
+  vote_error: Option<SharedString>,
   /// The text of a reward that asks for one (made at the first render: it needs the window).
   input: Option<Entity<InputState>>,
   _tasks: Vec<Task<()>>,
@@ -176,6 +188,10 @@ impl PointsView {
       share: 10,
       outcome: None,
       outcome_of_bet: false,
+      polls: Vec::new(),
+      unfolded: Unfolded::default(),
+      voting: false,
+      vote_error: None,
       input: None,
       _tasks: Vec::new(),
     };
@@ -221,7 +237,8 @@ impl PointsView {
         }
       }
     }));
-    // The countdown of a prediction taking bets, and the end of a confirmation's wait.
+    // The countdown of a prediction taking bets or a poll taking votes, and the end of a
+    // confirmation's wait.
     view._tasks.push(cx.spawn(async move |this, cx| {
       loop {
         cx.background_executor().timer(Duration::from_secs(1)).await;
@@ -235,6 +252,7 @@ impl PointsView {
               .predictions
               .iter()
               .any(|p| p.status == PredictionStatus::Active)
+            || this.polls.iter().any(|p| !p.ended)
           {
             cx.notify();
           }
@@ -254,6 +272,73 @@ impl PointsView {
     self.off = false;
     self.load_points(cx).detach();
     self.load_predictions(cx).detach();
+    self.load_polls(cx);
+  }
+
+  /// The channel's polls: the fake chat's; none on Twitch yet (its source is not captured).
+  #[cfg(debug_assertions)]
+  fn load_polls(&mut self, cx: &mut Context<Self>) {
+    if let Backend::Fake(fake) = &self.backend {
+      self.polls = fake.borrow().polls();
+      self.fold_gone();
+      cx.notify();
+    }
+  }
+
+  /// Folds the pinned item that is gone.
+  fn fold_gone(&mut self) {
+    let ids: Vec<String> = self
+      .predictions
+      .iter()
+      .map(|p| p.id.clone())
+      .chain(self.polls.iter().map(|p| p.id.clone()))
+      .collect();
+    self.unfolded.keep_only(ids.iter().map(String::as_str));
+  }
+
+  /// A free vote for `choice` in `poll`: one click.
+  fn vote(&mut self, poll: String, choice: String, cx: &mut Context<Self>) {
+    if self.voting {
+      return;
+    }
+    let send: Later<()> = match &self.backend {
+      // Unreachable while Twitch's polls are not read: none shows.
+      Backend::Twitch(_) => {
+        tracing::debug!("Twitch poll vote ({poll}, {choice}): polls are not read from Twitch yet");
+        Box::pin(std::future::ready(Some(Err(twitch::Error::Refused(
+          "POLLS_NOT_SUPPORTED".into(),
+        )))))
+      }
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => {
+        let (fake, wait) = (
+          fake.clone(),
+          cx.background_executor().timer(FAKE_SPEND_DELAY),
+        );
+        Box::pin(async move {
+          wait.await;
+          Some(fake.borrow_mut().vote(&poll, &choice))
+        })
+      }
+    };
+    self.voting = true;
+    self.vote_error = None;
+    cx.notify();
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      let result = send.await;
+      this
+        .update(cx, |this, cx| {
+          this.voting = false;
+          if let Some(Err(e)) = result {
+            tracing::warn!("Twitch poll vote: {e}");
+            this.vote_error = Some(refusal(&e).into());
+          }
+          #[cfg(debug_assertions)]
+          this.load_polls(cx);
+          cx.notify();
+        })
+        .ok();
+    }));
   }
 
   fn load_points(&mut self, cx: &mut Context<Self>) -> Task<()> {
@@ -369,7 +454,10 @@ impl PointsView {
       this
         .update(cx, |this, cx| {
           match result {
-            Ok(predictions) => this.predictions = predictions,
+            Ok(predictions) => {
+              this.predictions = predictions;
+              this.fold_gone();
+            }
             Err(e) => tracing::warn!("Twitch predictions: {e}"),
           }
           cx.notify();
@@ -700,35 +788,10 @@ impl PointsView {
     })
   }
 
-  fn prediction_card(&self, p: &Prediction, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  /// A prediction's card, unfolded over the chat: its outcomes, the bet amounts, a bet's outcome.
+  fn prediction_body(&self, p: &Prediction, cx: &mut Context<Self>) -> AnyElement {
     let total: u64 = p.outcomes.iter().map(|o| o.points).sum();
     let open = p.status == PredictionStatus::Active && p.bet.is_none();
-    let status = match (p.status, &p.bet) {
-      (_, Some((outcome, points))) => {
-        let title = p
-          .outcomes
-          .iter()
-          .find(|o| &o.id == outcome)
-          .map_or("", |o| o.title.as_str());
-        let points = points_text(*points);
-        tf!(
-          "Your bet: {points} on “{title}”",
-          "Votre pari : {points} sur « {title} »"
-        )
-      }
-      (PredictionStatus::Active, None) => match remaining(p) {
-        Some(left) if left > 0 => {
-          let left = ui::player::format_time(left as f64);
-          tf!("Betting open · {left}", "Paris ouverts · {left}")
-        }
-        _ => t("Betting closing", "Paris en cours de fermeture").into(),
-      },
-      (PredictionStatus::Locked, None) => t(
-        "Betting closed · waiting for the result",
-        "Paris clos · en attente du résultat",
-      )
-      .into(),
-    };
     let amount = self.bet_amount();
     let balance = self.points.as_ref().map_or(0, |p| p.balance);
     let mut outcomes = v_flex().gap_1();
@@ -842,28 +905,181 @@ impl PointsView {
         }))
     });
     v_flex()
-      .p_3()
       .gap_2()
-      .rounded(theme::RADIUS)
-      .bg(theme::surface())
-      .border_1()
-      .border_color(theme::border())
-      .child(
-        div()
-          .text_xs()
-          .text_color(theme::muted())
-          .font_weight(FontWeight::MEDIUM)
-          .child(t("Prediction", "Prédiction")),
-      )
-      .child(
-        div()
-          .text_sm()
-          .font_weight(FontWeight::SEMIBOLD)
-          .child(p.title.clone()),
-      )
-      .child(div().text_xs().text_color(theme::muted()).child(status))
       .child(outcomes)
       .children(shares)
+      .when(self.outcome_of_bet, |el| el.children(self.outcome_line()))
+      .into_any_element()
+  }
+
+  /// A poll's card: its choices with their share of the votes, a vote button on each while it
+  /// takes votes and the viewer has not voted.
+  fn poll_body(&self, poll: &Poll, cx: &mut Context<Self>) -> AnyElement {
+    let total = poll.total();
+    let open = !poll.ended && poll.voted.is_none();
+    let winner = poll
+      .ended
+      .then(|| poll.winner().map(|c| c.id.clone()))
+      .flatten();
+    let mut choices = v_flex().gap_1();
+    for choice in &poll.choices {
+      let share = if total > 0 {
+        choice.votes as f64 / total as f64
+      } else {
+        0.0
+      };
+      let mine = poll.voted.as_deref() == Some(choice.id.as_str());
+      let won = winner.as_deref() == Some(choice.id.as_str());
+      let (poll_id, choice_id) = (poll.id.clone(), choice.id.clone());
+      choices = choices.child(
+        v_flex()
+          .gap_0p5()
+          .child(
+            h_flex()
+              .gap_2()
+              .items_center()
+              .child(
+                div()
+                  .flex_1()
+                  .min_w_0()
+                  .text_sm()
+                  .truncate()
+                  .when(won, |el| el.font_weight(FontWeight::SEMIBOLD))
+                  .child(choice.title.clone()),
+              )
+              .when(mine, |row| {
+                row.child(
+                  gpui_component::Icon::new(Icon::Check)
+                    .size(px(14.))
+                    .text_color(theme::accent()),
+                )
+              })
+              .child(
+                div()
+                  .text_xs()
+                  .text_color(theme::muted())
+                  .child(percent(format!("{:.0}", share * 100.0))),
+              )
+              .when(open, |row| {
+                row.child(
+                  Button::new(ElementId::Name(
+                    format!("twitch-vote-{}-{}", poll.id, choice.id).into(),
+                  ))
+                  .xsmall()
+                  .label(t("Vote", "Voter"))
+                  .disabled(self.voting)
+                  .on_click(cx.listener(move |this, _, _, cx| {
+                    this.vote(poll_id.clone(), choice_id.clone(), cx)
+                  })),
+                )
+              }),
+          )
+          .child(
+            div()
+              .h(px(3.))
+              .w_full()
+              .rounded_full()
+              .bg(theme::surface_hover())
+              .child(
+                div()
+                  .h_full()
+                  .rounded_full()
+                  .w(gpui::relative(share as f32))
+                  .bg(if won || mine {
+                    theme::accent()
+                  } else {
+                    theme::muted()
+                  }),
+              ),
+          )
+          .child(div().text_xs().text_color(theme::subtle()).child({
+            let votes = cards::grouped(choice.votes);
+            if cards::plural(choice.votes) {
+              format!("{votes} votes")
+            } else {
+              format!("{votes} vote")
+            }
+          })),
+      );
+    }
+    v_flex()
+      .gap_2()
+      .child(choices)
+      .children(
+        self
+          .vote_error
+          .clone()
+          .map(|e| div().text_sm().text_color(theme::muted()).child(e)),
+      )
+      .into_any_element()
+  }
+
+  /// What is pinned over the chat: the predictions (with points), then the polls.
+  fn pinned(&self, cx: &mut Context<Self>) -> Vec<Pinned> {
+    let mut items = Vec::new();
+    if !self.off && self.points.is_some() {
+      for p in &self.predictions {
+        let open = self.unfolded.is(&p.id);
+        items.push(Pinned {
+          id: p.id.clone().into(),
+          icon: Icon::Points,
+          accent: outcome_color("BLUE"),
+          kind: t("Prediction", "Prédiction").into(),
+          title: p.title.clone().into(),
+          status: prediction_status(p).into(),
+          body: open.then(|| self.prediction_body(p, cx)),
+        });
+      }
+    }
+    let now = polls::now_millis();
+    for poll in &self.polls {
+      let open = self.unfolded.is(&poll.id);
+      items.push(Pinned {
+        id: poll.id.clone().into(),
+        icon: Icon::Poll,
+        accent: theme::accent(),
+        kind: t("Poll", "Sondage").into(),
+        title: poll.title.clone().into(),
+        status: poll.status(now).into(),
+        body: open.then(|| self.poll_body(poll, cx)),
+      });
+    }
+    items
+  }
+}
+
+/// A prediction's state in a few words, for its bar (folded, it is all that shows).
+fn prediction_status(p: &Prediction) -> String {
+  match (p.status, &p.bet) {
+    (_, Some((outcome, points))) => {
+      let title = p
+        .outcomes
+        .iter()
+        .find(|o| &o.id == outcome)
+        .map_or("", |o| o.title.as_str());
+      let points = points_text(*points);
+      let state = if p.status == PredictionStatus::Locked {
+        t(" · closed", " · clos")
+      } else {
+        ""
+      };
+      tf!(
+        "Your bet: {points} on “{title}”{state}",
+        "Votre pari : {points} sur « {title} »{state}"
+      )
+    }
+    (PredictionStatus::Active, None) => match remaining(p) {
+      Some(left) if left > 0 => {
+        let left = ui::player::format_time(left as f64);
+        tf!("Betting open · {left}", "Paris ouverts · {left}")
+      }
+      _ => t("Betting closing", "Paris en cours de fermeture").into(),
+    },
+    (PredictionStatus::Locked, None) => t(
+      "Betting closed · waiting for the result",
+      "Paris clos · en attente du résultat",
+    )
+    .into(),
   }
 }
 
@@ -904,30 +1120,22 @@ impl PointsView {
   }
 }
 
-/// The predictions (and a bet's outcome), at the header's right.
+/// The predictions and polls pinned over the chat (`ChatPanel::set_pinned`).
 impl Render for PointsView {
   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    if self.off || self.points.is_none() {
-      return div().into_any_element();
-    }
-    let predictions: Vec<_> = self
-      .predictions
-      .clone()
-      .iter()
-      .map(|p| self.prediction_card(p, cx).into_any_element())
-      .collect();
-    let outcome = self.popover_closed_outcome();
-    if predictions.is_empty() && !outcome {
-      return div().into_any_element();
-    }
-    v_flex()
-      .w(px(320.))
-      .flex_none()
-      .gap_2()
-      .items_end()
-      .when(outcome, |el| el.children(self.outcome_line()))
-      .children(predictions)
-      .into_any_element()
+    let items = self.pinned(cx);
+    let this = cx.entity().downgrade();
+    pinned_stack(
+      items,
+      Rc::new(move |id, _, cx| {
+        this
+          .update(cx, |this, cx| {
+            this.unfolded.toggle(id);
+            cx.notify();
+          })
+          .ok();
+      }),
+    )
   }
 }
 
@@ -953,13 +1161,6 @@ impl Render for PointsFooter {
     self
       .points
       .update(cx, |points, cx| points.footer(window, cx))
-  }
-}
-
-impl PointsView {
-  /// A bet's outcome shows under the balance (a reward's shows in its popover).
-  fn popover_closed_outcome(&self) -> bool {
-    self.outcome.is_some() && self.outcome_of_bet
   }
 }
 
