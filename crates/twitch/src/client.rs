@@ -76,6 +76,51 @@ impl Client {
     self.auth_token.is_some()
   }
 
+  /// A writer to `channel`'s chat as `login`, the account of the auth-token (ADR 0023); `None`
+  /// without the auth-token. Run the future on the network runtime.
+  pub fn chat_writer(
+    &self,
+    channel: &str,
+    login: &str,
+  ) -> Option<(
+    crate::chat::Writer,
+    tokio::sync::mpsc::Receiver<crate::chat::WriterUpdate>,
+    impl Future<Output = ()> + Send + 'static,
+  )> {
+    let token = self.auth_token.as_deref()?;
+    Some(crate::chat::connect_writer(channel, login, token))
+  }
+
+  /// Signs in to `channel`'s chat (the account's own when `None`) as the auth-token's account and
+  /// says how Twitch answered within 20 s: [`WriterStatus::Ready`](crate::chat::WriterStatus)
+  /// when it accepts it. Sends nothing to the room (`twitch_capture -- chat-login`).
+  pub async fn check_chat_sign_in(
+    &self,
+    channel: Option<&str>,
+  ) -> Result<Option<crate::chat::WriterStatus>> {
+    use crate::chat::{WriterStatus, WriterUpdate};
+    let login = self.current_user().await?;
+    let channel = channel.unwrap_or(&login);
+    let (writer, mut updates, run) = self
+      .chat_writer(channel, &login)
+      .ok_or(Error::NotLoggedIn)?;
+    let wait = async {
+      while let Some(update) = updates.recv().await {
+        if let WriterUpdate::Status(status @ (WriterStatus::Ready | WriterStatus::Refused)) = update
+        {
+          return Some(status);
+        }
+      }
+      None
+    };
+    let answer = tokio::select! {
+      answer = tokio::time::timeout(std::time::Duration::from_secs(20), wait) => answer.ok().flatten(),
+      () = run => None,
+    };
+    drop(writer);
+    Ok(answer)
+  }
+
   fn client_id(&self) -> String {
     // A poisoned lock only means a writer panicked mid-assignment of a `String`: the value is
     // still a whole string, so it is used as is.

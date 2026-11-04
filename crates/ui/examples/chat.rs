@@ -21,7 +21,8 @@ use gpui::{
 use gpui_component::{Root, TitleBar};
 use gpui_platform::application;
 use ui::chat::{
-  Author, Badge, ChatEvent, ChatMessage, ChatPanel, Emote, Fragment, MessageKind, split_text,
+  Author, Badge, ChatEvent, ChatMessage, ChatPanel, ChatPanelEvent, Composing, Emote, EmoteGroup,
+  Fragment, MessageKind, split_text,
 };
 use ui::images::{self, Download, Fetch};
 use ui::picture::Picture;
@@ -248,7 +249,47 @@ fn main() {
         ..TitleBar::window_options()
       };
       let opened = cx.open_window(options, |window, cx| {
-        let panel = cx.new(ChatPanel::new);
+        // The writing area too: what is sent comes back as a message, the picker has 60 emotes.
+        let panel = cx.new(|cx| {
+          let mut panel = ChatPanel::new(cx).with_composer(500);
+          panel.set_composing(Composing::Ready, cx);
+          let emotes = |kind: &'static str, count: usize| -> Vec<Emote> {
+            (0..count)
+              .map(|i| Emote {
+                name: format!("{kind}{i}").into(),
+                picture: picture(format!("{kind}/{i}")),
+                aspect: if i % 7 == 0 { 2. } else { 1. },
+                overlay: false,
+              })
+              .collect()
+          };
+          panel.set_emotes(
+            vec![
+              EmoteGroup {
+                title: "Channel".into(),
+                emotes: emotes("emote", 40),
+              },
+              EmoteGroup {
+                title: "Animated".into(),
+                emotes: emotes("anim", 20),
+              },
+            ],
+            cx,
+          );
+          panel
+        });
+        cx.subscribe(&panel, |panel, event: &ChatPanelEvent, cx| {
+          let ChatPanelEvent::Send(text) = event;
+          let me = Author {
+            id: "me".into(),
+            name: "me".into(),
+            color: None,
+            badges: Vec::new(),
+          };
+          let echo = ChatMessage::new(format!("me-{text}"), Some(me), split_text(text));
+          panel.update(cx, |p, cx| p.push([ChatEvent::Message(echo)], cx));
+        })
+        .detach();
         let feed = panel.downgrade();
         cx.spawn(async move |cx| {
           let mut rng = Rng(0x9e37_79b9_7f4a_7c15);

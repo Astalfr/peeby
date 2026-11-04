@@ -171,7 +171,7 @@ pub fn start(
             if !extras_asked && let Some(channel) = page.channel_id.clone() {
               extras_asked = true;
               let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
-              cx.update(|cx| load_extras(channel, client, catalog, extras, cx));
+              cx.update(|cx| load_extras(channel, client, catalog, extras, cx).detach());
             }
             replay.add(page, from);
             events.push(ChatEvent::Status(None));

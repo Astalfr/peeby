@@ -3,6 +3,7 @@
 //! [`ChatPanel`] that shows them, and the watch layout with a chat column. Nothing here knows
 //! IRC or InnerTube: a space owns the connection and feeds the panel.
 
+mod emoji;
 mod layout;
 mod panel;
 
@@ -13,7 +14,7 @@ use gpui::{Hsla, SharedString, hsla};
 use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
-pub use panel::{ChatPanel, MAX_MESSAGES};
+pub use panel::{ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
 
 /// One line of the chat.
 #[derive(Clone)]

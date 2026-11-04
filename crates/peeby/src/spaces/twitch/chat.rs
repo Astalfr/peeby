@@ -7,20 +7,26 @@
 //! each winning over the ones before; animated ones play, zero-width ones are drawn over the emote
 //! before them), and the chat badges (global, then the channel's over them). Both are
 //! kept for the session ([`ChatSets`]). Messages that arrived before keep their words and no badges.
+//! The 7TV and BTTV sets also fill the panel's picker.
+//!
+//! With the auth-token, [`start_writer`] signs in a second connection that sends what the viewer
+//! writes (ADR 0023); the reader shows those messages when Twitch relays them to it.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::rc::Rc;
 
-use gpui::{App, Entity, Global, Hsla, SharedString, Task};
+use gpui::{App, Entity, Global, Hsla, SharedString, Subscription, Task};
 use twitch::catalog::Catalog;
-use twitch::chat::{ChatLine, Event, Piece, RoomState, Status, Update, emote_url};
+use twitch::chat::{
+  ChatLine, Event, Piece, RoomState, Status, Update, Writer, WriterStatus, WriterUpdate, emote_url,
+};
 use twitch::helix;
 use twitch::{bttv, seventv};
 use ui::chat::{
-  Author, Badge, ChatEvent, ChatMessage, ChatPanel, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
-  split_text,
+  Author, Badge, ChatEvent, ChatMessage, ChatPanel, ChatPanelEvent, Composing, EMOTE_HEIGHT, Emote,
+  EmoteGroup, Fragment, MessageKind, split_text,
 };
 use ui::i18n::t;
 use ui::picture::Picture;
@@ -39,6 +45,8 @@ type Badges = HashMap<(String, String), Rc<helix::Badge>>;
 pub(super) struct Extras {
   words: Words,
   badges: Badges,
+  /// The 7TV and BTTV sets as the picker shows them: the channel's first.
+  picker: Vec<EmoteGroup>,
 }
 
 /// The sets loaded in this session: the global ones under `""`, a channel's under its Twitch user
@@ -83,7 +91,16 @@ pub fn start(
       if !extras_asked && let Some(room_id) = room.room_id.clone() {
         extras_asked = true;
         let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
-        cx.update(|cx| load_extras(room_id, client, catalog, extras, cx));
+        let panel = panel.clone();
+        cx.update(|cx| {
+          let load = load_extras(room_id, client, catalog, extras.clone(), cx);
+          cx.spawn(async move |cx| {
+            load.await;
+            let groups = extras.borrow().picker.clone();
+            panel.update(cx, |p, cx| p.set_emotes(groups, cx)).ok();
+          })
+          .detach();
+        });
       }
       if panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
         return;
@@ -93,14 +110,14 @@ pub fn start(
 }
 
 /// Loads (or takes from the session's cache) the global and `room_id`'s 7TV and BTTV emotes and
-/// badges into `target`.
+/// badges into `target`; the task ends once they are there.
 pub(super) fn load_extras(
   room_id: String,
   client: twitch::Client,
   catalog: Catalog,
   target: Rc<RefCell<Rc<Extras>>>,
   cx: &mut App,
-) {
+) -> Task<()> {
   let bttv_global = set(
     String::new(),
     |s| &mut s.bttv,
@@ -156,20 +173,42 @@ pub(super) fn load_extras(
   ];
   cx.spawn(async move |_| {
     let mut extras = Extras::default();
+    let (bttv_global, seventv_global) = (bttv_global.await, seventv_global.await);
+    let (bttv_channel, seventv_channel) = (bttv_channel.await, seventv_channel.await);
+    let as_bttv = |set: &Option<Rc<Vec<bttv::Emote>>>| -> Vec<Emote> {
+      set.iter().flat_map(|s| s.iter()).map(bttv_emote).collect()
+    };
+    let as_seventv = |set: &Option<Rc<Vec<seventv::Emote>>>| -> Vec<Emote> {
+      set
+        .iter()
+        .flat_map(|s| s.iter())
+        .map(seventv_emote)
+        .collect()
+    };
+    // In the picker's order: the channel's first.
+    let sets = [
+      (
+        t("Channel · 7TV", "Chaîne · 7TV"),
+        as_seventv(&seventv_channel),
+      ),
+      (t("Channel · BTTV", "Chaîne · BTTV"), as_bttv(&bttv_channel)),
+      ("7TV", as_seventv(&seventv_global)),
+      ("BTTV", as_bttv(&bttv_global)),
+    ];
     // The global sets first, so that the channel's win, and 7TV after BTTV in each.
-    let words = &mut extras.words;
-    for emote in bttv_global.await.iter().flat_map(|set| set.iter()) {
-      words.insert(emote.name.clone(), bttv_emote(emote));
+    for (_, emotes) in sets.iter().rev() {
+      for emote in emotes {
+        extras.words.insert(emote.name.to_string(), emote.clone());
+      }
     }
-    for emote in seventv_global.await.iter().flat_map(|set| set.iter()) {
-      words.insert(emote.name.clone(), seventv_emote(emote));
-    }
-    for emote in bttv_channel.await.iter().flat_map(|set| set.iter()) {
-      words.insert(emote.name.clone(), bttv_emote(emote));
-    }
-    for emote in seventv_channel.await.iter().flat_map(|set| set.iter()) {
-      words.insert(emote.name.clone(), seventv_emote(emote));
-    }
+    extras.picker = sets
+      .into_iter()
+      .filter(|(_, emotes)| !emotes.is_empty())
+      .map(|(title, emotes)| EmoteGroup {
+        title: title.into(),
+        emotes,
+      })
+      .collect();
     for set in badges {
       for badge in set.await.iter().flat_map(|set| set.iter()) {
         extras.badges.insert(
@@ -180,7 +219,6 @@ pub(super) fn load_extras(
     }
     *target.borrow_mut() = Rc::new(extras);
   })
-  .detach();
 }
 
 /// The set under `key` in the session's `cache`, else fetched with `fetch` (on the network
@@ -238,14 +276,185 @@ fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEv
       room.merge(&update);
       ChatEvent::State(modes(room))
     }
-    Update::Event(Event::ServerNotice(id)) => {
-      let mut notice = ChatMessage::new(format!("notice-{id}"), None, Vec::new());
-      notice.kind =
-        MessageKind::Notice(tf!("Message from Twitch: {id}", "Message de Twitch : {id}").into());
-      ChatEvent::Message(notice)
-    }
+    Update::Event(Event::ServerNotice(id)) => notice_line(&id, notice_text(&id)),
     Update::Event(Event::Ping(_) | Event::Reconnect | Event::Joined) => return None,
   })
+}
+
+/// A line of Twitch itself in the chat, with `text`.
+fn notice_line(id: &str, text: String) -> ChatEvent {
+  let mut notice = ChatMessage::new(format!("notice-{id}"), None, Vec::new());
+  notice.kind = MessageKind::Notice(text.into());
+  ChatEvent::Message(notice)
+}
+
+/// What a `NOTICE`'s `msg-id` tells the viewer; an unknown one shows as is.
+fn notice_text(id: &str) -> String {
+  let text = match id {
+    "msg_slowmode" => t(
+      "Slow mode: wait before sending another message.",
+      "Mode lent : attendez avant d'envoyer un autre message.",
+    ),
+    "msg_followersonly" | "msg_followersonly_zero" | "msg_followersonly_followed" => t(
+      "This chat is for followers only.",
+      "Ce chat est réservé aux followers.",
+    ),
+    "msg_subsonly" => t(
+      "This chat is for subscribers only.",
+      "Ce chat est réservé aux abonnés.",
+    ),
+    "msg_emoteonly" => t(
+      "This chat accepts emotes only.",
+      "Ce chat n'accepte que des emotes.",
+    ),
+    "msg_r9k" => t(
+      "Unique mode: this message was already sent.",
+      "Mode messages uniques : ce message a déjà été envoyé.",
+    ),
+    "msg_duplicate" => t(
+      "You already sent this message less than 30 seconds ago.",
+      "Vous avez déjà envoyé ce message il y a moins de 30 secondes.",
+    ),
+    "msg_ratelimit" => t(
+      "You're sending messages too quickly.",
+      "Vous envoyez des messages trop vite.",
+    ),
+    "msg_banned" => t(
+      "You're banned from this chat.",
+      "Vous êtes banni de ce chat.",
+    ),
+    "msg_timedout" => t(
+      "You're timed out in this chat for now.",
+      "Vous êtes exclu temporairement de ce chat.",
+    ),
+    "msg_verified_email" | "msg_requires_verified_phone_number" => t(
+      "This chat asks for a verified account: see twitch.tv.",
+      "Ce chat demande un compte vérifié : voir twitch.tv.",
+    ),
+    "msg_rejected" | "msg_rejected_mandatory" => t(
+      "Your message was held by the channel's moderation.",
+      "Votre message a été retenu par la modération de la chaîne.",
+    ),
+    "msg_channel_suspended" => t("This channel is suspended.", "Cette chaîne est suspendue."),
+    "msg_suspended" => t("Your account is suspended.", "Votre compte est suspendu."),
+    id => return tf!("Message from Twitch: {id}", "Message de Twitch : {id}"),
+  };
+  text.to_owned()
+}
+
+/// Sends what the viewer writes in `panel` to `channel`'s chat as the auth-token's account
+/// (`login` gives it, called out of any update; read from Twitch when it gives none), until the
+/// task and the subscription are dropped. Without the auth-token, the panel's field is off with
+/// how to get one.
+pub fn start_writer(
+  channel: &str,
+  client: twitch::Client,
+  login: impl FnOnce(&mut App) -> Option<String> + 'static,
+  panel: &Entity<ChatPanel>,
+  cx: &mut App,
+) -> Option<(Task<()>, Subscription)> {
+  if !client.signed_in() {
+    let off = t(
+      "Add the Twitch site token in the settings to chat.",
+      "Ajoutez le jeton du site Twitch dans les réglages pour discuter.",
+    );
+    panel.update(cx, |p, cx| p.set_composing(Composing::Off(off.into()), cx));
+    return None;
+  }
+  let writer: Rc<RefCell<Option<Writer>>> = Rc::default();
+  let subscription = cx.subscribe(panel, {
+    let writer = writer.clone();
+    move |panel, event: &ChatPanelEvent, cx| {
+      let ChatPanelEvent::Send(text) = event;
+      if !writer.borrow().as_ref().is_some_and(|w| w.send(text)) {
+        let failed = t("The message wasn't sent.", "Le message n'est pas parti.");
+        panel.update(cx, |p, cx| {
+          p.push([notice_line("unsent", failed.into())], cx)
+        });
+      }
+    }
+  });
+  let channel = channel.to_owned();
+  let panel = panel.downgrade();
+  let task = cx.spawn(async move |cx| {
+    let login = match cx.update(login) {
+      Some(login) => login,
+      None => {
+        let client = client.clone();
+        let fetch = cx.update(|cx| runtime::spawn(cx, async move { client.current_user().await }));
+        match fetch.await {
+          Some(Ok(login)) => login,
+          Some(Err(e)) => {
+            tracing::warn!("Twitch chat writer: no account: {e}");
+            let off = t(
+              "Twitch didn't give the account: the chat can't be written to.",
+              "Twitch n'a pas donné le compte : impossible d'écrire dans le chat.",
+            );
+            panel
+              .update(cx, |p, cx| p.set_composing(Composing::Off(off.into()), cx))
+              .ok();
+            return;
+          }
+          None => return,
+        }
+      }
+    };
+    let Some((sender, mut updates, run)) = client.chat_writer(&channel, &login) else {
+      return;
+    };
+    // The connection runs on the network runtime and ends when `updates` and the writer go.
+    drop(cx.update(|cx| runtime::spawn(cx, run)));
+    *writer.borrow_mut() = Some(sender);
+    while let Some(update) = updates.recv().await {
+      let (state, line) = writer_event(update);
+      let alive = panel.update(cx, |p, cx| {
+        if let Some(state) = state {
+          p.set_composing(state, cx);
+        }
+        if let Some(line) = line {
+          p.push([line], cx);
+        }
+      });
+      if alive.is_err() {
+        return;
+      }
+    }
+  });
+  Some((task, subscription))
+}
+
+/// The panel's state and line for a writer's update.
+fn writer_event(update: WriterUpdate) -> (Option<Composing>, Option<ChatEvent>) {
+  let waiting = |text: String| Some(Composing::Waiting(text.into()));
+  match update {
+    WriterUpdate::Status(WriterStatus::Connecting) => (
+      waiting(t("Signing in to the chat…", "Connexion au chat en cours…").into()),
+      None,
+    ),
+    WriterUpdate::Status(WriterStatus::Ready) => (Some(Composing::Ready), None),
+    WriterUpdate::Status(WriterStatus::Retrying(seconds)) => (
+      waiting(tf!(
+        "Can't send for now · retrying in {seconds} s",
+        "Envoi impossible pour l'instant · nouvel essai dans {seconds} s"
+      )),
+      None,
+    ),
+    WriterUpdate::Status(WriterStatus::Refused) => (
+      Some(Composing::Off(
+        t(
+          "Twitch refused the site token for the chat: add it again in the settings.",
+          "Twitch a refusé le jeton du site pour le chat : ajoutez-le de nouveau dans les réglages.",
+        )
+        .into(),
+      )),
+      None,
+    ),
+    WriterUpdate::Notice(id) => (None, Some(notice_line(&id, notice_text(&id)))),
+    WriterUpdate::RateLimited => (
+      None,
+      Some(notice_line("local-ratelimit", notice_text("msg_ratelimit"))),
+    ),
+  }
 }
 
 /// A user's message, or a notice with `notice`'s text.
@@ -462,6 +671,28 @@ mod tests {
       ]
     );
     assert!(with_words("", &words).is_empty());
+  }
+
+  #[test]
+  fn notices_read() {
+    assert_eq!(
+      notice_text("msg_slowmode"),
+      "Slow mode: wait before sending another message."
+    );
+    assert_eq!(notice_text("whatever"), "Message from Twitch: whatever");
+    let (state, line) = writer_event(WriterUpdate::RateLimited);
+    assert!(state.is_none());
+    assert!(matches!(
+      line,
+      Some(ChatEvent::Message(ChatMessage {
+        kind: MessageKind::Notice(_),
+        ..
+      }))
+    ));
+    assert_eq!(
+      writer_event(WriterUpdate::Status(WriterStatus::Ready)).0,
+      Some(Composing::Ready)
+    );
   }
 
   #[test]

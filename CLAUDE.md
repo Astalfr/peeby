@@ -35,7 +35,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data; `-- badges` saves only the chat badges; `-- master <login>` prints a live's
   variants with every codec and the auth-token and saves its master redacted, without spending the refresh token;
   `-- master-scan` lists the top lives offering HEVC/AV1; `-- positions <vod-id>…` saves the account's resume
-  positions in those VODs, read only, without spending the refresh token)
+  positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
+  the auth-token signs in to IRC, sending nothing)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Sign-in window alone (ADR 0017): `cargo run -p peeby -- --login youtube|twitch` writes the session (a
   cookie jar, the auth-token) on stdout: redirect it to a file, never into a log or a shared terminal
@@ -120,6 +121,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `embed`, never `site` (pre-roll).
 - Playback tokens (`value` holds the user's IP), signatures, and usher's error bodies (they repeat the
   signed URL) never reach a log or an error message: keep only `error_code`.
+- Sending to a chat (ADR 0023) is a public write from the account: ask before a send test. Messages leave
+  only through `twitch::chat::Writer` (lines cleaned, at most 20 per 30 s: beyond, Twitch locks the
+  account out of chat for 30 minutes); the `PASS oauth:` line never reaches a log or an error.
 - Chat: emote ranges count code points (`char`s), never byte or UTF-16 offsets. Chat fixtures are public
   channels' lines with every chatter renamed (`viewerN`, as long as the name it replaces, so that ranges
   still fit), mentions and quoted replies included.

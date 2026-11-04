@@ -1,6 +1,9 @@
 //! The chat panel: a virtual list of variable-height messages (`gpui::list`) that follows the
 //! newest, with emotes drawn inline. Scrolled up, it stops following and holds the new messages
-//! until "Resume scrolling", so that what is read does not move.
+//! until "Resume scrolling", so that what is read does not move. With a composer, the viewer
+//! writes under it ([`composer`]).
+
+mod composer;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, OnceLock};
@@ -15,6 +18,8 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
 use gpui_component::{Sizable, h_flex, v_flex};
+
+pub use composer::{ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
   Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind, name_color,
@@ -200,7 +205,11 @@ pub struct ChatPanel {
   modes: Vec<SharedString>,
   status: Option<SharedString>,
   title: SharedString,
+  /// The writing area, for a space that sends to its chat.
+  composer: Option<composer::Composer>,
 }
+
+impl gpui::EventEmitter<ChatPanelEvent> for ChatPanel {}
 
 impl ChatPanel {
   /// An empty panel, connecting.
@@ -226,6 +235,7 @@ impl ChatPanel {
       modes: Vec::new(),
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
       title: t("Live chat", "Chat du live").into(),
+      composer: None,
     }
   }
 
@@ -644,6 +654,7 @@ impl Render for ChatPanel {
         )
     });
     let empty = self.messages.is_empty() && held == 0;
+    let composer = self.render_composer(window, cx);
     v_flex()
       .size_full()
       .overflow_hidden()
@@ -687,6 +698,7 @@ impl Render for ChatPanel {
           })
           .children(resume),
       )
+      .children(composer)
   }
 }
 

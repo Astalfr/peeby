@@ -2,7 +2,8 @@
 //! - a channel's live: the shared player in live mode through the local proxy, the channel's
 //!   header (GQL), and its chat beside it (`ui::chat`, fed by [`super::chat`]). While an ad break runs that the backup
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
-//!   every minute; the viewer's channel points at the header's right ([`super::points`]);
+//!   every minute; the viewer writes in the chat with the auth-token, their channel points under
+//!   its field and the predictions at the header's right ([`super::points`]);
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews, its muted parts and
 //!   its game chapters on the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
@@ -13,7 +14,7 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, FontWeight, SharedString, Task, Window, div, px};
+use gpui::{Context, Entity, FontWeight, SharedString, Subscription, Task, Window, div, px};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use twitch::catalog::Catalog;
 use twitch::gql::Channel;
@@ -26,7 +27,7 @@ use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, tf, theme};
 
-use super::points::PointsView;
+use super::points::{PointsFooter, PointsView};
 use super::{Nav, Route, cards, chat, follow, play, progress, replay};
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
@@ -73,6 +74,8 @@ pub struct WatchView {
   chat: Option<Entity<ChatPanel>>,
   /// A live's channel points (shows nothing without the auth-token).
   points: Option<Entity<PointsView>>,
+  /// Sends what the viewer writes in a live's chat (with the auth-token).
+  _chat_send: Option<Subscription>,
   /// The codec and height of each quality of a live or a VOD, for the decoding check.
   qualities: play::QualityCodecs,
   /// The quality whose last check read `hwdec-current` as `no`: a second reading in a row acts.
@@ -140,6 +143,7 @@ impl WatchView {
       proxy: None,
       chat: None,
       points: None,
+      _chat_send: None,
       qualities: Vec::new(),
       cpu_reading: None,
       header: None,
@@ -150,7 +154,7 @@ impl WatchView {
     };
     match view.kind.clone() {
       Kind::Live(login) => {
-        let panel = cx.new(ChatPanel::new);
+        let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
         view._tasks.push(chat::start(
           &login,
           view.client.clone(),
@@ -158,11 +162,28 @@ impl WatchView {
           &panel,
           cx,
         ));
-        view.chat = Some(panel);
+        // Read once the writer starts: the page is built while the space is being updated.
+        let nav = view.nav.clone();
+        let account = move |cx: &mut gpui::App| {
+          nav
+            .upgrade()
+            .and_then(|nav| nav.read(cx).account().map(|a| a.login.clone()))
+        };
+        if let Some((task, send)) =
+          chat::start_writer(&login, view.client.clone(), account, &panel, cx)
+        {
+          view._tasks.push(task);
+          view._chat_send = Some(send);
+        }
         let client = view.client.clone();
         let login_ = login.clone();
         let player = view.player.downgrade();
-        view.points = Some(cx.new(|cx| PointsView::new(login_, client, player, cx)));
+        let points = cx.new(|cx| PointsView::new(login_, client, player, cx));
+        // The balance and its rewards under the chat's field, the predictions in the header.
+        let footer = cx.new(|cx| PointsFooter::new(points.clone(), cx));
+        panel.update(cx, |p, cx| p.set_footer(footer.into(), cx));
+        view.chat = Some(panel);
+        view.points = Some(points);
         view.start_live(login, cx)
       }
       Kind::Vod { id, start } => {

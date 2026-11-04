@@ -16,9 +16,11 @@ the boxes as steps land, and list under each step what was verified and what was
   WebP) for animated emotes.
 - **Nothing without signing in**: signed out, the space shows only its sign-in card.
 - **Low latency and HEVC/AV1 are in scope** (step 10).
-- Writes to the account (following, sending chat messages) stay out of scope.
+- Writes to the account (following) stay out of scope.
   2026-11-02: except channel points (redeeming a reward, betting on a prediction), which the user
   asked for. See [ADR 0012](decisions/0012-twitch-channel-points.md).
+  2026-11-04: and sending chat messages, which the user asked for. See
+  [ADR 0023](decisions/0023-twitch-chat-sending.md).
 - **Live and chat are generic** (2026-11-01): they must also serve YouTube lives later, and possibly other
   platforms. See the next section.
 

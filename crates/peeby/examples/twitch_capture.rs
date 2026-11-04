@@ -11,6 +11,8 @@
 //! `-- master-scan` lists which of the top 100 lives offer HEVC or AV1 (logins and codecs only).
 //! `-- positions <vod-id>…` prints how many of those VODs have a resume position on the account
 //! (saved `auth-token`) and saves the answer as `gql_vod_positions.json`; it reads, never writes.
+//! `-- chat-login [login]` signs in to a channel's chat (the user's own by default) with the saved
+//! `auth-token` and prints whether Twitch accepted it (ADR 0023); it never sends a message.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -38,6 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "master") {
     let login = args.get(i + 1).ok_or("master <login>")?.clone();
     return twitch::block_on(capture_master(login))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "chat-login") {
+    let channel = args.get(i + 1).cloned();
+    return twitch::block_on(check_chat_login(channel))?;
   }
   if args.iter().any(|a| a == "catalog") {
     return twitch::block_on(capture_catalog())?;
@@ -173,6 +179,18 @@ async fn capture_master(login: String) -> Result<(), Box<dyn std::error::Error>>
     std::fs::write(&path, redact_master(&master.text))?;
     println!("saved {}", path.display());
   }
+  Ok(())
+}
+
+/// Signs in to `channel`'s chat (the account's own when `None`) and prints whether Twitch accepts
+/// the auth-token. Nothing is sent to the room.
+async fn check_chat_login(channel: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+  let auth_token = keyring::Entry::new("peeby", "twitch|auth-token")
+    .and_then(|e| e.get_password())
+    .ok();
+  let client = twitch::Client::new(None, auth_token)?;
+  let status = client.check_chat_sign_in(channel.as_deref()).await?;
+  println!("chat sign-in: {status:?}");
   Ok(())
 }
 

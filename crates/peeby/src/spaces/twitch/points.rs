@@ -1,6 +1,6 @@
-//! A live's channel points, in the watch page's header, with the web `auth-token` (none: nothing
-//! shows): the viewer's balance, refreshed every minute; the channel's rewards in a popover;
-//! its predictions with their bets. Spending asks for a second click ("Confirmer", within 8 s; a
+//! A live's channel points, with the web `auth-token` (none: nothing shows): the viewer's
+//! balance, refreshed every minute, and the channel's rewards in a popover, under the chat's field
+//! ([`PointsFooter`], ADR 0023); its predictions with their bets at the watch page header's right. Spending asks for a second click ("Confirmer", within 8 s; a
 //! bet's shows the amount it sends), since it cannot be undone.
 //!
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
@@ -14,8 +14,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task, WeakEntity, Window,
-  div, px,
+  Anchor, AnyElement, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task, WeakEntity,
+  Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
@@ -429,8 +429,9 @@ impl PointsView {
     let name = points.name.clone().unwrap_or_else(|| "points".into());
     let this = cx.entity().downgrade();
     let closed = this.clone();
+    // Under the chat's field: it opens upward.
     Popover::new("twitch-points-rewards")
-      .anchor(Anchor::TopRight)
+      .anchor(Anchor::BottomLeft)
       .on_open_change(move |open, _, cx| {
         if !*open {
           closed
@@ -764,8 +765,9 @@ impl PointsView {
   }
 }
 
-impl Render for PointsView {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl PointsView {
+  /// The balance and its rewards, with the bonus button when one waits: under the chat's field.
+  fn footer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     if self.off || self.points.is_none() {
       return div().into_any_element();
     }
@@ -776,43 +778,75 @@ impl Render for PointsView {
     }
     let claim = self.points.as_ref().and_then(|p| p.claim.clone());
     let login = self.login.clone();
+    h_flex()
+      .gap_1()
+      .items_center()
+      .child(self.balance_chip(cx))
+      .when(claim.is_some(), |row| {
+        row.child(
+          Button::new("twitch-points-bonus")
+            .small()
+            .primary()
+            .icon(Icon::Gift)
+            .label("Bonus")
+            .tooltip(t(
+              "A bonus is waiting: claim it in the chat on twitch.tv",
+              "Un bonus attend : le réclamer dans le chat de twitch.tv",
+            ))
+            .on_click(move |_, _, cx| {
+              cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"))
+            }),
+        )
+      })
+      .into_any_element()
+  }
+}
+
+/// The predictions (and a bet's outcome), at the header's right.
+impl Render for PointsView {
+  fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    if self.off || self.points.is_none() {
+      return div().into_any_element();
+    }
     let predictions: Vec<_> = self
       .predictions
       .clone()
       .iter()
       .map(|p| self.prediction_card(p, cx).into_any_element())
       .collect();
+    let outcome = self.popover_closed_outcome();
+    if predictions.is_empty() && !outcome {
+      return div().into_any_element();
+    }
     v_flex()
       .w(px(320.))
       .flex_none()
       .gap_2()
       .items_end()
-      .child(
-        h_flex()
-          .gap_1()
-          .when(claim.is_some(), |row| {
-            row.child(
-              Button::new("twitch-points-bonus")
-                .small()
-                .primary()
-                .icon(Icon::Gift)
-                .label("Bonus")
-                .tooltip(t(
-                  "A bonus is waiting: claim it in the chat on twitch.tv",
-                  "Un bonus attend : le réclamer dans le chat de twitch.tv",
-                ))
-                .on_click(move |_, _, cx| {
-                  cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"))
-                }),
-            )
-          })
-          .child(self.balance_chip(cx)),
-      )
-      .when(self.popover_closed_outcome(), |el| {
-        el.children(self.outcome_line())
-      })
+      .when(outcome, |el| el.children(self.outcome_line()))
       .children(predictions)
       .into_any_element()
+  }
+}
+
+/// The chat's footer element: [`PointsView`]'s balance, rewards and bonus, drawn from the same
+/// view so that it is read and reported once.
+pub struct PointsFooter {
+  points: Entity<PointsView>,
+}
+
+impl PointsFooter {
+  pub fn new(points: Entity<PointsView>, cx: &mut Context<Self>) -> Self {
+    cx.observe(&points, |_, _, cx| cx.notify()).detach();
+    Self { points }
+  }
+}
+
+impl Render for PointsFooter {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    self
+      .points
+      .update(cx, |points, cx| points.footer(window, cx))
   }
 }
 

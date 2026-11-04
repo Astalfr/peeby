@@ -34,7 +34,8 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
 
 - **`twitch::points`** holds the parsers and requests, tested on saved answers. It uses raw GQL
   queries and mutations with the web Client-ID and the auth-token. There is no hash to maintain.
-- **On the watch page of a live**, at the header's right:
+- **On the watch page of a live**, at the header's right (since [ADR 0023](0023-twitch-chat-sending.md),
+  the balance and its rewards sit under the chat's field; the predictions stay here):
   - the balance, under the channel's name for its points, read again every minute;
   - its rewards in a popover;
   - its predictions, read again every 20 s, with their odds and a countdown.

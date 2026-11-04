@@ -119,6 +119,16 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - `CAP REQ :twitch.tv/tags twitch.tv/commands`, then `PASS`, `NICK`, `JOIN #login`.
   - Answer every `PING` with `PONG :tmi.twitch.tv`.
   - Handle `PRIVMSG`, `CLEARCHAT`, `CLEARMSG`, `USERNOTICE` and `ROOMSTATE`.
+- **Sending**, checked on 2026-11-04 (`twitch_capture -- chat-login`, nothing sent): the web
+  `auth-token` signs in to IRC as `PASS oauth:<auth-token>`, `NICK <login>` (the login from
+  `currentUser`); Twitch answers the welcome and the `JOIN`. A refused token gets
+  `NOTICE * :Login authentication failed` (no `msg-id`: tags are not on yet). A message goes as
+  `PRIVMSG #login :text`, at most 500 characters, and 20 per 30 s for a viewer (beyond: locked out of
+  chat for 30 minutes) **[src]**. Twitch does not send a message back to the connection that wrote it,
+  only to the room's other connections **[mem]**: Peeby reads with the anonymous connection and
+  writes with a second one ([ADR 0023](decisions/0023-twitch-chat-sending.md)). Refusals come as
+  `NOTICE` with a `msg-id` (`msg_slowmode`, `msg_followersonly`, `msg_subsonly`, `msg_duplicate`,
+  `msg_ratelimit`, `msg_banned`, `msg_timedout`…) **[src]**.
 - **Anonymous reading**: `NICK justinfan<digits>` with any `PASS`. It is a long-standing convention
   (Chatterino), not in Twitch's docs; it worked on 2026-11-01 (16 channels joined at once).
 - **Twitch's recommendation** **[src]**: EventSub `channel.chat.message`, which needs a user token with

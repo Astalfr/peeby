@@ -97,6 +97,7 @@ icons! {
   Speaker => "speaker",
   Plus => "plus",
   Shorts => "shorts",
+  Smile => "smile",
 }
 
 macro_rules! files {
