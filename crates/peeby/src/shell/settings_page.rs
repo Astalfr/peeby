@@ -1,16 +1,16 @@
 //! The settings page behind the gear: the app's own settings (general, player, storage,
-//! about) and, between them, each space's part under its name, in its accent: the open space's
+//! debug, about) and, between them, each space's part under its name, in its accent: the open space's
 //! first and unfolded, the others folded. Every change applies at once and is saved to
 //! `settings.toml`; most apply to the next video or the next visit of a page.
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, FontWeight, Subscription, Window, div, px};
+use gpui::{AnyElement, Context, FontWeight, Subscription, Task, Window, div, px};
 use gpui_component::button::Button;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, Icon, IconName, Sizable, h_flex, v_flex};
 use ui::form::{chips, format_size, row, section, toggle};
 use ui::i18n::{Lang, t};
-use ui::player::format_step;
+use ui::player::{Owner, RunningPlayer, format_step, format_time};
 use ui::theme::Accent;
 use ui::widgets::page_title;
 use ui::{images, tf, theme};
@@ -27,6 +27,8 @@ pub struct SettingsView {
   cache_size: Option<u64>,
   clearing: bool,
   _subscriptions: Vec<Subscription>,
+  /// Redraws the page every second, for the debug section's players.
+  _tick: Task<()>,
 }
 
 impl SettingsView {
@@ -54,6 +56,16 @@ impl SettingsView {
       cache_size: None,
       clearing: false,
       _subscriptions: subscriptions,
+      _tick: cx.spawn(async move |this, cx| {
+        loop {
+          cx.background_executor()
+            .timer(std::time::Duration::from_secs(1))
+            .await;
+          if this.update(cx, |_, cx| cx.notify()).is_err() {
+            break;
+          }
+        }
+      }),
     };
     view.measure_cache(cx);
     view
@@ -374,6 +386,74 @@ impl SettingsView {
   }
 }
 
+/// The mpv players alive, to find one that should be gone (a page closed, a quality replaced).
+fn debug_section(players: &[RunningPlayer]) -> AnyElement {
+  let rows = if players.is_empty() {
+    vec![
+      row(
+        t("mpv players", "Lecteurs mpv"),
+        t("None running.", "Aucun en cours."),
+        div(),
+      )
+      .into_any_element(),
+    ]
+  } else {
+    players
+      .iter()
+      .enumerate()
+      .map(|(i, p)| {
+        let n = i + 1;
+        let title = if p.title.is_empty() {
+          tf!("Player {n}", "Lecteur {n}")
+        } else {
+          p.title.to_string()
+        };
+        row(&title, &player_line(p), div()).into_any_element()
+      })
+      .collect()
+  };
+  section(t("Debug", "Débogage"), rows).into_any_element()
+}
+
+/// Position, state, decoding, age and owner of a running player.
+fn player_line(p: &RunningPlayer) -> String {
+  let position = match (p.position, p.duration) {
+    (Some(pos), Some(dur)) if dur > 0.0 => format!("{} / {}", format_time(pos), format_time(dur)),
+    (Some(pos), _) => format_time(pos),
+    _ => "–".to_owned(),
+  };
+  let state = if p.buffering {
+    t("buffering", "en attente")
+  } else if p.paused {
+    t("paused", "en pause")
+  } else {
+    t("playing", "en lecture")
+  };
+  let backend = match p.backend {
+    player::Backend::Gpu => "GPU",
+    player::Backend::Software => "CPU",
+  };
+  let decoding = match p.hwdec.as_deref() {
+    None | Some("") | Some("no") => t("software decoding", "décodage logiciel").to_owned(),
+    Some(hwdec) => hwdec.to_owned(),
+  };
+  let minutes = p.age.as_secs() / 60;
+  let age = tf!("started {minutes} min ago", "lancé il y a {minutes} min");
+  let owner = match p.owner {
+    Owner::Page if p.now_playing => t("its page, mini-player's", "sa page, celui du mini-lecteur"),
+    Owner::Page => t("its page", "sa page"),
+    Owner::Replaced => t(
+      "replaced on its page, still held",
+      "remplacé sur sa page, encore retenu",
+    ),
+    Owner::Closed => t(
+      "its page is closed, still held",
+      "sa page est fermée, encore retenu",
+    ),
+  };
+  format!("{position} · {state} · {backend}, {decoding} · {age} · {owner}")
+}
+
 fn about_section() -> AnyElement {
   let version = env!("CARGO_PKG_VERSION");
   section(
@@ -398,6 +478,7 @@ fn about_section() -> AnyElement {
 impl Render for SettingsView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let settings = Settings::get(cx).clone();
+    let players = ui::player::running(cx);
     let parts: Vec<AnyElement> = self
       .spaces
       .clone()
@@ -426,6 +507,7 @@ impl Render for SettingsView {
           .child(player_section(&settings.player))
           .children(parts)
           .child(self.storage_section(cx))
+          .child(debug_section(&players))
           .child(about_section())
           .child(div().text_xs().text_color(theme::subtle()).child(t(
             "Changes are saved at once.",

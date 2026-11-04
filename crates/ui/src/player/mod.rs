@@ -8,12 +8,14 @@
 
 pub mod chapter_list;
 mod overlays;
+mod running;
 pub mod segments;
 mod source;
 mod stats;
 mod tracks;
 
 pub use overlays::format_step;
+pub use running::{Owner, RunningPlayer, running};
 pub use source::{LIVE_DELAY, LiveInfo, Previews, Quality, Source, Subtitle, Tile};
 
 use std::cell::Cell;
@@ -913,6 +915,7 @@ impl PlayerView {
     frames: async_channel::Receiver<player::Frame>,
     cx: &mut Context<Self>,
   ) {
+    running::register(&player, cx.weak_entity(), cx);
     let resize = player.clone();
     self.video = Some(cx.new(|cx| {
       VideoView::new(

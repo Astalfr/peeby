@@ -51,6 +51,8 @@ mpv error messages built by `player::sys` never include option values or command
 4. Observe properties, send a `Progress` report every ~10 s and on user actions. Observed: `time-pos`, `duration`, `pause`, `paused-for-cache`, `track-list`, `chapter-list`, `eof-reached`, `mute`.
 5. At the end of the file (`eof-reached`, see `keep-open` above) or on stop, send the `Stopped` report, free the render context **before** the mpv handle, then destroy the handle. What happens at the end of an episode (up next, watched flag) is in [playback-ux.md](playback-ux.md).
 
+An mpv lives as long as something holds its `Player`: its page, and also the previous picture after a quality change or a reload. `ui::player::running` lists every mpv still alive, through a registry of weak references filled by `PlayerView::attach`. For each one it gives the page title, position, state, decoding and age, and whether its page plays it, replaced it, or is closed. The **Debug** section of the settings shows this list, refreshed every second, to find a player that should be gone.
+
 ## Player API exposed to the UI
 
 ```rust
