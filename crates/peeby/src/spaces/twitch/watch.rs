@@ -26,7 +26,7 @@ use ui::chat::{ChatPanel, watch_layout};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
-use ui::player::{LiveInfo, PlayerEvent, PlayerView, Rewind, Source};
+use ui::player::{Author, LiveInfo, PlayerEvent, PlayerView, Rewind, Source};
 use ui::{runtime, tf, theme};
 
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
@@ -62,6 +62,22 @@ struct Header {
   line: Option<String>,
   /// Whether the account follows the channel; `None` without an auth-token.
   followed: Option<bool>,
+}
+
+impl Header {
+  /// The channel shown over the player with the title.
+  fn author(&self) -> Option<Author> {
+    if self.name.is_empty() {
+      return None;
+    }
+    Some(Author {
+      name: self.name.clone().into(),
+      avatar: self
+        .avatar
+        .clone()
+        .map(|url| Picture::sized(move |_, _| url.clone())),
+    })
+  }
 }
 
 pub struct WatchView {
@@ -580,8 +596,10 @@ impl WatchView {
             let title: SharedString = video.title.into();
             this.nav.set_title(cx.entity_id(), title.clone(), cx);
             let muted = play::muted(&video.muted_segments);
+            let author = this.header.as_ref().and_then(Header::author);
             this.player.update(cx, |p, cx| {
               p.set_title(title, cx);
+              p.set_author(author, cx);
               p.set_segments(muted, cx);
             });
           }
@@ -708,7 +726,11 @@ impl WatchView {
             this.load_followed(cx);
             let title: SharedString = clip.title.into();
             this.nav.set_title(cx.entity_id(), title.clone(), cx);
-            this.player.update(cx, |p, cx| p.set_title(title, cx));
+            let author = this.header.as_ref().and_then(Header::author);
+            this.player.update(cx, |p, cx| {
+              p.set_title(title, cx);
+              p.set_author(author, cx);
+            });
           }
           match play {
             Some(Ok(clip)) => {
@@ -763,9 +785,17 @@ impl WatchView {
         .and_then(|ms| u64::try_from(ms).ok())
         .map(|ms| UNIX_EPOCH + Duration::from_millis(ms)),
     });
-    let title: SharedString = channel.display_name.clone().into();
+    let title: SharedString = channel.title.clone().into();
+    let author = Some(Author {
+      name: channel.display_name.clone().into(),
+      avatar: channel
+        .avatar_url
+        .clone()
+        .map(|url| Picture::sized(move |_, _| url.clone())),
+    });
     self.player.update(cx, |player, cx| {
       player.set_title(title, cx);
+      player.set_author(author, cx);
       player.set_live_info(info, cx);
     });
     let line = channel.live.as_ref().map(|live| {

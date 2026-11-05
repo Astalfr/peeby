@@ -70,6 +70,16 @@ pub struct LiveInfo {
   pub started_at: Option<std::time::SystemTime>,
 }
 
+/// Who made what plays (a YouTube channel, a Twitch streamer): shown with the title over the
+/// top of the picture while the controls show ([`super::PlayerView::set_author`]).
+#[derive(Clone)]
+pub struct Author {
+  /// The channel's shown name.
+  pub name: gpui::SharedString,
+  /// Its avatar, drawn round.
+  pub avatar: Option<crate::picture::Picture>,
+}
+
 /// One quality of a source: switching to it restarts mpv with its options at the current
 /// position.
 #[derive(Clone)]

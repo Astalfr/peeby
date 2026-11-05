@@ -16,7 +16,7 @@ mod tracks;
 
 pub use overlays::format_step;
 pub use running::{Owner, RunningPlayer, running};
-pub use source::{LIVE_DELAY, LiveInfo, Previews, Quality, Rewind, Source, Subtitle, Tile};
+pub use source::{Author, LIVE_DELAY, LiveInfo, Previews, Quality, Rewind, Source, Subtitle, Tile};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -271,6 +271,8 @@ pub struct PlayerView {
   /// Where the player is in the window, for the right-click menu.
   bounds: Rc<Cell<Bounds<Pixels>>>,
   title: SharedString,
+  /// The channel shown with the title over the picture.
+  author: Option<Author>,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
   /// Why the video cannot play, shown instead of the picture (a spinner while it loads).
@@ -411,6 +413,7 @@ impl PlayerView {
       stats_task: None,
       bounds: Rc::default(),
       title: SharedString::default(),
+      author: None,
       player: None,
       video: None,
       status: None,
@@ -745,9 +748,16 @@ impl PlayerView {
     &self.focus
   }
 
-  /// Title shown over the picture in fullscreen and in the full-window layout.
+  /// Title shown over the top of the picture while the controls show.
   pub fn set_title(&mut self, title: SharedString, cx: &mut Context<Self>) {
     self.title = title;
+    cx.notify();
+  }
+
+  /// The channel shown with the title over the picture (embedded layout): its avatar, then its
+  /// name under the title.
+  pub fn set_author(&mut self, author: Option<Author>, cx: &mut Context<Self>) {
+    self.author = author;
     cx.notify();
   }
 
@@ -2205,6 +2215,77 @@ impl PlayerView {
       })
   }
 
+  /// Whether the embedded player shows its title bar while the controls show.
+  fn has_title_bar(&self) -> bool {
+    self.layout == Layout::Embedded && (!self.title.is_empty() || self.author.is_some())
+  }
+
+  /// The embedded player's top: the channel's avatar, the title and the channel's name under
+  /// it, over a gradient. It takes no mouse events: a click there plays or pauses.
+  fn render_title_bar(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    if !self.has_title_bar() {
+      return None;
+    }
+    let fullscreen = window.is_fullscreen();
+    let radii = corner_radii(window, self.theater);
+    let author = self.author.as_ref();
+    let avatar = author
+      .and_then(|a| a.avatar.as_ref())
+      .filter(|p| !p.is_empty())
+      .map(|p| picture::avatar(p, if fullscreen { 44. } else { 36. }, window, cx));
+    let name = author.map(|a| a.name.clone()).filter(|n| !n.is_empty());
+    let line = |text: SharedString| {
+      div()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .child(text)
+    };
+    Some(
+      h_flex()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .when(fullscreen, |el| el.px_6().pt_4())
+        .when(!fullscreen, |el| el.px_4().pt_3())
+        .pb_10()
+        .gap_3()
+        .items_center()
+        // Its gradient reaches the player's top corners: rounded like them.
+        .rounded_tl(radii.top_left)
+        .rounded_tr(radii.top_right)
+        .bg(linear_gradient(
+          180.,
+          linear_color_stop(gpui::black().opacity(0.75), 0.0),
+          linear_color_stop(gpui::black().opacity(0.0), 1.0),
+        ))
+        .text_color(gpui::white())
+        .children(avatar)
+        .child(
+          v_flex()
+            .flex_1()
+            .min_w_0()
+            .when(!self.title.is_empty(), |col| {
+              col.child(
+                line(self.title.clone())
+                  .when(fullscreen, |el| el.text_lg().line_height(px(22.)))
+                  .when(!fullscreen, |el| el.text_base().line_height(px(19.)))
+                  .font_weight(FontWeight::SEMIBOLD),
+              )
+            })
+            .children(name.map(|name| {
+              line(name)
+                .text_sm()
+                .line_height(px(16.))
+                .text_color(gpui::white().opacity(0.8))
+            })),
+        )
+        .into_any_element(),
+    )
+  }
+
   fn render_controls(
     &mut self,
     window: &mut Window,
@@ -2225,27 +2306,8 @@ impl PlayerView {
 
     if !embedded {
       layers.push(self.render_top_bar(window, cx));
-    } else if fullscreen && !self.title.is_empty() {
-      layers.push(
-        div()
-          .absolute()
-          .top_0()
-          .left_0()
-          .right_0()
-          .px_6()
-          .pt_4()
-          .pb_10()
-          .bg(linear_gradient(
-            180.,
-            linear_color_stop(gpui::black().opacity(0.75), 0.0),
-            linear_color_stop(gpui::black().opacity(0.0), 1.0),
-          ))
-          .text_lg()
-          .font_weight(FontWeight::SEMIBOLD)
-          .text_color(gpui::white())
-          .child(self.title.clone())
-          .into_any_element(),
-      );
+    } else if let Some(bar) = self.render_title_bar(window, cx) {
+      layers.push(bar);
     }
 
     let buttons = h_flex()
@@ -2802,11 +2864,13 @@ impl Render for PlayerView {
     } else {
       self.osd.clone()
     };
+    // Under the title bar while it shows, not hidden behind it.
+    let title_bar = show_ui && !self.failed && self.has_title_bar();
     if let Some(osd) = osd {
       root = root.child(
         div()
           .absolute()
-          .top(px(24.))
+          .top(px(if title_bar { 84. } else { 24. }))
           .left_0()
           .right_0()
           .flex()

@@ -185,9 +185,11 @@ impl ShortView {
           match result {
             Some(Ok(page)) => {
               let title = SharedString::from(page.title.clone());
-              this
-                .player
-                .update(cx, |player, cx| player.set_title(title, cx));
+              let author = convert::author(&page);
+              this.player.update(cx, |player, cx| {
+                player.set_title(title, cx);
+                player.set_author(author, cx);
+              });
               this.rating = Rating::of(&page);
               let token = page.comments_continuation.clone();
               this.comments.update(cx, |c, cx| c.start(token, cx));

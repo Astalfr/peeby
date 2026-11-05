@@ -3,12 +3,12 @@
 
 use std::rc::Rc;
 
-use innertube::{Chapter, Client, Storyboard, Stream, Thumbnail};
+use innertube::{Chapter, Client, Storyboard, Stream, Thumbnail, WatchPage};
 use player::StartOptions;
 use ui::i18n::t;
 use ui::images::{Download, Fetch};
 use ui::picture::{Picture, Size};
-use ui::player::{LIVE_DELAY, Previews, Quality, Source, Subtitle, Tile};
+use ui::player::{Author, LIVE_DELAY, Previews, Quality, Source, Subtitle, Tile};
 use ui::tf;
 
 use crate::settings;
@@ -34,6 +34,15 @@ pub fn picture(sizes: &[Thumbnail]) -> Picture {
       })
       .collect(),
   )
+}
+
+/// A watch page's channel, shown over the player with the title; `None` without a name.
+pub fn author(page: &WatchPage) -> Option<Author> {
+  let name = page.channel.clone().filter(|n| !n.is_empty())?;
+  Some(Author {
+    name: name.into(),
+    avatar: (!page.channel_avatar.is_empty()).then(|| picture(&page.channel_avatar)),
+  })
 }
 
 /// The text of an InnerTube error as shown in the UI, in the interface's language (the

@@ -438,8 +438,10 @@ impl WatchView {
               let title = SharedString::from(page.title.clone());
               this.nav.set_title(cx.entity_id(), title.clone(), cx);
               let chapters = convert::chapters(&page.chapters);
+              let author = convert::author(&page);
               this.player.update(cx, |player, cx| {
                 player.set_title(title, cx);
+                player.set_author(author, cx);
                 if !chapters.is_empty() {
                   player.set_chapters(chapters, cx);
                 }
