@@ -226,6 +226,26 @@ fn live_channel() {
 }
 
 #[test]
+fn live_archive() {
+  // A live recorded as it goes (captured 2026-11-05): its VOD starts 4 s after it.
+  let channel = gql::parse_channel(&json("gql_channel_live_archive.json")).unwrap();
+  let live = channel.live.unwrap();
+  let archive = live.archive.unwrap();
+  assert_eq!(archive.id, "2920209653");
+  assert_eq!(
+    archive.created_at,
+    twitch::time::epoch_millis("2026-11-05T13:37:10Z")
+  );
+  assert_eq!(archive.created_at.unwrap() - live.started_at.unwrap(), 4000);
+  // A channel that keeps no VODs: no past to go back to.
+  let channel = gql::parse_channel(&json("gql_channel_live_no_archive.json")).unwrap();
+  assert!(channel.live.unwrap().archive.is_none());
+  // The older capture, from before the field was asked for.
+  let channel = gql::parse_channel(&json("gql_channel_live.json")).unwrap();
+  assert!(channel.live.unwrap().archive.is_none());
+}
+
+#[test]
 fn offline_channel() {
   let channel = gql::parse_channel(&json("gql_channel_offline.json")).unwrap();
   assert_eq!(channel.login, "twitch");

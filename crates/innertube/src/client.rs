@@ -9,17 +9,18 @@ use serde_json::{Value, json};
 use crate::auth::{Cookies, ORIGIN};
 use crate::error::{Error, Result};
 use crate::hls;
+use crate::live::LiveProxy;
 use crate::models::{
-  Channel, CommentPage, Feed, LikeStatus, LiveChatPage, NotificationPage, Playlist, PlaylistChoice,
-  PlaylistSummary, SearchPage, SearchResult, ShortsPage, Stream, Tracking, VideoItem, Votes,
-  WatchPage, Watchtime,
+  Channel, CommentPage, Feed, LikeStatus, Live, LiveChatPage, NotificationPage, Playlist,
+  PlaylistChoice, PlaylistSummary, SearchPage, SearchResult, ShortsPage, Stream, Tracking,
+  VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
   parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
-  parse_watch, tracking_param,
+  parse_live_chat, parse_live_formats, parse_notifications, parse_oembed_title, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
+  parse_shorts_sequence, parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking,
+  parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -864,7 +865,8 @@ impl Client {
     Ok(visitor)
   }
 
-  async fn visionos_stream(&self, video_id: &str, max_height: u32) -> Result<Stream> {
+  /// The VISIONOS `player` answer of `video_id` (anonymous: its own visitorData).
+  pub(crate) async fn visionos_player(&self, video_id: &str) -> Result<Value> {
     let visitor = self.resolver_visitor().await?;
     let (hl, gl) = &*self.language;
     let body = json!({
@@ -893,7 +895,20 @@ impl Client {
       .header("X-Youtube-Client-Version", VISIONOS_CLIENT_VERSION)
       .header("X-Goog-Visitor-Id", &visitor)
       .json(&body);
-    let player = self.send("player", request, false).await?;
+    self.send("player", request, false).await
+  }
+
+  async fn visionos_stream(&self, video_id: &str, max_height: u32) -> Result<Stream> {
+    let player = self.visionos_player(video_id).await?;
+    // A live with DVR plays from its DASH segments through the local proxy: the whole broadcast
+    // (ADR 0025). Should that fail, its HLS window (an hour).
+    let formats = parse_live_formats(&player);
+    if !formats.is_empty() {
+      match LiveProxy::start(self.clone(), video_id, &player, formats, max_height).await {
+        Ok(proxy) => return Ok(proxied_live(proxy, &player)),
+        Err(e) => tracing::warn!("live proxy: {e}, playing the HLS window"),
+      }
+    }
     let master_url = hls_manifest_url(&player)?;
 
     let response = self
@@ -1007,6 +1022,28 @@ pub(crate) fn new_cpn() -> String {
     .take(16)
     .map(|b| char::from(ALPHABET[usize::from(b & 63)]))
     .collect()
+}
+
+/// A live played through `proxy`: its qualities, the one picked at the start, and a window up
+/// to YouTube's DVR length.
+fn proxied_live(proxy: LiveProxy, player: &Value) -> Stream {
+  let main = proxy.main().clone();
+  Stream {
+    video_url: main.url,
+    audio_url: main.audio_url,
+    resolution: main.resolution,
+    codecs: main.codecs,
+    user_agent: VISIONOS_USER_AGENT,
+    qualities: proxy.variants().to_vec(),
+    captions: parse_captions(player),
+    // A live's storyboard is another kind: no seek previews.
+    storyboard: None,
+    live: Some(Live {
+      length: proxy.length(),
+      dvr_window: Some(proxy.window()),
+      proxy: Some(proxy),
+    }),
+  }
 }
 
 /// `streamingData.hlsManifestUrl` of a player response, or why there is none.

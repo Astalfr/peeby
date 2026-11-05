@@ -8,7 +8,10 @@
 //! size (panels larger than the player scroll) · `PEEBY_LIVE=1` plays it as a live (badge,
 //! uptime and viewers, no seeking) with a notice counting down for 8 s, as during a removed ad ·
 //! `PEEBY_LIVE=dvr` as a DVR live (YouTube's): the seek bar over its last 2 minutes, the badge
-//! greyed with the delay when started behind the edge (`PEEBY_START=60`) · `PEEBY_PICTURES=1` gives
+//! greyed with the delay when started behind the edge (`PEEBY_START=60`) · `PEEBY_LIVE=rewind` as
+//! a recorded live (Twitch's): after 2 s its recording (the same pattern, started 170 s ago)
+//! covers the broadcast, then the example seeks 60 s in (the recording plays) and, at 10 s, back
+//! to the edge (the live again), printing the `rewound` events · `PEEBY_PICTURES=1` gives
 //! the chapters a picture each, as the Twitch space does (empty boxes: the example has no image
 //! store).
 
@@ -23,7 +26,7 @@ use gpui_platform::application;
 use player::{Chapter, StartOptions};
 use ui::picture::Picture;
 use ui::player::segments::{Segment, SegmentKind};
-use ui::player::{Layout, LiveInfo, PlayerEvent, PlayerView, Prefs, Source};
+use ui::player::{Layout, LiveInfo, PlayerEvent, PlayerView, Prefs, Rewind, Source};
 use ui::{assets, theme};
 
 /// Length of the generated video, seconds.
@@ -36,7 +39,8 @@ fn main() {
     .unwrap_or(0.0);
   let live_mode = std::env::var("PEEBY_LIVE").ok();
   let dvr = live_mode.as_deref() == Some("dvr");
-  let live = dvr || live_mode.as_deref() == Some("1");
+  let rewind = live_mode.as_deref() == Some("rewind");
+  let live = dvr || rewind || live_mode.as_deref() == Some("1");
   application()
     .with_assets(assets::Assets)
     .run(move |cx: &mut App| {
@@ -156,7 +160,28 @@ fn main() {
           );
           view
         });
-        if live && !dvr {
+        if rewind {
+          let player = player.downgrade();
+          cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let timer = |s| executor.timer(Duration::from_secs(s));
+            timer(2).await;
+            player
+              .update(cx, |p, cx| {
+                let rewind = Rewind {
+                  started_at: SystemTime::now() - Duration::from_secs(170),
+                  recording: source(0.0),
+                };
+                p.set_rewind(rewind, cx);
+              })
+              .ok();
+            timer(2).await;
+            player.update(cx, |p, cx| p.seek_to(60.0, cx)).ok();
+            timer(6).await;
+            player.update(cx, |p, cx| p.seek_to(1e9, cx)).ok();
+          })
+          .detach();
+        } else if live && !dvr {
           // The notice the Twitch space shows while an ad is removed and no backup covers it.
           let notice = player.downgrade();
           cx.spawn(async move |cx| {
@@ -223,6 +248,7 @@ fn describe(event: &PlayerEvent) -> String {
     PlayerEvent::TracksChanged { audio, subtitle } => {
       format!("tracks audio={audio:?} subtitle={subtitle:?}")
     }
+    PlayerEvent::Rewound { rewound, at } => format!("rewound={rewound} at={at:.0}"),
     PlayerEvent::Close => "close".into(),
   }
 }

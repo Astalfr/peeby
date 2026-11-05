@@ -15,7 +15,7 @@ const HOVER_DELAY: Duration = Duration::from_millis(300);
 /// Under the 6 h validity of the URLs, with margin for a long video.
 const FRESH_FOR: Duration = Duration::from_secs(4 * 3600);
 /// A live's window grows while it is younger than its DVR length: past this, a prefetched live
-/// would start too far behind its edge.
+/// would start too far behind its edge (HLS), and its proxy should not run for nothing.
 const LIVE_FRESH_FOR: Duration = Duration::from_secs(10);
 /// Resolved streams kept; the oldest go first.
 const CAPACITY: usize = 64;
@@ -101,6 +101,8 @@ fn fresh(at: Instant, stream: &Stream) -> bool {
 
 impl Streams {
   fn fetch(&mut self, id: String, cx: &mut Context<Self>) {
+    // A stale live holds its proxy (ADR 0025): dropped, it stops.
+    self.ready.retain(|_, (at, stream)| fresh(*at, stream));
     let fresh = self
       .ready
       .get(&id)

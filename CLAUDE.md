@@ -26,6 +26,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   then `cargo test -p jellyfin-api --test live -- --ignored --nocapture`
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (an exported copy, as for `home`)
+- A YouTube live through its proxy, anonymous: `cargo run -p innertube --example live_probe -- [id | "query"] [--serve <s>]`
+  (window, playlist, both ends; `--serve` keeps the proxy up for `spike-yt-play` with `PEEBY_RESOLVER=raw`,
+  `PEEBY_AUDIO=<audio playlist>`, `PEEBY_START`)
+- A Twitch live's recording (archive VOD), anonymous: `cargo run -p twitch --example archive_probe -- (<login>… | top) [--save <dir>]`
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
@@ -49,12 +53,14 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   cookie jar, the auth-token) on stdout: redirect it to a file, never into a log or a shared terminal
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_VARIANT`, `PEEBY_USHER=v1`, `PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0`,
-  `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
+  `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`, `PEEBY_START=<s>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
   start delay)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 
 ## Product constraints (no exceptions)
-- Playback starts within about 1–2 s of the click. Streams come from the VISIONOS client as HLS (ADR 0003).
+- Playback starts within about 1–2 s of the click. Streams come from the VISIONOS client as HLS (ADR 0003); a live
+  with DVR from its DASH segments through `innertube::LiveProxy`, which serves mpv local playlists and redirects
+  (ADR 0025): the signed URLs stay in the proxy, never in a playlist, a log or an error.
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
 - Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.dat`,
@@ -114,7 +120,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   page's video. Reading YouTube's inbox clears its unseen count on youtube.com: read it only when
   the count grows.
 - Watch progress lives on the account (ADR 0013): playing a YouTube video signed in writes its history and resume
-  position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`. Ask the user before a playback test.
+  position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`, and so does going back in a Twitch
+  live (its recording is a VOD, ADR 0026). Ask the user before a playback test.
 
 ## Twitch (docs/twitch-plan.md, ADR 0010)
 - The space needs no sign-in: its catalog is anonymous GQL (`twitch::catalog`, ADR 0016). The web `auth-token`
@@ -139,7 +146,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Channel points (ADR 0012): every spend (reward, bet) waits for a second click and never happens on its
   own. `claimCommunityPoints` fails Twitch's integrity check: never route around it (another Client-ID,
   minted integrity tokens); the bonus is claimed on twitch.tv. `minute-watched` (spade) is sent only for
-  the live on screen while it plays, never from a script or for a live nobody watches.
+  the live on screen while it plays (not its recording, ADR 0026), never from a script or for a live nobody watches.
 - Fixtures: redact Twitch's session keys by name (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
   `C`/`E`…, and the ads' `*-SESSION-ID`, `RADS-TOKEN`, `*-URL`), never with a blanket IP regex (it breaks
   HEVC codec strings).
@@ -168,8 +175,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - mpv list options go through `change-list … append` (`http-header-fields`, `audio-files`, `ytdl-raw-options`,
   `script-opts`): a comma in a value would split it otherwise.
 - YouTube HLS variants are video only: pass the `AUDIO` group's rendition as `audio-files`, with the VISIONOS User-Agent.
-- A YouTube live's playlists are windows whose first segment is mpv's 0: start it with a positive `start` near the
-  window's end (`Live::length − LIVE_DELAY`); 0 or a negative `start` stalls about 10 s on the audio rendition (ADR 0011).
+- A YouTube live's playlists (HLS or its proxy's) are windows whose first segment is mpv's 0: start it with a positive
+  `start` near the window's end (`Live::length_now() − LIVE_DELAY`); 0 or a negative `start` stalls about 10 s on the
+  audio rendition (ADR 0011). Each of a proxied live's DASH segments repeats its `moov`: FFmpeg's warning is expected.
 - Caption tracks: `baseUrl&fmt=vtt` works; machine translations (`&tlang=`) answer HTTP 429 for VISIONOS sessions.
 - Per-frame video images: each `RenderImage` is a new atlas entry, so release the previous one with `Window::drop_image`.
 - vendor/gpui-pre-windows is a patched copy (external D3D11 textures, see vendor/README.md). Never edit it without

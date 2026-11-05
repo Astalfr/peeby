@@ -31,10 +31,26 @@ pub struct Source {
   /// mpv starts there by itself, as on Twitch; YouTube's lives start at their window's
   /// beginning, so [`LIVE_DELAY`] before its end).
   pub live: bool,
-  /// A live whose recent past can be watched (YouTube's DVR): how far back, seconds. The seek
-  /// bar covers that window up to the live edge (mpv's growing duration), a pause keeps the
-  /// position, and the live badge brings back to the edge.
+  /// A live whose past can be watched (YouTube's DVR): how far back, seconds. The seek bar
+  /// covers that window up to the live edge (mpv's growing duration), a pause keeps the
+  /// position, and the live badge brings back to the edge. The space may shorten it later
+  /// ([`super::PlayerView::set_dvr_window`]).
   pub dvr_window: Option<f64>,
+  /// Kept alive as long as the player holds the source: what serves its URLs, such as a local
+  /// playlist proxy, which stops when dropped.
+  pub keep_alive: Option<Rc<dyn std::any::Any>>,
+}
+
+/// A live whose past plays from another source: its recording, made as it goes (Twitch's VOD
+/// of a live in progress), given once the space has it ([`super::PlayerView::set_rewind`]). The
+/// seek bar then covers the broadcast, a seek back plays the recording from there, and the live
+/// badge (or a seek to the edge) comes back to the live.
+#[derive(Clone)]
+pub struct Rewind {
+  /// When the recording starts (its 0): the seek bar goes from there to now.
+  pub started_at: std::time::SystemTime,
+  /// The recording as a source, its qualities matched to the live's by label.
+  pub recording: Source,
 }
 
 /// How far behind its edge a live plays, seconds: mpv waits for segments closer than about two

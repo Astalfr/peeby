@@ -150,6 +150,7 @@ impl WatchView {
           | PlayerEvent::Paused(_)
           | PlayerEvent::Seeked
           | PlayerEvent::TracksChanged { .. }
+          | PlayerEvent::Rewound { .. }
           | PlayerEvent::Close => {}
         }
       }),
@@ -835,9 +836,11 @@ pub(super) fn load_stream(
       stream.resolution,
       stream.codecs
     );
+    let proxy = stream.live.as_ref().and_then(|l| l.proxy.clone());
     let mut source = convert::source(stream, &Settings::get(cx).player);
     resume(&mut source, start);
     player.update(cx, |player, cx| player.start(source, clicked, cx));
+    settle_window(proxy, player, cx);
     return;
   }
   let max_height = Settings::get(cx).max_height;
@@ -855,11 +858,15 @@ pub(super) fn load_stream(
           stream.resolution,
           stream.codecs
         );
+        let proxy = stream.live.as_ref().and_then(|l| l.proxy.clone());
         let mut source = convert::source(stream, &player_settings);
         resume(&mut source, start);
-        player
-          .update(cx, |player, cx| player.start(source, clicked, cx))
-          .ok();
+        if let Some(player) = player.upgrade() {
+          cx.update(|cx| {
+            player.update(cx, |player, cx| player.start(source, clicked, cx));
+            settle_window(proxy, &player, cx);
+          });
+        }
         return;
       }
       Some(Err(e)) => e,
@@ -891,6 +898,25 @@ pub(super) fn load_stream(
         }
       })
       .ok();
+  })
+  .detach();
+}
+
+/// A proxied live's window once its proxy has looked for the first segment kept (a 24/7 live
+/// keeps less than YouTube's DVR length): the seek bar stops there.
+fn settle_window(proxy: Option<innertube::LiveProxy>, player: &Entity<PlayerView>, cx: &mut App) {
+  let Some(proxy) = proxy else {
+    return;
+  };
+  let announced = proxy.window();
+  let settled = runtime::spawn(cx, async move { proxy.settled().await });
+  let player = player.downgrade();
+  cx.spawn(async move |cx| {
+    if let Some(window) = settled.await.filter(|w| *w < announced) {
+      player
+        .update(cx, |player, cx| player.set_dvr_window(window, cx))
+        .ok();
+    }
   })
   .detach();
 }

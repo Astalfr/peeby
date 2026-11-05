@@ -337,8 +337,8 @@ impl PlayView {
         }
       }
       PlayerEvent::Close => self.close(cx),
-      // The page has no theater mode: the player is the whole page.
-      PlayerEvent::Theater => {}
+      // The page has no theater mode: the player is the whole page. Jellyfin has no lives.
+      PlayerEvent::Theater | PlayerEvent::Rewound { .. } => {}
     }
   }
 

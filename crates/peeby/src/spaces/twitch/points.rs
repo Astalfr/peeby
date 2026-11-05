@@ -664,7 +664,8 @@ impl PointsView {
         return false;
       }
       let player = player.read(cx);
-      player.is_live() && player.property("core-idle").as_deref() == Some("no")
+      // Not while the live's recording plays: that is not the live (ADR 0026).
+      player.is_live() && !player.rewound() && player.property("core-idle").as_deref() == Some("no")
     });
     if !playing {
       return None;

@@ -202,6 +202,36 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 - Verified by driving the app: the playlists page (15 playlists), "Watch later" (17 videos), "Tout lire" (playback after 1.7 s), N, then the end of a video playing the next one (1.3 s, prefetched), the same in fullscreen (it stays fullscreen, Escape still works), playing from row 4, shuffle, back to the playlist page.
 - **Not verified:** reaching the end of a loaded page during playback (the queue loads the next one first; only its request was checked live), repeat at the end of a playlist.
 
+## Going back in a live
+
+- Done (2026-11-05, the user's request): back to the start of a live, and back to the live, on YouTube and
+  Twitch.
+  - **YouTube** ([ADR 0025](decisions/0025-youtube-lives-from-dash.md)): lives with DVR play from VISIONOS's DASH segments
+    through `innertube::LiveProxy`, the whole broadcast up to 12 h (the HLS window was an hour, and on most
+    ordinary broadcasts nothing before it was served), with VP9 up to 2160p.
+  - **Twitch** ([ADR 0026](decisions/0026-twitch-live-rewind-from-its-recording.md)): a live whose
+    channel keeps its VODs gets the shared player's `Rewind`, its recording through a second proxy, with
+    the recording's position saved to the account as a VOD's; `minute-watched` pauses meanwhile.
+  - Tests: 8 new (formats on the live fixture; the proxy's paths, ladder, segment length, playlist, edge
+    and search for the first segment kept; a live's recording on 2 new fixtures).
+  - Verified anonymously:
+    - `live_probe`: a 2 h 38 live listed from segment 0, both ends served through the redirects,
+      resolved in 0.16 s; a 24/7 live's 12 h; a 4K live's VP9 ladder.
+    - `spike-yt-play` through the real proxy: first frame at the edge 1.1 s, 30 s into the broadcast
+      0.8 s; 3 minutes at the edge of a 29.97 fps live with no 404 and no buffering.
+    - The search's request: one byte of a gone segment answers 404, of a kept one 206 (a `HEAD`
+      answers 200 for both).
+    - A Twitch recording in progress through `spike-twitch-play` and `twitch::Proxy`
+      (`PEEBY_PROXY=1`) from 1 h in and from 90 s before its end (2.5 s, token included), the playlist
+      reloaded from the proxy near the end.
+    - The player example's `PEEBY_LIVE=rewind`: the recording at 60 s, then back to the live.
+  - **Not verified:** in the app (a playback writes the account's history on both services: with the
+    user's agreement), and the search trimming a live's front: both 24/7 lives served their whole
+    12 h that day. That covers the seek bar's drag over 12 h, the badge's click, a quality change in
+    the past, the window shortened after the search on a 24/7 live, the URL refresh after 5.5 h, the end
+    of a live through the proxy, and a Twitch recording's position saved and the pause in
+    `minute-watched`.
+
 ## YouTube lives
 
 - Done (2026-11-02): lives start at their edge in about 0.6 s (they waited about 10 s at the start of their

@@ -4,6 +4,8 @@
 //!   stream cannot cover, the player shows a notice with its countdown; the viewers are refreshed
 //!   every minute; the viewer writes in the chat with the auth-token, their channel points under
 //!   its field and the predictions and polls pinned over its messages ([`super::points`]);
+//!   The live's past plays from its recording (its archive VOD, through a second proxy) when the
+//!   channel keeps its lives: the seek bar covers the broadcast (ADR 0026);
 //! - a VOD: through the proxy too, seekable, with the storyboard's previews, its muted parts and
 //!   its game chapters on the seek bar, and its chat replayed beside it as the playhead moves ([`super::replay`]);
 //! - a clip: its direct MP4s.
@@ -24,7 +26,7 @@ use ui::chat::{ChatPanel, watch_layout};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
-use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
+use ui::player::{LiveInfo, PlayerEvent, PlayerView, Rewind, Source};
 use ui::{runtime, tf, theme};
 
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
@@ -85,6 +87,14 @@ pub struct WatchView {
   started_at: Option<i64>,
   /// Saves a VOD's position to the account (with the auth-token).
   saver: Option<progress::Saver>,
+  /// A live's recording, as its channel names it, until its playback is asked for.
+  archive: Option<twitch::gql::Archive>,
+  /// Whether the recording was asked for (once per page).
+  rewind_asked: bool,
+  /// Serves the recording's playlists.
+  archive_proxy: Option<Proxy>,
+  /// Saves the position in the recording while it plays, as for any VOD (ADR 0013).
+  archive_saver: Option<progress::Saver>,
   focused: bool,
   _tasks: Vec<Task<()>>,
 }
@@ -107,6 +117,14 @@ impl WatchView {
     cx.subscribe(&player, move |this, player, event: &PlayerEvent, cx| {
       if let Some(saver) = &mut this.saver {
         saver.on_event(event, &player, cx);
+      }
+      if let Some(saver) = &mut this.archive_saver {
+        match *event {
+          // Leaving the recording for the live: where it was left.
+          PlayerEvent::Rewound { rewound: false, at } => saver.save_at(at, cx),
+          _ if player.read(cx).rewound() => saver.on_event(event, &player, cx),
+          _ => {}
+        }
       }
       match *event {
         PlayerEvent::Theater => {
@@ -134,6 +152,11 @@ impl WatchView {
       if let Some(saver) = &mut this.saver {
         saver.save(&player, cx);
       }
+      if let Some(saver) = &mut this.archive_saver
+        && player.read(cx).rewound()
+      {
+        saver.save(&player, cx);
+      }
     })
     .detach();
     let mut view = Self {
@@ -151,6 +174,10 @@ impl WatchView {
       header: None,
       started_at: None,
       saver: None,
+      archive: None,
+      rewind_asked: false,
+      archive_proxy: None,
+      archive_saver: None,
       focused: false,
       _tasks: Vec::new(),
     };
@@ -297,10 +324,82 @@ impl WatchView {
               this.start_source(source, clicked, cx);
               this.watch_live(cx);
               this.watch_decoding(cx);
+              this.prepare_rewind(cx);
             }
             Some(Err(e)) => this.fail(&e, cx),
             None => {}
           }
+        })
+        .ok();
+    }));
+  }
+
+  /// A live's past (ADR 0026): once the live plays and its channel names its recording, the
+  /// recording's VOD through a second proxy and the viewer's position in it, then the player's
+  /// [`Rewind`]. A recording Twitch refuses (subscribers only) leaves the live without its past.
+  fn prepare_rewind(&mut self, cx: &mut Context<Self>) {
+    if self.rewind_asked || self.proxy.is_none() {
+      return;
+    }
+    let Some(archive) = self.archive.clone() else {
+      return;
+    };
+    let Some(started_at) = archive
+      .created_at
+      .and_then(|ms| u64::try_from(ms).ok())
+      .map(|ms| UNIX_EPOCH + Duration::from_millis(ms))
+    else {
+      return;
+    };
+    self.rewind_asked = true;
+    let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
+    let play = runtime::spawn(cx, {
+      let (client, id) = (self.client.clone(), archive.id.clone());
+      async move { client.play(&Target::Vod(id), &codecs, false).await }
+    });
+    let viewing = runtime::spawn(cx, {
+      let (client, id) = (self.client.clone(), archive.id.clone());
+      async move { client.vod_viewing(&id).await }
+    });
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      let (play, viewing) = (play.await, viewing.await);
+      this
+        .update(cx, |this, cx| {
+          let proxy = match play {
+            Some(Ok(proxy)) => proxy,
+            Some(Err(e)) => {
+              tracing::info!("Twitch: the live's recording cannot play ({e}): no past");
+              return;
+            }
+            None => return,
+          };
+          let (recording, _) = play::proxied(
+            &proxy,
+            false,
+            Self::max_height(cx),
+            &Settings::get(cx).player,
+          );
+          match viewing {
+            Some(Ok(viewing)) => {
+              this.archive_saver = progress::Saver::new(this.client.clone(), archive.id, &viewing);
+              if this.archive_saver.is_some() {
+                this.save_periodically(cx);
+              }
+            }
+            Some(Err(e)) => tracing::warn!("recording position: {e}"),
+            None => {}
+          }
+          this.archive_proxy = Some(proxy);
+          tracing::info!("Twitch: the live's past plays from its recording");
+          this.player.update(cx, |player, cx| {
+            player.set_rewind(
+              Rewind {
+                started_at,
+                recording,
+              },
+              cx,
+            )
+          });
         })
         .ok();
     }));
@@ -512,7 +611,8 @@ impl WatchView {
     }));
   }
 
-  /// Saves the VOD's position every [`progress::SAVE_EVERY`] while the page lives.
+  /// Saves the VOD's (or the live's recording's) position every [`progress::SAVE_EVERY`] while
+  /// the page lives.
   fn save_periodically(&mut self, cx: &mut Context<Self>) {
     self._tasks.push(cx.spawn(async move |this, cx| {
       loop {
@@ -520,6 +620,11 @@ impl WatchView {
         let saved = this.update(cx, |this, cx| {
           let player = this.player.clone();
           if let Some(saver) = &mut this.saver {
+            saver.tick(&player, cx);
+          }
+          if let Some(saver) = &mut this.archive_saver
+            && player.read(cx).rewound()
+          {
             saver.tick(&player, cx);
           }
         });
@@ -616,6 +721,11 @@ impl WatchView {
       points.update(cx, |points, cx| points.watch_raids(id, cx));
     }
     let started = channel.live.as_ref().and_then(|l| l.started_at);
+    // A live just started may have no recording yet: a later reading may name it.
+    if let Some(archive) = channel.live.as_ref().and_then(|l| l.archive.clone()) {
+      self.archive = Some(archive);
+      self.prepare_rewind(cx);
+    }
     let info = channel.live.as_ref().map(|live| LiveInfo {
       viewers: Some(live.viewers),
       started_at: started

@@ -1,6 +1,6 @@
 # 0011: YouTube lives with DVR and chat
 
-- Status: accepted
+- Status: accepted; its HLS window superseded by [0025](0025-youtube-lives-from-dash.md) for lives with DVR
 - Date: 2026-11-02
 
 ## Context

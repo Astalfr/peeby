@@ -1,0 +1,30 @@
+{
+  "data": {
+    "user": {
+      "broadcastSettings": {
+        "title": "FITNACRAFT Tag 5 • FITNA PUR !LTD !vip !prepmymeal"
+      },
+      "displayName": "MontanaBlack88",
+      "id": "45044816",
+      "login": "montanablack88",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/6f36c08a-6f7d-40f1-a9e8-12eee2ff0f93-profile_image-70x70.png",
+      "self": null,
+      "stream": {
+        "archiveVideo": null,
+        "createdAt": "2026-11-05T12:00:59Z",
+        "game": {
+          "displayName": "Minecraft",
+          "id": "27471"
+        },
+        "id": "319274844902",
+        "type": "live",
+        "viewersCount": 12945
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 47,
+    "operationName": "Channel",
+    "requestID": "01M6P6EVDZMSVVD4T45YZM9DN2"
+  }
+}

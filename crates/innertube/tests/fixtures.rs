@@ -662,6 +662,27 @@ fn live_player_and_media_playlist() {
 }
 
 #[test]
+fn live_dash_formats() {
+  // The same live's `adaptiveFormats`: AVC up to 1080p and two AACs, 5 s segments, 12 h back.
+  let formats = innertube::parse_live_formats(&fixture("player_visionos_live.json"));
+  let itags: Vec<u32> = formats.iter().map(|f| f.itag).collect();
+  assert_eq!(itags, [137, 136, 135, 134, 133, 160, 139, 140]);
+  let best = &formats[0];
+  assert_eq!(
+    (best.mime.as_str(), best.codecs.as_str()),
+    ("video/mp4", "avc1.640028")
+  );
+  assert_eq!((best.width, best.height, best.fps), (1920, 1080, Some(30)));
+  assert_eq!((best.segment, best.max_dvr), (5.0, 43200.0));
+  assert!(best.url.contains("itag=137"));
+  let audio = &formats[7];
+  assert!(audio.audio());
+  assert_eq!((audio.codecs.as_str(), audio.height), ("mp4a.40.2", 0));
+  // A video has none: it plays from HLS.
+  assert!(innertube::parse_live_formats(&fixture("player_visionos.json")).is_empty());
+}
+
+#[test]
 fn watch_page_chapters() {
   // The player bar's markers of a video whose description has timestamps (captured
   // 2026-11-02, trimmed to a few chapters, one of them made malformed).

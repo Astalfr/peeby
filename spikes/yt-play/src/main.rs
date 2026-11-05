@@ -3,7 +3,9 @@
 //!
 //! Usage: `cargo run -p spike-yt-play --release -- <youtube-url>`
 //! - `PEEBY_RESOLVER`: `visionos` (default: direct InnerTube call, muxed HLS, see visionos.rs)
-//!   or `ytdl` (libmpv `ytdl_hook` → yt-dlp). The options below are for `ytdl`.
+//!   or `ytdl` (libmpv `ytdl_hook` → yt-dlp), or `raw`: the argument is a playlist URL played as
+//!   it is, with `PEEBY_AUDIO` as its audio (a live's proxy, from `innertube`'s `live_probe --serve`).
+//!   The options below are for `ytdl`.
 //! - `PEEBY_START`: start position in seconds (visionos), to time a seek.
 //! - Tools are bundled, nothing is installed on the host: `tools/` next to the executable, else
 //!   `third_party/yt-dlp/` (filled by `scripts/fetch-tools.ps1`). `PATH` is only a last resort.
@@ -47,6 +49,21 @@ fn main() {
 
   let options = match std::env::var("PEEBY_RESOLVER").as_deref() {
     Ok("ytdl") => ytdl_options(url),
+    // A playlist URL as it is, with `PEEBY_AUDIO` as its audio rendition (a proxy's).
+    Ok("raw") => (
+      StartOptions {
+        url,
+        external_audio: std::env::var("PEEBY_AUDIO").ok().into_iter().collect(),
+        http_headers: vec![format!("User-Agent: {}", visionos::USER_AGENT)],
+        log_file: Some(Path::new(ROOT).join("target/yt-play-mpv.log")),
+        start_seconds: std::env::var("PEEBY_START")
+          .ok()
+          .and_then(|s| s.parse().ok())
+          .unwrap_or(0.0),
+        ..Default::default()
+      },
+      Instant::now(),
+    ),
     _ => visionos_options(&url),
   };
   let started = options.1;

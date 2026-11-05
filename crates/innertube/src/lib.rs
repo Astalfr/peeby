@@ -38,24 +38,26 @@ mod auth;
 mod client;
 mod error;
 pub mod hls;
+mod live;
 mod models;
 mod parse;
 
 pub use auth::Cookies;
 pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
 pub use error::Error;
+pub use live::LiveProxy;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
-  Live, LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
-  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
-  SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, Subscription, TextLink, Thumbnail,
-  Tracking, VideoItem, Votes, WatchPage, Watchtime,
+  Live, LiveChatPage, LiveFormat, Notification, NotificationKind, NotificationLevel,
+  NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
+  SearchPage, SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, Subscription,
+  TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
-  parse_watch,
+  parse_live_chat, parse_live_formats, parse_notifications, parse_oembed_title, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
+  parse_shorts_sequence, parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking,
+  parse_unseen_count, parse_watch,
 };

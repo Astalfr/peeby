@@ -186,11 +186,25 @@ pub struct Live {
   pub started_at: Option<i64>,
   /// Category (game) name.
   pub category: Option<String>,
+  /// The VOD recording it as it goes (`archiveVideo`), when the channel keeps its lives: the
+  /// live's past (ADR 0026).
+  pub archive: Option<Archive>,
+}
+
+/// The VOD recording a live.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Archive {
+  /// The VOD's id.
+  pub id: String,
+  /// When the recording started (its 0), milliseconds since the epoch: a few seconds after the
+  /// live.
+  pub created_at: Option<i64>,
 }
 
 const CHANNEL_QUERY: &str = "query Channel($login: String!) { user(login: $login) { id login \
   displayName profileImageURL(width: 70) broadcastSettings { title } stream { id type viewersCount \
-  createdAt game { id displayName } } self { follower { followedAt } } } }";
+  createdAt game { id displayName } archiveVideo { id createdAt } } self { follower { followedAt } \
+  } } }";
 
 /// The request for `login`'s channel and live.
 pub fn channel_request(login: &str) -> Value {
@@ -218,6 +232,12 @@ pub fn parse_channel(answer: &Value) -> Result<Channel> {
       .as_str()
       .and_then(crate::time::epoch_millis),
     category: stream["game"]["displayName"].as_str().map(str::to_owned),
+    archive: stream["archiveVideo"]["id"].as_str().map(|id| Archive {
+      id: id.to_owned(),
+      created_at: stream["archiveVideo"]["createdAt"]
+        .as_str()
+        .and_then(crate::time::epoch_millis),
+    }),
   });
   Ok(Channel {
     id: text(&user["id"]),

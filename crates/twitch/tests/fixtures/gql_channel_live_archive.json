@@ -1,0 +1,33 @@
+{
+  "data": {
+    "user": {
+      "broadcastSettings": {
+        "title": "!DROPS, FOREVER DAY 2 | GIVEAWAYS | PVP ALLIANCE !addons"
+      },
+      "displayName": "Xaryu",
+      "id": "32085830",
+      "login": "xaryu",
+      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/b79e636b-26ad-49f8-8fd1-60a6e4cf9cca-profile_image-70x70.png",
+      "self": null,
+      "stream": {
+        "archiveVideo": {
+          "createdAt": "2026-11-05T13:37:10Z",
+          "id": "2920209653"
+        },
+        "createdAt": "2026-11-05T13:37:06Z",
+        "game": {
+          "displayName": "World of Warcraft",
+          "id": "18122"
+        },
+        "id": "322101369177",
+        "type": "live",
+        "viewersCount": 27112
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 48,
+    "operationName": "Channel",
+    "requestID": "01M6P6C7FMERHJKE1RDYYSM4EE"
+  }
+}

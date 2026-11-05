@@ -8,6 +8,7 @@
 //! - `PEEBY_VARIANT`: the variant to play by id (e.g. `1080p60-portrait`), else the best landscape one.
 //! - `PEEBY_FIXTURES=1`: saves the GQL answer, redacted, in `crates/twitch/tests/fixtures/`.
 //! - `PEEBY_QUIT_AFTER`: quits after that many seconds (unattended runs).
+//! - `PEEBY_START`: start position in seconds (a VOD, e.g. a live's recording in progress).
 //! - `PEEBY_LOW_LATENCY=0`: without Twitch's prefetch segments (default with them). A live prints,
 //!   every 10 s, how long ago the segment FFmpeg starts at (third from the end) was captured.
 //! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
@@ -82,6 +83,10 @@ fn main() {
     ],
     force_software: std::env::var("PEEBY_SOFTWARE_VIDEO").as_deref() == Ok("1"),
     log_file: Some(Path::new(ROOT).join("target/twitch-play-mpv.log")),
+    start_seconds: std::env::var("PEEBY_START")
+      .ok()
+      .and_then(|s| s.parse().ok())
+      .unwrap_or(0.0),
     ..Default::default()
   };
   let (event_tx, event_rx) = async_channel::unbounded();

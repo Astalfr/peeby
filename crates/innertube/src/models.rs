@@ -507,15 +507,75 @@ pub struct Stream {
 }
 
 /// What a live's playlists cover.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Live {
   /// Seconds the chosen variant's media playlist covered when the stream was resolved: mpv's
-  /// timeline starts at its first segment, so the live edge was this far in.
+  /// timeline starts at its first segment, so the live edge was this far in. With a
+  /// [`Live::proxy`], [`Live::length_now`] is where the edge is now.
   pub length: f64,
-  /// How far back the broadcast can be watched (YouTube's DVR: the `playlist_duration` of its
-  /// playlists, an hour or more), seconds; `None` when the live keeps no past. The window grows
-  /// from the broadcast's start up to it, then slides.
+  /// How far back the broadcast can be watched, seconds; `None` when the live keeps no past.
+  /// Through the [`Live::proxy`], up to YouTube's DVR length (`maxDvrDurationSec`, 12 h), which
+  /// [`crate::LiveProxy::settled`] may shorten; else the `playlist_duration` of its HLS
+  /// playlists (an hour). The window grows from the broadcast's start up to it, then slides.
   pub dvr_window: Option<f64>,
+  /// The local proxy serving the live's playlists from its DASH segments (ADR 0025): the
+  /// stream's URLs point at it, so it must live as long as the playback. `None`: YouTube's HLS
+  /// window, an hour at most.
+  pub proxy: Option<crate::LiveProxy>,
+}
+
+impl Live {
+  /// Where the live edge is in a new mpv's timeline, seconds.
+  pub fn length_now(&self) -> f64 {
+    self
+      .proxy
+      .as_ref()
+      .map_or(self.length, crate::LiveProxy::length)
+  }
+}
+
+/// One DASH format of a live (`streamingData.adaptiveFormats`, VISIONOS): its segments are
+/// fetched by number (`&sq=N`), each a whole fragmented MP4 or WebM (headers included).
+#[derive(Clone, PartialEq)]
+pub struct LiveFormat {
+  /// YouTube's format number, e.g. 137 (1080p AVC), 140 (AAC).
+  pub itag: u32,
+  /// Signed URL, the user's IP inside: never log it.
+  pub url: String,
+  /// `video/mp4`, `video/webm`, `audio/mp4`.
+  pub mime: String,
+  /// `avc1.64002A`, `vp9`, `mp4a.40.2`.
+  pub codecs: String,
+  /// Width in pixels; 0 for audio.
+  pub width: u32,
+  /// Height in pixels; 0 for audio.
+  pub height: u32,
+  /// Frames per second (video).
+  pub fps: Option<u32>,
+  /// Average bits per second.
+  pub bitrate: u64,
+  /// Nominal length of a segment, seconds (`targetDurationSec`, 5 or 2 for low latency).
+  pub segment: f64,
+  /// How far back segments are kept, seconds (`maxDvrDurationSec`).
+  pub max_dvr: f64,
+}
+
+impl LiveFormat {
+  /// An audio format.
+  pub fn audio(&self) -> bool {
+    self.mime.starts_with("audio/")
+  }
+}
+
+impl std::fmt::Debug for LiveFormat {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    // The URL embeds the user's IP and signatures.
+    write!(
+      f,
+      "{} {} {}x{}",
+      self.itag, self.codecs, self.width, self.height
+    )
+  }
 }
 
 impl std::fmt::Debug for Stream {

@@ -83,6 +83,12 @@ pub fn error_text(error: &innertube::Error) -> String {
       "Réponse de YouTube inattendue : son format a peut-être changé.",
     )
     .into(),
+    // Not shown in practice: the live plays from its HLS window instead.
+    Error::Proxy(_) => t(
+      "The live could not be prepared.",
+      "Impossible de préparer le direct.",
+    )
+    .into(),
   }
 }
 
@@ -122,8 +128,9 @@ pub fn chapters(chapters: &[Chapter]) -> Vec<player::Chapter> {
 
 /// A resolved stream as the player's source: its quality ladder, captions fetched on demand
 /// and the storyboard for the seek bar; `player` gives the hardware acceleration setting. A live
-/// starts [`LIVE_DELAY`] before the end of its window (mpv's timeline starts at the window's
-/// first segment) and, with DVR, can be sought back over its window.
+/// starts [`LIVE_DELAY`] before its edge (mpv's timeline starts at the first segment listed)
+/// and, with DVR, can be sought back over its window: the whole broadcast through its proxy
+/// (ADR 0025), which the source keeps alive.
 pub fn source(stream: Stream, player: &settings::Player) -> Source {
   let qualities = stream
     .qualities
@@ -139,10 +146,11 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
     stream.user_agent,
     player,
   );
-  if let Some(live) = stream.live {
+  let live = stream.live.as_ref();
+  if let Some(live) = live {
     // Never 0, which gives mpv no `start` at all: it would wait on the audio rendition again
     // (a live opened in its first seconds, its window shorter than the delay).
-    options.start_seconds = (live.length - LIVE_DELAY).max(1.0);
+    options.start_seconds = (live.length_now() - LIVE_DELAY).max(1.0);
   }
   Source {
     options,
@@ -164,8 +172,11 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
     previews: stream
       .storyboard
       .map(|board| Rc::new(StoryboardPreviews(board)) as Rc<dyn Previews>),
-    live: stream.live.is_some(),
-    dvr_window: stream.live.and_then(|live| live.dvr_window),
+    live: live.is_some(),
+    dvr_window: live.and_then(|live| live.dvr_window),
+    keep_alive: live
+      .and_then(|live| live.proxy.clone())
+      .map(|proxy| Rc::new(proxy) as Rc<dyn std::any::Any>),
     ..Default::default()
   }
 }

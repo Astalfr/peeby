@@ -58,8 +58,14 @@ impl Saver {
 
   /// Saves the player's position, if it moved.
   pub fn save(&mut self, player: &Entity<PlayerView>, cx: &mut App) {
+    let position = player.read(cx).position();
+    self.save_at(position, cx);
+  }
+
+  /// Saves `position`, seconds, if it moved.
+  pub fn save_at(&mut self, position: f64, cx: &mut App) {
     // Truncation on purpose: whole seconds, a resume a fraction early.
-    let position = player.read(cx).position() as u32;
+    let position = position as u32;
     if position == 0 || self.saved == Some(position) {
       return;
     }

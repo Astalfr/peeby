@@ -12,10 +12,12 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 serde_json = "1"
 sha1 = "0.10"
 thiserror = "2"
+# The local playlist proxy of lives (ADR 0025): the features the twitch crate already builds.
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync"] }
 tracing = "0.1"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [lints]
 workspace = true

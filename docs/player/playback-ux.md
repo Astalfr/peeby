@@ -124,7 +124,11 @@ A source with `Source::live` (Twitch, [twitch-plan.md](../twitch-plan.md) step 4
 
 ### DVR lives (YouTube)
 
-A live with `Source::dvr_window` (YouTube with `isLiveDvrEnabled`) keeps its past, as on youtube.com:
+A live with `Source::dvr_window` (YouTube with `isLiveDvrEnabled`) keeps its past, as on youtube.com.
+Since [ADR 0025](../decisions/0025-youtube-lives-from-dash.md) its playlists come from a local proxy and
+cover the whole broadcast, up to 12 h; the source keeps the proxy alive (`Source::keep_alive`), and the
+space shortens the window once the proxy knows how far back the live really goes
+(`PlayerView::set_dvr_window`):
 - **Seek bar.** It covers the window up to the edge: mpv's duration is the edge and grows with the live,
   the window's start is `duration − dvr_window` (or 0 while the window still grows from the broadcast's
   start). Hovering it shows how far behind the edge a point is (`-5:23`). The ±10 s buttons, the seeking
@@ -141,13 +145,31 @@ A live with `Source::dvr_window` (YouTube with `isLiveDvrEnabled`) keeps its pas
 Measured on a live (Lofi Girl, 1 h window, 2026-11-02, `spike-yt-play`): playback 0.59 s after load at
 `length − 30`; 2 minutes back, playing again in about 1.5 s; back to the edge in about 2 s.
 
+### Recorded lives (Twitch)
+
+A live without DVR whose page gives it a `Rewind` (`PlayerView::set_rewind`: its recording as a `Source`
+and when it started; Twitch's archive VOD, [ADR 0026](../decisions/0026-twitch-live-rewind-from-its-recording.md))
+gets the DVR controls over a timeline the player computes:
+- **Seek bar.** From 0 to `now − started_at`, redrawn every second; on the live, the playhead stays at the
+  edge (mpv's live positions and duration are ignored).
+- **Back.** A seek back plays the recording from there (a new mpv on the quality of the same label, about
+  0.7 s), at least `REWIND_EDGE` (30 s) behind the edge: the recording trails the live by a few seconds to a
+  segment. Within the recording, seeks are mpv's own.
+- **Forward.** A seek within `REWIND_EDGE` of the edge, or a click on the badge, goes back to the live at its
+  edge.
+- **Pause.** A pause longer than a second resumes from where it stopped, in the recording, unless that is
+  within `REWIND_EDGE` of the edge (then at the live).
+- **Events.** Each switch emits `PlayerEvent::Rewound { rewound, at }` (the recording's position); the page
+  reads `PlayerView::rewound()`.
+
 `PlayerView::set_notice(Option<SharedString>)` puts the page's message over the picture, in place of
 "Chargement…". It is generic: Twitch uses it while an ad is removed and no backup stream covers it, with
 the countdown it updates itself.
 
 `cargo run -p ui --example player` with `PEEBY_LIVE=1` shows the live controls and a notice counting down;
 `PEEBY_LIVE=dvr` shows a DVR live's (its generated source reports what it has read as its duration, so it
-stays at its edge).
+stays at its edge); `PEEBY_LIVE=rewind` a recorded live's, which seeks back into its recording at 4 s and
+to the edge at 10 s on its own.
 
 ## Icons
 

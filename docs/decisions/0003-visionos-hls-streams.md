@@ -1,6 +1,6 @@
 # 0003: Streams from the VISIONOS client, as HLS
 
-- Status: accepted
+- Status: accepted; amended by [0025](0025-youtube-lives-from-dash.md) (lives with DVR play from VISIONOS's DASH segments through a local proxy)
 - Date: 2026-11-01
 
 ## Context

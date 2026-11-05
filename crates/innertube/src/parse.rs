@@ -32,10 +32,10 @@ use std::collections::HashMap;
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
-  Live, LiveChatPage, Notification, NotificationKind, NotificationLevel, NotificationPage,
-  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, SearchPage,
-  SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem,
-  WatchPage,
+  Live, LiveChatPage, LiveFormat, Notification, NotificationKind, NotificationLevel,
+  NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
+  SearchPage, SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail, Tracking,
+  VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -529,7 +529,77 @@ pub fn parse_live(player: &Value, length: f64) -> Option<Live> {
       announced
     }
   });
-  Some(Live { length, dvr_window })
+  Some(Live {
+    length,
+    dvr_window,
+    proxy: None,
+  })
+}
+
+/// The DASH formats of a live with DVR (`isLive` and `isLiveDvrEnabled`) that can be played
+/// through [`crate::LiveProxy`]: a direct URL with no `available_at` delay, MP4 (AVC, AV1, AAC)
+/// or WebM (VP9). Empty for anything else, and when the formats lack a video or an audio one.
+pub fn parse_live_formats(player: &Value) -> Vec<LiveFormat> {
+  let details = &player["videoDetails"];
+  if details["isLive"] != true || details["isLiveDvrEnabled"] != true {
+    return Vec::new();
+  }
+  let Some(formats) = player["streamingData"]["adaptiveFormats"].as_array() else {
+    return Vec::new();
+  };
+  let parsed: Vec<LiveFormat> = formats.iter().filter_map(live_format).collect();
+  let has = |audio: bool| parsed.iter().any(|f| f.audio() == audio);
+  if has(true) && has(false) {
+    parsed
+  } else {
+    Vec::new()
+  }
+}
+
+fn live_format(format: &Value) -> Option<LiveFormat> {
+  let url = format["url"].as_str()?;
+  // Such a URL answers 403 until then (ADR 0003).
+  if url.contains("available_at") {
+    return None;
+  }
+  let mime_type = format["mimeType"].as_str()?;
+  let (mime, codecs) = mime_type.split_once(';')?;
+  let codecs = codecs
+    .trim()
+    .strip_prefix("codecs=")?
+    .trim_matches('"')
+    .to_owned();
+  let playable = match mime {
+    "video/mp4" => codecs.starts_with("avc1") || codecs.starts_with("av01"),
+    "video/webm" => codecs.starts_with("vp9") || codecs.starts_with("vp09"),
+    "audio/mp4" => codecs.starts_with("mp4a"),
+    _ => false,
+  };
+  if !playable {
+    return None;
+  }
+  let number = |key: &str| {
+    format[key]
+      .as_u64()
+      .or_else(|| format[key].as_str()?.parse().ok())
+  };
+  let segment = format["targetDurationSec"].as_f64().filter(|s| *s > 0.0)?;
+  Some(LiveFormat {
+    itag: u32::try_from(number("itag")?).ok()?,
+    url: url.to_owned(),
+    mime: mime.to_owned(),
+    codecs,
+    width: number("width")
+      .and_then(|n| u32::try_from(n).ok())
+      .unwrap_or(0),
+    height: number("height")
+      .and_then(|n| u32::try_from(n).ok())
+      .unwrap_or(0),
+    fps: number("fps").and_then(|n| u32::try_from(n).ok()),
+    bitrate: number("bitrate").unwrap_or(0),
+    segment,
+    max_dvr: format["maxDvrDurationSec"].as_f64().unwrap_or(0.0),
+  })
 }
 
 /// Parses the subscribed channels list (`FEchannels`: all channels in one response).

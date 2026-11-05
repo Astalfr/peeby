@@ -16,7 +16,7 @@ mod tracks;
 
 pub use overlays::format_step;
 pub use running::{Owner, RunningPlayer, running};
-pub use source::{LIVE_DELAY, LiveInfo, Previews, Quality, Source, Subtitle, Tile};
+pub use source::{LIVE_DELAY, LiveInfo, Previews, Quality, Rewind, Source, Subtitle, Tile};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -56,6 +56,10 @@ const SPEEDS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 /// A live paused longer than this resumes at its live edge rather than where it stopped (shorter:
 /// a double click's two toggles).
 const LIVE_RESUME_AFTER: Duration = Duration::from_secs(1);
+/// A recorded live's recording ends a few seconds to a segment behind the live ([`Rewind`]): a
+/// seek closer than this to the edge joins the live, and one back from the live starts the
+/// recording at least this far behind.
+const REWIND_EDGE: f64 = 30.0;
 /// mpv reporting the end further than this from the duration: a stream stopped short (its
 /// segments stopped coming), not the end of the video.
 const EARLY_END_MARGIN: f64 = 10.0;
@@ -103,6 +107,14 @@ pub enum PlayerEvent {
   Paused(bool),
   /// The user moved the playhead.
   Seeked,
+  /// A recorded live ([`Rewind`]) moved between the live and its recording: `rewound` while the
+  /// recording plays; `at` is the recording's position, where it starts or where it was left.
+  Rewound {
+    /// The recording plays now.
+    rewound: bool,
+    /// Seconds into the recording.
+    at: f64,
+  },
   /// mpv's selected tracks, by mpv id (1, 2… per type), after any change.
   TracksChanged {
     /// Audio track.
@@ -325,6 +337,14 @@ pub struct PlayerView {
   /// Viewers and start time next to the live badge, and the task redrawing the uptime.
   live_info: Option<LiveInfo>,
   live_tick: Option<Task<()>>,
+  /// A live's recording, for its past ([`Self::set_rewind`]), and the task moving its edge.
+  rewind: Option<Rewind>,
+  rewind_tick: Option<Task<()>>,
+  /// The recording plays, not the live.
+  rewound: bool,
+  /// A drag of the seek bar that would move between the live and the recording: where the
+  /// playhead was, the move done on release (each would restart mpv).
+  rewind_drag_from: Option<f64>,
   /// A message over the picture from the page, e.g. why it waits (an ad removed from a live).
   notice: Option<SharedString>,
   /// When the stream was last reloaded after ending early ([`EARLY_END_MARGIN`]) or stalling
@@ -423,6 +443,10 @@ impl PlayerView {
       queue: None,
       live_info: None,
       live_tick: None,
+      rewind: None,
+      rewind_tick: None,
+      rewound: false,
+      rewind_drag_from: None,
       notice: None,
       last_reload: None,
       stall_task: None,
@@ -435,13 +459,134 @@ impl PlayerView {
     self.source.as_ref().is_some_and(|s| s.live)
   }
 
-  /// How far back the live can be watched, if it keeps its past ([`Source::dvr_window`]).
+  /// How far back the live can be watched, if it keeps its past ([`Source::dvr_window`]): a
+  /// recorded live's whole broadcast ([`Rewind`]).
   fn dvr_window(&self) -> Option<f64> {
+    if self.rewind.is_some() && self.is_live() {
+      return Some(self.duration.max(0.0));
+    }
     self
       .source
       .as_ref()
       .filter(|s| s.live)
       .and_then(|s| s.dvr_window)
+  }
+
+  /// Whether a recorded live's recording plays rather than the live ([`Rewind`]).
+  pub fn rewound(&self) -> bool {
+    self.rewound
+  }
+
+  /// The live's recording, once the space has it: the seek bar covers the broadcast from then
+  /// on. Nothing for a source that is not a live, or that keeps its own past (DVR).
+  pub fn set_rewind(&mut self, rewind: Rewind, cx: &mut Context<Self>) {
+    let plain_live = self
+      .source
+      .as_ref()
+      .is_some_and(|s| s.live && s.dvr_window.is_none());
+    if !plain_live {
+      return;
+    }
+    self.rewind = Some(rewind);
+    self.sync_rewind();
+    self.rewind_tick = Some(cx.spawn(async move |this, cx| {
+      loop {
+        cx.background_executor().timer(Duration::from_secs(1)).await;
+        let alive = this.update(cx, |this, cx| {
+          this.sync_rewind();
+          if this.controls_visible {
+            cx.notify();
+          }
+        });
+        if alive.is_err() {
+          return;
+        }
+      }
+    }));
+    cx.notify();
+  }
+
+  /// A recorded live's edge, seconds since its recording started.
+  fn rewind_edge(&self) -> Option<f64> {
+    let rewind = self.rewind.as_ref().filter(|_| self.is_live())?;
+    Some(
+      std::time::SystemTime::now()
+        .duration_since(rewind.started_at)
+        .map_or(0.0, |elapsed| elapsed.as_secs_f64()),
+    )
+  }
+
+  /// A recorded live's timeline: its end is now; on the live, the playhead is there (or where
+  /// the live was paused).
+  fn sync_rewind(&mut self) {
+    let Some(edge) = self.rewind_edge() else {
+      return;
+    };
+    self.duration = edge;
+    if !self.rewound && !self.paused && !self.seek_dragging {
+      self.position = edge;
+    }
+  }
+
+  /// Plays a recorded live's recording from `at` seconds, at the quality of the live's label.
+  fn play_recording(&mut self, at: f64, cx: &mut Context<Self>) {
+    let Some(rewind) = &self.rewind else {
+      return;
+    };
+    let recording = &rewind.recording;
+    let label = self
+      .quality
+      .and_then(|i| self.source.as_ref()?.qualities.get(i))
+      .map(|q| q.label.clone());
+    let options = label
+      .and_then(|label| recording.qualities.iter().find(|q| q.label == label))
+      .map_or_else(|| recording.options.clone(), |q| q.options.clone());
+    // At least 1 s: 0 gives mpv no `start`, and a recording in progress starts at its end then.
+    let at = at.max(1.0);
+    let options = StartOptions {
+      start_seconds: at,
+      ..options
+    };
+    tracing::info!("recorded live: its recording from {at:.0} s");
+    if let Some(old) = self.player.take() {
+      old.set_paused(true);
+    }
+    self.captions_added.clear();
+    self.rewound = true;
+    self.position = at;
+    self.paused_since = None;
+    cx.emit(PlayerEvent::Rewound { rewound: true, at });
+    self.start_with(options, Instant::now(), cx);
+  }
+
+  /// A recorded live's seek to `target` from `from` that leaves what plays: from the recording to
+  /// the live, or from the live back into the recording.
+  fn switch_rewind(&mut self, target: f64, from: f64, edge: f64, cx: &mut Context<Self>) {
+    if self.rewound {
+      self.play_live(cx);
+    } else if target < from - 1.0 {
+      self.play_recording(target.min(edge - REWIND_EDGE), cx);
+    } else if self.paused {
+      self.play_live(cx);
+    } else {
+      // Already at the live.
+      self.sync_rewind();
+    }
+  }
+
+  /// Back from a recorded live's recording (or a pause) to the live, at its edge.
+  fn play_live(&mut self, cx: &mut Context<Self>) {
+    let at = self.position;
+    if self.rewound {
+      self.rewound = false;
+      cx.emit(PlayerEvent::Rewound { rewound: false, at });
+    }
+    if let Some(old) = self.player.take() {
+      old.set_paused(true);
+    }
+    self.resume_live(cx);
+    self.paused = false;
+    self.sync_rewind();
   }
 
   /// Whether the timeline can be sought: a video, or a live with its past.
@@ -470,8 +615,15 @@ impl PlayerView {
     self.behind_live() < LIVE_DELAY + 10.0
   }
 
-  /// Back to a DVR live's edge: a seek, mpv keeps reloading the playlist.
+  /// Back to a DVR live's edge: a seek, mpv keeps reloading the playlist. A recorded live goes
+  /// back from its recording (or from a pause) to the live.
   fn go_live(&mut self, cx: &mut Context<Self>) {
+    if self.rewind.is_some() && self.is_live() {
+      if self.rewound || self.paused {
+        self.play_live(cx);
+      }
+      return;
+    }
     self.seek_to(self.duration - LIVE_DELAY, cx);
     self.show_osd(t("Back to live", "Retour au direct").into(), cx);
   }
@@ -482,6 +634,15 @@ impl PlayerView {
       .source
       .as_ref()
       .map_or(0.0, |s| s.options.start_seconds)
+  }
+
+  /// How far back the DVR live playing can be watched, seconds, once its space knows better
+  /// than when it started ([`Source::dvr_window`]). Nothing for another source.
+  pub fn set_dvr_window(&mut self, window: f64, cx: &mut Context<Self>) {
+    if let Some(source) = self.source.as_mut().filter(|s| s.dvr_window.is_some()) {
+      source.dvr_window = Some(window);
+      cx.notify();
+    }
   }
 
   /// Viewers and start time shown next to the live badge; the uptime ticks every second.
@@ -601,7 +762,16 @@ impl PlayerView {
       && self
         .paused_since
         .is_some_and(|t| t.elapsed() > LIVE_RESUME_AFTER);
-    if self.is_live() && self.dvr_window().is_none() && stale && self.player.is_some() {
+    let recorded_live = self.rewind.is_some() && self.is_live() && !self.rewound;
+    if recorded_live && stale && self.player.is_some() {
+      // As a DVR live: on from where it was paused, which is the recording once it is behind.
+      let at = self.position;
+      if self.duration - at > REWIND_EDGE {
+        self.play_recording(at, cx);
+      } else {
+        self.play_live(cx);
+      }
+    } else if self.is_live() && self.dvr_window().is_none() && stale && self.player.is_some() {
       self.resume_live(cx);
     } else {
       self.with_player(Player::toggle_pause);
@@ -670,7 +840,7 @@ impl PlayerView {
       Some(quality) => quality.options.clone(),
       None => source.options.clone(),
     };
-    tracing::info!("live resumed after a pause: back to its live edge");
+    tracing::info!("live: back to its edge");
     self.paused_since = None;
     self.show_osd(t("Back to live", "Retour au direct").into(), cx);
     // Already paused: its last frame stays on screen until the new player's first one.
@@ -752,6 +922,9 @@ impl PlayerView {
     );
     let options = source.options.clone();
     self.source = Some(source);
+    self.rewind = None;
+    self.rewind_tick = None;
+    self.rewound = false;
     self.start_with(options, clicked, cx);
   }
 
@@ -770,6 +943,26 @@ impl PlayerView {
     else {
       return;
     };
+    // A recorded live: its recording at the same label, or the live.
+    if self.rewind.is_some() && self.is_live() {
+      tracing::info!("quality {}", quality.label);
+      self.quality = Some(index);
+      self.show_osd(tf!("Quality {}", "Qualité {}", quality.label).into(), cx);
+      if self.rewound {
+        self.play_recording(self.position, cx);
+      } else {
+        if let Some(old) = self.player.take() {
+          old.set_paused(true);
+        }
+        self.captions_added.clear();
+        let options = StartOptions {
+          start_seconds: self.live_start(),
+          ..quality.options
+        };
+        self.start_with(options, Instant::now(), cx);
+      }
+      return;
+    }
     let start_seconds = match self.dvr_window() {
       // The new mpv's timeline starts at the window's current first segment: the broadcast's
       // start while the window grows, `window` before the edge once it slides.
@@ -960,16 +1153,20 @@ impl PlayerView {
       }
       // While dragging, mpv still reports the positions of the seeks it has not caught up
       // with: the playhead would jump back behind the mouse.
+      // A recorded live's playhead is its edge while the live plays.
+      Event::Position(_) if self.rewind.is_some() && !self.rewound => {}
       Event::Position(seconds) if !self.seek_dragging => {
         self.position = seconds;
         self.update_up_next(cx);
         self.tell_muted(cx);
       }
       Event::Position(_) => {}
+      Event::Cached(_) if self.rewind.is_some() && !self.rewound => self.cached = 0.0,
       Event::Cached(seconds) => self.cached = seconds,
       // A live's duration is only its playlist's window: kept at 0, it turns off the seek
       // bar's math, "up next" and `finished`. A DVR live's is its edge, for the seek bar.
-      Event::Duration(_) if !self.can_seek() => {}
+      // A recorded live's is the time since its recording started.
+      Event::Duration(_) if !self.can_seek() || self.rewind.is_some() => {}
       Event::Duration(seconds) => {
         self.duration = seconds;
         self.refresh_segments();
@@ -1113,8 +1310,25 @@ impl PlayerView {
     }
   }
 
-  /// Seeks to `seconds`, within what can be seeked (a timestamp's click).
+  /// Seeks to `seconds`, within what can be seeked (a timestamp's click). A recorded live moves
+  /// between its recording and the live.
   pub fn seek_to(&mut self, seconds: f64, cx: &mut Context<Self>) {
+    if let Some(edge) = self.rewind_edge() {
+      let target = seconds.clamp(0.0, edge);
+      if self.rewound && target <= edge - REWIND_EDGE {
+        self.position = target;
+        self.with_player(|p| p.seek_to(target));
+      } else if self.seek_dragging {
+        self.rewind_drag_from.get_or_insert(self.position);
+        self.position = target;
+      } else {
+        let from = self.rewind_drag_from.take().unwrap_or(self.position);
+        self.switch_rewind(target, from, edge, cx);
+      }
+      cx.emit(PlayerEvent::Seeked);
+      cx.notify();
+      return;
+    }
     let (start, mut end) = self.seek_range();
     // Closer to a live's edge, mpv would wait for segments that do not exist yet.
     if self.dvr_window().is_some() {
@@ -1164,6 +1378,10 @@ impl PlayerView {
 
   fn end_seek_drag(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
     self.seek_dragging = false;
+    // A recorded live's move between the live and its recording, left for the release.
+    if self.rewind_drag_from.is_some() {
+      self.seek_to(self.position, cx);
+    }
     // Released away from the bar: no hover-out comes, the bar was left during the drag.
     if !self.seek_bounds.get().dilate(px(8.)).contains(&position) {
       self.seek_hover = None;

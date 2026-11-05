@@ -38,6 +38,9 @@ pub enum Error {
     /// Human-readable reason from YouTube, if any.
     reason: String,
   },
+  /// The local proxy of a live could not start (ADR 0025).
+  #[error("live proxy: {0}")]
+  Proxy(String),
 }
 
 impl From<reqwest::Error> for Error {
