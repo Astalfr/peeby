@@ -166,9 +166,9 @@ impl Render for LibraryView {
     let layout = GridLayout::new(available, shape.width(), GAP);
     let rows = layout.rows(self.items.len());
     let count = match (self.total, self.loading) {
-      (Some(total), _) => titles(total),
-      (None, true) => t("Loading…", "Chargement…").into(),
-      (None, false) => String::new(),
+      (Some(total), _) => titles(total).into_any_element(),
+      (None, true) => ui::widgets::loader(16., theme::muted()).into_any_element(),
+      (None, false) => gpui::Empty.into_any_element(),
     };
 
     let grid = uniform_list(

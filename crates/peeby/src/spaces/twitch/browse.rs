@@ -75,7 +75,7 @@ impl Render for BrowseView {
       )
       .into_any_element(),
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
-      None => cards::note(t("Loading…", "Chargement…")).into_any_element(),
+      None => cards::loading().into_any_element(),
     };
     page("twitch-browse", t("Browse", "Parcourir"), None, body)
   }
@@ -133,7 +133,7 @@ impl Render for CategoryView {
       )
       .into_any_element(),
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
-      None => cards::note(t("Loading…", "Chargement…")).into_any_element(),
+      None => cards::loading().into_any_element(),
     };
     page(
       "twitch-category",

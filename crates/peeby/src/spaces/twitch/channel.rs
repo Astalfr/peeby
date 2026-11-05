@@ -140,7 +140,7 @@ impl Render for ChannelView {
           "twitch-channel",
           &self.login,
           None,
-          cards::note(t("Loading…", "Chargement…")).into_any_element(),
+          cards::loading().into_any_element(),
         )
         .into_any_element();
       }

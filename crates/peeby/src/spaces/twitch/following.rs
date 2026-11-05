@@ -218,7 +218,7 @@ impl Render for FollowingView {
           .into_any_element()
       }
       (None, Some(error)) => cards::note(error.clone()).into_any_element(),
-      (None, None) => cards::note(t("Loading…", "Chargement…")).into_any_element(),
+      (None, None) => cards::loading().into_any_element(),
     };
     v_flex()
       .id("twitch-following")

@@ -267,7 +267,7 @@ pub struct PlayerView {
   title: SharedString,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
-  /// Shown instead of the picture: loading, or why the video cannot play.
+  /// Why the video cannot play, shown instead of the picture (a spinner while it loads).
   status: Option<SharedString>,
   failed: bool,
   position: f64,
@@ -401,7 +401,7 @@ impl PlayerView {
       title: SharedString::default(),
       player: None,
       video: None,
-      status: Some(t("Loading…", "Chargement…").into()),
+      status: None,
       failed: false,
       position: 0.0,
       duration: 0.0,
@@ -2611,35 +2611,39 @@ impl Render for PlayerView {
           .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx))),
       );
 
-    // The page's notice says why the picture waits better than "loading".
-    let status = if self.failed {
-      None
-    } else {
-      self
-        .notice
-        .clone()
-        .or_else(|| self.status.clone())
-        .or_else(|| self.buffering.then(|| t("Loading…", "Chargement…").into()))
-    };
-    if let Some(status) = status {
-      root = root.child(
-        div()
-          .absolute()
-          .inset_0()
-          .flex()
-          .items_center()
-          .justify_center()
-          .child(
-            div()
-              .max_w(px(560.))
-              .px_4()
-              .py_2()
-              .rounded_md()
-              .bg(gpui::black().opacity(0.6))
-              .text_color(gpui::white())
-              .child(status),
-          ),
-      );
+    // The page's notice says why the picture waits better than a spinner. Until mpv starts
+    // (no player yet) and while it buffers, a spinner stands over the picture.
+    if !self.failed {
+      if let Some(notice) = self.notice.clone() {
+        root = root.child(
+          div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+              div()
+                .max_w(px(560.))
+                .px_4()
+                .py_2()
+                .rounded_md()
+                .bg(gpui::black().opacity(0.6))
+                .text_color(gpui::white())
+                .child(notice),
+            ),
+        );
+      } else if self.player.is_none() || self.buffering {
+        root = root.child(
+          div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(crate::widgets::loader(48., gpui::white())),
+        );
+      }
     }
     if let Some((count, paused)) = self.pause_pulse {
       // The new state's icon grows and fades out, like a ripple. Once done it stays fully

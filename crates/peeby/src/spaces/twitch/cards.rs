@@ -370,6 +370,15 @@ pub fn note(text: impl Into<SharedString>) -> impl IntoElement {
     .child(text.into())
 }
 
+/// A spinner standing for a page's content until it arrives.
+pub fn loading() -> impl IntoElement {
+  div()
+    .flex()
+    .justify_center()
+    .py_8()
+    .child(ui::widgets::loader(24., theme::muted()))
+}
+
 /// `80,308` (French grouping: `80 308`, a narrow no-break space).
 pub fn grouped(n: u64) -> String {
   let separator = lang().pick(',', '\u{202f}');
