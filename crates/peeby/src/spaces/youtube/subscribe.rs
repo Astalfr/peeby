@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use gpui::prelude::*;
 use gpui::{Anchor, App, ElementId, Global, Window, div, px};
-use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::notification::Notification;
 use gpui_component::popover::Popover;
 use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
@@ -71,8 +71,16 @@ pub fn subscribe_button(
   );
   let button = Button::new(ElementId::Name(format!("{key}-button").into()))
     .map(|b| {
+      // The accent to subscribe, greyed out once subscribed.
       if subscribed {
-        b.ghost().label(t("Subscribed", "Abonné"))
+        b.custom(
+          ButtonCustomVariant::new(cx)
+            .color(theme::surface())
+            .foreground(theme::muted())
+            .hover(theme::surface_hover())
+            .active(theme::border()),
+        )
+        .label(t("Subscribed", "Abonné"))
       } else {
         b.primary().label(t("Subscribe", "S'abonner"))
       }

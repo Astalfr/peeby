@@ -121,9 +121,9 @@ impl Accent {
   /// YouTube red.
   pub fn red() -> Self {
     Self {
-      base: color(0xff4e45),
-      hover: color(0xff6b63),
-      active: color(0xe63e36),
+      base: color(0xff0000),
+      hover: color(0xff3333),
+      active: color(0xcc0000),
     }
   }
 

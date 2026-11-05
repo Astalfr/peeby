@@ -9,7 +9,7 @@ The first milestones used peeby's palette and shapes but none of its motion or l
 
 ## Decision
 
-PeebTube follows peeby's visual system ([design.md](../design.md)): Fluent layout (Mica chrome, bordered content panel, sidebar entries with an accent pill), one accent, rounded surfaces for settings rows, skeletons cross-faded into content, card hover lift and ring, image fade-in and page fade. `motion.rs` is copied from peeby unchanged. The accent stays YouTube red (`#FF4E45`) instead of peeby's amber, and the neutral greys stay cool rather than warm.
+PeebTube follows peeby's visual system ([design.md](../design.md)): Fluent layout (Mica chrome, bordered content panel, sidebar entries with an accent pill), one accent, rounded surfaces for settings rows, skeletons cross-faded into content, card hover lift and ring, image fade-in and page fade. `motion.rs` is copied from peeby unchanged. The accent stays YouTube red (`#FF4E45`, since moved to the brand red `#FF0000`, see design.md) instead of peeby's amber, and the neutral greys stay cool rather than warm.
 
 ## Consequences
 
