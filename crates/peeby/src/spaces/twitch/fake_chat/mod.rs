@@ -1114,7 +1114,8 @@ impl FakeChatView {
                   id: format!("fake-raid-{}", this.made),
                   target_login: "peeby_ami".into(),
                   target_name: "Peeby_Ami".into(),
-                  target_avatar: None,
+                  // Drawn in memory, as the fake emotes.
+                  target_avatar: Some(format!("{SCHEME}avatar/peeby_ami")),
                   viewer_count: 1,
                   created_at: Some(polls::now_millis()),
                   force_seconds: 90,

@@ -17,6 +17,8 @@ use crate::theme;
 /// Height of the stack at most, as a share of the message list's: the newest lines stay in
 /// sight.
 const MAX_SHARE: f32 = 0.7;
+/// Side of an item's lead image (an avatar), logical pixels.
+pub const LEAD: f32 = 24.;
 /// Height of the time-left line along an item's bottom edge, logical pixels.
 const TIME_LINE: f32 = 3.;
 
@@ -39,6 +41,8 @@ pub struct Pinned {
   /// The share of its time left (1 at its start, 0 at its end), drawn as a line along its bottom
   /// edge; `None` once it no longer counts down (closed, ended).
   pub time_left: Option<f32>,
+  /// Drawn in the icon's place, 24 px (a channel's avatar); the icon when `None`.
+  pub lead: Option<AnyElement>,
 }
 
 /// Which item is unfolded, by id: held by the space across its reloads.
@@ -109,11 +113,17 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
     .cursor_pointer()
     .hover(|s| s.bg(theme::surface_hover()))
     .on_click(move |_, window, cx| on_toggle(&id, window, cx))
-    .child(
-      gpui_component::Icon::new(item.icon)
+    .child(match item.lead {
+      Some(lead) => div()
+        .size(px(LEAD))
+        .flex_none()
+        .child(lead)
+        .into_any_element(),
+      None => gpui_component::Icon::new(item.icon)
         .size(px(16.))
-        .text_color(item.accent),
-    )
+        .text_color(item.accent)
+        .into_any_element(),
+    })
     .child(
       v_flex()
         .flex_1()

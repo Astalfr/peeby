@@ -18,7 +18,7 @@ use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
 pub use panel::{ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
-pub use pinned::{OnToggle, Pinned, Unfolded, pinned_stack};
+pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
 
 /// One line of the chat.
 #[derive(Clone)]

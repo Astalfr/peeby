@@ -37,7 +37,7 @@ use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 use twitch::raids::{Raid, RaidEvent};
 use ui::assets::Icon;
-use ui::chat::{Pinned, Unfolded, pinned_stack};
+use ui::chat::{LEAD, Pinned, Unfolded, pinned_stack};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
@@ -420,12 +420,32 @@ impl PointsView {
   }
 
   /// The raid's card: where it goes and what the viewer does.
-  fn raid_body(&self, raid: &Raid, cx: &mut Context<Self>) -> AnyElement {
+  fn raid_body(&self, raid: &Raid, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
     let target = raid.target_login.clone();
     let id = raid.id.clone();
+    let avatar = raid_avatar(raid, RAID_AVATAR, window, cx);
     v_flex()
       .gap_2()
+      .child(
+        h_flex().gap_3().items_center().children(avatar).child(
+          v_flex()
+            .min_w_0()
+            .child(
+              div()
+                .text_sm()
+                .font_weight(FontWeight::SEMIBOLD)
+                .truncate()
+                .child(raid.target_name.clone()),
+            )
+            .child(
+              div()
+                .text_xs()
+                .text_color(theme::muted())
+                .child(format!("twitch.tv/{}", raid.target_login)),
+            ),
+        ),
+      )
       .child(
         div()
           .text_xs()
@@ -1321,7 +1341,7 @@ impl PointsView {
   }
 
   /// What is pinned over the chat: the predictions (with points), then the polls.
-  fn pinned(&self, cx: &mut Context<Self>) -> Vec<Pinned> {
+  fn pinned(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Pinned> {
     let mut items = Vec::new();
     let now = polls::now_millis();
     // The raid first: it may take the viewer away.
@@ -1358,10 +1378,14 @@ impl PointsView {
           )
         }
         .into(),
-        body: self.unfolded.is(&raid.id).then(|| self.raid_body(raid, cx)),
+        body: self
+          .unfolded
+          .is(&raid.id)
+          .then(|| self.raid_body(raid, window, cx)),
         time_left: raid
           .created_at
           .and_then(|start| polls::share_left(start, length, now)),
+        lead: raid_avatar(raid, LEAD, window, cx),
       });
     }
     if !self.off && self.points.is_some() {
@@ -1376,6 +1400,7 @@ impl PointsView {
           status: prediction_status(p).into(),
           body: open.then(|| self.prediction_body(p, cx)),
           // The bets' time, then the result's.
+          lead: None,
           time_left: match p.status {
             PredictionStatus::Active => i64::try_from(p.window_seconds)
               .ok()
@@ -1403,6 +1428,7 @@ impl PointsView {
         body: open.then(|| self.poll_body(poll, cx)),
         // The votes' time, then the result's.
         time_left: poll.time_left(now).or_else(|| self.ended_left(&poll.id)),
+        lead: None,
       });
     }
     items
@@ -1517,8 +1543,8 @@ impl gpui::EventEmitter<PointsEvent> for PointsView {}
 
 /// The raid, predictions and polls pinned over the chat (`ChatPanel::set_pinned`).
 impl Render for PointsView {
-  fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let items = self.pinned(cx);
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let items = self.pinned(window, cx);
     let this = cx.entity().downgrade();
     pinned_stack(
       items,
@@ -1557,6 +1583,25 @@ impl Render for PointsFooter {
       .points
       .update(cx, |points, cx| points.footer(window, cx))
   }
+}
+
+/// Side of the raided channel's avatar in the raid's card, logical pixels.
+const RAID_AVATAR: f32 = 40.;
+
+/// The raided channel's avatar, `size` px round; `None` without one.
+fn raid_avatar(
+  raid: &Raid,
+  size: f32,
+  window: &mut Window,
+  cx: &mut gpui::App,
+) -> Option<AnyElement> {
+  let url = raid.target_avatar.clone()?;
+  Some(picture::avatar(
+    &Picture::sized(move |_, _| url.clone()),
+    size,
+    window,
+    cx,
+  ))
 }
 
 /// Seconds left to bet on `p`.
