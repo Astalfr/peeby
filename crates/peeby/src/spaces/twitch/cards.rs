@@ -187,6 +187,13 @@ pub fn stream_card(
   .avatar(avatar.map(|url| template(url)))
   .lines([stream.user_name.clone(), stream.game_name.clone()])
   .badge(Some(compact_viewers(stream.viewer_count)))
+  // Twitch's red dot: on air.
+  .badge_dot(Some(gpui::rgb(LIVE_RED).into()))
+  .badge_left(
+    stream
+      .started_at
+      .and_then(|ms| uptime(ms, SystemTime::now())),
+  )
   .on_middle_click({
     let (nav, login) = (nav.clone(), login.clone());
     let label = SharedString::from(stream.user_name.clone());
@@ -194,6 +201,34 @@ pub fn stream_card(
   })
   .on_click(move |_, cx| nav.open(Route::Watch(login.clone()), cx))
   .grid(width, window, cx)
+}
+
+/// The red of Twitch's "live" dot.
+const LIVE_RED: u32 = 0xEB0400;
+
+/// How often a page of stream cards redraws their uptimes, which count the seconds.
+const UPTIME_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Redraws a page of stream cards every [`UPTIME_EVERY`], so that their uptimes move on; keep
+/// the task as long as the page.
+pub fn uptime_ticker<V: 'static>(cx: &mut gpui::Context<V>) -> gpui::Task<()> {
+  cx.spawn(async move |this, cx| {
+    loop {
+      cx.background_executor().timer(UPTIME_EVERY).await;
+      if this.update(cx, |_, cx| cx.notify()).is_err() {
+        return;
+      }
+    }
+  })
+}
+
+/// How long a live started at `started_ms` (milliseconds since the epoch) has been on air at
+/// `now`, as the notification area's list of lives writes it: `5:30`, `2:05:30`. `None` for a
+/// start in the future (clocks apart).
+pub fn uptime(started_ms: i64, now: SystemTime) -> Option<String> {
+  let started = UNIX_EPOCH + std::time::Duration::from_millis(u64::try_from(started_ms).ok()?);
+  let elapsed = now.duration_since(started).ok()?;
+  Some(crate::shell::lives::duration(elapsed.as_secs()))
 }
 
 /// A category's poster; a click opens its streams.
@@ -592,7 +627,20 @@ pub fn clip_card(
 
 #[cfg(test)]
 mod tests {
-  use super::{cached_size, compact, date, grouped, progress, viewers, views};
+  use std::time::{Duration, UNIX_EPOCH};
+
+  use super::{cached_size, compact, date, grouped, progress, uptime, viewers, views};
+
+  #[test]
+  fn uptime_as_the_list_of_lives() {
+    let at = |s: u64| UNIX_EPOCH + Duration::from_secs(s);
+    assert_eq!(uptime(1_000_000, at(1_000 + 59)).as_deref(), Some("0:59"));
+    assert_eq!(
+      uptime(1_000_000, at(1_000 + 2 * 3600 + 5 * 60 + 30)).as_deref(),
+      Some("2:05:30")
+    );
+    assert_eq!(uptime(1_000_000, at(999)), None);
+  }
 
   #[test]
   fn images_are_asked_at_a_cached_size() {

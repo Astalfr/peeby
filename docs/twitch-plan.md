@@ -424,7 +424,9 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
       and since the URL changed with the window's width, every resize downloaded the grid again
 - [x] Pages (`cards.rs` holds the shared cards):
   - **Suivies**: the followed channels on air as stream cards (preview, avatar, title, channel,
-    category, viewers), widened to fill their rows, then "Hors ligne", the others as avatars and
+    category, viewers at the bottom right after a red dot, uptime at the bottom left as in the
+    notification area's list, `2:05:30`, redrawn every second, as on every stream card: a
+    category's lives too), widened to fill their rows, then "Hors ligne", the others as avatars and
     names in alphabetical order, under a field filtering them by name or login. It reads up to 300
     live and 500 followed channels;
   - partners (Helix `users`, `broadcaster_type`) get Twitch's verified badge on their avatar in

@@ -1,5 +1,6 @@
 //! "Suivies": the followed channels on air as stream cards (most viewers first), then the others
-//! with their avatars, by name, under a field that filters them. Helix `streams/followed` and
+//! with their avatars, by name, under a field that filters them. The live cards show their
+//! uptime, redrawn every second ([`cards::uptime_ticker`]). Helix `streams/followed` and
 //! `channels/followed` (GQL refuses the follows to raw queries), the avatars from the catalog.
 
 use std::collections::HashSet;
@@ -35,6 +36,7 @@ pub struct FollowingView {
   /// Filters the offline channels; made on the first render, which has the window.
   filter: Option<(Entity<InputState>, Subscription)>,
   _load: Task<()>,
+  _uptime: Task<()>,
 }
 
 impl FollowingView {
@@ -65,12 +67,14 @@ impl FollowingView {
         })
         .ok();
     });
+    let uptime = cards::uptime_ticker(cx);
     Self {
       nav,
       loaded: None,
       error: None,
       filter: None,
       _load: load,
+      _uptime: uptime,
     }
   }
 }

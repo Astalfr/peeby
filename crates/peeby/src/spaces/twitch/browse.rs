@@ -86,6 +86,7 @@ pub struct CategoryView {
   name: String,
   streams: Option<Result<(Vec<Stream>, Avatars), String>>,
   _load: Task<()>,
+  _uptime: Task<()>,
 }
 
 impl CategoryView {
@@ -112,6 +113,7 @@ impl CategoryView {
       name,
       streams: None,
       _load: task,
+      _uptime: cards::uptime_ticker(cx),
     }
   }
 }

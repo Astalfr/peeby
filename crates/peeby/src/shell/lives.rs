@@ -678,8 +678,8 @@ fn message(text: impl Into<SharedString>) -> AnyElement {
 }
 
 /// A live's uptime: `5:30`, `2:05:30` from an hour (the minutes padded only then; the seconds
-/// always).
-fn duration(seconds: u64) -> String {
+/// always). Stream cards show the same (`spaces::twitch::cards::uptime`).
+pub fn duration(seconds: u64) -> String {
   let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
   if hours == 0 {
     format!("{minutes}:{seconds:02}")

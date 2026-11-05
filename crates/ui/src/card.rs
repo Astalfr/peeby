@@ -8,7 +8,8 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, ElementId, Entity, FontWeight, Pixels, SharedString, Window, div, px, relative,
+  AnyElement, App, ElementId, Entity, FontWeight, Hsla, Pixels, SharedString, Window, div, px,
+  relative,
 };
 use gpui_component::h_flex;
 use gpui_component::skeleton::Skeleton;
@@ -96,6 +97,8 @@ pub struct MediaCard {
   picture: Picture,
   avatar: Option<Picture>,
   badge: Option<SharedString>,
+  badge_left: Option<SharedString>,
+  badge_dot: Option<Hsla>,
   live: bool,
   progress: Option<f32>,
   corner: Option<Corner>,
@@ -125,6 +128,8 @@ impl MediaCard {
       picture,
       avatar: None,
       badge: None,
+      badge_left: None,
+      badge_dot: None,
       live: false,
       progress: None,
       corner: None,
@@ -158,6 +163,18 @@ impl MediaCard {
   /// Text in a dark badge at the picture's bottom right (duration).
   pub fn badge(mut self, badge: Option<impl Into<SharedString>>) -> Self {
     self.badge = badge.map(Into::into);
+    self
+  }
+
+  /// A dot of this color before the bottom right badge's text (a live's viewers).
+  pub fn badge_dot(mut self, color: Option<Hsla>) -> Self {
+    self.badge_dot = color;
+    self
+  }
+
+  /// Text in a dark badge at the picture's bottom left (a live's uptime).
+  pub fn badge_left(mut self, badge: Option<impl Into<SharedString>>) -> Self {
+    self.badge_left = badge.map(Into::into);
     self
   }
 
@@ -305,7 +322,14 @@ impl MediaCard {
       .children(self.progress.map(progress_bar))
       .children(self.corner.map(corner))
       .when(self.live, |el| el.child(live_badge()))
-      .children(self.badge.take().filter(|_| !self.live).map(badge))
+      .children(
+        self
+          .badge
+          .take()
+          .filter(|_| !self.live)
+          .map(|t| badge(t, self.badge_dot).right(px(8.))),
+      )
+      .children(self.badge_left.take().map(|t| badge(t, None).left(px(8.))))
       .children(self.overlays.drain(..))
   }
 
@@ -646,12 +670,14 @@ fn muted_lines(lines: &[SharedString]) -> gpui::Div {
     .children(lines.iter().map(|l| div().truncate().child(l.clone())))
 }
 
-/// Dark badge at a picture's bottom right (duration).
-fn badge(text: SharedString) -> impl IntoElement {
-  div()
+/// Dark badge at a picture's bottom (duration), after a `dot` of that color if any, placed
+/// on its side by the caller.
+fn badge(text: SharedString, dot: Option<Hsla>) -> gpui::Div {
+  h_flex()
+    .gap_1()
+    .items_center()
     .absolute()
     .bottom(px(8.))
-    .right(px(8.))
     .px(px(6.))
     .py(px(1.))
     .rounded(px(4.))
@@ -659,6 +685,7 @@ fn badge(text: SharedString) -> impl IntoElement {
     .text_xs()
     .font_weight(FontWeight::SEMIBOLD)
     .text_color(gpui::white())
+    .children(dot.map(|color| div().size(px(6.)).rounded_full().bg(color)))
     .child(text)
 }
 
