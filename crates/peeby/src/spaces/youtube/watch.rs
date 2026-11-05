@@ -57,6 +57,10 @@ const QUEUE_BEFORE: usize = 50;
 const QUEUE_AFTER: usize = 150;
 /// Lines of the description shown until it is expanded.
 const DESCRIPTION_LINES: usize = 4;
+/// The like button and the ratio bar's likes: the blue of YouTube's thumb (dark theme).
+const LIKE_BLUE: u32 = 0x3ea6ff;
+/// The dislike button and the ratio bar's dislikes: YouTube red.
+const DISLIKE_RED: u32 = 0xff0000;
 /// Theater mode: height left under the player for the start of the title, and the player's
 /// least height.
 const THEATER_BELOW: f32 = 120.;
@@ -518,6 +522,7 @@ impl WatchView {
     let button = |id: &'static str,
                   icon: Icon,
                   status: LikeStatus,
+                  color: u32,
                   count: Option<u64>,
                   label: &'static str,
                   tooltip: &'static str,
@@ -529,8 +534,13 @@ impl WatchView {
         .gap_2()
         .items_center()
         .cursor_pointer()
-        .hover(|s| s.bg(theme::surface_hover()))
-        .when(current == status, |el| el.text_color(theme::accent()))
+        // The button takes its thumb's color (YouTube's blue or red) when it is the user's
+        // rating and on hover, over a soft wash of it.
+        .hover(move |s| {
+          let color = gpui::Hsla::from(gpui::rgb(color));
+          s.bg(color.opacity(0.14)).text_color(color)
+        })
+        .when(current == status, |el| el.text_color(gpui::rgb(color)))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
         .on_click(cx.listener(move |this, _, window, cx| this.rate(status, window, cx)))
         .child(gpui_component::Icon::new(icon).size(px(16.)))
@@ -563,6 +573,7 @@ impl WatchView {
           "like",
           Icon::ThumbsUp,
           LikeStatus::Like,
+          LIKE_BLUE,
           votes.map(|v| v.likes),
           "Likes",
           like_tip,
@@ -578,6 +589,7 @@ impl WatchView {
           "dislike",
           Icon::ThumbsDown,
           LikeStatus::Dislike,
+          DISLIKE_RED,
           votes.map(|v| v.dislikes),
           "Dislikes",
           dislike_tip,
@@ -592,17 +604,18 @@ impl WatchView {
       } else {
         1.0
       };
+      // Likes in YouTube's blue thumb over the dislikes in its red, whatever the accent.
       div()
         .mx_3()
         .h(px(3.))
         .rounded_full()
-        .bg(theme::border())
+        .bg(gpui::rgb(DISLIKE_RED))
         .child(
           div()
             .h_full()
             .w(relative(ratio))
             .rounded_full()
-            .bg(theme::accent()),
+            .bg(gpui::rgb(LIKE_BLUE)),
         )
     });
     // The attribution RYD requires: an "i" right of the pill, its tooltip naming the source, a
