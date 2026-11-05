@@ -182,3 +182,15 @@ fn no_prefetch_during_an_ad_break() {
   assert!(!splicer.ad_state().active);
   assert_eq!(splicer.prefetched(), 2);
 }
+
+#[test]
+fn edge_is_the_newest_dated_end_then_the_prefetch() {
+  // The backup's newest segment: 2026-11-01T20:10:47.158Z, 2 s long.
+  let end = twitch::time::epoch_millis("2026-11-01T20:10:49.158Z").unwrap();
+  let mut plain = Splicer::new(false);
+  plain.update(&backup(), None);
+  assert_eq!(plain.edge(), Some((end, 0.0)));
+  let mut low = Splicer::new(true);
+  low.update(&backup(), None);
+  assert_eq!(low.edge(), Some((end, 4.0)));
+}

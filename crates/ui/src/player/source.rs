@@ -39,6 +39,10 @@ pub struct Source {
   /// Kept alive as long as the player holds the source: what serves its URLs, such as a local
   /// playlist proxy, which stops when dropped.
   pub keep_alive: Option<Rc<dyn std::any::Any>>,
+  /// A live's clock, for the statistics' delay to the streamer: when the end of the playlist
+  /// mpv read last left the broadcaster. Called on the UI thread once a second while the
+  /// statistics show: it reads memory, never the network.
+  pub live_edge: Option<Rc<dyn Fn() -> Option<std::time::SystemTime>>>,
 }
 
 /// A live whose past plays from another source: its recording, made as it goes (Twitch's VOD

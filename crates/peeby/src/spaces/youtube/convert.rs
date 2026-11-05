@@ -177,6 +177,10 @@ pub fn source(stream: Stream, player: &settings::Player) -> Source {
     keep_alive: live
       .and_then(|live| live.proxy.clone())
       .map(|proxy| Rc::new(proxy) as Rc<dyn std::any::Any>),
+    // Through the proxy only: YouTube's own HLS playlists go to mpv unseen.
+    live_edge: live.and_then(|live| live.proxy.clone()).map(|proxy| {
+      Rc::new(move || proxy.edge_time()) as Rc<dyn Fn() -> Option<std::time::SystemTime>>
+    }),
     ..Default::default()
   }
 }

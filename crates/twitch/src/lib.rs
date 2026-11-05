@@ -32,7 +32,7 @@ pub mod usher;
 pub use client::{Client, Master};
 pub use error::{Error, Result};
 pub use gql::{PlaybackToken, Target};
-pub use proxy::Proxy;
+pub use proxy::{EdgeClock, Proxy};
 
 /// Runs `future` to its end on a new single-thread runtime, for command-line tools and examples
 /// (the app runs this crate on its own network runtime).

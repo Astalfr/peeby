@@ -465,6 +465,12 @@ A probe run by the user, anonymously, on a live channel:
 - **Prefetch**: two `#EXT-X-TWITCH-PREFETCH:` lines end each live playlist. Given to FFmpeg as ordinary
   segments after the content (step 10), they start a live about 2.6 s behind its capture instead of about
   7 s (measured against the segments' `PROGRAM-DATE-TIME`).
+- **Streamer delay** (the player's statistics): the proxy keeps where the playlist it served last ends on
+  Twitch's clock (`Splicer::edge`: the newest dated segment's end, plus the prefetch segments after it as
+  far as they can exist: up to now less Twitch's production lag, the smallest delay over 30 s between a
+  dated segment's end and the reload listing it; `Proxy::edge_clock`). The delay is that end's age plus
+  mpv's `demuxer-cache-duration` (mpv reads up to the playlist's end). The dates are Twitch's clock,
+  taken as ours: a skew shows as is.
 - **Codecs** (the user's auth-token, `supported_codecs=av1,h265,h264`, 2026-11-01): 16 of the top 100 lives
   send their 1440p60 source in HEVC only, every lower quality in H.264; the others are all H.264. No AV1.
   Anonymously, the 1440p source is not offered. A quality is never repeated in two codecs.

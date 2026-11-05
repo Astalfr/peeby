@@ -101,7 +101,12 @@ pub fn proxied(
     .map(|(v, label)| (label, v.url.clone(), v.height))
     .collect();
   let codecs = playable.iter().map(|v| (v.codec, v.height)).collect();
-  (source(qualities, max_height, live, player), codecs)
+  let mut source = source(qualities, max_height, live, player);
+  if live {
+    let clock = proxy.edge_clock();
+    source.live_edge = Some(Rc::new(move || clock.time()));
+  }
+  (source, codecs)
 }
 
 /// The quality menu's labels: the variant's name, with its codec when another variant has the

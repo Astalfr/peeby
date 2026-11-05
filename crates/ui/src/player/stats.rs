@@ -1,8 +1,13 @@
 //! The statistics panel (right click > Statistics): what mpv decodes and how, read once a
 //! second while the panel is open, for debugging playback. Only the properties listed here are
 //! read: never `path` or `stream-open-filename`, whose stream URLs carry the user's IP.
+//!
+//! A live's delay to the streamer is how long ago the frame on screen left the broadcaster:
+//! the age of the playlist's end ([`super::Source::live_edge`]) plus how far the playhead is
+//! behind that end (a DVR live: mpv's duration minus the position; else what mpv buffered,
+//! which reaches the playlist's end). A recorded live's recording: how far behind now it plays.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, FontWeight, SharedString, div, px};
@@ -58,6 +63,12 @@ impl PlayerView {
         t("not started", "pas démarré").to_owned(),
       )],
     };
+    if let Some(delay) = self.streamer_delay() {
+      self.stats_rows.push((
+        t("Streamer delay", "Retard sur le streamer"),
+        format!("{delay:.1} s"),
+      ));
+    }
     self.stats_rows.push((
       t("Position", "Position"),
       format!(
@@ -66,6 +77,34 @@ impl PlayerView {
         format_time(self.duration)
       ),
     ));
+  }
+
+  /// How long ago the frame on screen left the broadcaster, seconds (see the module's doc);
+  /// `None` for a video, or a live whose space gives no clock. Negative when the service's
+  /// clock runs ahead of ours: shown as is.
+  fn streamer_delay(&self) -> Option<f64> {
+    if !self.is_live() {
+      return None;
+    }
+    if self.rewound {
+      return self.rewind_edge().map(|edge| edge - self.position);
+    }
+    let edge = (self.source.as_ref()?.live_edge.as_ref()?)()?;
+    let age = match SystemTime::now().duration_since(edge) {
+      Ok(age) => age.as_secs_f64(),
+      Err(ahead) => -ahead.duration().as_secs_f64(),
+    };
+    let behind = if self.source.as_ref()?.dvr_window.is_some() {
+      self.behind_live()
+    } else {
+      self
+        .player
+        .as_ref()?
+        .property("demuxer-cache-duration")?
+        .parse::<f64>()
+        .ok()?
+    };
+    Some(age + behind)
   }
 
   /// The panel, at the player's top left, scrolling when the player is shorter than it.

@@ -26,7 +26,7 @@ use std::hash::{BuildHasher, Hasher};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -119,6 +119,8 @@ struct Edge {
   read_at: Instant,
   /// When `sq` last grew.
   moved_at: Instant,
+  /// The same on the wall clock, never reset by a stall: about when segment `sq` was complete.
+  grew_at: SystemTime,
 }
 
 impl Edge {
@@ -141,6 +143,9 @@ struct Shared {
   window: Mutex<f64>,
   refresh_at: Mutex<Instant>,
   refreshing: AtomicBool,
+  /// Where the video playlist served last ends: when its newest segment number became the
+  /// edge (wall clock), and the seconds listed after that one ([`LiveProxy::edge_time`]).
+  served_edge: Mutex<Option<(SystemTime, f64)>>,
   /// The live has ended: the playlists get `#EXT-X-ENDLIST`.
   ended: AtomicBool,
   /// The tracks mpv starts on (the quality picked and the audio): until each has served a
@@ -226,6 +231,7 @@ impl LiveProxy {
       refresh_at: Mutex::new(Instant::now() + expiry.saturating_sub(REFRESH_BEFORE)),
       refreshing: AtomicBool::new(false),
       ended: AtomicBool::new(false),
+      served_edge: Mutex::new(None),
       starting: [main, audio_index],
       served: [AtomicBool::new(false), AtomicBool::new(false)],
       held: Mutex::new(None),
@@ -273,6 +279,16 @@ impl LiveProxy {
     };
     let (first, last) = shared.range(&edge, Instant::now());
     (last + 1).saturating_sub(first) as f64 * edge.segment
+  }
+
+  /// About when the end of the video playlist mpv read last left the broadcaster, for the
+  /// delay to the streamer: when its edge segment appeared, plus the segments listed after it
+  /// (mpv's duration counts them too, so they cancel out of the delay even before they exist).
+  /// YouTube's ingest delay (a few seconds) is not known, and the first reading may be up to a
+  /// segment late: the delay this gives is short of the real one by that much.
+  pub fn edge_time(&self) -> Option<SystemTime> {
+    let (grew_at, after) = (*lock(&self.0.shared.served_edge))?;
+    Some(grew_at + Duration::from_secs_f64(after.max(0.0)))
   }
 
   /// How far back the live can be watched, seconds: YouTube's DVR length until
@@ -386,6 +402,10 @@ async fn read_edge(shared: &Shared, track: usize) -> Result<Edge> {
     Some(old) if old.sq >= sq => old.moved_at,
     _ => now,
   };
+  let grew_at = match *slot {
+    Some(old) if old.sq >= sq => old.grew_at,
+    _ => SystemTime::now(),
+  };
   // Stalled: whether the live has ended, asked once per stalled minute.
   if now.duration_since(moved_at) > STALLED_AFTER {
     *lock(&shared.refresh_at) = now;
@@ -396,6 +416,7 @@ async fn read_edge(shared: &Shared, track: usize) -> Result<Edge> {
     segment,
     read_at: now,
     moved_at,
+    grew_at,
   };
   *slot = Some(edge);
   Ok(edge)
@@ -635,6 +656,11 @@ async fn playlist(shared: &Arc<Shared>, i: usize) -> Result<String> {
     shared.ended.load(Ordering::Relaxed),
   );
   shared.served(i);
+  // The audio is the last track; the edge follows the picture's.
+  if i + 1 < shared.tracks.len() {
+    let after = last.saturating_sub(edge.sq) as f64 * edge.segment;
+    *lock(&shared.served_edge) = Some((edge.grew_at, after));
+  }
   Ok(body)
 }
 
@@ -769,6 +795,7 @@ mod tests {
       segment: 5.0,
       read_at: at,
       moved_at: at,
+      grew_at: SystemTime::now(),
     };
     assert_eq!(edge.now(at), 100);
     assert_eq!(edge.now(at + Duration::from_secs(12)), 102);

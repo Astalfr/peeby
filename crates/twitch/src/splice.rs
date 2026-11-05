@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use crate::ads::{MediaPlaylist, Segment};
+use crate::time::epoch_millis;
 
 /// Segments kept in the output, about 30 s: FFmpeg starts a live 3 segments from the end.
 const WINDOW: usize = 15;
@@ -198,6 +199,31 @@ impl Splicer {
   /// Number of prefetch segments after them.
   pub fn prefetched(&self) -> usize {
     self.prefetch.len()
+  }
+
+  /// Where the output ends on the broadcast's clock: the end of its newest dated segment
+  /// (`#EXT-X-PROGRAM-DATE-TIME` plus its length, milliseconds since the epoch), and the
+  /// seconds listed after it (undated segments, prefetch ones), which may not exist yet.
+  pub fn edge(&self) -> Option<(i64, f64)> {
+    let mut after: f64 = self.prefetch.iter().map(|(_, s)| s.duration).sum();
+    for kept in self.kept.values().rev() {
+      let date = kept
+        .segment
+        .date_line
+        .as_deref()
+        .and_then(|l| l.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:"))
+        .and_then(epoch_millis);
+      match date {
+        Some(date) => {
+          return Some((
+            date + (kept.segment.duration * 1000.0).round() as i64,
+            after,
+          ));
+        }
+        None => after += kept.segment.duration,
+      }
+    }
+    None
   }
 
   /// Whether the output has no segment yet (an ad break with no backup).
