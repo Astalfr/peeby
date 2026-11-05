@@ -31,7 +31,7 @@ takes its viewers to Y's live unless they leave. Peeby should do the same on a l
 - `points::PointsView` starts it once the live's channel id is known. It pins the raid first over
   the chat (`ui::chat::pinned_stack`), its countdown (`raid_created_at` +
   `force_raid_now_seconds`) along the bar. On `raid_go_v2`, once per raid, the page opens the
-  target's live in its tab, unless the viewer clicked "Rester ici". A cancel (`raid_cancel_v2`,
+  target's live in its tab, unless the viewer clicked "Quitter le raid": the viewer is in the raid by default, as on Twitch, and its card's one button leaves it (then "Rejoindre le raid"). A cancel (`raid_cancel_v2`,
   unconfirmed) removes the bar.
 - Only raid topics are listened to: the other PubSub topics (points, predictions) stay on GQL.
 

@@ -115,7 +115,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   - On a live's header: the balance, refreshed every minute; the channel's rewards in a popover; its predictions with odds and a countdown, refreshed every 20 s.
   - 2026-11-04: an ended prediction stays pinned 20 s with its winner and the viewer's result (`resolvedPredictionEvents`, a new fixture and test).
   - 2026-11-04 (the user's request): the predictions moved over the chat, as on Twitch: folded bars at the top of the messages, one card unfolded at a time, shared with the polls.
-  - 2026-11-04 (the user's request): outgoing raids from Twitch's PubSub (`twitch::raids`, ADR 0024; GQL's `user { raid }` shows nothing to viewers) pinned over the chat with their countdown, "Rejoindre maintenant" and "Rester ici"; the page follows the raid when it goes (1 fixture, 2 tests).
+  - 2026-11-04 (the user's request): outgoing raids from Twitch's PubSub (`twitch::raids`, ADR 0024; GQL's `user { raid }` shows nothing to viewers) pinned over the chat with their countdown and the target's avatar; the viewer is in the raid by default ("Quitter le raid" to stay); the page follows the raid when it goes (1 fixture, 2 tests).
   - 2026-11-04 (the user's request): a live's polls from Twitch (`twitch::polls`: `viewablePoll` read every 10 s anonymous, `voteInPoll` with the auth-token; 3 fixtures, 4 tests). A real vote is still to be tried with the user.
   - Spending takes a second click. A reward can ask for a text; a bet takes a share of the balance.
   - The bonus chest is shown, but claimed on twitch.tv: its mutation fails Twitch's integrity check.

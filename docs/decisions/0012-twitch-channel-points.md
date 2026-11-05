@@ -47,7 +47,7 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
     Polls come from `viewablePoll` (anonymous, every 10 s) and a free vote from `voteInPoll`
     (one click, with the auth-token; paid votes are never sent). An outgoing raid (Twitch's PubSub,
     [ADR 0024](0024-twitch-raids-pubsub.md)) is pinned first with its countdown; when it goes,
-    the page follows it to the raided channel, unless the viewer clicked "Rester ici";
+    the page follows it to the raided channel, unless the viewer clicked "Quitter le raid" (in the raid by default, as on Twitch);
     a line along each bar's bottom edge shows the time left to bet, then the time left for the
     result to show (a poll's alike).
   Without the auth-token, or on a channel without points, nothing shows (polls excepted, which

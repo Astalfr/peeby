@@ -422,7 +422,6 @@ impl PointsView {
   /// The raid's card: where it goes and what the viewer does.
   fn raid_body(&self, raid: &Raid, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
-    let target = raid.target_login.clone();
     let id = raid.id.clone();
     let avatar = raid_avatar(raid, RAID_AVATAR, window, cx);
     v_flex()
@@ -452,40 +451,33 @@ impl PointsView {
           .text_color(theme::muted())
           .child(if staying {
             t(
-              "You stay here when it goes.",
-              "Vous restez ici quand il part.",
+              "You left the raid: you stay here when it goes.",
+              "Vous avez quitté le raid : vous restez ici quand il part.",
             )
           } else {
             t(
-              "When it goes, this page follows it, as on Twitch.",
-              "Quand il part, cette page le suit, comme sur Twitch.",
+              "You're in the raid: when it goes, this page opens the raided channel's live.",
+              "Vous êtes dans le raid : quand il part, cette page ouvre le live de la chaîne raidée.",
             )
           }),
       )
+      // In the raid by default, as on Twitch: the one choice is to leave it (and come back).
       .child(
-        h_flex()
-          .gap_2()
-          .child(
-            Button::new("twitch-raid-join")
-              .small()
-              .primary()
-              .label(t("Join now", "Rejoindre maintenant"))
-              .on_click(cx.listener(move |_, _, _, cx| cx.emit(PointsEvent::Raid(target.clone())))),
-          )
-          .child(
-            Button::new("twitch-raid-stay")
-              .small()
-              .ghost()
-              .label(if staying {
-                t("Follow it", "Le suivre")
-              } else {
-                t("Stay here", "Rester ici")
-              })
-              .on_click(cx.listener(move |this, _, _, cx| {
-                this.raid_stay = if staying { None } else { Some(id.clone()) };
-                cx.notify();
-              })),
-          ),
+        h_flex().child(
+          Button::new("twitch-raid-leave")
+            .small()
+            .when(staying, |b| b.primary())
+            .when(!staying, |b| b.ghost())
+            .label(if staying {
+              t("Join the raid", "Rejoindre le raid")
+            } else {
+              t("Leave the raid", "Quitter le raid")
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+              this.raid_stay = if staying { None } else { Some(id.clone()) };
+              cx.notify();
+            })),
+        ),
       )
       .into_any_element()
   }
@@ -1349,9 +1341,9 @@ impl PointsView {
       let viewers = cards::grouped(raid.viewer_count);
       let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
       let next = if staying {
-        t("you stay here", "vous restez ici")
+        t("raid left", "raid quitté")
       } else {
-        t("you'll follow it", "vous le suivrez")
+        t("you're in it", "vous en êtes")
       };
       // It leaves at the latest `force_seconds` after its announcement.
       let length = i64::try_from(raid.force_seconds).unwrap_or(0) * 1000;
