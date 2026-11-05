@@ -715,6 +715,18 @@ impl TwitchSpace {
     }
   }
 
+  /// A notification's middle click: `route` in a new tab after the tab shown, in the
+  /// background (built when it first shows).
+  pub fn open_from_notification_in_new_tab(&mut self, route: Route, cx: &mut Context<Self>) {
+    let tab = self.tabs.add(vec![route], None);
+    cx.emit(SpaceEvent::Opened {
+      tab,
+      after: None,
+      focus: false,
+    });
+    cx.notify();
+  }
+
   /// Reacts to an error of any page: an expired Helix session disconnects it, the rest is
   /// logged.
   pub fn handle_error(&mut self, error: &Error, cx: &mut Context<Self>) {
@@ -1069,12 +1081,8 @@ impl Space for TwitchSpace {
     }
   }
 
-  fn searchable(&self) -> bool {
-    self.catalog.is_some()
-  }
-
-  fn open_search(&mut self, tab: TabId, _window: &mut Window, cx: &mut Context<Self>) {
-    self.open(tab, Route::Search, cx);
+  fn search_route(&self) -> Option<Route> {
+    self.catalog.is_some().then_some(Route::Search)
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {

@@ -590,7 +590,8 @@ pub enum SpaceEvent {
   /// Show this tab (a notification of the space was clicked from another tab).
   Activate(TabId),
   /// The space opened a tab (a link's middle click, a notification with no tab of the space
-  /// open): the shell puts it after `after` (at the end when `None`), and shows it if `focus`.
+  /// open): the shell puts it after `after` (after the tab shown when `None`), and shows it if
+  /// `focus`.
   Opened {
     tab: TabId,
     after: Option<TabId>,
@@ -698,13 +699,20 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
     self.history().get(tab).is_some_and(Tab::settings_shown)
   }
 
-  /// Whether the top bar's search button searches this space (signed in, with a search page).
-  fn searchable(&self) -> bool {
-    false
+  /// The space's search page, when the top bar's search button searches this space (signed
+  /// in, with a search page).
+  fn search_route(&self) -> Option<Self::Route> {
+    None
   }
 
-  /// Opens the space's search page in `tab`.
-  fn open_search(&mut self, _tab: TabId, _window: &mut Window, _cx: &mut Context<Self>) {}
+  /// Opens a tab of the space on its search page (built when it shows); `None` when the space
+  /// has none.
+  fn search_tab(&mut self, cx: &mut Context<Self>) -> Option<TabId> {
+    let route = self.search_route()?;
+    let id = self.history_mut().add(vec![route], None);
+    cx.notify();
+    Some(id)
+  }
 
   /// The player of the page on top of `tab`, if it has one. The shell moves it to the
   /// mini-player when another tab opens while it plays.
@@ -785,10 +793,10 @@ pub trait AnySpace {
   fn reload(&self, tab: TabId, cx: &mut App);
   /// See [`Space::settings_shown`].
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool;
-  /// See [`Space::searchable`].
+  /// Whether the space has a [`Space::search_route`].
   fn searchable(&self, cx: &App) -> bool;
-  /// See [`Space::open_search`].
-  fn open_search(&self, tab: TabId, window: &mut Window, cx: &mut App);
+  /// See [`Space::search_tab`].
+  fn search_tab(&self, cx: &mut App) -> Option<TabId>;
   /// See [`Space::player`].
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>>;
   /// See [`Space::unseen`].
@@ -884,11 +892,11 @@ impl<T: Space> AnySpace for Entity<T> {
   }
 
   fn searchable(&self, cx: &App) -> bool {
-    self.read(cx).searchable()
+    self.read(cx).search_route().is_some()
   }
 
-  fn open_search(&self, tab: TabId, window: &mut Window, cx: &mut App) {
-    self.update(cx, |space, cx| space.open_search(tab, window, cx));
+  fn search_tab(&self, cx: &mut App) -> Option<TabId> {
+    self.update(cx, |space, cx| space.search_tab(cx))
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {

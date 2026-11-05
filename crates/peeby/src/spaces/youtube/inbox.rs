@@ -21,8 +21,8 @@ use std::time::{Duration, SystemTime};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, ElementId, Entity, Global, ScrollHandle, SharedString, WeakEntity,
-  Window, div, px,
+  AnyElement, App, ClickEvent, Context, ElementId, Entity, Global, ScrollHandle, SharedString,
+  WeakEntity, Window, div, px,
 };
 use gpui_component::popover::PopoverState;
 use gpui_component::skeleton::Skeleton;
@@ -516,6 +516,25 @@ impl InboxPanel {
       .ok();
   }
 
+  /// A middle click: the video of a notification in a new tab, in the background; the panel
+  /// stays open for the next ones.
+  fn open_in_new_tab(&mut self, item: usize, cx: &mut Context<Self>) {
+    let Some(notification) = self.items.get_mut(item) else {
+      return;
+    };
+    let Some(video_id) = notification.video_id.clone() else {
+      return;
+    };
+    notification.read = true;
+    self
+      .nav
+      .update(cx, |space, cx| {
+        space.open_from_notification_in_new_tab(Route::Watch(video_id), cx)
+      })
+      .ok();
+    cx.notify();
+  }
+
   fn row(
     &self,
     item: usize,
@@ -534,6 +553,12 @@ impl InboxPanel {
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface_hover()))
       .on_click(cx.listener(move |this, _, window, cx| this.open(item, window, cx)))
+      .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+        if event.is_middle_click() {
+          cx.stop_propagation();
+          this.open_in_new_tab(item, cx);
+        }
+      }))
       .child(
         div()
           .mt(px(16.))

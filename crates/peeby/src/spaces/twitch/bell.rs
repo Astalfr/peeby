@@ -9,7 +9,9 @@ use std::collections::{HashMap, VecDeque};
 use std::time::SystemTime;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, Context, ElementId, SharedString, WeakEntity, Window, div, px};
+use gpui::{
+  AnyElement, App, ClickEvent, Context, ElementId, SharedString, WeakEntity, Window, div, px,
+};
 use gpui_component::popover::PopoverState;
 use gpui_component::{h_flex, v_flex};
 use twitch::helix::{self, Stream};
@@ -285,6 +287,17 @@ impl BellPanel {
       })
       .ok();
   }
+
+  /// A middle click: the live in a new tab, in the background; the panel stays open for the
+  /// next ones.
+  fn open_in_new_tab(&mut self, login: String, cx: &mut Context<Self>) {
+    self
+      .nav
+      .update(cx, |space, cx| {
+        space.open_from_notification_in_new_tab(Route::Watch(login), cx)
+      })
+      .ok();
+  }
 }
 
 impl Render for BellPanel {
@@ -313,6 +326,7 @@ impl Render for BellPanel {
         .get(&entry.user_id)
         .map(|url| picture::avatar(&cards::template(url), AVATAR, window, cx));
       let login = entry.login.clone();
+      let in_new_tab = login.clone();
       // The category is in the headline of a change already.
       let category = match entry.change {
         Change::Live => entry.category.clone(),
@@ -337,6 +351,12 @@ impl Render for BellPanel {
           .cursor_pointer()
           .hover(|s| s.bg(theme::surface_hover()))
           .on_click(cx.listener(move |this, _, window, cx| this.open(login.clone(), window, cx)))
+          .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+            if event.is_middle_click() {
+              cx.stop_propagation();
+              this.open_in_new_tab(in_new_tab.clone(), cx);
+            }
+          }))
           .child(
             div()
               .mt(px(16.))

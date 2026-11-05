@@ -414,6 +414,18 @@ impl YouTubeSpace {
     }
   }
 
+  /// A notification's middle click: `route` in a new tab after the tab shown, in the
+  /// background (built when it first shows).
+  pub fn open_from_notification_in_new_tab(&mut self, route: Route, cx: &mut Context<Self>) {
+    let tab = self.tabs.add(vec![route], None);
+    cx.emit(SpaceEvent::Opened {
+      tab,
+      after: None,
+      focus: false,
+    });
+    cx.notify();
+  }
+
   /// Plays the current video of `queue` on a watch page of `tab`: opened after the page shown,
   /// or replacing the watch page shown (`replace`, from one video of the queue to the next).
   /// Replacing drops the previous page and its player, so a long queue keeps a single player,
@@ -607,12 +619,8 @@ impl Space for YouTubeSpace {
     }
   }
 
-  fn searchable(&self) -> bool {
-    true
-  }
-
-  fn open_search(&mut self, tab: TabId, window: &mut Window, cx: &mut Context<Self>) {
-    self.open(tab, Route::Search, window, cx);
+  fn search_route(&self) -> Option<Route> {
+    Some(Route::Search)
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {

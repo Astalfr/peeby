@@ -312,7 +312,7 @@ impl Shell {
   }
 
   /// Adds a tab a space opened, after `after` (and after the tabs opened from there before it),
-  /// else at the end; shows it when `focus`.
+  /// the tab shown when `None`, else at the end; shows it when `focus`.
   fn add_tab(
     &mut self,
     space: usize,
@@ -325,6 +325,7 @@ impl Shell {
     if self.find(id).is_some() {
       return;
     }
+    let after = after.or(self.active.map(|t| t.id));
     let position = |shell: &Self, id: TabId| shell.tabs.iter().position(|t| t.id == id);
     let at = match after.and_then(|from| position(self, from).map(|i| (from, i))) {
       Some((from, i)) => match self.opened_from {
@@ -591,13 +592,15 @@ impl Shell {
     cx.notify();
   }
 
-  /// The top bar's search: the search page of the tab's space, in the tab.
+  /// The top bar's search: the search page of the shown tab's space, in a new tab after it,
+  /// shown (a video playing goes to the mini-player).
   fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    if let Some((tab, space)) = self.current() {
-      space.clone().open_search(tab, window, cx);
+    let Some(current) = self.active else {
+      return;
+    };
+    if let Some(id) = self.spaces[current.space].search_tab(cx) {
+      self.add_tab(current.space, id, Some(current.id), true, window, cx);
     }
-    self.enter_page(cx);
-    cx.notify();
   }
 
   fn open_entry(&mut self, id: SharedString, window: &mut Window, cx: &mut Context<Self>) {

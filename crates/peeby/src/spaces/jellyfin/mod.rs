@@ -639,12 +639,8 @@ impl Space for JellyfinSpace {
     }
   }
 
-  fn searchable(&self) -> bool {
-    self.signed.is_some()
-  }
-
-  fn open_search(&mut self, tab: TabId, window: &mut Window, cx: &mut Context<Self>) {
-    self.open(tab, Route::Search, window, cx);
+  fn search_route(&self) -> Option<Route> {
+    self.signed.is_some().then_some(Route::Search)
   }
 
   fn settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
