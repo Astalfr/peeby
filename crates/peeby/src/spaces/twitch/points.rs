@@ -3,9 +3,9 @@
 //! ([`PointsFooter`], ADR 0023). Its predictions with their bets, and its polls
 //! ([`super::polls`]), are pinned over the chat as Twitch does (`ui::chat::pinned_stack`): folded
 //! bars with their state, one card unfolded at a time, new ones folded. Polls show with or without
-//! points. A raid the channel is about to send is pinned first: when it goes (the live ends soon
-//! after it was read), the page follows it to the raided channel ([`PointsEvent::Raid`]), unless
-//! the viewer chose to stay. Spending asks for a second click ("Confirmer", within 8 s; a bet's shows the amount it
+//! points. A raid the channel is about to send (Twitch's PubSub, ADR 0024) is pinned first, its
+//! countdown along its bar: when it goes, the page follows it to the raided channel
+//! ([`PointsEvent::Raid`]), unless the viewer chose to stay. Spending asks for a second click ("Confirmer", within 8 s; a bet's shows the amount it
 //! sends), since it cannot be undone; a free vote takes one.
 //!
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
@@ -35,7 +35,7 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
-use twitch::raids::Raid;
+use twitch::raids::{Raid, RaidEvent};
 use ui::assets::Icon;
 use ui::chat::{Pinned, Unfolded, pinned_stack};
 use ui::i18n::t;
@@ -55,10 +55,6 @@ const WATCHED_EVERY: Duration = Duration::from_secs(60);
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
 /// How often the poll is read again (a poll often lasts 1 to 5 minutes).
 const POLLS_EVERY: Duration = Duration::from_secs(10);
-/// How often the outgoing raid is read again (Twitch's countdown is about 90 s).
-const RAIDS_EVERY: Duration = Duration::from_secs(10);
-/// A raid read this recently is followed when the live ends: it has gone.
-const RAID_FOLLOWED_WITHIN: Duration = Duration::from_secs(60);
 
 /// What the view asks its page.
 pub enum PointsEvent {
@@ -181,12 +177,12 @@ pub struct PointsView {
   polls: Vec<Poll>,
   /// The raid the channel is about to send.
   raid: Option<Raid>,
-  /// The last raid read, and when: it is followed when the live ends soon after.
-  last_raid: Option<(Raid, Instant)>,
   /// The viewer stays on this channel instead of following this raid (by id).
   raid_stay: Option<String>,
-  /// The last raid reading failed (the next failures log at debug).
-  raid_failing: bool,
+  /// The raid already followed (by id): its next departures do nothing.
+  raid_followed: Option<String>,
+  /// Hears the raid topic ([`Self::watch_raids`]); dropping it ends the connection.
+  raid_task: Option<Task<()>>,
   /// The choices the viewer voted for, by poll id: Twitch does not give them back.
   voted: HashMap<String, Vec<String>>,
   /// The last poll reading failed (the next failures log at debug).
@@ -229,9 +225,9 @@ impl PointsView {
       voted: HashMap::new(),
       polls_failing: false,
       raid: None,
-      last_raid: None,
       raid_stay: None,
-      raid_failing: false,
+      raid_followed: None,
+      raid_task: None,
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
@@ -264,16 +260,6 @@ impl PointsView {
           None => return,
         }
         cx.background_executor().timer(PREDICTIONS_EVERY).await;
-      }
-    }));
-    // The outgoing raid, with or without points.
-    view._tasks.push(cx.spawn(async move |this, cx| {
-      loop {
-        let Ok(load) = this.update(cx, |this, cx| this.load_raid(cx)) else {
-          return;
-        };
-        load.await;
-        cx.background_executor().timer(RAIDS_EVERY).await;
       }
     }));
     // The poll, with or without points: every viewer sees it.
@@ -385,86 +371,52 @@ impl PointsView {
     })
   }
 
-  /// The raid the channel is about to send: Twitch's (anonymous; a failed reading keeps the last
-  /// one), or the fake chat's. When one that was there is gone, the live is read: off air, the
-  /// raid went.
-  fn load_raid(&mut self, cx: &mut Context<Self>) -> Task<()> {
-    let client = match &self.backend {
-      Backend::Twitch(client) => client.clone(),
-      #[cfg(debug_assertions)]
-      Backend::Fake(fake) => {
-        let raid = fake.borrow().raid.clone();
-        self.raid_read(raid, cx);
-        return Task::ready(());
+  /// Listens to `channel_id`'s raids on Twitch's PubSub (anonymous, ADR 0024), once; the
+  /// connection ends with the view.
+  pub fn watch_raids(&mut self, channel_id: String, cx: &mut Context<Self>) {
+    if self.raid_task.is_some() || self.backend.twitch().is_none() {
+      return;
+    }
+    let (mut events, run) = twitch::raids::listen(&channel_id);
+    // The connection runs on the network runtime and ends when `events` is dropped.
+    drop(runtime::spawn(cx, run));
+    self.raid_task = Some(cx.spawn(async move |this, cx| {
+      while let Some(event) = events.recv().await {
+        if this
+          .update(cx, |this, cx| this.raid_event(event, cx))
+          .is_err()
+        {
+          return;
+        }
       }
-    };
-    let login = self.login.clone();
-    let fetch = runtime::spawn(cx, async move { client.raid(&login).await });
-    cx.spawn(async move |this, cx| {
-      let Some(result) = fetch.await else {
-        return;
-      };
-      let gone = this
-        .update(cx, |this, cx| match result {
-          Ok(raid) => {
-            this.raid_failing = false;
-            let gone = this.raid.is_some() && raid.is_none();
-            this.raid_read(raid, cx);
-            gone
-          }
-          Err(e) => {
-            if this.raid_failing {
-              tracing::debug!("Twitch raid: {e}");
-            } else {
-              tracing::warn!("Twitch raid: {e}");
-            }
-            this.raid_failing = true;
-            false
-          }
-        })
-        .unwrap_or(false);
-      if !gone {
-        return;
-      }
-      // Gone: sent (the live is off air) or canceled (it goes on).
-      let Ok(check) = this.update(cx, |this, cx| {
-        let client = this.backend.twitch().cloned();
-        let login = this.login.clone();
-        client.map(|client| runtime::spawn(cx, async move { client.channel(&login).await }))
-      }) else {
-        return;
-      };
-      if let Some(check) = check
-        && let Some(Ok(channel)) = check.await
-        && channel.live.is_none()
-      {
-        this.update(cx, |this, cx| this.raid_went(cx)).ok();
-      }
-    })
+    }));
   }
 
-  /// A raid was read (or none).
-  fn raid_read(&mut self, raid: Option<Raid>, cx: &mut Context<Self>) {
-    if let Some(raid) = &raid {
-      self.last_raid = Some((raid.clone(), Instant::now()));
+  /// What the raid topic says: an announced raid is pinned; when it goes, the page follows it
+  /// unless the viewer stays (Twitch sends the departure several times: followed once).
+  pub fn raid_event(&mut self, event: RaidEvent, cx: &mut Context<Self>) {
+    match event {
+      RaidEvent::Update(raid) => {
+        if self.raid_followed.as_deref() != Some(raid.id.as_str()) {
+          self.raid = Some(raid);
+        }
+      }
+      RaidEvent::Go(raid) => {
+        self.raid = None;
+        let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
+        if !staying && self.raid_followed.as_deref() != Some(raid.id.as_str()) {
+          self.raid_followed = Some(raid.id.clone());
+          cx.emit(PointsEvent::Raid(raid.target_login));
+        }
+      }
+      RaidEvent::Cancel(id) => {
+        if self.raid.as_ref().is_some_and(|r| r.id == id) {
+          self.raid = None;
+        }
+      }
     }
-    self.raid = raid;
     self.fold_gone();
     cx.notify();
-  }
-
-  /// The live ended, or the raid was seen gone with the live off air: a raid read lately went,
-  /// and the page follows it unless the viewer stays.
-  pub fn raid_went(&mut self, cx: &mut Context<Self>) {
-    let Some((raid, read)) = self.last_raid.take() else {
-      return;
-    };
-    self.raid = None;
-    cx.notify();
-    if read.elapsed() < RAID_FOLLOWED_WITHIN && self.raid_stay.as_deref() != Some(raid.id.as_str())
-    {
-      cx.emit(PointsEvent::Raid(raid.target_login));
-    }
   }
 
   /// The raid's card: where it goes and what the viewer does.
@@ -1381,6 +1333,13 @@ impl PointsView {
       } else {
         t("you'll follow it", "vous le suivrez")
       };
+      // It leaves at the latest `force_seconds` after its announcement.
+      let length = i64::try_from(raid.force_seconds).unwrap_or(0) * 1000;
+      let left = raid
+        .created_at
+        .map(|start| ((start + length - now) / 1000).max(0))
+        .map(|s| format!(" · {}", ui::player::format_time(s as f64)))
+        .unwrap_or_default();
       items.push(Pinned {
         id: raid.id.clone().into(),
         icon: Icon::Tv,
@@ -1389,16 +1348,20 @@ impl PointsView {
         title: tf!("Raid to {}", "Raid vers {}", raid.target_name).into(),
         status: if cards::plural(raid.viewer_count) {
           tf!(
-            "{viewers} viewers · {next}",
-            "{viewers} spectateurs · {next}"
+            "{viewers} viewers · {next}{left}",
+            "{viewers} spectateurs · {next}{left}"
           )
         } else {
-          tf!("{viewers} viewer · {next}", "{viewers} spectateur · {next}")
+          tf!(
+            "{viewers} viewer · {next}{left}",
+            "{viewers} spectateur · {next}{left}"
+          )
         }
         .into(),
         body: self.unfolded.is(&raid.id).then(|| self.raid_body(raid, cx)),
-        // Twitch gives no countdown.
-        time_left: None,
+        time_left: raid
+          .created_at
+          .and_then(|start| polls::share_left(start, length, now)),
       });
     }
     if !self.off && self.points.is_some() {

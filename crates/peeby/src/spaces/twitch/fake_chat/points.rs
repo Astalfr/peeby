@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use twitch::points::{Outcome, Points, Prediction, PredictionStatus, Reward};
-use twitch::raids::Raid;
 use ui::chat::fake::Rng;
 
 use super::super::points::{ENDED_SHOWN, Order};
@@ -31,8 +30,6 @@ pub struct FakePoints {
   predictions: Vec<Prediction>,
   /// Other viewers vote in the polls taking votes.
   pub voters: bool,
-  /// The raid the channel is about to send.
-  pub raid: Option<Raid>,
   polls: Vec<Poll>,
   /// Reward id → end of its cooldown, Unix milliseconds.
   cooldowns: HashMap<String, i64>,
@@ -52,7 +49,6 @@ impl Default for FakePoints {
       bettors: true,
       predictions: Vec::new(),
       voters: true,
-      raid: None,
       polls: Vec::new(),
       cooldowns: HashMap::new(),
       made: 0,
@@ -159,18 +155,6 @@ impl FakePoints {
       poll.ended = true;
       poll.ended_at = Some(now_millis());
     }
-  }
-
-  /// A raid about to leave for another channel.
-  pub fn start_raid(&mut self) {
-    self.made += 1;
-    self.raid = Some(Raid {
-      id: format!("fake-raid-{}", self.made),
-      target_login: "peeby_ami".into(),
-      target_name: "Peeby_Ami".into(),
-      target_avatar: None,
-      viewer_count: 1_234,
-    });
   }
 
   /// Removes the first poll, as Twitch does a while after its end.

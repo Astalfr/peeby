@@ -201,7 +201,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling;
       an ended one stays pinned 20 s with its result, as on a live.
     - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays 20 s), removing.
-    - An outgoing raid: announced, canceled, or gone (a followed one says what would open).
+    - An outgoing raid: announced (viewers join it, it goes by itself after 90 s), canceled, or
+      gone at once (a followed one says what would open).
       They show with the points off too.
 
 ## Catalog through GQL instead of Helix
@@ -365,15 +366,16 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     - The top lives page holds 30 at most (`streams(first: 30)`, `options: { languages: [FR] }`),
       and a query takes 15 root aliases at most. A second page (`after: <cursor>`) fails Twitch's
       integrity check; the 30 top categories' first pages give thousands of lives instead.
-  - **Outgoing raids**, checked on 2026-11-04, anonymous (`gql-probe`): `user(login) { raid }`
-    (not on `Channel`) is the raid the channel is about to send, null without one: `id`,
-    `viewerCount`, `targetChannel` and `sourceChannel` (`User`s: `login displayName
-    profileImageURL(width)`). No field gives the countdown or when it goes (none of a dozen
-    guessed names exists): Peeby reads it every 10 s, pins it over the chat, and follows it to
-    the raided channel's live when the source's live ends within a minute of the last reading
-    (mpv's end, or the raid gone with the channel off air), unless the viewer chose to stay.
-    Incoming raids are `USERNOTICE msg-id=raid` lines, shown as chat notices.
-    `twitch_capture -- raids-scan --watch` looks for one to save as `gql_raid.json`.
+  - **Outgoing raids** ([ADR 0024](decisions/0024-twitch-raids-pubsub.md)): GQL's
+    `user(login) { raid }` exists but stayed null for viewers (2026-11-04, about 2,600 lives
+    scanned 52 times, anonymous and with the auth-token). Twitch's PubSub gives them instead,
+    anonymous (2026-11-05, 500 lives for 30 minutes with the `twitch` example `raid_probe`: 13
+    raids): `wss://pubsub-edge.twitch.tv/v1`, `LISTEN raid.<channel id>`, then `raid_update_v2`
+    (announced, then as viewers join) and `raid_go_v2` (several times, when it leaves), with the
+    target's login, name and avatar, `viewer_count`, `raid_created_at` (Unix s) and
+    `force_raid_now_seconds` (90). A connection takes 50 topics, an address 10 connections. No
+    cancel was seen (`raid_cancel_v2` expected **[?]**). Fixture: `pubsub_raid.jsonl`. Incoming
+    raids are `USERNOTICE msg-id=raid` lines, shown as chat notices.
   - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
     automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
 - **Spends, raw mutations** (checked with made-up ids, so nothing was spent):
@@ -409,7 +411,8 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   serves them is **[?]**. Peeby polls instead.
 - Fixtures: `gql_points_context.json` (balance replaced by 12345), `gql_predictions_active.json`,
   `gql_predictions_locked.json`, `gql_predictions_resolved.json`, `gql_poll.json`,
-  `gql_poll_completed.json`, `gql_vote_unauthenticated.json` (anonymous, request ids removed), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
+  `gql_poll_completed.json`, `gql_vote_unauthenticated.json` (anonymous, request ids removed),
+  `pubsub_raid.jsonl` (one raid's PubSub frames), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
   Request ids are redacted. Rewards and predictions are the channels' public data.
 
 ## Checked live on 2026-11-01

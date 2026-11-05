@@ -42,8 +42,10 @@ use ui::{form, images, tf, theme};
 
 use super::chat::{self, BATCH, Extras};
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
+use super::polls;
 use feed::{CHANNEL, Content, Feed, Look, ME, Notice, THIRD_PARTY};
 pub use points::FakePoints;
+use twitch::raids::RaidEvent;
 
 /// The images' URLs: drawn by [`Squares`], never downloaded.
 pub const SCHEME: &str = "fake-chat://";
@@ -112,6 +114,10 @@ pub struct FakeChatView {
   followers: i64,
   /// Seconds; 0: off.
   slow: u32,
+  /// The fake outgoing raid, while it counts down.
+  raid: Option<twitch::raids::Raid>,
+  /// Fake raids announced so far, for their ids.
+  made: u64,
   _send: Subscription,
   _tasks: Vec<Task<()>>,
 }
@@ -180,6 +186,8 @@ impl FakeChatView {
       unique: false,
       followers: -1,
       slow: 0,
+      raid: None,
+      made: 0,
       _send: send,
       _tasks: Vec::new(),
     };
@@ -231,7 +239,25 @@ impl FakeChatView {
       self.last_second = now;
       self.points.borrow_mut().tick();
       self.reload_points(cx);
+      self.raid_tick(cx);
     }
+  }
+
+  /// A second of the fake raid: viewers join it, and it goes at the end of its countdown.
+  fn raid_tick(&mut self, cx: &mut Context<Self>) {
+    let Some(raid) = self.raid.as_mut() else {
+      return;
+    };
+    let end = raid.created_at.unwrap_or(0) + i64::try_from(raid.force_seconds).unwrap_or(0) * 1000;
+    if polls::now_millis() >= end {
+      if let Some(raid) = self.raid.take() {
+        self.raid_event(RaidEvent::Go(raid), cx);
+      }
+      return;
+    }
+    raid.viewer_count += 7;
+    let raid = raid.clone();
+    self.raid_event(RaidEvent::Update(raid), cx);
   }
 
   /// IRC lines through the parser, then as the connection's updates.
@@ -1081,22 +1107,40 @@ impl FakeChatView {
           vec![
             self.button(
               "raid-start",
-              t("Announce one", "En annoncer un").into(),
-              |this, cx| this.points_changed(FakePoints::start_raid, cx),
+              t("Announce one (90 s)", "En annoncer un (90 s)").into(),
+              |this, cx| {
+                this.made += 1;
+                let raid = twitch::raids::Raid {
+                  id: format!("fake-raid-{}", this.made),
+                  target_login: "peeby_ami".into(),
+                  target_name: "Peeby_Ami".into(),
+                  target_avatar: None,
+                  viewer_count: 1,
+                  created_at: Some(polls::now_millis()),
+                  force_seconds: 90,
+                };
+                this.raid = Some(raid.clone());
+                this.raid_event(RaidEvent::Update(raid), cx);
+              },
               cx,
             ),
             self.button(
               "raid-cancel",
               t("Cancel it", "L'annuler").into(),
-              |this, cx| this.points_changed(|p| p.raid = None, cx),
+              |this, cx| {
+                if let Some(raid) = this.raid.take() {
+                  this.raid_event(RaidEvent::Cancel(raid.id), cx);
+                }
+              },
               cx,
             ),
             self.button(
               "raid-go",
-              t("It goes (the live ends)", "Il part (le live se termine)").into(),
+              t("It goes now", "Il part maintenant").into(),
               |this, cx| {
-                this.points_changed(|p| p.raid = None, cx);
-                this.points_view.update(cx, |p, cx| p.raid_went(cx));
+                if let Some(raid) = this.raid.take() {
+                  this.raid_event(RaidEvent::Go(raid), cx);
+                }
               },
               cx,
             ),
@@ -1106,12 +1150,17 @@ impl FakeChatView {
           .text_xs()
           .text_color(theme::muted())
           .child(t(
-            "On a live, a followed raid opens the raided channel. Incoming raids are chat notices (Events).",
-            "Sur un live, un raid suivi ouvre la chaîne raidée. Les raids reçus sont des notices du chat (Événements).",
+            "As on Twitch: viewers join while it counts down, and it goes by itself after 90 s. On a live, a followed raid opens the raided channel. Incoming raids are chat notices (Events).",
+            "Comme sur Twitch : des spectateurs le rejoignent pendant le compte à rebours, et il part tout seul après 90 s. Sur un live, un raid suivi ouvre la chaîne raidée. Les raids reçus sont des notices du chat (Événements).",
           ))
           .into_any_element(),
       ],
     )
+  }
+
+  /// A fake raid event, as the raid topic would send it.
+  fn raid_event(&mut self, event: RaidEvent, cx: &mut Context<Self>) {
+    self.points_view.update(cx, |p, cx| p.raid_event(event, cx));
   }
 
   fn polls_card(&self, cx: &mut Context<Self>) -> AnyElement {
