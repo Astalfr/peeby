@@ -208,7 +208,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   Twitch.
   - **YouTube** ([ADR 0025](decisions/0025-youtube-lives-from-dash.md)): lives with DVR play from VISIONOS's DASH segments
     through `innertube::LiveProxy`, the whole broadcast up to 12 h (the HLS window was an hour, and on most
-    ordinary broadcasts nothing before it was served), with VP9 up to 2160p.
+    ordinary broadcasts nothing before it was served). MP4 formats only: VP9 (WebM) lost its video at the
+    first seek, found by the user in the app on 2026-11-05.
   - **Twitch** ([ADR 0026](decisions/0026-twitch-live-rewind-from-its-recording.md)): a live whose
     channel keeps its VODs gets the shared player's `Rewind`, its recording through a second proxy, with
     the recording's position saved to the account as a VOD's; `minute-watched` pauses meanwhile.
@@ -216,7 +217,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
     and search for the first segment kept; a live's recording on 2 new fixtures).
   - Verified anonymously:
     - `live_probe`: a 2 h 38 live listed from segment 0, both ends served through the redirects,
-      resolved in 0.16 s; a 24/7 live's 12 h; a 4K live's VP9 ladder.
+      resolved in 0.16 s; a 24/7 live's 12 h.
     - `spike-yt-play` through the real proxy: first frame at the edge 1.1 s, 30 s into the broadcast
       0.8 s; 3 minutes at the edge of a 29.97 fps live with no 404 and no buffering.
     - The search's request: one byte of a gone segment answers 404, of a kept one 206 (a `HEAD`

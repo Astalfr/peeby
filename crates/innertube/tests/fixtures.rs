@@ -680,6 +680,14 @@ fn live_dash_formats() {
   assert_eq!((audio.codecs.as_str(), audio.height), ("mp4a.40.2", 0));
   // A video has none: it plays from HLS.
   assert!(innertube::parse_live_formats(&fixture("player_visionos.json")).is_empty());
+  // WebM (VP9) is left out: FFmpeg ends its video at the first seek.
+  let mut player = fixture("player_visionos_live.json");
+  player["streamingData"]["adaptiveFormats"][0]["mimeType"] = "video/webm; codecs=\"vp9\"".into();
+  let itags: Vec<u32> = innertube::parse_live_formats(&player)
+    .iter()
+    .map(|f| f.itag)
+    .collect();
+  assert_eq!(itags, [136, 135, 134, 133, 160, 139, 140]);
 }
 
 #[test]

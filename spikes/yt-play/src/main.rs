@@ -18,6 +18,10 @@
 //!   `WindowKind::PopUp`) at the bottom right of the screen, and back 6 s later: checks that the
 //!   zero-copy surface draws in a second window (the mini-player, docs/refactor-plan.md).
 //! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
+//! - `PEEBY_SEEK=<after>:<to>[:<n>]`: seeks to `<to>` seconds `<after>` seconds after the start (in
+//!   `n` seeks 30 ms apart from the position, as a drag of the seek bar does), and prints every 2 s
+//!   the position and the video's frame number (a frozen picture stops it).
+//! - `PEEBY_READAHEAD`: mpv's `cache-secs` (raw), as the app's 60.
 //! - The mpv log goes to `target/yt-play-mpv.log`.
 //!
 //! Keys: space pause · ←/→ seek 10 s · q quit.
@@ -56,6 +60,9 @@ fn main() {
         external_audio: std::env::var("PEEBY_AUDIO").ok().into_iter().collect(),
         http_headers: vec![format!("User-Agent: {}", visionos::USER_AGENT)],
         log_file: Some(Path::new(ROOT).join("target/yt-play-mpv.log")),
+        readahead_secs: std::env::var("PEEBY_READAHEAD")
+          .ok()
+          .and_then(|s| s.parse().ok()),
         start_seconds: std::env::var("PEEBY_START")
           .ok()
           .and_then(|s| s.parse().ok())
@@ -184,6 +191,47 @@ impl Spike {
         }
       }
     });
+    let seek = std::env::var("PEEBY_SEEK").ok().and_then(|s| {
+      let mut parts = s.split(':');
+      let after = parts.next()?.parse::<u64>().ok()?;
+      let to = parts.next()?.parse::<f64>().ok()?;
+      let burst = parts
+        .next()
+        .and_then(|n| n.parse::<u32>().ok())
+        .unwrap_or(1);
+      Some((after, to, burst))
+    });
+    let watched = player.clone();
+    cx.spawn(async move |_, cx| {
+      let Some((after, to, burst)) = seek else {
+        return;
+      };
+      for tick in 0..60u64 {
+        cx.background_executor().timer(Duration::from_secs(2)).await;
+        if tick * 2 == after.next_multiple_of(2) {
+          eprintln!("seek to {to} in {burst}");
+          let from: f64 = watched
+            .property("time-pos")
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(to);
+          for step in 1..=burst {
+            watched.seek_to(from + (to - from) * f64::from(step) / f64::from(burst));
+            cx.background_executor()
+              .timer(Duration::from_millis(30))
+              .await;
+          }
+        }
+        eprintln!(
+          "t={:>3} s position {:?} avsync {:?} decoder drops {:?} vo drops {:?}",
+          tick * 2 + 2,
+          watched.property("time-pos"),
+          watched.property("avsync"),
+          watched.property("decoder-frame-drop-count"),
+          watched.property("frame-drop-count"),
+        );
+      }
+    })
+    .detach();
     let pip = (std::env::var("PEEBY_PIP").as_deref() == Ok("1")).then(|| {
       cx.spawn_in(window, async move |this, cx| {
         cx.background_executor().timer(Duration::from_secs(4)).await;

@@ -3,8 +3,9 @@
 //!
 //! VISIONOS's HLS playlists cover an hour at most, and on most lives the HLS segments before it
 //! are gone, but the DASH formats of the same answer keep the broadcast since its first segment.
-//! Each DASH segment is fetched by number (`&sq=N`) and is a whole file (`ftyp`, `moov`, `moof`,
-//! `mdat`, or WebM's), which mpv plays one after the other from an HLS playlist. So mpv plays
+//! Each DASH segment is fetched by number (`&sq=N`) and is a whole MP4 (`ftyp`, `moov`, `moof`,
+//! `mdat`), which mpv plays one after the other from an HLS playlist (not WebM: FFmpeg ends its
+//! video at the first seek). So mpv plays
 //! `http://127.0.0.1:<port>/<key>/<track>.m3u8`, a live media playlist the proxy writes on each
 //! reload: segment numbers from the first one kept to the live edge, each URI a short local path
 //! (`s/<track>/<sq>`) the proxy answers with a redirect to the signed URL. Twelve hours of signed
@@ -39,8 +40,10 @@ use crate::hls::Variant;
 use crate::models::LiveFormat;
 use crate::parse::parse_live_formats;
 
-/// The edge is read again at most this often while mpv reloads.
-const HEAD_EVERY: Duration = Duration::from_secs(10);
+/// The edge is read again at most this often while mpv reloads (so about once per reload). A
+/// track waiting at the edge takes a seek only once its playlist grows: an estimate running
+/// behind YouTube's edge held a seek back about 5 s.
+const HEAD_EVERY: Duration = Duration::from_secs(2);
 /// The signed URLs are resolved again this long before they expire.
 const REFRESH_BEFORE: Duration = Duration::from_secs(30 * 60);
 /// Their lifetime when the answer does not say (`streamingData.expiresInSeconds`, 6 h).
@@ -49,7 +52,8 @@ const DEFAULT_EXPIRY: Duration = Duration::from_secs(6 * 3600);
 const REFRESH_RETRY: Duration = Duration::from_secs(60);
 /// An edge that has not moved for this long: the live may have ended.
 const STALLED_AFTER: Duration = Duration::from_secs(60);
-/// Segments the playlist stops before the estimated edge, which may run ahead of YouTube's.
+/// Segments the playlist stops before the estimated edge, which may run ahead of YouTube's (the
+/// newest segment read is always listed).
 const EDGE_MARGIN: u64 = 1;
 /// Segments added after the first one found served, should the formats' numbers differ a little.
 const FIRST_MARGIN: u64 = 2;
@@ -101,6 +105,8 @@ struct Track {
   /// The signed URL, replaced on refresh.
   url: Mutex<String>,
   edge: Mutex<Option<Edge>>,
+  /// The newest segment listed so far: a playlist never shrinks at its end.
+  listed: std::sync::atomic::AtomicU64,
 }
 
 /// A format's live edge as last read.
@@ -200,6 +206,7 @@ impl LiveProxy {
         url: Mutex::new(format.url.clone()),
         format,
         edge: Mutex::new(None),
+        listed: std::sync::atomic::AtomicU64::new(0),
       })
       .collect();
     let expiry = player["streamingData"]["expiresInSeconds"]
@@ -312,15 +319,12 @@ impl Shared {
   }
 
   /// The segments listed for an edge read as `edge`: from the first kept (sliding once the
-  /// window is full) to the estimated edge.
+  /// window is full) to the newest one read, or further when the estimate is a margin past it.
   fn range(&self, edge: &Edge, at: Instant) -> (u64, u64) {
     let last = if self.ended.load(Ordering::Relaxed) {
       edge.sq
     } else {
-      edge
-        .now(at)
-        .saturating_sub(EDGE_MARGIN)
-        .max(edge.sq.saturating_sub(EDGE_MARGIN))
+      edge.now(at).saturating_sub(EDGE_MARGIN).max(edge.sq)
     };
     let kept = (*lock(&self.window) / edge.segment) as u64;
     let first = (*lock(&self.first)).max(last.saturating_sub(kept));
@@ -328,8 +332,8 @@ impl Shared {
   }
 }
 
-/// The video formats to offer, best first with one per height (VP9 over AVC at equal height, as
-/// [`crate::hls::ladder`] does), and the best audio one.
+/// The video formats to offer, best first with one per height (AV1 over AVC at equal height),
+/// and the best audio one.
 fn pick(formats: Vec<LiveFormat>) -> Option<(Vec<LiveFormat>, LiveFormat)> {
   let (audios, mut videos): (Vec<_>, Vec<_>) = formats.into_iter().partition(LiveFormat::audio);
   let audio = audios.into_iter().max_by_key(|f| f.bitrate)?;
@@ -337,7 +341,7 @@ fn pick(formats: Vec<LiveFormat>) -> Option<(Vec<LiveFormat>, LiveFormat)> {
     (
       short_side(f),
       f.fps.unwrap_or(0),
-      f.codecs.starts_with("vp9") || f.codecs.starts_with("vp09"),
+      f.codecs.starts_with("av01"),
       f.bitrate,
     )
   };
@@ -618,6 +622,11 @@ async fn playlist(shared: &Arc<Shared>, i: usize) -> Result<String> {
     None => read_edge(shared, i).await?,
   };
   let (first, last) = shared.range(&edge, now);
+  // A reading behind the previous estimate keeps the segments already listed.
+  let last = shared.tracks[i]
+    .listed
+    .fetch_max(last, Ordering::Relaxed)
+    .max(last);
   let body = render(
     i,
     first,
@@ -704,16 +713,16 @@ mod tests {
   fn ladder() {
     let (videos, audio) = pick(vec![
       format(299, "video/mp4", "avc1.64002A", 1080, 60, 6_000_000),
-      format(303, "video/webm", "vp9", 1080, 60, 4_000_000),
-      format(315, "video/webm", "vp9", 2160, 60, 20_000_000),
+      format(399, "video/mp4", "av01.0.09M.08", 1080, 60, 4_000_000),
+      format(401, "video/mp4", "av01.0.13M.08", 2160, 60, 20_000_000),
       format(135, "video/mp4", "avc1.4D401F", 480, 30, 1_000_000),
       format(139, "audio/mp4", "mp4a.40.5", 0, 0, 48_000),
       format(140, "audio/mp4", "mp4a.40.2", 0, 0, 128_000),
     ])
     .unwrap();
     let itags: Vec<u32> = videos.iter().map(|f| f.itag).collect();
-    // VP9 wins at 1080p60; one per height.
-    assert_eq!(itags, [315, 303, 135]);
+    // AV1 wins at 1080p60; one per height.
+    assert_eq!(itags, [401, 399, 135]);
     assert_eq!(audio.itag, 140);
     assert!(pick(vec![format(140, "audio/mp4", "mp4a.40.2", 0, 0, 1)]).is_none());
   }

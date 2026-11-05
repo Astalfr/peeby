@@ -325,6 +325,10 @@ impl WatchView {
               this.watch_live(cx);
               this.watch_decoding(cx);
               this.prepare_rewind(cx);
+              if this.archive.is_none() {
+                // A later reading of the channel (every minute) may name it.
+                tracing::info!("Twitch: the channel names no recording of its live (yet): no past");
+              }
             }
             Some(Err(e)) => this.fail(&e, cx),
             None => {}
@@ -349,6 +353,8 @@ impl WatchView {
       .and_then(|ms| u64::try_from(ms).ok())
       .map(|ms| UNIX_EPOCH + Duration::from_millis(ms))
     else {
+      tracing::info!("Twitch: the live's recording has no start time: no past");
+      self.rewind_asked = true;
       return;
     };
     self.rewind_asked = true;

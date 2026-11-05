@@ -537,8 +537,10 @@ pub fn parse_live(player: &Value, length: f64) -> Option<Live> {
 }
 
 /// The DASH formats of a live with DVR (`isLive` and `isLiveDvrEnabled`) that can be played
-/// through [`crate::LiveProxy`]: a direct URL with no `available_at` delay, MP4 (AVC, AV1, AAC)
-/// or WebM (VP9). Empty for anything else, and when the formats lack a video or an audio one.
+/// through [`crate::LiveProxy`]: a direct URL with no `available_at` delay, MP4 (AVC, AV1, AAC).
+/// Not WebM (VP9): FFmpeg plays its segments from the start position but ends the video at the
+/// first seek (`video=eof`, the audio going on alone). Empty for anything else, and when the
+/// formats lack a video or an audio one.
 pub fn parse_live_formats(player: &Value) -> Vec<LiveFormat> {
   let details = &player["videoDetails"];
   if details["isLive"] != true || details["isLiveDvrEnabled"] != true {
@@ -571,7 +573,6 @@ fn live_format(format: &Value) -> Option<LiveFormat> {
     .to_owned();
   let playable = match mime {
     "video/mp4" => codecs.starts_with("avc1") || codecs.starts_with("av01"),
-    "video/webm" => codecs.starts_with("vp9") || codecs.starts_with("vp09"),
     "audio/mp4" => codecs.starts_with("mp4a"),
     _ => false,
   };
