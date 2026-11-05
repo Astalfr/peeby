@@ -342,16 +342,15 @@ impl PlayView {
     }
   }
 
-  /// Back to the page underneath.
+  /// Back to the page underneath, out of fullscreen whoever entered it: fullscreen belongs to
+  /// the player, the page underneath has no use for it.
   fn close(&mut self, cx: &mut Context<Self>) {
     self.remember_tracks(cx);
-    let (leave_fullscreen, tab) = (self.entered_fullscreen, self.nav.tab);
+    let tab = self.nav.tab;
     self
       .nav
       .update(cx, |space, cx| {
-        if leave_fullscreen {
-          space.leave_fullscreen();
-        }
+        space.leave_fullscreen();
         space.back(tab, cx)
       })
       .ok();
