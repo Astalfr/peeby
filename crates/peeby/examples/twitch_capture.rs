@@ -21,6 +21,10 @@
 //! that channel's poll (`twitch::polls::poll_request`) as `gql_poll.json`, and an anonymous vote's
 //! refusal (made-up ids) as `gql_vote_unauthenticated.json`; `-- gql-probe <query>
 //! [login]` sends one query and prints GQL's messages and the data. All three are anonymous.
+//! `-- raids-scan [--watch [minutes]]` lists which of thousands of lives (the 30 top categories' first
+//! pages) are about to raid;
+//! `-- raid <login>` saves that channel's raid (`twitch::raids::raid_request`) as `gql_raid.json`,
+//! anonymous.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -74,6 +78,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::thread::sleep(std::time::Duration::from_secs(120));
       }
     })?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "raids-scan") {
+    // `--watch [minutes]`: again every 2 minutes until a raid is found and saved.
+    let watch = args.get(i + 1).is_some_and(|a| a == "--watch");
+    let minutes = args
+      .get(i + 2)
+      .and_then(|m| m.parse::<u64>().ok())
+      .unwrap_or(60);
+    return twitch::block_on(async move {
+      let until = std::time::Instant::now() + std::time::Duration::from_secs(minutes * 60);
+      loop {
+        let found = scan_raids().await?;
+        if let Some(login) = found.filter(|_| watch) {
+          return capture_raid(login).await;
+        }
+        if !watch || std::time::Instant::now() >= until {
+          return Ok(());
+        }
+        // A command-line tool alone on its runtime: blocking it a while harms nothing.
+        std::thread::sleep(std::time::Duration::from_secs(120));
+      }
+    })?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "raid") {
+    let login = args.get(i + 1).ok_or("raid <login>")?.clone();
+    return twitch::block_on(capture_raid(login))?;
   }
   if let Some(i) = args.iter().position(|a| a == "poll") {
     let login = args.get(i + 1).ok_or("poll <login>")?.clone();
@@ -451,6 +481,82 @@ async fn scan_polls() -> Result<Option<String>, Box<dyn std::error::Error>> {
   }
   println!("poll found: {}", if first.is_some() { "yes" } else { "no" });
   Ok(first)
+}
+
+/// Thousands of lives, anonymous: the first page of each of the 30 top categories, as the
+/// catalog reads them (a second page of `streams` fails Twitch's integrity check).
+async fn top_logins(client: &twitch::Client) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+  use twitch::catalog;
+  let categories =
+    catalog::parse_top_categories(&client.gql(&catalog::top_categories_request()).await?)?;
+  let mut logins = Vec::new();
+  for category in categories.iter().take(30) {
+    let answer = client
+      .gql(&catalog::category_streams_request(&category.id))
+      .await?;
+    // A category that fails is skipped.
+    if let Ok(streams) = catalog::parse_category_streams(&answer) {
+      logins.extend(streams.into_iter().map(|s| s.user_login));
+    }
+  }
+  // Logins are letters, digits and `_`: safe inside a query.
+  logins.retain(|l| l.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+  logins.sort();
+  logins.dedup();
+  Ok(logins)
+}
+
+/// The lives of [`top_logins`] about to raid, anonymous: prints their logins and the raid's
+/// target.
+async fn scan_raids() -> Result<Option<String>, Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  let logins = top_logins(&client).await?;
+  println!("{} lives", logins.len());
+  let mut first = None;
+  // GQL takes 15 root aliases at most.
+  for chunk in logins.chunks(15) {
+    let fields: Vec<String> = chunk
+      .iter()
+      .enumerate()
+      .map(|(i, login)| {
+        format!("u{i}: user(login: \"{login}\") {{ login raid {{ targetChannel {{ login }} }} }}")
+      })
+      .collect();
+    let answer = client
+      .gql(&json!({ "query": format!("query {{ {} }}", fields.join(" ")) }))
+      .await?;
+    for i in 0..chunk.len() {
+      let user = &answer["data"][format!("u{i}")];
+      if let Some(target) = user["raid"]["targetChannel"]["login"].as_str() {
+        let login = user["login"].as_str().unwrap_or_default().to_owned();
+        println!("{login} raids {target}");
+        first.get_or_insert(login);
+      }
+    }
+  }
+  println!("raid found: {}", if first.is_some() { "yes" } else { "no" });
+  Ok(first)
+}
+
+/// `login`'s raid answer to `twitch::raids::raid_request`, anonymous, saved without its request
+/// ids as `gql_raid.json` (public channels: the source and its target).
+async fn capture_raid(login: String) -> Result<(), Box<dyn std::error::Error>> {
+  let client = twitch::Client::new(None, None)?;
+  let mut answer = client.gql(&twitch::raids::raid_request(&login)).await?;
+  for error in answer["errors"].as_array().into_iter().flatten() {
+    println!("error: {}", error["message"].as_str().unwrap_or_default());
+  }
+  if answer["data"]["user"]["raid"].is_null() {
+    println!("{login}: no raid");
+    return Ok(());
+  }
+  if let Some(map) = answer.as_object_mut() {
+    map.remove("extensions");
+  }
+  let path = Path::new(FIXTURES).join("gql_raid.json");
+  std::fs::write(&path, serde_json::to_string_pretty(&answer)? + "\n")?;
+  println!("saved {}", path.display());
+  Ok(())
 }
 
 /// `login`'s poll answer to `twitch::polls::poll_request`, anonymous, saved without its request

@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
-use crate::{points, polls, spade};
+use crate::{points, polls, raids, spade};
 
 /// VODs per [`Client::vod_positions`] or [`Client::vod_chapters_many`] request: GQL allows 15
 /// aliased root fields in a query (checked 2026-11-02).
@@ -312,6 +312,12 @@ impl Client {
   pub async fn predictions(&self, login: &str) -> Result<Vec<points::Prediction>> {
     let answer = self.gql(&points::predictions_request(login)).await?;
     points::parse_predictions(&answer)
+  }
+
+  /// The raid `login`'s channel is about to send, if any (anonymous).
+  pub async fn raid(&self, login: &str) -> Result<Option<raids::Raid>> {
+    let answer = self.gql(&raids::raid_request(login)).await?;
+    raids::parse_raid(&answer)
   }
 
   /// `login`'s poll on screen, if any (anonymous: it needs no auth-token).

@@ -27,7 +27,7 @@ use ui::picture::{self, Picture};
 use ui::player::{LiveInfo, PlayerEvent, PlayerView, Source};
 use ui::{runtime, tf, theme};
 
-use super::points::{Backend, PointsFooter, PointsView};
+use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
 use super::{Nav, Route, cards, chat, follow, play, progress, replay};
 use crate::settings::{Player, Settings};
 use crate::shell::space::middle_click;
@@ -116,12 +116,18 @@ impl WatchView {
           cx.notify();
         }
         PlayerEvent::Sound { volume, muted } => Player::save_sound(volume, muted, cx),
-        PlayerEvent::Ended if live => player.update(cx, |player, cx| {
-          player.set_notice(
-            Some(t("The live has ended.", "Le live est terminé.").into()),
-            cx,
-          )
-        }),
+        PlayerEvent::Ended if live => {
+          player.update(cx, |player, cx| {
+            player.set_notice(
+              Some(t("The live has ended.", "Le live est terminé.").into()),
+              cx,
+            )
+          });
+          // A raid read lately went with it.
+          if let Some(points) = this.points.clone() {
+            points.update(cx, |points, cx| points.raid_went(cx));
+          }
+        }
         _ => {}
       }
     })
@@ -181,6 +187,13 @@ impl WatchView {
         let points = cx.new(|cx| PointsView::new(login_, Backend::Twitch(client), player, cx));
         // The balance and its rewards under the chat's field, the predictions and polls over
         // its messages.
+        // The raid the viewer follows opens the raided channel's live, after this event.
+        cx.subscribe(&points, |this, _, event: &PointsEvent, cx| {
+          let PointsEvent::Raid(login) = event;
+          let (nav, route) = (this.nav.clone(), Route::Watch(login.clone()));
+          cx.defer(move |cx| nav.open(route, cx));
+        })
+        .detach();
         let footer = cx.new(|cx| PointsFooter::new(points.clone(), cx));
         panel.update(cx, |p, cx| {
           p.set_footer(footer.into(), cx);

@@ -41,7 +41,7 @@ use ui::picture::Picture;
 use ui::{form, images, tf, theme};
 
 use super::chat::{self, BATCH, Extras};
-use super::points::{Backend, PointsFooter, PointsView};
+use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
 use feed::{CHANNEL, Content, Feed, Look, ME, Notice, THIRD_PARTY};
 pub use points::FakePoints;
 
@@ -135,6 +135,19 @@ impl FakeChatView {
         cx,
       )
     });
+    // A followed raid would open the raided channel: here it only says so.
+    cx.subscribe(&points_view, |this, _, event: &PointsEvent, cx| {
+      let PointsEvent::Raid(login) = event;
+      let line = chat::notice_line(
+        "fake-raid",
+        tf!(
+          "Fake chat: the raid is followed, {login}'s live would open now.",
+          "Faux chat : le raid est suivi, le live de {login} s'ouvrirait maintenant."
+        ),
+      );
+      this.push(line, cx);
+    })
+    .detach();
     let footer = cx.new(|cx| PointsFooter::new(points_view.clone(), cx));
     panel.update(cx, |p, cx| {
       p.set_footer(footer.into(), cx);
@@ -1059,6 +1072,48 @@ impl FakeChatView {
 }
 
 impl FakeChatView {
+  fn raid_card(&self, cx: &mut Context<Self>) -> AnyElement {
+    Self::card(
+      t("Outgoing raid", "Raid sortant"),
+      vec![
+        Self::line(
+          "Raid",
+          vec![
+            self.button(
+              "raid-start",
+              t("Announce one", "En annoncer un").into(),
+              |this, cx| this.points_changed(FakePoints::start_raid, cx),
+              cx,
+            ),
+            self.button(
+              "raid-cancel",
+              t("Cancel it", "L'annuler").into(),
+              |this, cx| this.points_changed(|p| p.raid = None, cx),
+              cx,
+            ),
+            self.button(
+              "raid-go",
+              t("It goes (the live ends)", "Il part (le live se termine)").into(),
+              |this, cx| {
+                this.points_changed(|p| p.raid = None, cx);
+                this.points_view.update(cx, |p, cx| p.raid_went(cx));
+              },
+              cx,
+            ),
+          ],
+        ),
+        div()
+          .text_xs()
+          .text_color(theme::muted())
+          .child(t(
+            "On a live, a followed raid opens the raided channel. Incoming raids are chat notices (Events).",
+            "Sur un live, un raid suivi ouvre la chaîne raidée. Les raids reçus sont des notices du chat (Événements).",
+          ))
+          .into_any_element(),
+      ],
+    )
+  }
+
   fn polls_card(&self, cx: &mut Context<Self>) -> AnyElement {
     let voters = self.points.borrow().voters;
     Self::card(
@@ -1160,7 +1215,8 @@ impl Render for FakeChatView {
           .child(self.writer_card(cx))
           .child(self.points_card(cx))
           .child(self.predictions_card(cx))
-          .child(self.polls_card(cx)),
+          .child(self.polls_card(cx))
+          .child(self.raid_card(cx)),
       )
       .child(
         div()

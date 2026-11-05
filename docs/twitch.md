@@ -201,6 +201,7 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - Predictions with 2 or 5 outcomes, fake bettors, locking, a winner that gets paid, cancelling;
       an ended one stays pinned 20 s with its result, as on a live.
     - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays 20 s), removing.
+    - An outgoing raid: announced, canceled, or gone (a followed one says what would open).
       They show with the points off too.
 
 ## Catalog through GQL instead of Helix
@@ -362,7 +363,17 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
       was **not** tried (it writes from the account): whether it passes Twitch's integrity check is
       **[?]**.
     - The top lives page holds 30 at most (`streams(first: 30)`, `options: { languages: [FR] }`),
-      and a query takes 15 root aliases at most.
+      and a query takes 15 root aliases at most. A second page (`after: <cursor>`) fails Twitch's
+      integrity check; the 30 top categories' first pages give thousands of lives instead.
+  - **Outgoing raids**, checked on 2026-11-04, anonymous (`gql-probe`): `user(login) { raid }`
+    (not on `Channel`) is the raid the channel is about to send, null without one: `id`,
+    `viewerCount`, `targetChannel` and `sourceChannel` (`User`s: `login displayName
+    profileImageURL(width)`). No field gives the countdown or when it goes (none of a dozen
+    guessed names exists): Peeby reads it every 10 s, pins it over the chat, and follows it to
+    the raided channel's live when the source's live ends within a minute of the last reading
+    (mpv's end, or the raid gone with the channel off air), unless the viewer chose to stay.
+    Incoming raids are `USERNOTICE msg-id=raid` lines, shown as chat notices.
+    `twitch_capture -- raids-scan --watch` looks for one to save as `gql_raid.json`.
   - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
     automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
 - **Spends, raw mutations** (checked with made-up ids, so nothing was spent):

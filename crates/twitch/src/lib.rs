@@ -22,6 +22,7 @@ pub mod helix;
 pub mod points;
 pub mod polls;
 mod proxy;
+pub mod raids;
 pub mod seventv;
 pub mod spade;
 pub mod splice;

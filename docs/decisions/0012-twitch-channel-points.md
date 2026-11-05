@@ -45,7 +45,9 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
     prediction and a poll never cover the chat together. An ended one stays 20 s with its result
     (the winner, the viewer's gain or loss, or "canceled"), read from `resolvedPredictionEvents`.
     Polls come from `viewablePoll` (anonymous, every 10 s) and a free vote from `voteInPoll`
-    (one click, with the auth-token; paid votes are never sent);
+    (one click, with the auth-token; paid votes are never sent). An outgoing raid (`user { raid
+    }`, every 10 s) is pinned first; when the live ends, the page follows it to the raided
+    channel, unless the viewer clicked "Rester ici";
     a line along each bar's bottom edge shows the time left to bet, then the time left for the
     result to show (a poll's alike).
   Without the auth-token, or on a channel without points, nothing shows (polls excepted, which

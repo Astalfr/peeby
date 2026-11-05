@@ -3,7 +3,9 @@
 //! ([`PointsFooter`], ADR 0023). Its predictions with their bets, and its polls
 //! ([`super::polls`]), are pinned over the chat as Twitch does (`ui::chat::pinned_stack`): folded
 //! bars with their state, one card unfolded at a time, new ones folded. Polls show with or without
-//! points. Spending asks for a second click ("Confirmer", within 8 s; a bet's shows the amount it
+//! points. A raid the channel is about to send is pinned first: when it goes (the live ends soon
+//! after it was read), the page follows it to the raided channel ([`PointsEvent::Raid`]), unless
+//! the viewer chose to stay. Spending asks for a second click ("Confirmer", within 8 s; a bet's shows the amount it
 //! sends), since it cannot be undone; a free vote takes one.
 //!
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
@@ -33,6 +35,7 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
+use twitch::raids::Raid;
 use ui::assets::Icon;
 use ui::chat::{Pinned, Unfolded, pinned_stack};
 use ui::i18n::t;
@@ -52,6 +55,16 @@ const WATCHED_EVERY: Duration = Duration::from_secs(60);
 const PREDICTIONS_EVERY: Duration = Duration::from_secs(20);
 /// How often the poll is read again (a poll often lasts 1 to 5 minutes).
 const POLLS_EVERY: Duration = Duration::from_secs(10);
+/// How often the outgoing raid is read again (Twitch's countdown is about 90 s).
+const RAIDS_EVERY: Duration = Duration::from_secs(10);
+/// A raid read this recently is followed when the live ends: it has gone.
+const RAID_FOLLOWED_WITHIN: Duration = Duration::from_secs(60);
+
+/// What the view asks its page.
+pub enum PointsEvent {
+  /// Open this channel's live: the raid the viewer follows has gone.
+  Raid(String),
+}
 /// How long an ended prediction stays pinned with its result, as on Twitch, from when Peeby
 /// first reads it ended (the predictions are read every [`PREDICTIONS_EVERY`]).
 pub const ENDED_SHOWN: Duration = Duration::from_secs(20);
@@ -166,6 +179,14 @@ pub struct PointsView {
   outcome_of_bet: bool,
   /// The channel's polls ([`super::polls`]).
   polls: Vec<Poll>,
+  /// The raid the channel is about to send.
+  raid: Option<Raid>,
+  /// The last raid read, and when: it is followed when the live ends soon after.
+  last_raid: Option<(Raid, Instant)>,
+  /// The viewer stays on this channel instead of following this raid (by id).
+  raid_stay: Option<String>,
+  /// The last raid reading failed (the next failures log at debug).
+  raid_failing: bool,
   /// The choices the viewer voted for, by poll id: Twitch does not give them back.
   voted: HashMap<String, Vec<String>>,
   /// The last poll reading failed (the next failures log at debug).
@@ -207,6 +228,10 @@ impl PointsView {
       polls: Vec::new(),
       voted: HashMap::new(),
       polls_failing: false,
+      raid: None,
+      last_raid: None,
+      raid_stay: None,
+      raid_failing: false,
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
@@ -239,6 +264,16 @@ impl PointsView {
           None => return,
         }
         cx.background_executor().timer(PREDICTIONS_EVERY).await;
+      }
+    }));
+    // The outgoing raid, with or without points.
+    view._tasks.push(cx.spawn(async move |this, cx| {
+      loop {
+        let Ok(load) = this.update(cx, |this, cx| this.load_raid(cx)) else {
+          return;
+        };
+        load.await;
+        cx.background_executor().timer(RAIDS_EVERY).await;
       }
     }));
     // The poll, with or without points: every viewer sees it.
@@ -350,6 +385,139 @@ impl PointsView {
     })
   }
 
+  /// The raid the channel is about to send: Twitch's (anonymous; a failed reading keeps the last
+  /// one), or the fake chat's. When one that was there is gone, the live is read: off air, the
+  /// raid went.
+  fn load_raid(&mut self, cx: &mut Context<Self>) -> Task<()> {
+    let client = match &self.backend {
+      Backend::Twitch(client) => client.clone(),
+      #[cfg(debug_assertions)]
+      Backend::Fake(fake) => {
+        let raid = fake.borrow().raid.clone();
+        self.raid_read(raid, cx);
+        return Task::ready(());
+      }
+    };
+    let login = self.login.clone();
+    let fetch = runtime::spawn(cx, async move { client.raid(&login).await });
+    cx.spawn(async move |this, cx| {
+      let Some(result) = fetch.await else {
+        return;
+      };
+      let gone = this
+        .update(cx, |this, cx| match result {
+          Ok(raid) => {
+            this.raid_failing = false;
+            let gone = this.raid.is_some() && raid.is_none();
+            this.raid_read(raid, cx);
+            gone
+          }
+          Err(e) => {
+            if this.raid_failing {
+              tracing::debug!("Twitch raid: {e}");
+            } else {
+              tracing::warn!("Twitch raid: {e}");
+            }
+            this.raid_failing = true;
+            false
+          }
+        })
+        .unwrap_or(false);
+      if !gone {
+        return;
+      }
+      // Gone: sent (the live is off air) or canceled (it goes on).
+      let Ok(check) = this.update(cx, |this, cx| {
+        let client = this.backend.twitch().cloned();
+        let login = this.login.clone();
+        client.map(|client| runtime::spawn(cx, async move { client.channel(&login).await }))
+      }) else {
+        return;
+      };
+      if let Some(check) = check
+        && let Some(Ok(channel)) = check.await
+        && channel.live.is_none()
+      {
+        this.update(cx, |this, cx| this.raid_went(cx)).ok();
+      }
+    })
+  }
+
+  /// A raid was read (or none).
+  fn raid_read(&mut self, raid: Option<Raid>, cx: &mut Context<Self>) {
+    if let Some(raid) = &raid {
+      self.last_raid = Some((raid.clone(), Instant::now()));
+    }
+    self.raid = raid;
+    self.fold_gone();
+    cx.notify();
+  }
+
+  /// The live ended, or the raid was seen gone with the live off air: a raid read lately went,
+  /// and the page follows it unless the viewer stays.
+  pub fn raid_went(&mut self, cx: &mut Context<Self>) {
+    let Some((raid, read)) = self.last_raid.take() else {
+      return;
+    };
+    self.raid = None;
+    cx.notify();
+    if read.elapsed() < RAID_FOLLOWED_WITHIN && self.raid_stay.as_deref() != Some(raid.id.as_str())
+    {
+      cx.emit(PointsEvent::Raid(raid.target_login));
+    }
+  }
+
+  /// The raid's card: where it goes and what the viewer does.
+  fn raid_body(&self, raid: &Raid, cx: &mut Context<Self>) -> AnyElement {
+    let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
+    let target = raid.target_login.clone();
+    let id = raid.id.clone();
+    v_flex()
+      .gap_2()
+      .child(
+        div()
+          .text_xs()
+          .text_color(theme::muted())
+          .child(if staying {
+            t(
+              "You stay here when it goes.",
+              "Vous restez ici quand il part.",
+            )
+          } else {
+            t(
+              "When it goes, this page follows it, as on Twitch.",
+              "Quand il part, cette page le suit, comme sur Twitch.",
+            )
+          }),
+      )
+      .child(
+        h_flex()
+          .gap_2()
+          .child(
+            Button::new("twitch-raid-join")
+              .small()
+              .primary()
+              .label(t("Join now", "Rejoindre maintenant"))
+              .on_click(cx.listener(move |_, _, _, cx| cx.emit(PointsEvent::Raid(target.clone())))),
+          )
+          .child(
+            Button::new("twitch-raid-stay")
+              .small()
+              .ghost()
+              .label(if staying {
+                t("Follow it", "Le suivre")
+              } else {
+                t("Stay here", "Rester ici")
+              })
+              .on_click(cx.listener(move |this, _, _, cx| {
+                this.raid_stay = if staying { None } else { Some(id.clone()) };
+                cx.notify();
+              })),
+          ),
+      )
+      .into_any_element()
+  }
+
   /// The polls were read: the ended ones' time is noted, a gone one folds.
   fn polls_read(&mut self, cx: &mut Context<Self>) {
     self.note_ended();
@@ -413,6 +581,7 @@ impl PointsView {
       .iter()
       .map(|p| p.id.clone())
       .chain(self.polls.iter().map(|p| p.id.clone()))
+      .chain(self.raid.iter().map(|r| r.id.clone()))
       .collect();
     self.unfolded.keep_only(ids.iter().map(String::as_str));
   }
@@ -1203,6 +1372,35 @@ impl PointsView {
   fn pinned(&self, cx: &mut Context<Self>) -> Vec<Pinned> {
     let mut items = Vec::new();
     let now = polls::now_millis();
+    // The raid first: it may take the viewer away.
+    if let Some(raid) = &self.raid {
+      let viewers = cards::grouped(raid.viewer_count);
+      let staying = self.raid_stay.as_deref() == Some(raid.id.as_str());
+      let next = if staying {
+        t("you stay here", "vous restez ici")
+      } else {
+        t("you'll follow it", "vous le suivrez")
+      };
+      items.push(Pinned {
+        id: raid.id.clone().into(),
+        icon: Icon::Tv,
+        accent: theme::accent(),
+        kind: "Raid".into(),
+        title: tf!("Raid to {}", "Raid vers {}", raid.target_name).into(),
+        status: if cards::plural(raid.viewer_count) {
+          tf!(
+            "{viewers} viewers · {next}",
+            "{viewers} spectateurs · {next}"
+          )
+        } else {
+          tf!("{viewers} viewer · {next}", "{viewers} spectateur · {next}")
+        }
+        .into(),
+        body: self.unfolded.is(&raid.id).then(|| self.raid_body(raid, cx)),
+        // Twitch gives no countdown.
+        time_left: None,
+      });
+    }
     if !self.off && self.points.is_some() {
       for p in self.predictions.iter().filter(|p| self.shown(p)) {
         let open = self.unfolded.is(&p.id);
@@ -1352,7 +1550,9 @@ impl PointsView {
   }
 }
 
-/// The predictions and polls pinned over the chat (`ChatPanel::set_pinned`).
+impl gpui::EventEmitter<PointsEvent> for PointsView {}
+
+/// The raid, predictions and polls pinned over the chat (`ChatPanel::set_pinned`).
 impl Render for PointsView {
   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let items = self.pinned(cx);

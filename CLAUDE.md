@@ -37,7 +37,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `-- master-scan` lists the top lives offering HEVC/AV1; `-- positions <vod-id>…` saves the account's resume
   positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
   the auth-token signs in to IRC, sending nothing; `-- polls-scan [--watch [min]]` finds a top live with a poll and `-- poll <login>`
-  saves it, anonymous; `-- gql-probe '<query>' [login]` prints GQL's validation messages (introspection is
+  saves it, anonymous; `-- raids-scan [--watch [min]]` and `-- raid <login>` the same for a raid about to leave; `-- gql-probe '<query>' [login]` prints GQL's validation messages (introspection is
   off); `-- predictions-ended <login>` probes, anonymous,
   the GQL fields of ended predictions and saves the app's predictions answer)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
