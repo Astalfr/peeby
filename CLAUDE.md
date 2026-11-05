@@ -57,6 +57,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_VARIANT`, `PEEBY_USHER=v1`, `PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0`,
   `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`, `PEEBY_START=<s>`, `PEEBY_SEEK=<after>:<back>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
   start delay)
+- Release (docs/release.md, ADR 0027): bump `version` in the root Cargo.toml, `cargo build` (CI is `--locked`),
+  commit, push, then push a tag `v<version>`: CI builds `peeby-setup-<version>-x64.exe` and publishes the
+  release that installed copies update from. Pushing a tag publishes: ask first. Installer locally:
+  `iscc /DAppVersion=x.y.z installer\peeby.iss` (after the fetch scripts, `fetch-vcruntime.ps1` and a release build)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 
 ## Product constraints (no exceptions)
@@ -163,6 +167,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Touching rust-toolchain.toml, CI or .claude/ hooks.
 - Introducing `unsafe` outside the FFI modules.
 - Changing the copied peeby crates (`player`, `gpui-video`, `vendor/`) beyond small additions: note them in ADR 0001.
+
+- Updates (ADR 0027): only a release build with the installer's `unins000.exe` beside it checks GitHub;
+  the release's asset must be named `peeby-setup-<tag version>-x64.exe` and carry GitHub's digest, and the
+  repository must stay public (the check is anonymous).
 
 ## Documentation
 - A change in behavior, architecture or decision updates docs/ in the same change.

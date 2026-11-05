@@ -19,10 +19,10 @@ use gpui::{
   ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img,
   px,
 };
-use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Disableable, IconName, Selectable, TitleBar, h_flex, v_flex};
+use gpui_component::{Disableable, IconName, Selectable, Sizable, TitleBar, h_flex, v_flex};
 use player::AudioDevice;
 use ui::assets::{self, Icon};
 use ui::i18n::t;
@@ -171,6 +171,8 @@ impl Shell {
         shell.close_mini(cx);
       }
     }));
+    // An update's installer is ready: the title bar shows its button (ADR 0027).
+    subscriptions.push(cx.observe_global::<crate::update::Updater>(|_, cx| cx.notify()));
     // F5 and Ctrl+R refresh the page, as in a browser. Observed after dispatch, so they work
     // whatever has the focus (or nothing); only in this window, and not in fullscreen, which
     // belongs to the player.
@@ -710,6 +712,7 @@ impl Shell {
             .occlude()
             .mr_2()
             .gap_1()
+            .children(update_button(cx))
             .child(
               // Each space searches its own catalog.
               Button::new("search")
@@ -1552,4 +1555,37 @@ impl Render for Shell {
 fn choose_audio_device(device: Option<String>, cx: &mut App) {
   Settings::update(cx, |s| s.player.audio_device = device.clone());
   cx.set_global(AudioOutput(device));
+}
+
+/// The green button of the title bar while an update's installer is ready (ADR 0027): a click
+/// quits Peeby, installs the update and starts it again.
+fn update_button(cx: &App) -> Option<Button> {
+  let version = crate::update::ready(cx)?;
+  Some(
+    Button::new("update")
+      .custom(
+        ButtonCustomVariant::new(cx)
+          .color(theme::update())
+          .foreground(theme::on_accent())
+          .hover(theme::update_hover())
+          .active(theme::update_active()),
+      )
+      .small()
+      .icon(Icon::Download)
+      .label(t("Update", "Mettre à jour"))
+      .tooltip(tf!(
+        "Restart to install Peeby {version}",
+        "Redémarrer pour installer Peeby {version}"
+      ))
+      .on_click(|_, window, cx| {
+        // Out of the click's event: the update quits the app (CLAUDE.md, never from inside
+        // the window's own event).
+        let handle = window.window_handle();
+        cx.defer(move |cx| {
+          handle
+            .update(cx, |_, window, cx| crate::update::install(window, cx))
+            .ok();
+        });
+      }),
+  )
 }

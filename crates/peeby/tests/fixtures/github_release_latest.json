@@ -1,0 +1,17 @@
+{
+  "html_url": "https://github.com/Astalfr/peeby/releases/tag/v1.0.1",
+  "tag_name": "v1.0.1",
+  "name": "Peeby 1.0.1",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-10-29T13:41:42Z",
+  "assets": [
+    {
+      "name": "peeby-setup-1.0.1-x64.exe",
+      "content_type": "application/octet-stream",
+      "size": 11691828,
+      "digest": "sha256:725b87edf68cf673a5bd9656f01bdf260aaf12355e5c617552a2ce6d53b75acb",
+      "browser_download_url": "https://github.com/Astalfr/peeby/releases/download/v1.0.1/peeby-setup-1.0.1-x64.exe"
+    }
+  ]
+}

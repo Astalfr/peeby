@@ -21,7 +21,14 @@ keyring = "4"
 player = { workspace = true }
 # The main window's HWND, to hide it in the notification area (ADR 0020).
 raw-window-handle = "0.6"
+# Updates from GitHub Releases (ADR 0027): the check and the installer's download, the
+# workspace's version and TLS.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "http2", "charset"] }
 serde = { version = "1", features = ["derive"] }
+# GitHub's release object (ADR 0027).
+serde_json = "1"
+# The downloaded installer's digest, checked against GitHub's (ADR 0027).
+sha2 = "0.10"
 # The sign-in window (ADR 0017), a separate process: its event loop cannot share GPUI's.
 tao = "0.37"
 toml = "1"
@@ -56,9 +63,6 @@ windows = { version = "0.62", features = [
 ] }
 # The `Run` key (start with Windows) and the toasts' app id.
 windows-registry = "0.6"
-
-[dev-dependencies]
-serde_json = "1"
 
 [build-dependencies]
 embed-resource = "3"

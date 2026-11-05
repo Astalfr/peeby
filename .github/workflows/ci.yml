@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # A version tag (v1.2.3) also builds the installer and publishes a GitHub Release, which
+    # installed copies update from (jobs `build` and `release`, ADR 0027).
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # On main, a cancelled run never saves its cache: let it finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # No debug info in CI: a much smaller target/ to compile, link and cache.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
+jobs:
+  # In parallel: clippy only type-checks and shares nothing with the test build.
+  lint:
+    name: fmt, clippy
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      # Real-time scanning of every file rustc writes slows Windows builds a lot; the runner is
+      # thrown away after the job.
+      - name: Disable Defender real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
+      - uses: actions/checkout@v4
+
+      # rustup installs the toolchain pinned in rust-toolchain.toml (with rustfmt + clippy).
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy
+          cache-on-failure: true
+          # Only main saves (10 GB quota); pull requests restore main's cache.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        timeout-minutes: 40
+
+  test:
+    name: test
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Disable Defender real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Offline: parsers run on the fixtures; the live tests are #[ignore]d. Not the examples:
+      # `innertube` and `twitch` both have a `smoke`, whose two links race for one smoke.exe
+      # (clippy --all-targets checks them).
+      - name: Test
+        run: cargo test --workspace --locked --lib --bins --tests
+        timeout-minutes: 40
+
+  build:
+    name: build installer
+    # Only version tags build the installer, as only they publish it: it is the slowest job.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Disable Defender real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      # The installer ships them (git-ignored): pinned and checked with SHA-256 by the scripts.
+      # shinchiro deletes old libmpv releases: a 404 here means bumping fetch-mpv.ps1's pin.
+      - name: Fetch libmpv
+        run: pwsh scripts/fetch-mpv.ps1
+      - name: Fetch yt-dlp and Deno
+        run: pwsh scripts/fetch-tools.ps1
+      # The C runtime peeby.exe links against, from the runner's Visual Studio: Windows lacks it.
+      - name: Copy the VC++ runtime
+        run: pwsh scripts/fetch-vcruntime.ps1
+
+      - name: Build release
+        run: cargo build --release --locked -p peeby
+        timeout-minutes: 75
+
+      # Inno Setup may or may not be on the runner image: installed if missing.
+      - name: Build installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $version = (cargo metadata --no-deps --format-version 1 --locked | ConvertFrom-Json).packages |
+            Where-Object name -eq 'peeby' | Select-Object -ExpandProperty version
+          & $iscc /Qp "/DAppVersion=$version" installer\peeby.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: peeby-setup-windows-x64-${{ github.sha }}
+          path: target/installer/peeby-setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  # Publishes a version tag's installer. Installed copies update from the latest release, so
+  # this runs only once lint, tests and the build pass.
+  release:
+    name: publish release
+    needs: [lint, test, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: peeby-setup-windows-x64-${{ github.sha }}
+          path: dist
+
+      # The installer is named after the version in Cargo.toml, which the tag must match: the
+      # updater compares the tag with its own version and looks for that installer.
+      - name: Check the tag matches the version
+        run: |
+          installer="dist/peeby-setup-${GITHUB_REF_NAME#v}-x64.exe"
+          if [ ! -f "$installer" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the version in Cargo.toml (no $installer)."
+            ls dist
+            exit 1
+          fi
+
+      # GitHub computes each asset's SHA-256 (`digest`), which the updater checks.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/peeby-setup-*-x64.exe
+          --repo "$GITHUB_REPOSITORY"
+          --title "Peeby ${GITHUB_REF_NAME#v}"
+          --generate-notes

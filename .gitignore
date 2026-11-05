@@ -6,3 +6,4 @@ CLAUDE.local.md
 .env
 *.local.toml
 cookies*.txt
+/third_party/vcruntime/

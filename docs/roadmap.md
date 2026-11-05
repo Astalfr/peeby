@@ -11,7 +11,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **4: session and settings** | ✅ | Cookie import UI, `Set-Cookie` persistence, settings page (language, quality), yt-dlp updater | — |
 | **Peeby refactor** | ✅ | One space per service (YouTube, Jellyfin), shared `ui` crate and player, tabs, mini-player, YouTube search, unified settings ([refactor-plan.md](refactor-plan.md), ADRs 0007–0010) | All ten steps of the plan; peeby's Jellyfin features in the Jellyfin space |
 | **Twitch space** | ✅ | Helix catalog, GQL/usher playback with the ad-removing layer, `auth-token` with its tutorial, read-only chat ([twitch.md](twitch.md), [ADR 0010](decisions/0010-twitch-space.md), plan: [twitch-plan.md](twitch-plan.md)) | Live and VOD playback without ads, followed channels, chat |
-| **5: distribution** | ⏳ | CI, bundle with libmpv, yt-dlp and Deno in `tools/`, installer (peeby's scripts) | Downloadable build |
+| **5: distribution (1.0)** | 🚧 (done once v1.0.0 is published and installed) | CI, installer with libmpv, yt-dlp and Deno in `tools/` (Inno Setup, after Twitty's), releases from version tags, updates from GitHub Releases with the title bar's button ([ADR 0027](decisions/0027-installer-and-updates.md), [release.md](release.md)) | Downloadable build |
+
+
+## 1.0: installer, CI and updates
+
+- Done (2026-11-05, [ADR 0027](decisions/0027-installer-and-updates.md)): version 1.0.0. `installer/peeby.iss` (Inno Setup, per user, libmpv and the VC++ runtime beside the exe, yt-dlp and Deno in `tools\`, yt-dlp kept across updates, `CloseApplications=force`, the `Run` value and the toasts' registration removed on uninstall); `.github/workflows/ci.yml` (fmt, clippy, tests on every push; a `v*` tag builds the installer and publishes the release after checking it against `Cargo.toml`); `update` in the binary: an installed release build checks `releases/latest` 20 s after the start then every 4 hours, downloads a newer installer into `%LOCALAPPDATA%\peeby\updates`, checks GitHub's SHA-256 digest, and only then shows the green "Update" / "Mettre à jour" button in the title bar; a click writes the settings, starts the installer silently with `/relaunch=1` and quits. 12 tests (versions, digests, the installer's asset, the download decision, a real `releases/latest` answer as a fixture). Checked: clippy, tests. **Not verified:** the installer (Inno Setup is not on this machine: CI builds it), CI itself (it runs on the first push), and the update end to end (download, silent install, relaunch), which needs a second release (1.0.1).
 
 ## Encrypted cookie jar
 

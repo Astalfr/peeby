@@ -228,6 +228,18 @@ pub fn accent_active() -> Hsla {
 pub fn on_accent() -> Hsla {
   color(0xffffff)
 }
+/// Green of the title bar's update button: the same in every space, unlike the accent.
+pub fn update() -> Hsla {
+  color(0x2ea043)
+}
+/// Hovered update button.
+pub fn update_hover() -> Hsla {
+  color(0x3fb950)
+}
+/// Pressed update button.
+pub fn update_active() -> Hsla {
+  color(0x238636)
+}
 /// Tinted accent for selected rows and soft highlights.
 pub fn accent_soft() -> Hsla {
   accent().opacity(0.14)

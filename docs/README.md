@@ -38,11 +38,13 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Notifications and background | Windows notifications with the channel's picture and the bell, per kind (Twitch live and category change, YouTube video and live); the window hidden in the notification area; one instance; start with Windows | [0020](decisions/0020-notifications-and-background.md) |
 | Twitch channel points | Read and spent through raw GQL with the auth-token (balance, rewards, predictions; two clicks per spend); the bonus chest claimed on twitch.tv (integrity check); a `minute-watched` report each minute the live plays | [0012](decisions/0012-twitch-channel-points.md) |
 | Watch progress | On the account, never local: YouTube's stats pings (history, resume position) from a signed WEB `player`, the cards' `startTimeSeconds` to resume; Twitch VODs through GQL `viewingHistory` and `updateUserViewedVideo` | [0013](decisions/0013-watch-progress-on-the-account.md) |
+| Installer and updates | Inno Setup per user, built by CI from a version tag and published as a GitHub Release; installed copies download a newer installer in the background (SHA-256 checked) and show a green button in the title bar that quits, installs and restarts | [0027](decisions/0027-installer-and-updates.md) |
 | UI language | English (default) or French, chosen in the settings; both texts at each call site (`ui::i18n::t`, `tf!`), no catalogue; code, comments and docs in English | [0014](decisions/0014-interface-language.md) |
 
 ## Index
 
 - [roadmap.md](roadmap.md): milestones and status
+- [release.md](release.md): making a release (version bump, tag, CI), building the installer locally
 - [refactor-plan.md](refactor-plan.md): the move to Peeby, a multi-space app (YouTube, Jellyfin, Twitch), with its checklists
 - [architecture.md](architecture.md): crates, threads, data flow
 - [design.md](design.md): palette, layout, pages and motion; the logo, its sources and the proposals: [logo/](logo/README.md)

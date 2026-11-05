@@ -461,6 +461,12 @@ impl Settings {
     cx.set_global(PendingSave(write));
   }
 
+  /// Writes the settings now, bypassing the pending write: Peeby is about to quit (an update).
+  /// Blocking (small file): call it off the UI thread.
+  pub fn save_now(&self) -> std::io::Result<()> {
+    self.save()
+  }
+
   fn save(&self) -> std::io::Result<()> {
     let path = settings_path().ok_or_else(|| std::io::Error::other("no profile folder"))?;
     let text = toml::to_string(self).map_err(std::io::Error::other)?;

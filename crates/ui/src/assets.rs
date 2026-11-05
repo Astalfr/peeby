@@ -99,6 +99,7 @@ icons! {
   Shorts => "shorts",
   Smile => "smile",
   Poll => "chart-column",
+  Download => "download",
 }
 
 macro_rules! files {

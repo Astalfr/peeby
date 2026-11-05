@@ -8,6 +8,7 @@ mod logs;
 mod settings;
 mod shell;
 mod spaces;
+mod update;
 mod web_sign_in;
 
 use std::rc::Rc;
@@ -116,6 +117,8 @@ fn main() {
       cx.set_global(prefs);
       settings::Settings::update(cx, |s| s.jellyfin.device_id = device_id);
       desktop::init(cx);
+      // An installed copy checks GitHub's releases (ADR 0027).
+      update::init(cx);
       match innertube::Client::new(None, None, &hl, &gl) {
         Ok(anonymous) => {
           images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);

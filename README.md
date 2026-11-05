@@ -16,8 +16,9 @@ as many tabs as you open, and each tab keeps its own history. All spaces share t
 (libmpv, hardware decoding). When you leave a page, its video keeps playing in a mini-player
 window. Playback aims to start within 1–2 s of the click.
 
-> **Status:** in active development, version 0.2. There is no installer or downloadable build yet
-> (see [docs/roadmap.md](docs/roadmap.md), step 5): you build Peeby from source.
+> **Status:** version 1.0. Download the installer from the
+> [latest release](https://github.com/Astalfr/peeby/releases/latest); Peeby then updates itself
+> (a green **Update** button in the title bar when a new version is ready).
 
 ## Features
 
@@ -60,11 +61,23 @@ window. Playback aims to start within 1–2 s of the click.
 Nothing else needs installing on the machine: libmpv, yt-dlp and Deno are downloaded into
 `third_party/` (git-ignored). The scripts pin each one with its SHA-256.
 
-## Install from source
+## Install
+
+Run `peeby-setup-<version>-x64.exe` from the [latest release](https://github.com/Astalfr/peeby/releases/latest).
+It installs Peeby for your Windows user (`%LOCALAPPDATA%\Programs\Peeby`, no admin rights) with
+libmpv, yt-dlp and Deno. The installer is not signed, so Windows SmartScreen may warn on the first
+install ("More info" → "Run anyway").
+
+Installed copies check GitHub for a new release shortly after they start and then every few
+hours. When one is downloaded and verified, a green **Update** button shows in the title bar: a
+click closes Peeby, installs the update and starts it again ([ADR 0027](docs/decisions/0027-installer-and-updates.md)).
+Releases are made with [docs/release.md](docs/release.md).
+
+## Build from source
 
 ```powershell
-git clone https://github.com/Astalfr/peebtube.git
-cd peebtube
+git clone https://github.com/Astalfr/peeby.git
+cd peeby
 
 # libmpv: required to play anything
 pwsh scripts/fetch-mpv.ps1
