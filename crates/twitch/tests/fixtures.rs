@@ -227,22 +227,34 @@ fn live_channel() {
 
 #[test]
 fn live_archive() {
-  // A live recorded as it goes (captured 2026-11-05): its VOD starts 4 s after it.
-  let channel = gql::parse_channel(&json("gql_channel_live_archive.json")).unwrap();
-  let live = channel.live.unwrap();
-  let archive = live.archive.unwrap();
+  // A live recorded as it goes (captured 2026-11-05, anonymous): its VOD starts 4 s after it.
+  let archive = gql::parse_archive(&json("gql_live_archive.json"))
+    .unwrap()
+    .unwrap();
   assert_eq!(archive.id, "2920209653");
   assert_eq!(
     archive.created_at,
     twitch::time::epoch_millis("2026-11-05T13:37:10Z")
   );
-  assert_eq!(archive.created_at.unwrap() - live.started_at.unwrap(), 4000);
   // A channel that keeps no VODs: no past to go back to.
-  let channel = gql::parse_channel(&json("gql_channel_live_no_archive.json")).unwrap();
-  assert!(channel.live.unwrap().archive.is_none());
-  // The older capture, from before the field was asked for.
-  let channel = gql::parse_channel(&json("gql_channel_live.json")).unwrap();
-  assert!(channel.live.unwrap().archive.is_none());
+  assert!(
+    gql::parse_archive(&json("gql_live_no_archive.json"))
+      .unwrap()
+      .is_none()
+  );
+  // What Twitch answers with an auth-token (2026-11-05): an error, so it is asked anonymously.
+  let signed_in = serde_json::json!({
+    "errors": [{ "message": "server error", "path": ["user", "stream", "archiveVideo"] }],
+    "data": { "user": { "stream": { "archiveVideo": null } } },
+  });
+  assert!(gql::parse_archive(&signed_in).is_err());
+  // The channel's own query no longer asks for it: its answer stays whole.
+  assert!(
+    !gql::channel_request("x")["query"]
+      .as_str()
+      .unwrap()
+      .contains("archiveVideo")
+  );
 }
 
 #[test]

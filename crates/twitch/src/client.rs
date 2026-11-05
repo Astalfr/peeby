@@ -190,6 +190,13 @@ impl Client {
     gql::parse_channel(&answer)
   }
 
+  /// The recording of `login`'s live, for its past (ADR 0026): always anonymous, Twitch failing
+  /// `archiveVideo` with an auth-token ([`gql::parse_archive`]).
+  pub async fn live_archive(&self, login: &str) -> Result<Option<gql::Archive>> {
+    let answer = self.anonymous().gql(&gql::archive_request(login)).await?;
+    gql::parse_archive(&answer)
+  }
+
   /// A clip's files (direct MP4s, signed).
   pub async fn clip(&self, slug: &str) -> Result<gql::ClipPlayback> {
     let answer = self.gql(&gql::clip_request(slug)).await?;

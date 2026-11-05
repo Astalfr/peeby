@@ -303,14 +303,19 @@ impl WatchView {
           .await
       }
     });
+    let archive = runtime::spawn(cx, {
+      let (client, login) = (client.clone(), login.clone());
+      async move { client.live_archive(&login).await }
+    });
     let channel = runtime::spawn(cx, async move { client.channel(&login).await });
     self._tasks.push(cx.spawn(async move |this, cx| {
-      let (play, channel) = (play.await, channel.await);
+      let (play, channel, archive) = (play.await, channel.await, archive.await);
       this
         .update(cx, |this, cx| {
           if let Some(Ok(channel)) = channel {
             this.show_channel(channel, cx);
           }
+          this.keep_archive(archive);
           match play {
             Some(Ok(proxy)) => {
               let (source, qualities) = play::proxied(
@@ -326,8 +331,8 @@ impl WatchView {
               this.watch_decoding(cx);
               this.prepare_rewind(cx);
               if this.archive.is_none() {
-                // A later reading of the channel (every minute) may name it.
-                tracing::info!("Twitch: the channel names no recording of its live (yet): no past");
+                // Asked again every minute: a live just started may have none yet.
+                tracing::info!("Twitch: no recording of this live (yet): no past");
               }
             }
             Some(Err(e)) => this.fail(&e, cx),
@@ -338,7 +343,16 @@ impl WatchView {
     }));
   }
 
-  /// A live's past (ADR 0026): once the live plays and its channel names its recording, the
+  /// The answer to [`twitch::Client::live_archive`], kept for [`Self::prepare_rewind`].
+  fn keep_archive(&mut self, answer: Option<twitch::Result<Option<twitch::gql::Archive>>>) {
+    match answer {
+      Some(Ok(Some(archive))) => self.archive = Some(archive),
+      Some(Ok(None)) | None => {}
+      Some(Err(e)) => tracing::warn!("Twitch: the live's recording: {e}"),
+    }
+  }
+
+  /// A live's past (ADR 0026): once the live plays and its recording is known, the
   /// recording's VOD through a second proxy and the viewer's position in it, then the player's
   /// [`Rewind`]. A recording Twitch refuses (subscribers only) leaves the live without its past.
   fn prepare_rewind(&mut self, cx: &mut Context<Self>) {
@@ -424,13 +438,29 @@ impl WatchView {
     self._tasks.push(cx.spawn(async move |this, cx| {
       loop {
         cx.background_executor().timer(INFO_EVERY).await;
-        let Ok(fetch) = this.update(cx, |this, cx| {
+        let Ok((fetch, archive)) = this.update(cx, |this, cx| {
           let client = this.client.clone();
           let login = this.login_hint();
-          runtime::spawn(cx, async move { client.channel(&login).await })
+          // The recording until there is one (a live just started may have none yet).
+          let archive = (!this.rewind_asked).then(|| {
+            let (client, login) = (client.clone(), login.clone());
+            runtime::spawn(cx, async move { client.live_archive(&login).await })
+          });
+          let fetch = runtime::spawn(cx, async move { client.channel(&login).await });
+          (fetch, archive)
         }) else {
           return;
         };
+        if let Some(archive) = archive {
+          let answer = archive.await;
+          let alive = this.update(cx, |this, cx| {
+            this.keep_archive(answer);
+            this.prepare_rewind(cx);
+          });
+          if alive.is_err() {
+            return;
+          }
+        }
         if let Some(Ok(channel)) = fetch.await
           && this
             .update(cx, |this, cx| this.show_channel(channel, cx))
@@ -727,11 +757,6 @@ impl WatchView {
       points.update(cx, |points, cx| points.watch_raids(id, cx));
     }
     let started = channel.live.as_ref().and_then(|l| l.started_at);
-    // A live just started may have no recording yet: a later reading may name it.
-    if let Some(archive) = channel.live.as_ref().and_then(|l| l.archive.clone()) {
-      self.archive = Some(archive);
-      self.prepare_rewind(cx);
-    }
     let info = channel.live.as_ref().map(|live| LiveInfo {
       viewers: Some(live.viewers),
       started_at: started

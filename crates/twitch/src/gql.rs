@@ -186,12 +186,10 @@ pub struct Live {
   pub started_at: Option<i64>,
   /// Category (game) name.
   pub category: Option<String>,
-  /// The VOD recording it as it goes (`archiveVideo`), when the channel keeps its lives: the
-  /// live's past (ADR 0026).
-  pub archive: Option<Archive>,
 }
 
-/// The VOD recording a live.
+/// The VOD recording a live as it goes (`stream.archiveVideo`), when the channel keeps its
+/// lives: the live's past (ADR 0026).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Archive {
   /// The VOD's id.
@@ -203,8 +201,7 @@ pub struct Archive {
 
 const CHANNEL_QUERY: &str = "query Channel($login: String!) { user(login: $login) { id login \
   displayName profileImageURL(width: 70) broadcastSettings { title } stream { id type viewersCount \
-  createdAt game { id displayName } archiveVideo { id createdAt } } self { follower { followedAt } \
-  } } }";
+  createdAt game { id displayName } } self { follower { followedAt } } } }";
 
 /// The request for `login`'s channel and live.
 pub fn channel_request(login: &str) -> Value {
@@ -232,12 +229,6 @@ pub fn parse_channel(answer: &Value) -> Result<Channel> {
       .as_str()
       .and_then(crate::time::epoch_millis),
     category: stream["game"]["displayName"].as_str().map(str::to_owned),
-    archive: stream["archiveVideo"]["id"].as_str().map(|id| Archive {
-      id: id.to_owned(),
-      created_at: stream["archiveVideo"]["createdAt"]
-        .as_str()
-        .and_then(crate::time::epoch_millis),
-    }),
   });
   Ok(Channel {
     id: text(&user["id"]),
@@ -251,6 +242,37 @@ pub fn parse_channel(answer: &Value) -> Result<Channel> {
       .is_object()
       .then(|| user["self"]["follower"].is_object()),
   })
+}
+
+/// `archiveVideo` answers `server error` to a request with an auth-token (2026-11-05), and a GQL
+/// error fails the whole answer: it is asked on its own, anonymously
+/// ([`crate::Client::live_archive`]).
+const ARCHIVE_QUERY: &str = "query LiveArchive($login: String!) { user(login: $login) { stream { \
+  archiveVideo { id createdAt } } } }";
+
+/// The request for the recording of `login`'s live.
+pub fn archive_request(login: &str) -> Value {
+  json!({
+    "operationName": "LiveArchive",
+    "query": ARCHIVE_QUERY,
+    "variables": { "login": login },
+  })
+}
+
+/// The recording of a live; `None` when offline or when the channel keeps no VODs.
+pub fn parse_archive(answer: &Value) -> Result<Option<Archive>> {
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let archive = &answer["data"]["user"]["stream"]["archiveVideo"];
+  Ok(archive["id"].as_str().map(|id| {
+    Archive {
+      id: id.to_owned(),
+      created_at: archive["createdAt"]
+        .as_str()
+        .and_then(crate::time::epoch_millis),
+    }
+  }))
 }
 
 /// The request asking who the auth-token belongs to.

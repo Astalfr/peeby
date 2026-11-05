@@ -1,0 +1,14 @@
+{
+  "data": {
+    "user": {
+      "stream": {
+        "archiveVideo": null
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 47,
+    "operationName": "LiveArchive",
+    "requestID": "01M6P9SDR2VWVNTYSK0KZH75MZ"
+  }
+}

@@ -1,11 +1,11 @@
-//! A live's past through its archive VOD (ADR 0026), anonymous: for each live, the recording
-//! that `Channel` names (`stream.archiveVideo`), then that VOD's media playlist read twice, 20 s
+//! A live's past through its archive VOD (ADR 0026), anonymous: for each live, its recording
+//! (`stream.archiveVideo`, asked on its own as the app does), then that VOD's media playlist read twice, 20 s
 //! apart (type, end tag, length against the live's age). Prints no token or URL.
 //!
 //! `cargo run -p twitch --example archive_probe -- (<login>… | top) [--save <dir>]`
 //!
-//! `top`: the first lives of the top categories. `--save` writes the `Channel` answers of the
-//! first live with an archive and the first without one, as fixtures.
+//! `top`: the first lives of the top categories. `--save` writes the `LiveArchive` answers of
+//! the first live with an archive and the first without one, as fixtures.
 
 // An example reports on the console.
 #![allow(clippy::print_stdout)]
@@ -45,8 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let (mut saved_with, mut saved_without) = (false, false);
   let http = reqwest::Client::new();
   for login in logins {
-    let answer = client.gql(&gql::channel_request(&login)).await?;
-    let channel = match gql::parse_channel(&answer) {
+    let channel = match client.channel(&login).await {
       Ok(channel) => channel,
       Err(e) => {
         println!("{login}: {e}");
@@ -57,28 +56,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
       println!("{login}: offline");
       continue;
     };
+    // As the app asks it: on its own, anonymously.
+    let answer = client
+      .anonymous()
+      .gql(&gql::archive_request(&login))
+      .await?;
+    let archive = gql::parse_archive(&answer)?;
     println!(
-      "{login}: live since {:?} · archive {:?}",
-      live.started_at, live.archive
+      "{login}: live since {:?} · archive {archive:?}",
+      live.started_at
     );
     if let Some(dir) = &save {
-      let slot = if live.archive.is_some() {
+      let slot = if archive.is_some() {
         &mut saved_with
       } else {
         &mut saved_without
       };
       if !*slot {
         *slot = true;
-        let name = if live.archive.is_some() {
-          "gql_channel_live_archive.json"
+        let name = if archive.is_some() {
+          "gql_live_archive.json"
         } else {
-          "gql_channel_live_no_archive.json"
+          "gql_live_no_archive.json"
         };
         std::fs::write(dir.join(name), serde_json::to_string_pretty(&answer)?)?;
         println!("  saved {name}");
       }
     }
-    let Some(archive) = live.archive else {
+    let Some(archive) = archive else {
       continue;
     };
     let target = Target::Vod(archive.id.clone());

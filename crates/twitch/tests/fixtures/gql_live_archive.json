@@ -1,0 +1,17 @@
+{
+  "data": {
+    "user": {
+      "stream": {
+        "archiveVideo": {
+          "createdAt": "2026-11-05T13:37:10Z",
+          "id": "2920209653"
+        }
+      }
+    }
+  },
+  "extensions": {
+    "durationMilliseconds": 44,
+    "operationName": "LiveArchive",
+    "requestID": "01M6P9PS2V0STVDWX0TQN4NDJE"
+  }
+}

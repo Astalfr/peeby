@@ -23,10 +23,14 @@ has to come from somewhere else. Measured on 2026-11-05, anonymous (`archive_pro
 
 ## Decision
 
-- The channel's GQL query (already read with the live) asks for `archiveVideo { id createdAt }`
-  (`gql::Live::archive`). Once the live plays and the channel names a recording, the watch page
-  prepares it in the background (`WatchView::prepare_rewind`): a second proxy on the VOD and the
-  viewer's position in it. A later reading (every minute) may name it for a live just started.
+- The recording is asked for on its own, anonymously (`Client::live_archive`, query `LiveArchive`:
+  `user.stream.archiveVideo { id createdAt }`), with the live's playback and channel. With an
+  auth-token, Twitch answers `server error` on that field (2026-11-05, every live tried), and a GQL
+  error fails the whole answer. Asked inside the channel's query, it broke the signed-in viewer's
+  header and found no recording on any live, as the user saw. Once the live plays and its recording
+  is known, the watch page prepares it in the background (`WatchView::prepare_rewind`): a second
+  proxy on the VOD and the viewer's position in it. It is asked again every minute until there is
+  one (a live just started may have none yet).
 - The shared player gets `Rewind { started_at, recording: Source }` (`PlayerView::set_rewind`), for a
   live without DVR:
   - **The bar.** The seek bar covers 0 to `now − started_at`; on the live, the playhead is at the
@@ -52,7 +56,10 @@ has to come from somewhere else. Measured on 2026-11-05, anonymous (`archive_pro
   from the live, not from the recording.
 - Going back resumes the account's `viewingHistory` for that VOD. If the viewer later opens the VOD,
   it starts where they left the recording.
-- Revisit if Twitch stops naming the recording on `stream` or makes in-progress VODs unplayable.
+- Revisit if Twitch stops naming the recording on `stream` (anonymously) or makes in-progress VODs
+  unplayable.
+- Checked signed in (with the auth-token, read only): the recording found anonymously, its playback
+  through `Client::play` (6 variants, `EVENT` playlist, no end tag).
 - Checks: `cargo run -p twitch --example archive_probe -- (<login>… | top) [--save <dir>]` (each
   live's recording and how far its playlist trails), `PEEBY_START` for `spike-twitch-play` on a
   recording, `PEEBY_LIVE=rewind` for the player example (a generated recorded live that seeks back

@@ -226,6 +226,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
       (`PEEBY_PROXY=1`) from 1 h in and from 90 s before its end (2.5 s, token included), the playlist
       reloaded from the proxy near the end.
     - The player example's `PEEBY_LIVE=rewind`: the recording at 60 s, then back to the live.
+  - Fixed the same day after the user's test:
+    - YouTube: MP4 formats only (VP9's video ended at the first seek), and the edge read on each
+      reload (a seek back took 5 to 6 s, now 1.9 s).
+    - Twitch: the recording asked anonymously on its own, since `archiveVideo` fails with an
+      auth-token. Inside the channel's query it had broken signed-in headers and found no recording.
   - **Not verified:** in the app (a playback writes the account's history on both services: with the
     user's agreement), and the search trimming a live's front: both 24/7 lives served their whole
     12 h that day. That covers the seek bar's drag over 12 h, the badge's click, a quality change in
