@@ -284,9 +284,9 @@ Checked against the code on 2026-11-01:
 | Size-templated images (`{width}x{height}`, `%{width}x%{height}`) | `Picture::sized` (the space fills the template) | Covered |
 | Stream, VOD and clip cards; category box art (tall) | `MediaCard` (`badge`, `lines`, `avatar`, `poster` at any ratio) | Covered |
 | A watch page with the player and a chat beside it | `ui::chat::watch_layout` (step 9) with `ui::chat::ChatPanel` | Covered |
-| Live: no seek bar, a live badge, uptime and viewers instead; no 0–9/Home seeks | `Source::live` (step 4) | Covered |
+| Live: a live badge, uptime and viewers; a seek bar over its last 2 minutes (`twitch::LIVE_KEPT`) | `Source::live`, `Source::dvr_window` (ADR 0026) | Covered |
 | Going back in a live and back to it (its recording, the archive VOD) | `PlayerView::set_rewind` ([ADR 0026](decisions/0026-twitch-live-rewind-from-its-recording.md)) | Covered |
-| Resuming a paused live goes back to its live edge, without delay | `PlayerView::toggle_pause`: after more than 1 s of pause, mpv restarts on the current quality ("Retour au direct") | Covered |
+| Pausing a live resumes in place while its last 2 minutes hold it (else at its edge, or in its recording); going back to the live restarts at its low-latency edge | `PlayerView::toggle_pause`, `go_live` (ADR 0026) | Covered |
 | Ads removed | `twitch::Proxy`, the local playlist proxy (step 3) | Covered |
 | Low latency | The proxy adds Twitch's prefetch segments (step 10) | Covered |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |

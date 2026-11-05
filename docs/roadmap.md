@@ -231,6 +231,13 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
       reload (a seek back took 5 to 6 s, now 1.9 s).
     - Twitch: the recording asked anonymously on its own, since `archiveVideo` fails with an
       auth-token. Inside the channel's query it had broken signed-in headers and found no recording.
+  - Then (2026-11-05, the user's request): a Twitch live keeps its last 2 minutes in the proxy's
+    playlist (`twitch::LIVE_KEPT`, 60 segments; Twitch's CDN serves a segment 3 to 5 minutes after it
+    leaves Twitch's own playlist, measured with `segment_ttl`). Seeks within them stay in the live
+    (no restart), and the recording takes over beyond, so its delay leaves no gap; a live with no
+    recording gets those 2 minutes. Verified with `spike-twitch-play` through the proxy: 1 to 3 s
+    behind the edge as before, a seek 60 s back playing again in about 1 s. **Not verified:** in the
+    app, and a seek across a replaced ad break (none came during the runs).
   - **Not verified:** in the app (a playback writes the account's history on both services: with the
     user's agreement), and the search trimming a live's front: both 24/7 lives served their whole
     12 h that day. That covers the seek bar's drag over 12 h, the badge's click, a quality change in

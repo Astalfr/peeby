@@ -104,16 +104,16 @@ fn main_takes_over_after_the_preroll() {
   let mut splicer = Splicer::default();
   splicer.update(&preroll(0), Some(&backup()));
   // The backup snapshot is old (4536–4549) and the live resumes at 4567: a gap, so a
-  // discontinuity, and the window keeps its 15 newest segments.
+  // discontinuity. The window (2 minutes, 60 segments) keeps all 16.
   splicer.update(&preroll(15), None);
-  assert_eq!(splicer.len(), 15);
+  assert_eq!(splicer.len(), 16);
   let origins = splicer.origins();
-  assert_eq!(origins[0], (4537, Origin::Backup));
-  assert_eq!(origins[13], (4567, Origin::Main));
-  assert_eq!(origins[14], (4568, Origin::Main));
+  assert_eq!(origins[0], (4536, Origin::Backup));
+  assert_eq!(origins[14], (4567, Origin::Main));
+  assert_eq!(origins[15], (4568, Origin::Main));
   assert!(!splicer.ad_state().active);
   let text = splicer.render();
-  assert!(text.contains("#EXT-X-MEDIA-SEQUENCE:4537\n"));
+  assert!(text.contains("#EXT-X-MEDIA-SEQUENCE:4536\n"));
   assert_eq!(text.matches("#EXT-X-DISCONTINUITY\n").count(), 1);
   // Each source's init segment is announced where it starts.
   assert_eq!(text.matches("#EXT-X-MAP:").count(), 2);

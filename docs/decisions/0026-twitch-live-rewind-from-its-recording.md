@@ -21,8 +21,23 @@ has to come from somewhere else. Measured on 2026-11-05, anonymous (`archive_pro
   before its end. There it keeps reloading the playlist from the proxy (5 times in 40 s): mpv's
   duration grows and no end comes.
 
+- The recording trails the live by up to 25 s, so its last 30 s could not be reached from it, and
+  each move between the live and the recording restarts mpv. The live's own playlist lists about
+  28 s (14 segments of 2 s), but Twitch's CDN still serves a segment at least 3 minutes after it
+  left that playlist, and no longer 5 minutes after (`segment_ttl`, two lives, 7 minutes each,
+  1,200 requests). Through the proxy with a 2-minute window, mpv still plays 1 to 3 s behind the
+  edge, its duration grows with the live, and a seek 60 s back plays again in about 1 s.
+
 ## Decision
 
+- **The live keeps its last 2 minutes** (`twitch::LIVE_KEPT`, user's request, 2026-11-05): the
+  proxy's playlist keeps 60 segments instead of 15, their URLs only (mpv still fetches them from
+  the CDN). Only the quality playing keeps them: another quality's window starts when it is picked
+  (the user's choice, rather than reading every quality's playlist). The live's `Source` gets
+  `dvr_window` = 2 min, so a live with no recording still gets the DVR controls over them. Going
+  back to the live, or a seek within 3 s of its edge, restarts mpv at the edge (`EDGE_SNAP`): a seek
+  would stop short of its low latency. A quality change goes to the edge. `minute-watched` goes on
+  while the live plays behind its edge (the user's choice): it is still the live.
 - The recording is asked for on its own, anonymously (`Client::live_archive`, query `LiveArchive`:
   `user.stream.archiveVideo { id createdAt }`), with the live's playback and channel. With an
   auth-token, Twitch answers `server error` on that field (2026-11-05, every live tried), and a GQL
@@ -32,28 +47,31 @@ has to come from somewhere else. Measured on 2026-11-05, anonymous (`archive_pro
   proxy on the VOD and the viewer's position in it. It is asked again every minute until there is
   one (a live just started may have none yet).
 - The shared player gets `Rewind { started_at, recording: Source }` (`PlayerView::set_rewind`), for a
-  live without DVR:
-  - **The bar.** The seek bar covers 0 to `now − started_at`; on the live, the playhead is at the
-    edge. The timeline is computed, not mpv's.
-  - **Going back.** A seek back plays the recording from there (a new mpv, about 0.7 s, at the
-    live's quality label), at least `REWIND_EDGE` (30 s) behind.
-  - **Coming back.** A seek within 30 s of the edge, or a click on the live badge, goes back to the
-    live at its edge.
-  - **Pause.** A pause longer than a second resumes in the recording where it stopped, as a DVR live
-    does; within 30 s of the edge, at the live.
+  live:
+  - **The bar.** The seek bar covers 0 to `now − started_at`. On the live, the playhead is as far
+    behind that end as mpv is behind the live's edge (it slides back while paused). The timeline is
+    computed, not mpv's.
+  - **The live's window.** A seek within the live's kept minutes (what its mpv has read, less 5 s)
+    is mpv's own seek in the live: no restart.
+  - **Going back further.** A seek older than that plays the recording from there (a new mpv, about
+    0.7 s, at the live's quality label), at least `REWIND_EDGE` (30 s) behind.
+  - **Coming back.** From the recording, a seek within 30 s of the edge goes back to the live at its
+    edge, then seeks that far behind once its duration is known; the live badge goes to the edge.
+  - **Pause.** A pause resumes in place while the live's window still holds where it stopped, else
+    in the recording from there.
   - **The page** follows each switch through `PlayerEvent::Rewound { rewound, at }`.
 - While the recording plays, it is VOD playback (user's choice, 2026-11-05): its position is saved to
   the account like any VOD's (`progress::Saver`, ADR 0013), including where it was left on going back
   to the live. `minute-watched` is not sent: that is not the live on screen (ADR 0012).
 - The chat stays the live's.
-- No recording (VODs off, or none yet), or one Twitch refuses (subscribers only): the live keeps
-  today's behavior, without a seek bar.
+- No recording (VODs off, or none yet), or one Twitch refuses (subscribers only): the live still
+  has its last 2 minutes.
 
 ## Consequences
 
 - One more token, usher request and proxy per live opened, unused unless the viewer goes back.
-- The recording trails the live by a few seconds to a segment, so the last 30 s before the edge play
-  from the live, not from the recording.
+- The last 2 minutes play from the live itself, so the recording's delay no longer leaves a gap,
+  and short seeks back (← 10 s) need no restart.
 - Going back resumes the account's `viewingHistory` for that VOD. If the viewer later opens the VOD,
   it starts where they left the recording.
 - Revisit if Twitch stops naming the recording on `stream` (anonymously) or makes in-progress VODs

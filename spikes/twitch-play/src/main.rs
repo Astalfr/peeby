@@ -9,6 +9,9 @@
 //! - `PEEBY_FIXTURES=1`: saves the GQL answer, redacted, in `crates/twitch/tests/fixtures/`.
 //! - `PEEBY_QUIT_AFTER`: quits after that many seconds (unattended runs).
 //! - `PEEBY_START`: start position in seconds (a VOD, e.g. a live's recording in progress).
+//! - `PEEBY_SEEK=<after>:<back>`: `<after>` seconds in, seeks `<back>` seconds back (a live's kept
+//!   minutes, `twitch::LIVE_KEPT`), and prints every 5 s the position, mpv's duration and how far
+//!   behind it the playhead is.
 //! - `PEEBY_LOW_LATENCY=0`: without Twitch's prefetch segments (default with them). A live prints,
 //!   every 10 s, how long ago the segment FFmpeg starts at (third from the end) was captured.
 //! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
@@ -96,6 +99,11 @@ fn main() {
     Err(e) => fail(format!("cannot start the player: {e}")),
   };
   eprintln!("backend: {:?}", player.backend());
+  let seek = std::env::var("PEEBY_SEEK").ok().and_then(|s| {
+    let (after, back) = s.split_once(':')?;
+    Some((after.parse::<u64>().ok()?, back.parse::<f64>().ok()?))
+  });
+  let watched = player.clone();
   let quit_after = std::env::var("PEEBY_QUIT_AFTER")
     .ok()
     .and_then(|s| s.parse().ok())
@@ -134,6 +142,30 @@ fn main() {
       eprintln!("cannot open the window: {e}");
       cx.quit();
       return;
+    }
+    if let Some((after, back)) = seek {
+      let watched = watched.clone();
+      cx.spawn(async move |cx| {
+        let number = |name: &str| watched.property(name).and_then(|v| v.parse::<f64>().ok());
+        for tick in 1..=120u64 {
+          cx.background_executor().timer(Duration::from_secs(5)).await;
+          if tick * 5 == after.next_multiple_of(5)
+            && let Some(position) = number("time-pos")
+          {
+            eprintln!("seek {back} s back from {position:.1}");
+            watched.seek_to(position - back);
+          }
+          let (position, duration) = (number("time-pos"), number("duration"));
+          eprintln!(
+            "t={:>3} s position {position:?} duration {duration:?} behind {:?}",
+            tick * 5,
+            position
+              .zip(duration)
+              .map(|(p, d)| ((d - p) * 10.0).round() / 10.0)
+          );
+        }
+      })
+      .detach();
     }
     if let Some(after) = quit_after {
       cx.spawn(async move |cx| {

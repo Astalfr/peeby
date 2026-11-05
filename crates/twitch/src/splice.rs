@@ -14,8 +14,16 @@ use std::fmt::Write as _;
 use crate::ads::{MediaPlaylist, Segment};
 use crate::time::epoch_millis;
 
-/// Segments kept in the output, about 30 s: FFmpeg starts a live 3 segments from the end.
-const WINDOW: usize = 15;
+/// How far back a live's output goes, so the player can seek back in it (ADR 0026): Twitch's own
+/// playlist lists about 28 s, but its CDN still serves a segment 3 min after it left (404 at 5
+/// min, measured 2026-11-05 with `segment_ttl`). FFmpeg still starts 3 segments from the end.
+pub const LIVE_KEPT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// A live segment's length on Twitch.
+const SEGMENT_SECONDS: u64 = 2;
+
+/// Segments kept in the output: [`LIVE_KEPT`] of them.
+const WINDOW: usize = (LIVE_KEPT.as_secs() / SEGMENT_SECONDS) as usize;
 
 /// Where an output segment comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -73,6 +73,8 @@ fn source(
     quality: (!qualities.is_empty()).then_some(index),
     qualities,
     live,
+    // The proxy keeps a live's last minutes in its playlist (ADR 0026): seekable in place.
+    dvr_window: live.then(|| twitch::LIVE_KEPT.as_secs_f64()),
     ..Source::default()
   }
 }

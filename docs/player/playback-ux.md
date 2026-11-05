@@ -150,15 +150,21 @@ Measured on a live (Lofi Girl, 1 h window, 2026-11-02, `spike-yt-play`): playbac
 A live without DVR whose page gives it a `Rewind` (`PlayerView::set_rewind`: its recording as a `Source`
 and when it started; Twitch's archive VOD, [ADR 0026](../decisions/0026-twitch-live-rewind-from-its-recording.md))
 gets the DVR controls over a timeline the player computes:
-- **Seek bar.** From 0 to `now − started_at`, redrawn every second; on the live, the playhead stays at the
-  edge (mpv's live positions and duration are ignored).
-- **Back.** A seek back plays the recording from there (a new mpv on the quality of the same label, about
+- **Seek bar.** From 0 to `now − started_at`, redrawn every second; on the live, the playhead is as far
+  behind that end as mpv is behind the live's edge, and a seek within the live's own window
+  (`Source::dvr_window`, Twitch's last 2 minutes, less 5 s) is mpv's own seek, no restart.
+- **Back.** A seek older than the live's window plays the recording from there (a new mpv on the quality of the same label, about
   0.7 s), at least `REWIND_EDGE` (30 s) behind the edge: the recording trails the live by a few seconds to a
   segment. Within the recording, seeks are mpv's own.
-- **Forward.** A seek within `REWIND_EDGE` of the edge, or a click on the badge, goes back to the live at its
-  edge.
-- **Pause.** A pause longer than a second resumes from where it stopped, in the recording, unless that is
-  within `REWIND_EDGE` of the edge (then at the live).
+- **Forward.** From the recording, a seek within `REWIND_EDGE` of the edge goes back to the live (at its
+  edge, then that far behind once its duration is known); the badge goes to the edge.
+- **Pause.** A pause resumes in place while the live's window still holds where it stopped, else in the
+  recording from there.
+
+A live that starts at its edge by itself (Twitch: `start` 0) and keeps a window (`dvr_window`) without a
+recording uses the DVR controls, except that going back to the live, and a seek within `EDGE_SNAP` (3 s) of
+the edge, restart mpv at its edge (a seek would lose the low latency); a quality change goes to the edge (the
+new quality's window starts then); a pause longer than the window resumes at the edge.
 - **Events.** Each switch emits `PlayerEvent::Rewound { rewound, at }` (the recording's position); the page
   reads `PlayerView::rewound()`.
 

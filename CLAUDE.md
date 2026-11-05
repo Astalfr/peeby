@@ -30,6 +30,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   (window, playlist, both ends; `--serve` keeps the proxy up for `spike-yt-play` with `PEEBY_RESOLVER=raw`,
   `PEEBY_AUDIO=<audio playlist>`, `PEEBY_START`)
 - A Twitch live's recording (archive VOD), anonymous: `cargo run -p twitch --example archive_probe -- (<login>… | top) [--save <dir>]`
+- How long a live's segments stay served after leaving Twitch's playlist (bounds `twitch::LIVE_KEPT`), anonymous:
+  `cargo run -p twitch --example segment_ttl -- <login> [minutes]`
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
@@ -53,7 +55,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   cookie jar, the auth-token) on stdout: redirect it to a file, never into a log or a shared terminal
 - Twitch playback spike: `cargo run -p spike-twitch-play --release -- [login | twitch.tv/videos/<id> | vod:<login>]`
   (`PEEBY_PLAYER_TYPE`, `PEEBY_CODECS`, `PEEBY_VARIANT`, `PEEBY_USHER=v1`, `PEEBY_PROXY=1`, `PEEBY_LOW_LATENCY=0`,
-  `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`, `PEEBY_START=<s>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
+  `PEEBY_FIXTURES=1`, `PEEBY_QUIT_AFTER=<s>`, `PEEBY_START=<s>`, `PEEBY_SEEK=<after>:<back>`; see its main.rs; it prints `hwdec-current` and, through the proxy, the
   start delay)
 - Shell is Windows: PowerShell or Git Bash, MSVC toolchain pinned in rust-toolchain.toml.
 
