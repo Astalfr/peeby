@@ -1235,6 +1235,11 @@ impl PlayerView {
       }
       Event::Position(seconds) if !self.seek_dragging => {
         self.position = seconds;
+        // A recorded live's recording: its edge (now) moves with the playhead, else how far
+        // behind it plays drops by a second between the edge's ticks, then jumps back.
+        if self.rewound {
+          self.sync_rewind();
+        }
         self.update_up_next(cx);
         self.tell_muted(cx);
       }
