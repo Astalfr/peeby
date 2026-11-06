@@ -3,13 +3,15 @@
 //! copy's middle passes a neighbor's, the tab takes that neighbor's place. The drag is followed
 //! with window listeners rather than GPUI's `on_drag`, which ends at the window's edge: tearing a
 //! tab out to a window of its own needs the release wherever it happens (the window captures the
-//! mouse while the button is held).
+//! mouse while the button is held). The tabs it passes slide to their new places, and so does the
+//! tab released (none with reduced motion).
 
 use std::cell::{Cell, RefCell};
+use std::time::{Duration, Instant};
 
 use gpui::{
-  Bounds, Context, DispatchPhase, MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-  WeakEntity, Window,
+  App, Bounds, Context, DispatchPhase, MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+  WeakEntity, Window, px,
 };
 
 use super::Shell;
@@ -17,6 +19,25 @@ use super::space::TabId;
 
 /// How far the pointer moves, held, before the tab follows it: less is still a click.
 const THRESHOLD: f32 = 4.;
+/// Between two tabs: the row's `gap_1`.
+const GAP: f32 = 4.;
+/// A tab sliding to its new place.
+const SLIDE: Duration = Duration::from_millis(150);
+
+/// A tab drawn away from its place by `from`, easing back to it from `started`.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Slide {
+  from: Pixels,
+  started: Instant,
+}
+
+impl Slide {
+  /// Where the tab is drawn from its place at `now`; `None` once there.
+  fn offset(&self, now: Instant) -> Option<Pixels> {
+    let t = now.duration_since(self.started).as_secs_f32() / SLIDE.as_secs_f32();
+    (t < 1.).then(|| self.from * (1. - t).powi(3))
+  }
+}
 
 /// Where the bar's tabs were drawn at the last frame, in window coordinates, to place the
 /// dragged copy and to find the neighbors it passes.
@@ -91,12 +112,12 @@ impl Shell {
         self.activate(tab, window, cx);
       }
     }
-    self.reorder_dragged();
+    self.reorder_dragged(cx);
     cx.notify();
   }
 
   /// Puts the dragged tab after every other tab whose middle is left of the copy's.
-  fn reorder_dragged(&mut self) {
+  fn reorder_dragged(&mut self, cx: &App) {
     let Some(drag) = self.tab_drag else { return };
     let middle = drag.x - drag.grab + drag.width / 2.;
     let layout = self.tab_layout.tabs.borrow();
@@ -113,17 +134,64 @@ impl Shell {
     let Some(from) = self.tabs.iter().position(|t| t.id == drag.tab) else {
       return;
     };
-    if from != target {
-      let tab = self.tabs.remove(from);
-      self.tabs.insert(target, tab);
+    if from == target {
+      return;
+    }
+    let tab = self.tabs.remove(from);
+    self.tabs.insert(target, tab);
+    // The tabs passed move by the dragged one's width, the other way: drawn where they were,
+    // they slide there.
+    let shift = drag.width + px(GAP);
+    let (passed, by) = if from < target {
+      (from..target, shift)
+    } else {
+      (target + 1..from + 1, -shift)
+    };
+    let ids: Vec<_> = self.tabs[passed].iter().map(|t| t.id).collect();
+    for id in ids {
+      self.slide(id, by, cx);
     }
   }
 
-  /// The button was released (or found released): the tab stays where it is.
+  /// The button was released (or found released): the tab stays where it is, sliding from the
+  /// copy into its slot.
   fn drop_tab(&mut self, cx: &mut Context<Self>) {
-    if self.tab_drag.take().is_some() {
-      cx.notify();
+    let Some(drag) = self.tab_drag.take() else {
+      return;
+    };
+    if drag.moving
+      && let Some(slot) = self.tab_layout.bounds(drag.tab)
+    {
+      let copy = self.tab_layout.row.get().left() + self.dragged_left(&drag);
+      self.slide(drag.tab, copy - slot.left(), cx);
     }
+    cx.notify();
+  }
+
+  /// Draws tab `id` `by` away from its place (added to a slide under way), easing back to it.
+  fn slide(&mut self, id: TabId, by: Pixels, cx: &App) {
+    if cx.reduce_motion() {
+      return;
+    }
+    let now = Instant::now();
+    let current = self.tab_slide_at(id, now).unwrap_or_default();
+    self.tab_slides.retain(|_, s| s.offset(now).is_some());
+    self.tab_slides.insert(
+      id,
+      Slide {
+        from: current + by,
+        started: now,
+      },
+    );
+  }
+
+  fn tab_slide_at(&self, id: TabId, now: Instant) -> Option<Pixels> {
+    self.tab_slides.get(&id).and_then(|s| s.offset(now))
+  }
+
+  /// Where tab `id` is drawn from its place now, while it slides.
+  pub(super) fn tab_slide(&self, id: TabId) -> Option<Pixels> {
+    self.tab_slide_at(id, Instant::now())
   }
 
   /// The dragged copy's left edge from the row's, kept over the tabs.

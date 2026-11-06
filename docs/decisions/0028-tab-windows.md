@@ -61,5 +61,7 @@ five steps, each one shippable:
   position.
 - Step 2 touches the start, the notification area and the mini-player: each later step depends
   on it, and it is the one to test first in the app.
-- The neighbors jump to their new place rather than slide; an animation can come later.
+- The tabs passed slide to their new place in 150 ms (ease out), drawn shifted by the distance
+  they jumped and easing back (`tab_drag::Slide`); the released tab slides from the copy into
+  its slot. None with reduced motion.
 - Restoring the tabs at startup (roadmap) will have to save each window's tabs and bounds.

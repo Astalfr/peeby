@@ -13,6 +13,7 @@ mod settings_page;
 pub mod space;
 mod tab_drag;
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -39,7 +40,7 @@ use mini_player::MiniPlayer;
 use settings_page::SettingsView;
 pub use settings_page::delivery_row;
 use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle, TabId};
-use tab_drag::{TabDrag, TabLayout};
+use tab_drag::{Slide, TabDrag, TabLayout};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
@@ -110,6 +111,8 @@ pub struct Shell {
   tab_drag: Option<TabDrag>,
   /// Where the tabs were drawn, shared with the canvases that measure them.
   tab_layout: Rc<TabLayout>,
+  /// The tabs sliding to a new place (passed by the dragged one, or released).
+  tab_slides: HashMap<TabId, Slide>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -233,6 +236,7 @@ impl Shell {
       audio_listing: Task::ready(()),
       tab_drag: None,
       tab_layout: Rc::default(),
+      tab_slides: HashMap::new(),
       _subscriptions: subscriptions,
     };
     if let Some(&first) = shell.tabs.first() {
@@ -770,10 +774,15 @@ impl Shell {
         let group = SharedString::from(format!("tab-{id}"));
         let tooltip = self.spaces[tab.space].title(id, cx);
         let layout = self.tab_layout.clone();
+        let slide = self.tab_slide(id);
+        if slide.is_some() {
+          window.request_animation_frame();
+        }
         self
           .tab_face(tab, window, cx)
           .id(group.clone())
           .group(group)
+          .when_some(slide, |el, offset| el.left(offset))
           .when(dragged.is_some_and(|d| d.tab == id), |el| el.invisible())
           .child(
             canvas(
