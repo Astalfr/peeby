@@ -45,7 +45,7 @@ const AUDIO_MENU_WIDTH: f32 = 320.;
 const NEW_TAB_MENU_WIDTH: f32 = 220.;
 /// A tab's widest; tabs narrow down to [`TAB_MIN_WIDTH`] when the bar is full.
 const TAB_MAX_WIDTH: f32 = 220.;
-const TAB_MIN_WIDTH: f32 = 96.;
+const TAB_MIN_WIDTH: f32 = 140.;
 
 /// A tab of the bar: its space (an index in `Shell::spaces`, which never changes) and its id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
