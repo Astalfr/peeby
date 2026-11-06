@@ -340,42 +340,57 @@ fn notifications_section(cx: &gpui::App) -> AnyElement {
   .into_any_element()
 }
 
-fn playback_section(max_height: u32, low_latency: bool) -> AnyElement {
+fn playback_section(max_height: u32, low_latency: bool, catch_up: bool) -> AnyElement {
   let qualities = play::QUALITIES
     .iter()
     .map(|&h| (h, format!("{h}p")))
     .collect();
-  section(
-    t("Playback", "Lecture"),
-    vec![
-      row(
-        t("Default quality", "Qualité par défaut"),
-        t(
-          "The highest one picked when a live starts. Without the site token, Twitch stops at \
+  let mut rows = vec![
+    row(
+      t("Default quality", "Qualité par défaut"),
+      t(
+        "The highest one picked when a live starts. Without the site token, Twitch stops at \
            1080p.",
-          "La plus haute choisie au lancement d'un live. Sans le jeton du site, Twitch s'arrête à \
+        "La plus haute choisie au lancement d'un live. Sans le jeton du site, Twitch s'arrête à \
            1080p.",
-        ),
-        chips("twitch-quality", qualities, &max_height, |h, cx| {
-          Settings::update(cx, |s| s.twitch.max_height = Some(h))
-        }),
-      )
-      .into_any_element(),
-      row(
-        t("Low latency", "Faible latence"),
-        t(
-          "Lives start closer to real time, a few seconds less. From the next live opened.",
-          "Les lives démarrent plus près du direct, quelques secondes de moins. Au prochain live \
+      ),
+      chips("twitch-quality", qualities, &max_height, |h, cx| {
+        Settings::update(cx, |s| s.twitch.max_height = Some(h))
+      }),
+    )
+    .into_any_element(),
+    row(
+      t("Low latency", "Faible latence"),
+      t(
+        "Lives start closer to real time, a few seconds less. From the next live opened.",
+        "Les lives démarrent plus près du direct, quelques secondes de moins. Au prochain live \
            ouvert.",
+      ),
+      toggle("twitch-low-latency", low_latency, |on, cx| {
+        Settings::update(cx, |s| s.twitch.low_latency = Some(on))
+      }),
+    )
+    .into_any_element(),
+  ];
+  // Catch-up only applies to low latency: shown with it.
+  if low_latency {
+    rows.push(
+      row(
+        t("Catch up", "Rattrapage"),
+        t(
+          "Keeps lives close to real time by playing a touch faster when they fall behind (and a \
+           touch slower before the buffer runs out). From the next live opened.",
+          "Garde les lives près du direct en accélérant un peu quand ils prennent du retard (et en \
+           ralentissant un peu avant que la mémoire tampon s'épuise). Au prochain live ouvert.",
         ),
-        toggle("twitch-low-latency", low_latency, |on, cx| {
-          Settings::update(cx, |s| s.twitch.low_latency = Some(on))
+        toggle("twitch-catch-up", catch_up, |on, cx| {
+          Settings::update(cx, |s| s.twitch.catch_up = Some(on))
         }),
       )
       .into_any_element(),
-    ],
-  )
-  .into_any_element()
+    );
+  }
+  section(t("Playback", "Lecture"), rows).into_any_element()
 }
 
 impl Render for SettingsView {
@@ -385,6 +400,7 @@ impl Render for SettingsView {
       .max_height
       .unwrap_or(play::DEFAULT_HEIGHT);
     let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
+    let catch_up = Settings::get(cx).twitch.catch_up.unwrap_or(true);
     let flash = self
       .nav
       .upgrade()
@@ -394,7 +410,7 @@ impl Render for SettingsView {
       flash.wrap("twitch-account-flash", self.account_section(cx), cx),
       self.followed_section(cx),
       notifications_section(cx),
-      playback_section(max_height, low_latency),
+      playback_section(max_height, low_latency, catch_up),
     ];
     v_flex().gap_8().children(sections)
   }

@@ -79,6 +79,20 @@ real responses (saved, redacted fixtures, as for InnerTube) before writing a par
 - **Latency** **[src/mem]**:
   - Streamlink's low-latency mode keeps the `#EXT-X-TWITCH-PREFETCH` segments. mpv ignores that tag.
   - Without the rewriting layer, expect 5–10 s of latency.
+  - mpv then holds the ~2 s of buffer it started with (FFmpeg starts a live three segments from its
+    end) and never shrinks it: about 4.2 s behind the streamer, measured 2026-11-06 on a live of 1 s
+    segments. Low latency also turns on the player's catch-up ("Rattrapage", `[twitch] catch_up`,
+    on by default, shown only with low latency) (`Source::catch_up`,
+    `crates/ui/src/player/catch_up.rs`): at the live's edge, 1.05× (1.1× far above) while mpv's
+    buffer (its smallest over 4 s) stays above `play::CATCH_UP_BUFFER` (0.6 s), 0.97× under it, so
+    a stall is caught up too: 3.3 s on average, no stall in 3 min (measured on 1 s segments only).
+    The buffer swings by about a segment, so the floor cannot go much lower (0.4 s stalled twice
+    in 2.5 min). The CDN is not the cause: it serves the segment in production as it is made (first
+    byte within 40–90 ms, the rest over the next ~0.8 s; the next one ~1 s later, the spike's
+    `newest segment` lines). mpv opens each segment late, likely after its playlist reload
+    (FFmpeg reloads at most once a segment's length after the previous one): the lead for the
+    remaining second, not investigated further. Twitch's announced `TARGETDURATION` (6 s for 1 s
+    segments) was tried: lowering it in the proxy changed neither the reloads nor the delay.
 
 ## Credentials
 
@@ -288,7 +302,7 @@ Checked against the code on 2026-11-01:
 | Going back in a live and back to it (its recording, the archive VOD) | `PlayerView::set_rewind` ([ADR 0026](decisions/0026-twitch-live-rewind-from-its-recording.md)) | Covered |
 | Pausing a live resumes in place while its last 2 minutes hold it (else at its edge, or in its recording); going back to the live restarts at its low-latency edge | `PlayerView::toggle_pause`, `go_live` (ADR 0026) | Covered |
 | Ads removed | `twitch::Proxy`, the local playlist proxy (step 3) | Covered |
-| Low latency | The proxy adds Twitch's prefetch segments (step 10) | Covered |
+| Low latency | The proxy adds Twitch's prefetch segments (step 10); the player catches up to a 0.6 s buffer at the edge (`Source::catch_up`) | Covered |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |
 | Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |

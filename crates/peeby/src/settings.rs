@@ -166,6 +166,10 @@ pub struct Twitch {
   pub max_height: Option<u32>,
   /// Lives start closer to the broadcast (Twitch's prefetch segments); on when unset.
   pub low_latency: Option<bool>,
+  /// With `low_latency`, lives keep close to the broadcast: the player's catch-up
+  /// (`play::CATCH_UP_BUFFER`) plays a little faster or slower to hold a small buffer; on when
+  /// unset.
+  pub catch_up: Option<bool>,
   /// Codecs this PC was found to decode on the CPU only (`h265`, `av1`): no longer asked for.
   pub software_codecs: Vec<String>,
 }

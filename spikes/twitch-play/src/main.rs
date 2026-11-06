@@ -13,7 +13,13 @@
 //!   minutes, `twitch::LIVE_KEPT`), and prints every 5 s the position, mpv's duration and how far
 //!   behind it the playhead is.
 //! - `PEEBY_LOW_LATENCY=0`: without Twitch's prefetch segments (default with them). A live prints,
-//!   every 10 s, how long ago the segment FFmpeg starts at (third from the end) was captured.
+//!   every 10 s, how long ago the segment FFmpeg starts at (third from the end) was captured, and
+//!   its playlist's target and last segment durations, and how its two newest segments arrive
+//!   (first and last byte). Through the proxy (`PEEBY_PROXY=1`), it
+//!   prints every 2 s the delay to the streamer as the app's statistics compute it, with mpv's
+//!   buffer and speed.
+//! - `PEEBY_CATCHUP=<s>`: a live plays faster while mpv's buffer stays above that many seconds and
+//!   slower under it (the app's `ui::player` catch-up, its thresholds copied).
 //! - `PEEBY_DISPLAY=secondary`: opens the window on a screen that is not the primary one.
 //! - The mpv log goes to `target/twitch-play-mpv.log` (it holds stream URLs: never share it).
 //!
@@ -65,8 +71,11 @@ fn main() {
   let fixtures = (std::env::var("PEEBY_FIXTURES").as_deref() == Ok("1"))
     .then(|| Path::new(ROOT).join("crates/twitch/tests/fixtures"));
   let started = Instant::now();
+  let mut edge_clock = None;
   let url = if std::env::var("PEEBY_PROXY").as_deref() == Ok("1") {
-    through_proxy(&target).unwrap_or_else(|e| fail(e))
+    let (url, clock) = through_proxy(&target).unwrap_or_else(|e| fail(e));
+    edge_clock = Some(clock);
+    url
   } else {
     let stream = resolver
       .resolve(&target, fixtures.as_deref())
@@ -167,6 +176,89 @@ fn main() {
       })
       .detach();
     }
+    // Through the proxy, a live's delay to the streamer every 2 s, as the app's statistics
+    // compute it: the playlist end's age plus how far mpv plays behind that end.
+    if live && let Some(clock) = edge_clock.clone() {
+      let watched = watched.clone();
+      cx.spawn(async move |cx| {
+        let number = |name: &str| watched.property(name).and_then(|v| v.parse::<f64>().ok());
+        let started = Instant::now();
+        loop {
+          cx.background_executor().timer(Duration::from_secs(2)).await;
+          let age = clock.time().and_then(|t| {
+            std::time::SystemTime::now()
+              .duration_since(t)
+              .ok()
+              .map(|d| d.as_secs_f64())
+          });
+          let (position, duration) = (number("time-pos"), number("duration"));
+          let cache = number("demuxer-cache-duration");
+          let delay = age
+            .zip(position.zip(duration))
+            .map(|(age, (p, d))| age + (d - p).max(0.0));
+          eprintln!(
+            "t={:>5.1} s delay {:?} (edge age {:?}, behind {:?}, cache {:?}, speed {:?})",
+            started.elapsed().as_secs_f64(),
+            delay.map(|d| (d * 10.0).round() / 10.0),
+            age.map(|a| (a * 10.0).round() / 10.0),
+            position
+              .zip(duration)
+              .map(|(p, d)| ((d - p) * 10.0).round() / 10.0),
+            cache.map(|c| (c * 10.0).round() / 10.0),
+            number("speed"),
+          );
+        }
+      })
+      .detach();
+    }
+    // `PEEBY_CATCHUP=<s>`: plays a little faster while mpv's buffer (its smallest over the last
+    // 4 s) stays above that many seconds, the app's catch-up experiment.
+    if live
+      && let Some(target) = std::env::var("PEEBY_CATCHUP")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+    {
+      let watched = watched.clone();
+      cx.spawn(async move |cx| {
+        let mut samples: std::collections::VecDeque<f64> = Default::default();
+        let mut speed = 1.0;
+        loop {
+          cx.background_executor()
+            .timer(Duration::from_millis(500))
+            .await;
+          let Some(cache) = watched
+            .property("demuxer-cache-duration")
+            .and_then(|v| v.parse::<f64>().ok())
+          else {
+            continue;
+          };
+          samples.push_back(cache);
+          if samples.len() > 8 {
+            samples.pop_front();
+          }
+          let low = samples.iter().copied().fold(f64::INFINITY, f64::min);
+          let wanted = if samples.len() < 8 {
+            speed
+          } else if speed == 1.0 && low > target + 0.3 {
+            if low > target + 1.5 { 1.1 } else { 1.05 }
+          } else if speed > 1.0 && low <= target + 0.1 {
+            1.0
+          } else if speed == 1.0 && low < target - 0.3 {
+            0.97
+          } else if speed < 1.0 && low >= target {
+            1.0
+          } else {
+            speed
+          };
+          if wanted != speed {
+            speed = wanted;
+            watched.set_speed(speed);
+            eprintln!("catch-up: speed {speed} (buffer low {low:.2} s)");
+          }
+        }
+      })
+      .detach();
+    }
     if let Some(after) = quit_after {
       cx.spawn(async move |cx| {
         cx.background_executor().timer(after).await;
@@ -182,7 +274,7 @@ fn main() {
 /// `PEEBY_PROXY=1`: the `twitch` crate's `Client::play` (main and backup tokens and masters
 /// together, then the local proxy). The proxy runs on a thread of its own until the spike quits,
 /// and reports ad breaks. Returns the best landscape variant's local URL.
-fn through_proxy(target: &Target) -> Result<String, String> {
+fn through_proxy(target: &Target) -> Result<(String, ::twitch::EdgeClock), String> {
   let target = match target {
     Target::Live(login) => ::twitch::Target::Live(login.clone()),
     Target::Vod(id) => ::twitch::Target::Vod(id.clone()),
@@ -232,8 +324,8 @@ fn through_proxy(target: &Target) -> Result<String, String> {
         .variants()
         .iter()
         .find(|v| !v.portrait && !v.audio_only())
-        .map(|v| (v.url.clone(), format!("{v:?}")));
-      let playlist = best.as_ref().map(|(url, _)| url.clone());
+        .map(|v| (v.url.clone(), format!("{v:?}"), proxy.edge_clock()));
+      let playlist = best.as_ref().map(|(url, _, _)| url.clone());
       let _ = tx.send(best.ok_or_else(|| "no landscape variant".to_owned()));
       let mut last = proxy.ad_state();
       let mut ticks = 0u32;
@@ -257,14 +349,14 @@ fn through_proxy(target: &Target) -> Result<String, String> {
       }
     });
   });
-  let (url, name) = rx
+  let (url, name, clock) = rx
     .recv()
     .map_err(|_| "the proxy thread stopped".to_owned())??;
   eprintln!(
     "proxy ready after {:.2} s: {name}",
     started.elapsed().as_secs_f64()
   );
-  Ok(url)
+  Ok((url, clock))
 }
 
 /// How long ago the segment FFmpeg starts a live at (third from the end of `url`'s playlist) was
@@ -272,6 +364,52 @@ fn through_proxy(target: &Target) -> Result<String, String> {
 /// segments have none).
 async fn start_behind(url: &str) -> Option<f64> {
   let text = reqwest::get(url).await.ok()?.text().await.ok()?;
+  // The playlist's shape, without its URLs.
+  let tags: Vec<&str> = text
+    .lines()
+    .filter(|l| l.starts_with("#EXT-X-TARGETDURATION") || l.starts_with("#EXTINF"))
+    .collect();
+  eprintln!(
+    "playlist: {} … {:?}",
+    tags.first().unwrap_or(&""),
+    &tags[tags.len().saturating_sub(5)..]
+  );
+  // How the two newest segments (prefetch ones, still being made) arrive: their first and last
+  // bytes after the request, and in how many reads; never their URLs.
+  let urls: Vec<&str> = text
+    .lines()
+    .filter(|l| !l.starts_with('#') && !l.is_empty())
+    .collect();
+  let timed: Vec<_> = urls[urls.len().saturating_sub(2)..]
+    .iter()
+    .map(|url| (*url).to_owned())
+    .map(|url| {
+      tokio::spawn(async move {
+        let asked = Instant::now();
+        let mut response = reqwest::Client::new()
+          .get(url)
+          .header("Referer", twitch::REFERER)
+          .header("Origin", twitch::REFERER)
+          .send()
+          .await
+          .ok()?;
+        let status = response.status().as_u16();
+        let (mut first, mut reads, mut bytes) = (None, 0u32, 0usize);
+        while let Ok(Some(chunk)) = response.chunk().await {
+          first.get_or_insert_with(|| asked.elapsed().as_millis());
+          reads += 1;
+          bytes += chunk.len();
+        }
+        Some(format!(
+          "HTTP {status}, first byte {first:?} ms, last {} ms, {reads} reads, {bytes} bytes",
+          asked.elapsed().as_millis()
+        ))
+      })
+    })
+    .collect();
+  for (name, task) in ["second newest", "newest"].iter().zip(timed) {
+    eprintln!("{name} segment: {:?}", task.await.ok().flatten());
+  }
   // (capture time in ms when known, duration in s) of each segment.
   let mut segments: Vec<(Option<i64>, f64)> = Vec::new();
   let mut date = None;

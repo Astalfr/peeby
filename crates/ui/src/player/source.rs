@@ -43,6 +43,10 @@ pub struct Source {
   /// mpv read last left the broadcaster. Called on the UI thread once a second while the
   /// statistics show: it reads memory, never the network.
   pub live_edge: Option<Rc<dyn Fn() -> Option<std::time::SystemTime>>>,
+  /// A live kept close to its edge (low latency): the buffer to keep, seconds. While it plays at
+  /// its edge, the player runs a little faster above it and a little slower under it
+  /// (`catch_up.rs`). `None`: the live plays at 1× from wherever mpv started it.
+  pub catch_up: Option<f64>,
 }
 
 /// A live whose past plays from another source: its recording, made as it goes (Twitch's VOD

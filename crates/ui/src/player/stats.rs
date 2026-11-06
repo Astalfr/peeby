@@ -69,6 +69,11 @@ impl PlayerView {
         format!("{delay:.1} s"),
       ));
     }
+    if let Some(speed) = self.catch_up_stat() {
+      self
+        .stats_rows
+        .push((t("Low-latency speed", "Vitesse faible latence"), speed));
+    }
     self.stats_rows.push((
       t("Position", "Position"),
       format!(

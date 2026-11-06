@@ -6,6 +6,7 @@
 //! or the window ([`Layout::Window`], the example); fills the window in fullscreen. Controls and
 //! behavior come from peeby's player page.
 
+mod catch_up;
 pub mod chapter_list;
 mod overlays;
 mod running;
@@ -366,6 +367,8 @@ pub struct PlayerView {
   last_reload: Option<Instant>,
   /// Reloads the stream if buffering lasts [`STALL_AFTER`].
   stall_task: Option<Task<()>>,
+  /// A live's speed kept close to its edge ([`Source::catch_up`]).
+  catch_up: catch_up::CatchUp,
   _events: Option<Task<()>>,
 }
 
@@ -467,6 +470,7 @@ impl PlayerView {
       notice: None,
       last_reload: None,
       stall_task: None,
+      catch_up: Default::default(),
       _events: None,
     }
   }
@@ -1216,6 +1220,7 @@ impl PlayerView {
       player.set_paused(true);
     }
     self.player = Some(player);
+    self.start_catch_up(cx);
     self.status = None;
     // After a quality change: the subtitle track goes to the new mpv. Only for subtitles added
     // on demand: a file's own tracks were picked by the source's `sid` (Jellyfin), which

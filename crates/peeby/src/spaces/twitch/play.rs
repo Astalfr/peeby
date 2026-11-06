@@ -31,6 +31,14 @@ pub const DEFAULT_HEIGHT: u32 = 1080;
 /// the proxy at once. A live never gets this far ahead of its edge.
 const READAHEAD_SECS: u32 = 60;
 
+/// The buffer a low-latency live keeps while it plays at its edge, seconds
+/// ([`ui::player::Source::catch_up`]). mpv starts a live about 2 s of buffer from what exists and
+/// holds it; its buffer then swings by about a segment (it opens each one late, though the CDN
+/// serves them as they are made). Measured 2026-11-06 with `spike-twitch-play` (`PEEBY_CATCHUP`),
+/// on a live of 1 s segments only: the delay to the streamer went from 4.2 s to 3.3 s on average,
+/// with no stall in 3 min at 0.6 and two short ones in 2.5 min at 0.4.
+pub const CATCH_UP_BUFFER: f64 = 0.6;
+
 /// mpv's options for `url`: Twitch's CDN wants the player's origin.
 fn options(url: &str, player: &settings::Player) -> StartOptions {
   let mut options = StartOptions {

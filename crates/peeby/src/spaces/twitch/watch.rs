@@ -310,6 +310,7 @@ impl WatchView {
     let clicked = Instant::now();
     let client = self.client.clone();
     let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
+    let catch_up = low_latency && Settings::get(cx).twitch.catch_up.unwrap_or(true);
     let codecs = play::codecs(&Settings::get(cx).twitch.software_codecs);
     let play = runtime::spawn(cx, {
       let (client, login) = (client.clone(), login.clone());
@@ -334,12 +335,14 @@ impl WatchView {
           this.keep_archive(archive);
           match play {
             Some(Ok(proxy)) => {
-              let (source, qualities) = play::proxied(
+              let (mut source, qualities) = play::proxied(
                 &proxy,
                 true,
                 Self::max_height(cx),
                 &Settings::get(cx).player,
               );
+              // Low latency: closer to the edge than where mpv starts, and back there after a stall.
+              source.catch_up = catch_up.then_some(play::CATCH_UP_BUFFER);
               this.proxy = Some(proxy);
               this.qualities = qualities;
               this.start_source(source, clicked, cx);
