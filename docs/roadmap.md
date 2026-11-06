@@ -272,6 +272,17 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   memberships (none in the saved responses); the comments of a live page do not load more on scroll (its
   layout scrolls on its own).
 
+## Members-only videos
+
+- Done (2026-11-06): cards of members-only videos show a star and "Réservé aux membres" at the thumbnail's
+  bottom left (the star alone under 200 px: queue, related videos, playlist rows) (`VideoItem::members_only`, from the lockup's `BADGE_MEMBERS_ONLY` metadata row, which no longer passes for
+  the channel's row on a channel's own tab). When VISIONOS refuses one, a WEB `player` check with the session
+  tells a member (yt-dlp plays it with the cookies) from anyone else, to whom the player says the video is for
+  the channel's members ([ADR 0005](decisions/0005-bundled-yt-dlp.md)). 2 tests on 2 new anonymous fixtures
+  (Okayu Ch.'s live tab, a members-only `player`). **Not verified:** the badge and the message in the running
+  app, a member's playback through yt-dlp; search results (`videoRenderer`) carry no badge (anonymous
+  searches, global or in a channel, leave these videos out: no response to parse).
+
 ## Visual refresh
 
 - Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.

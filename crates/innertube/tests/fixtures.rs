@@ -7,9 +7,9 @@
 use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
   NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url,
-  parse_channel_search, parse_feed, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_tracking, parse_watch,
+  parse_channel_search, parse_feed, parse_members_only, parse_oembed_title, parse_playlist,
+  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
+  parse_shorts_sequence, parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -99,6 +99,36 @@ fn channel_streams_are_live() {
   assert_eq!(feed.items.len(), 3);
   assert_eq!(feed.items[0].id, "0sfDth4lMLc");
   assert!(feed.items.iter().all(|v| v.live && v.duration.is_none()));
+}
+
+#[test]
+fn members_only_cards() {
+  // Okayu Ch.'s "En direct" tab, captured 2026-11-06 anonymously, trimmed to a public past live
+  // and a members-only one, whose badge is a metadata row of its own after views · date.
+  let feed = parse_feed(&fixture("channel_streams_members.json"));
+  assert_eq!(feed.items.len(), 2);
+  let (public, members) = (&feed.items[0], &feed.items[1]);
+  assert_eq!(public.id, "U1x0E4tXVk4");
+  assert!(!public.members_only);
+  assert_eq!(members.id, "0XfSSfCjakE");
+  assert!(members.members_only);
+  // The badge row is not taken for the channel's row on the channel's own tab.
+  assert_eq!(members.channel, None);
+  assert_eq!(members.metadata, ["Diffusé il y a 1 mois"]);
+  assert!(members.duration.is_some());
+}
+
+#[test]
+fn members_only_player() {
+  // WEB `player` of a members-only video, anonymous, captured 2026-11-06: the membership offer.
+  let player = fixture("player_web_members_only.json");
+  assert!(parse_members_only(&player));
+  assert!(matches!(
+    hls_manifest_url(&player),
+    Err(Error::Unplayable { ref status, .. }) if status == "UNPLAYABLE"
+  ));
+  assert!(!parse_members_only(&fixture("player_login_required.json")));
+  assert!(!parse_members_only(&fixture("player_web_signed_in.json")));
 }
 
 #[test]

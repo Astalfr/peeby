@@ -56,8 +56,8 @@ pub use models::{
 };
 pub use parse::{
   parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_live_formats, parse_notifications, parse_oembed_title, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
-  parse_shorts_sequence, parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking,
-  parse_unseen_count, parse_watch,
+  parse_live_chat, parse_live_formats, parse_members_only, parse_notifications, parse_oembed_title,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch,
 };

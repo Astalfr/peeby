@@ -38,6 +38,12 @@ pub enum Error {
     /// Human-readable reason from YouTube, if any.
     reason: String,
   },
+  /// The video is for the channel's members, and the session is not one (or is signed out).
+  #[error("members-only video")]
+  MembersOnly {
+    /// Whether the check was signed in (else signing in with a member's account may help).
+    signed_in: bool,
+  },
   /// The local proxy of a live could not start (ADR 0025).
   #[error("live proxy: {0}")]
   Proxy(String),

@@ -16,7 +16,7 @@ VISIONOS ([0003](0003-visionos-hls-streams.md)) can fail: client blocked, age or
 - yt-dlp runs isolated from the host: `--ignore-config`, `--cache-dir` in the app's folder, `--js-runtimes deno:<path>`.
 - The fallback forces HLS to avoid the `available_at` wait: `bv*[protocol=m3u8_native][height<=?1080]+ba[protocol=m3u8_native]/…` (about 3–4 s to start). It also sets `sub-langs=none`, because mpv opens external subtitles before playing.
 
-In the app (`tools.rs`, `watch.rs`): when `Client::stream` fails with anything but a network error, mpv's `ytdl_hook` runs the bundled yt-dlp with those options and a copy of the session cookies. Measured on an age-restricted video: playback after 8.1 s, 1080p, hardware decoding. yt-dlp found no HLS for it, so mpv waited for `available_at` (4 s).
+In the app (`tools.rs`, `watch.rs`): when `Client::stream` fails with anything but a network error, mpv's `ytdl_hook` runs the bundled yt-dlp with those options and a copy of the session cookies. Members-only videos (VISIONOS answers `UNPLAYABLE` to anyone, being an anonymous visitor) get one check first: a WEB `player` request with the session (`Client::check_members_only`). When it offers the channel's membership (`errorScreen.playerLegacyDesktopYpcOfferRenderer.offerId == "sponsors_only_video"`, not translated, unlike `reason`), the player says the video is for members (`Error::MembersOnly`, its text asking a signed-out user to sign in with a member's account) without running yt-dlp; when it would play (the account is a member), yt-dlp plays it with the cookies. Measured on an age-restricted video: playback after 8.1 s, 1080p, hardware decoding. yt-dlp found no HLS for it, so mpv waited for `available_at` (4 s).
 
 ## Consequences
 

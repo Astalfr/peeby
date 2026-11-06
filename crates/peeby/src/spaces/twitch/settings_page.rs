@@ -399,10 +399,16 @@ fn points_section(auto_claim: bool) -> AnyElement {
     t("Channel points", "Points de chaîne"),
     vec![
       row(
-        t("Claim the bonus automatically", "Réclamer le bonus automatiquement"),
         t(
-          "When a live's bonus chest shows, Peeby claims it a second or two later, through            twitch.tv's chat in a hidden window. Off: the Bonus button claims it.",
-          "Quand le coffre bonus d'un live apparaît, Peeby le réclame une ou deux secondes plus            tard, par le chat de twitch.tv dans une fenêtre cachée. Désactivé : le bouton Bonus le            réclame.",
+          "Claim the bonus automatically",
+          "Réclamer le bonus automatiquement",
+        ),
+        t(
+          "When a live's bonus chest shows, Peeby claims it a second or two later, through \
+           twitch.tv's chat in a hidden window. Off: the Bonus button claims it.",
+          "Quand le coffre bonus d'un live apparaît, Peeby le réclame une ou deux secondes plus \
+           tard, par le chat de twitch.tv dans une fenêtre cachée. Désactivé : le bouton Bonus le \
+           réclame.",
         ),
         toggle("twitch-auto-claim", auto_claim, |on, cx| {
           Settings::update(cx, |s| s.twitch.auto_claim_bonus = Some(on))

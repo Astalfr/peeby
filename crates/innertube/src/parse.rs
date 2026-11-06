@@ -679,6 +679,9 @@ fn parse_video_renderer(video: &Value) -> Option<VideoItem> {
       .into_iter()
       .flatten()
       .any(|b| b["metadataBadgeRenderer"]["style"] == "BADGE_STYLE_TYPE_LIVE_NOW"),
+    // Anonymous searches, global or in a channel, left members-only videos out (checked
+    // 2026-11-06): no response to parse their badge from.
+    members_only: false,
     thumbnails: thumbnails(&video["thumbnail"]["thumbnails"]),
     avatar: thumbnails(
       &video["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]["thumbnail"]
@@ -989,6 +992,7 @@ fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
       .collect(),
     duration: non_empty(text(&r["lengthText"])),
     live: false,
+    members_only: false,
     thumbnails: thumbnails(&r["thumbnail"]["thumbnails"]),
     avatar: Vec::new(),
     set_video_id: removable_entry(r),
@@ -1037,9 +1041,29 @@ fn metadata_rows(metadata: &Value) -> Vec<Vec<String>> {
         .into_iter()
         .flatten()
         .filter_map(|part| part["text"]["content"].as_str().map(str::to_owned))
-        .collect()
+        .collect::<Vec<_>>()
     })
+    // A row of badges only ("Members only") has no text: it is not the channel's row.
+    .filter(|row| !row.is_empty())
     .collect()
+}
+
+/// Whether a lockup's metadata carries the "Members only" badge (a row of `badgeViewModel`s).
+fn lockup_members_only(metadata: &Value) -> bool {
+  metadata["contentMetadataViewModel"]["metadataRows"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .flat_map(|row| row["badges"].as_array().into_iter().flatten())
+    .any(|b| b["badgeViewModel"]["badgeStyle"] == "BADGE_MEMBERS_ONLY")
+}
+
+/// Whether a WEB `player` answer offers the channel's membership instead of the video: a
+/// members-only video the session cannot watch (`offerId` is not translated, unlike `reason`).
+pub fn parse_members_only(player: &Value) -> bool {
+  player["playabilityStatus"]["status"] != "OK"
+    && player["playabilityStatus"]["errorScreen"]["playerLegacyDesktopYpcOfferRenderer"]["offerId"]
+      == "sponsors_only_video"
 }
 
 /// Parses a comments page (`next` continuation). Threads are `commentThreadRenderer`s pointing
@@ -1285,6 +1309,7 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
     metadata,
     duration,
     live,
+    members_only: lockup_members_only(&meta["metadata"]),
     thumbnails: thumbnails(&image["image"]["sources"]),
     avatar: thumbnails(&avatar["avatar"]["avatarViewModel"]["image"]["sources"]),
     set_video_id: None,

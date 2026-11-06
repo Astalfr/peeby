@@ -24,6 +24,9 @@ use crate::{motion, theme};
 const AVATAR: f32 = 36.;
 /// Width of a compact card's thumbnail.
 pub const COMPACT_WIDTH: f32 = 168.;
+/// Narrowest picture whose bottom left badge shows its text after its icon (a duration
+/// leaves room for it from there).
+pub const BADGE_LABEL_WIDTH: f32 = 200.;
 /// Width of a list row's thumbnail.
 pub const ROW_WIDTH: f32 = 246.;
 /// Aspect ratio of video thumbnails.
@@ -98,6 +101,7 @@ pub struct MediaCard {
   avatar: Option<Picture>,
   badge: Option<SharedString>,
   badge_left: Option<SharedString>,
+  badge_left_icon: Option<Icon>,
   badge_dot: Option<Hsla>,
   live: bool,
   progress: Option<f32>,
@@ -129,6 +133,7 @@ impl MediaCard {
       avatar: None,
       badge: None,
       badge_left: None,
+      badge_left_icon: None,
       badge_dot: None,
       live: false,
       progress: None,
@@ -175,6 +180,14 @@ impl MediaCard {
   /// Text in a dark badge at the picture's bottom left (a live's uptime).
   pub fn badge_left(mut self, badge: Option<impl Into<SharedString>>) -> Self {
     self.badge_left = badge.map(Into::into);
+    self
+  }
+
+  /// An icon before the bottom left badge's text. On a picture narrower than
+  /// [`BADGE_LABEL_WIDTH`], the icon shows alone, so that the badge leaves room for the
+  /// bottom right one.
+  pub fn badge_left_icon(mut self, icon: Option<Icon>) -> Self {
+    self.badge_left_icon = icon;
     self
   }
 
@@ -327,9 +340,16 @@ impl MediaCard {
           .badge
           .take()
           .filter(|_| !self.live)
-          .map(|t| badge(t, self.badge_dot).right(px(8.))),
+          .map(|t| badge(Some(t), self.badge_dot, None).right(px(8.))),
       )
-      .children(self.badge_left.take().map(|t| badge(t, None).left(px(8.))))
+      .children({
+        let icon = self.badge_left_icon.take();
+        let text = self
+          .badge_left
+          .take()
+          .filter(|_| icon.is_none() || width >= BADGE_LABEL_WIDTH);
+        (icon.is_some() || text.is_some()).then(|| badge(text, None, icon).left(px(8.)))
+      })
       .children(self.overlays.drain(..))
   }
 
@@ -670,9 +690,9 @@ fn muted_lines(lines: &[SharedString]) -> gpui::Div {
     .children(lines.iter().map(|l| div().truncate().child(l.clone())))
 }
 
-/// Dark badge at a picture's bottom (duration), after a `dot` of that color if any, placed
-/// on its side by the caller.
-fn badge(text: SharedString, dot: Option<Hsla>) -> gpui::Div {
+/// Dark badge at a picture's bottom (duration), after a `dot` of that color or an `icon` if
+/// any, placed on its side by the caller.
+fn badge(text: Option<SharedString>, dot: Option<Hsla>, icon: Option<Icon>) -> gpui::Div {
   h_flex()
     .gap_1()
     .items_center()
@@ -686,7 +706,8 @@ fn badge(text: SharedString, dot: Option<Hsla>) -> gpui::Div {
     .font_weight(FontWeight::SEMIBOLD)
     .text_color(gpui::white())
     .children(dot.map(|color| div().size(px(6.)).rounded_full().bg(color)))
-    .child(text)
+    .children(icon.map(|icon| gpui_component::Icon::new(icon).size(px(12.))))
+    .children(text)
 }
 
 /// "LIVE" with a white dot on the accent at a picture's bottom right, like the player's.

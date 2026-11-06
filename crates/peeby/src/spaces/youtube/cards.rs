@@ -34,7 +34,7 @@ fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &
 }
 
 /// The card of `video` under `id` (which tells apart the same video in two lists): title,
-/// thumbnail, duration or live badge, channel then views · date, and the stream prefetch on hover.
+/// thumbnail, duration or live badge, members-only badge, channel then views · date, and the stream prefetch on hover.
 fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
   let video_id = video.id.clone();
   MediaCard::new(
@@ -48,6 +48,12 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
     video.metadata.join(" · "),
   ])
   .badge(video.duration.clone())
+  .badge_left(
+    video
+      .members_only
+      .then(|| ui::i18n::t("Members only", "Réservé aux membres")),
+  )
+  .badge_left_icon(video.members_only.then_some(ui::assets::Icon::Star))
   .live(video.live)
   .progress(video.progress.map(|p| f32::from(p.percent) / 100.0))
   .on_hover(move |hovered, cx| crate::spaces::youtube::prefetch::hover(&video_id, hovered, cx))

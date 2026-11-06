@@ -17,10 +17,10 @@ use crate::models::{
 };
 use crate::parse::{
   parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_live_formats, parse_notifications, parse_oembed_title, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
-  parse_shorts_sequence, parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking,
-  parse_unseen_count, parse_watch, tracking_param,
+  parse_live_chat, parse_live_formats, parse_members_only, parse_notifications, parse_oembed_title,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
@@ -586,6 +586,22 @@ impl Client {
       endpoint: "player",
       detail: "no playbackTracking".into(),
     })
+  }
+
+  /// Why VISIONOS refused `video_id`, when it is for the channel's members: `Err(MembersOnly)`
+  /// if the WEB `player` (signed in when cookies are set) offers the membership instead of the
+  /// video, `Ok(())` when it would play (the account is a member: yt-dlp, with the cookies, can
+  /// play it) or is refused for another reason.
+  pub async fn check_members_only(&self, video_id: &str) -> Result<()> {
+    let body = json!({ "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true });
+    let player = self.web("player", body, true).await?;
+    self.check_session(&player)?;
+    if parse_members_only(&player) {
+      return Err(Error::MembersOnly {
+        signed_in: self.session.is_some(),
+      });
+    }
+    Ok(())
   }
 
   /// Reports the start of playback at `position` seconds: the video goes to the top of the

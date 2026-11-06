@@ -37,6 +37,8 @@ pub struct VideoItem {
   pub duration: Option<String>,
   /// Whether the video is a live broadcast happening now.
   pub live: bool,
+  /// Whether only the channel's members can watch it (YouTube's "Members only" badge).
+  pub members_only: bool,
   /// Thumbnail sizes.
   pub thumbnails: Vec<Thumbnail>,
   /// Channel avatar sizes.

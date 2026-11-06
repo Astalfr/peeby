@@ -861,7 +861,10 @@ pub(super) fn load_stream(
   let max_height = Settings::get(cx).max_height;
   let player_settings = Settings::get(cx).player.clone();
   let (client, id) = (client.clone(), video_id.to_owned());
-  let fetch = runtime::spawn(cx, async move { client.stream(&id, max_height).await });
+  let fetch = runtime::spawn(cx, {
+    let client = client.clone();
+    async move { client.stream(&id, max_height).await }
+  });
   let player = player.downgrade();
   let video_id = video_id.to_owned();
   cx.spawn(async move |cx| {
@@ -887,9 +890,28 @@ pub(super) fn load_stream(
       Some(Err(e)) => e,
       None => return,
     };
-    // Network down: yt-dlp would fail too. Anything else (age or membership restriction,
-    // client blocked, unexpected response): let the bundled yt-dlp try (ADR 0005).
-    let fallback = if matches!(error, innertube::Error::Http(_)) {
+    // VISIONOS is an anonymous visitor: it refuses a members-only video even to a member. The
+    // WEB player, with the session, tells whether the account may watch it (then yt-dlp, with
+    // the cookies, plays it); otherwise say so rather than let yt-dlp fail after a few seconds.
+    let error = match error {
+      innertube::Error::Unplayable { ref status, .. } if status == "UNPLAYABLE" => {
+        let id = video_id.clone();
+        let check =
+          cx.update(|cx| runtime::spawn(cx, async move { client.check_members_only(&id).await }));
+        match check.await {
+          Some(Err(members @ innertube::Error::MembersOnly { .. })) => members,
+          _ => error,
+        }
+      }
+      error => error,
+    };
+    // Network down: yt-dlp would fail too, and a members-only video the account cannot watch
+    // stays refused. Anything else (age restriction, a member's video, client blocked,
+    // unexpected response): let the bundled yt-dlp try (ADR 0005).
+    let fallback = if matches!(
+      error,
+      innertube::Error::Http(_) | innertube::Error::MembersOnly { .. }
+    ) {
       None
     } else {
       tracing::info!("VISIONOS failed ({error}), trying yt-dlp");

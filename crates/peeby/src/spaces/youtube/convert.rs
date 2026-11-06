@@ -66,6 +66,19 @@ pub fn error_text(error: &innertube::Error) -> String {
       "Invalid cookie file: {detail}",
       "Fichier de cookies invalide : {detail}"
     ),
+    Error::MembersOnly { signed_in: false } => t(
+      "This video is for the channel's members. Sign in with a member's account to watch it.",
+      "Cette vidéo est réservée aux membres de la chaîne. Connectez-vous avec un compte membre \
+       pour la regarder.",
+    )
+    .into(),
+    Error::MembersOnly { signed_in: true } => t(
+      "This video is for the channel's members. Join the channel on youtube.com, signed in \
+       with this account, to watch it here.",
+      "Cette vidéo est réservée aux membres de la chaîne. Rejoignez-la sur youtube.com avec \
+       ce compte pour la regarder ici.",
+    )
+    .into(),
     Error::Unplayable { status, reason } if status == "LOGIN_REQUIRED" => tf!(
       "This video requires signing in. {reason}",
       "Cette vidéo demande d'être connecté. {reason}"
