@@ -596,13 +596,19 @@ impl PlayerView {
     let top = f32::from(at.y)
       .min(f32::from(size.height) - HEIGHT - 8.)
       .max(8.);
-    let entry = |id: &'static str, label: &'static str, checked: bool| {
-      Button::new(id)
-        .ghost()
-        .w_full()
-        .justify_start()
-        .label(label)
-        .when(checked, |b| b.icon(IconName::Check))
+    // A `Button` centers its content in a full-size box: a growing row inside it aligns the entry left.
+    let entry = |id: &'static str, icon: Icon, label: &'static str, checked: bool| {
+      Button::new(id).ghost().w_full().child(
+        h_flex()
+          .flex_1()
+          .min_w_0()
+          .gap_2()
+          .child(gpui_component::Icon::new(icon).size_4())
+          .child(div().flex_1().min_w_0().text_ellipsis().child(label))
+          .when(checked, |row| {
+            row.child(gpui_component::Icon::new(IconName::Check).size_4())
+          }),
+      )
     };
     v_flex()
       .id("context-menu")
@@ -621,6 +627,7 @@ impl PlayerView {
       .child(
         entry(
           "context-help",
+          Icon::Keyboard,
           t("Keyboard shortcuts", "Raccourcis clavier"),
           self.help,
         )
@@ -631,12 +638,16 @@ impl PlayerView {
         })),
       )
       .child(
-        entry("context-stats", t("Statistics", "Statistiques"), self.stats).on_click(cx.listener(
-          |this, _, _, cx| {
-            this.context_menu = None;
-            this.toggle_stats(cx);
-          },
-        )),
+        entry(
+          "context-stats",
+          Icon::Info,
+          t("Statistics", "Statistiques"),
+          self.stats,
+        )
+        .on_click(cx.listener(|this, _, _, cx| {
+          this.context_menu = None;
+          this.toggle_stats(cx);
+        })),
       )
       .into_any_element()
   }
