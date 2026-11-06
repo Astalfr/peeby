@@ -14,11 +14,8 @@ mod web_sign_in;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{
-  App, AppContext, Bounds, DisplayId, Entity, TitlebarOptions, WeakEntity, Window, WindowBounds,
-  WindowOptions, px, size,
-};
-use gpui_component::{Root, TitleBar};
+use gpui::{App, AppContext, Bounds, DisplayId, Entity, WeakEntity, Window, px, size};
+use gpui_component::Root;
 use gpui_platform::application;
 use shell::Shell;
 use shell::space::SpaceHandle;
@@ -146,21 +143,7 @@ fn main() {
 
       let display = chosen_display(cx);
       let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
-      let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
-        display_id: display,
-        window_min_size: Some(size(px(960.), px(600.))),
-        window_background: theme::window_background(cx),
-        show: !background,
-        focus: !background,
-        // GPUI caps an unfocused window at 30 fps by default: video plays while you work elsewhere.
-        inactive_frame_interval: None,
-        titlebar: Some(TitlebarOptions {
-          title: Some(settings::APP_NAME.into()),
-          ..TitleBar::title_bar_options()
-        }),
-        ..TitleBar::window_options()
-      };
+      let options = shell::windows::options(bounds, display, !background, cx);
       // The opening animation, unless something opens right away (a video, a live).
       let splash = initial_videos.is_empty() && twitch_page.is_none() && !background;
       let mut launches = None;
@@ -177,21 +160,22 @@ fn main() {
           youtube: youtube.downgrade(),
           twitch: twitch.as_ref().map(Entity::downgrade),
         });
+        // Before any space emits (a live opened at startup, once the shell is up).
+        shell::windows::route_events(&spaces, cx);
+        cx.set_global(shell::windows::Spaces(spaces.clone()));
         let shell = cx.new(|cx| Shell::new(spaces, splash, window, cx));
         desktop::attach(window, shell.downgrade(), cx);
         cx.new(|cx| Root::new(shell, window, cx))
       });
-      let main = match opened {
-        Ok(main) => main.window_id(),
-        Err(e) => {
-          tracing::error!("cannot open the main window: {e:#}");
-          cx.quit();
-          return;
-        }
-      };
-      // The app ends with its main window, not with the mini-player's.
+      if let Err(e) = opened {
+        tracing::error!("cannot open the main window: {e:#}");
+        cx.quit();
+        return;
+      }
+      // The app ends when one of its windows closes: they only hide, unless it is the last one
+      // and Peeby does not stay in the notification area (ADR 0028). Not with the mini-player's.
       cx.on_window_closed(move |cx, closed| {
-        if closed == main {
+        if shell::windows::get(closed, cx).is_some() {
           cx.quit();
         }
       })

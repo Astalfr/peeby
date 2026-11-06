@@ -161,18 +161,17 @@ impl WatchView {
     ];
     let queue_scroll = ScrollHandle::new();
     if let Some(queue) = &queue {
-      // The queue chose another video: this page makes way for that video's page.
+      // The queue chose another video: this page makes way for that video's page, built in the
+      // window its tab is in now (ADR 0028).
       let nav = nav.clone();
-      subscriptions.push(cx.subscribe_in(
-        queue,
-        window,
-        move |_, queue, QueueEvent::Play, window, cx| {
-          let (queue, tab) = (queue.clone(), nav.tab);
+      subscriptions.push(cx.subscribe(queue, move |_, queue, QueueEvent::Play, cx| {
+        let (queue, tab, nav) = (queue.clone(), nav.tab, nav.clone());
+        crate::shell::windows::in_window_of(tab, cx, move |window, cx| {
           nav
             .update(cx, |app, cx| app.play_queue(tab, queue, true, window, cx))
             .ok();
-        },
-      ));
+        });
+      }));
       subscriptions.push(cx.observe(queue, |this, _, cx| {
         this.sync_queue_controls(cx);
         cx.notify();

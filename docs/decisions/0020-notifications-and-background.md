@@ -69,7 +69,8 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   "Quit". Its hidden window gets its
   messages from GPUI's loop on the same thread. `close_to_tray` (on by default) makes the "×"
   hide the main window (`on_window_should_close`, `ShowWindow(SW_HIDE)`); off, or without the
-  icon, it quits as before.
+  icon, it quits as before. With several windows (ADR 0028), this is the last one's "×"; the
+  others close with their tabs, and the "main window" here is the window used last.
 - **List of lives** (`shell::lives`, 2026-11-03, the layout of the Gumbo extension for Twitch):
   a `PopUp` window above the icon (on the icon's screen, `sys::monitor_at` giving its
   `DisplayId` and scale) with a tab per space whose `Space::lives` is `Some` (the shell still

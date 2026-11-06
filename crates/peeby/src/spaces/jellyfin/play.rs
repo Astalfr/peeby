@@ -103,7 +103,8 @@ impl PlayView {
     if entered_fullscreen {
       window.toggle_fullscreen();
     }
-    let player_events = cx.subscribe_in(&player, window, Self::on_player_event);
+    // Not through the window: the tab may move to another one (ADR 0028), the reports go on.
+    let player_events = cx.subscribe(&player, Self::on_player_event);
     // Whatever takes the page away (back, the sidebar, signing out, the next episode), the
     // server learns where playback stopped.
     cx.on_release(|this, cx| this.finish(false, cx)).detach();
@@ -297,9 +298,8 @@ impl PlayView {
 
   fn on_player_event(
     &mut self,
-    _: &Entity<PlayerView>,
+    _: Entity<PlayerView>,
     event: &PlayerEvent,
-    window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     match event {
@@ -328,12 +328,12 @@ impl PlayView {
         // Only an episode left in its credits counts as watched; N midway does not.
         let watched = self.player.read(cx).finished();
         if let Some(next) = self.next.clone() {
-          self.play_episode(next, watched, window, cx);
+          self.play_episode(next, watched, cx);
         }
       }
       PlayerEvent::Previous => {
         if let Some(previous) = self.previous.clone() {
-          self.play_episode(previous, false, window, cx);
+          self.play_episode(previous, false, cx);
         }
       }
       PlayerEvent::Close => self.close(cx),
@@ -356,27 +356,23 @@ impl PlayView {
       .ok();
   }
 
-  /// Replaces this page by a player for another episode of the series.
-  fn play_episode(
-    &mut self,
-    episode: BaseItem,
-    watched: bool,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
+  /// Replaces this page by a player for another episode of the series, built in the window its
+  /// tab is in now (ADR 0028).
+  fn play_episode(&mut self, episode: BaseItem, watched: bool, cx: &mut Context<Self>) {
     self.remember_tracks(cx);
     self.finish(watched, cx);
     // The next player finds the window fullscreen already: hand over leaving it.
-    let (leave_fullscreen, tab) = (self.entered_fullscreen, self.nav.tab);
-    self
-      .nav
-      .update(cx, |space, cx| {
-        if leave_fullscreen {
-          space.leave_fullscreen();
-        }
-        space.replace(tab, Route::Play(episode.id), window, cx)
-      })
-      .ok();
+    let (leave_fullscreen, tab, nav) = (self.entered_fullscreen, self.nav.tab, self.nav.clone());
+    crate::shell::windows::in_window_of(tab, cx, move |window, cx| {
+      nav
+        .update(cx, |space, cx| {
+          if leave_fullscreen {
+            space.leave_fullscreen();
+          }
+          space.replace(tab, Route::Play(episode.id), window, cx)
+        })
+        .ok();
+    });
   }
 
   /// Keeps the series' track choices for its next episodes.

@@ -157,7 +157,7 @@ impl JellyfinSpace {
     };
     if Settings::get(cx).opens_at_startup(ID) {
       let first = space.tabs.add(Vec::new(), None);
-      space.tabs.show(first);
+      space.tabs.remember(first);
     }
     if let Some(client) = client {
       space.sign_in(client, cx);
@@ -544,11 +544,6 @@ impl Space for JellyfinSpace {
     cx.notify();
   }
 
-  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    self.tabs.show(tab);
-    cx.notify();
-  }
-
   fn title(&self, tab: TabId, _cx: &App) -> SharedString {
     self
       .tabs
@@ -677,7 +672,7 @@ impl Render for JellyfinSpace {
         .child(self.render_login(window, cx))
         .into_any_element();
     }
-    let Some(tab) = self.tabs.shown() else {
+    let Some(tab) = self.tabs.shown_in(window.window_handle().window_id()) else {
       return div().size_full().into_any_element();
     };
     // A tab opened in the background, a page reached with "back" or "forward", signing in: the

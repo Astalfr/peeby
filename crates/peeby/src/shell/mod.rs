@@ -12,6 +12,7 @@ mod mini_player;
 mod settings_page;
 pub mod space;
 mod tab_drag;
+pub mod windows;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -20,10 +21,11 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, NavigationDirection,
-  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, anchored, canvas, deferred,
-  div, img, px,
+  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, WindowId, anchored, canvas,
+  deferred, div, img, px,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
+use gpui_component::menu::{ContextMenuExt, PopupMenuItem};
 use gpui_component::popover::{Popover, PopoverState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Disableable, IconName, Selectable, Sizable, TitleBar, h_flex, v_flex};
@@ -39,7 +41,7 @@ use crate::settings::Settings;
 use mini_player::MiniPlayer;
 use settings_page::SettingsView;
 pub use settings_page::delivery_row;
-use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle, TabId};
+use space::{Avatar, HoverCard, MenuEntry, SpaceHandle, TabId};
 use tab_drag::{Slide, TabDrag, TabLayout};
 
 /// Width of the notifications panel.
@@ -80,6 +82,8 @@ enum Request {
 
 /// The window's root view.
 pub struct Shell {
+  /// Its window's (ADR 0028).
+  window: WindowId,
   spaces: Vec<SpaceHandle>,
   /// The tabs, left to right.
   tabs: Vec<TabRef>,
@@ -123,10 +127,23 @@ const CARD_DELAY: Duration = Duration::from_millis(500);
 const CARD_GRACE: Duration = Duration::from_millis(300);
 
 impl Shell {
-  /// The shell over `spaces` and the tabs they opened, the first one shown, with the opening
-  /// animation when `splash` (and GPUI's `reduce_motion` is off).
+  /// The first window's shell, over `spaces` and the tabs they opened at startup, the first
+  /// one shown, with the opening animation when `splash` (and GPUI's `reduce_motion` is off).
   pub fn new(
     spaces: Vec<SpaceHandle>,
+    splash: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    Self::with_tabs(spaces, None, splash, window, cx)
+  }
+
+  /// A shell over `spaces` holding `tabs` (a tab moved to a new window), or the tabs the
+  /// spaces opened at startup when `None`. The spaces' events reach it through
+  /// `windows::route_events`.
+  fn with_tabs(
+    spaces: Vec<SpaceHandle>,
+    tabs: Option<Vec<TabRef>>,
     splash: bool,
     window: &mut Window,
     cx: &mut Context<Self>,
@@ -142,39 +159,17 @@ impl Shell {
             .ok();
         }),
       ));
-      let shell = cx.weak_entity();
-      let handle = window.window_handle();
-      subscriptions.push(space.on_event(
-        cx,
-        Box::new(move |event, cx| {
-          let request = match *event {
-            SpaceEvent::Activate(tab) => Request::Activate(tab),
-            SpaceEvent::Opened { tab, after, focus } => Request::Add { tab, after, focus },
-            SpaceEvent::OpenSettings { reveal } => Request::Settings { reveal },
-          };
-          let shell = shell.clone();
-          // Deferred: the event comes from inside the window (a click), which cannot be
-          // updated again from there.
-          cx.defer(move |cx| {
-            handle
-              .update(cx, |_, window, cx| {
-                shell
-                  .update(cx, |shell, cx| match request {
-                    Request::Activate(tab) => shell.activate(tab, window, cx),
-                    Request::Add { tab, after, focus } => {
-                      shell.add_tab(index, tab, after, focus, window, cx)
-                    }
-                    Request::Settings { reveal } => {
-                      shell.open_settings(Some(index), reveal, window, cx)
-                    }
-                  })
-                  .ok();
-              })
-              .ok();
-          });
-        }),
-      ));
     }
+    // The window used last takes what has no window of its own; the accent is the whole app's,
+    // so it follows the window in front.
+    subscriptions.push(cx.observe_window_activation(window, |shell, window, cx| {
+      if window.is_window_active() {
+        windows::used(shell.window, cx);
+        if let Some(tab) = shell.active {
+          theme::transition_accent(shell.spaces[tab.space].info(cx).accent, cx);
+        }
+      }
+    }));
     // Another player started: the mini-player shows only the one that plays.
     subscriptions.push(cx.observe_global::<NowPlaying>(|shell, cx| {
       let shown = shell.mini_player(cx);
@@ -200,19 +195,23 @@ impl Shell {
         shell.reload(cx);
       }
     }));
-    let mut tabs: Vec<TabRef> = spaces
-      .iter()
-      .enumerate()
-      .flat_map(|(space, handle)| {
-        handle
-          .tabs(cx)
-          .into_iter()
-          .map(move |id| TabRef { space, id })
-      })
-      .collect();
+    let startup = tabs.is_none();
+    let mut tabs: Vec<TabRef> = tabs.unwrap_or_else(|| {
+      spaces
+        .iter()
+        .enumerate()
+        .flat_map(|(space, handle)| {
+          handle
+            .tabs(cx)
+            .into_iter()
+            .map(move |id| TabRef { space, id })
+        })
+        .collect()
+    });
     // No space opened one (none chosen to start with, or only a service that is unavailable):
     // the first space's.
-    if tabs.is_empty()
+    if startup
+      && tabs.is_empty()
       && let Some(first) = spaces.first()
     {
       tabs.push(TabRef {
@@ -221,6 +220,7 @@ impl Shell {
       });
     }
     let mut shell = Self {
+      window: window.window_handle().window_id(),
       spaces,
       tabs,
       active: None,
@@ -242,7 +242,7 @@ impl Shell {
     if let Some(&first) = shell.tabs.first() {
       shell.active = Some(first);
       let space = &shell.spaces[first.space];
-      space.show_tab(first.id, cx);
+      space.show_tab(first.id, shell.window, cx);
       theme::set_accent(space.info(cx).accent, cx);
     }
     shell
@@ -281,11 +281,6 @@ impl Shell {
     });
   }
 
-  /// The spaces, in the tabs' order of services.
-  pub fn spaces(&self) -> &[SpaceHandle] {
-    &self.spaces
-  }
-
   /// The tab shown and its space.
   fn current(&self) -> Option<(TabId, &SpaceHandle)> {
     let tab = self.active?;
@@ -294,6 +289,85 @@ impl Shell {
 
   fn find(&self, id: TabId) -> Option<TabRef> {
     self.tabs.iter().find(|t| t.id == id).copied()
+  }
+
+  /// Whether tab `id` is in this window.
+  pub fn holds(&self, id: TabId) -> bool {
+    self.find(id).is_some()
+  }
+
+  /// What a space asked, routed to this window (`windows::route_events`).
+  fn handle(
+    &mut self,
+    space: usize,
+    request: Request,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    match request {
+      Request::Activate(tab) => self.activate(tab, window, cx),
+      Request::Add { tab, after, focus } => self.add_tab(space, tab, after, focus, window, cx),
+      Request::Settings { reveal } => self.open_settings(Some(space), reveal, window, cx),
+    }
+  }
+
+  /// A tab's menu: it leaves this window for a new one (or a spare), with its pages and its
+  /// video. Not the window's only tab.
+  fn move_to_new_window(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(tab) = self.detach_tab(id, cx) else {
+      return;
+    };
+    let (bounds, display) = windows::cascade(window, cx);
+    // Deferred: a spare window is updated, which cannot happen from inside this one's event.
+    cx.defer(move |cx| windows::open_with(tab, bounds, display, cx));
+  }
+
+  /// Takes tab `id` out of this window without closing it (it moves to another window): the
+  /// next tab shows if it was the one shown, without moving its video to the mini-player. The
+  /// last tab stays.
+  fn detach_tab(&mut self, id: TabId, cx: &mut Context<Self>) -> Option<TabRef> {
+    if self.tabs.len() <= 1 {
+      return None;
+    }
+    let index = self.tabs.iter().position(|t| t.id == id)?;
+    let tab = self.tabs.remove(index);
+    if self.mini.as_ref().is_some_and(|m| m.tab == tab) {
+      self.close_mini(cx);
+    }
+    if self.settings.as_ref().is_some_and(|(t, _)| *t == id) {
+      self.settings = None;
+    }
+    self.tab_drag = None;
+    if self.active == Some(tab) {
+      let next = self.tabs[index.min(self.tabs.len() - 1)];
+      self.show(next, cx);
+      cx.refresh_windows();
+    }
+    cx.notify();
+    Some(tab)
+  }
+
+  /// A tab moved in from another window, shown.
+  fn adopt_tab(&mut self, tab: TabRef, cx: &mut Context<Self>) {
+    if self.holds(tab.id) {
+      return;
+    }
+    self.tabs.push(tab);
+    self.show(tab, cx);
+  }
+
+  /// The window closes while others stay open: its tabs close (their pages and videos with
+  /// them), as a browser's do, and it waits hidden for the next new window.
+  pub(crate) fn close_all(&mut self, cx: &mut Context<Self>) {
+    self.close_mini(cx);
+    for tab in std::mem::take(&mut self.tabs) {
+      self.spaces[tab.space].close_tab(tab.id, cx);
+    }
+    self.active = None;
+    self.settings = None;
+    self.opened_from = None;
+    self.tab_drag = None;
+    cx.notify();
   }
 
   /// Whether the tab shown is on the settings page.
@@ -321,7 +395,7 @@ impl Shell {
     self.active = Some(tab);
     self.opened_from = None;
     let space = self.spaces[tab.space].clone();
-    space.show_tab(tab.id, cx);
+    space.show_tab(tab.id, self.window, cx);
     self.enter_page(cx);
     theme::transition_accent(space.info(cx).accent, cx);
     cx.notify();
@@ -469,8 +543,8 @@ impl Shell {
   /// The mini-player's "back to the page": its tab shows in the main window.
   pub(crate) fn return_from_mini(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(tab) = self.mini.as_ref().map(|m| m.tab) {
-      // The main window may be hidden in the notification area.
-      crate::desktop::reveal_main(cx);
+      // The window may be hidden in the notification area.
+      crate::desktop::reveal(self.window, cx);
       window.activate_window();
       self.activate(tab.id, window, cx);
       // The tab is on the settings page: back to the page under it.
@@ -766,6 +840,8 @@ impl Shell {
     let dragged_left = dragged.map(|drag| self.dragged_left(&drag));
     // Refilled by each tab's canvas as it is laid out.
     self.tab_layout.tabs.borrow_mut().clear();
+    // A window keeps a tab.
+    let movable = self.tabs.len() > 1;
     let tabs: Vec<_> = self
       .tabs
       .iter()
@@ -807,6 +883,24 @@ impl Shell {
               this.close_tab(id, cx);
             }
           }))
+          .context_menu({
+            let shell = cx.weak_entity();
+            move |menu, _, _| {
+              let shell = shell.clone();
+              menu.item(
+                PopupMenuItem::new(t(
+                  "Move to a new window",
+                  "Déplacer dans une nouvelle fenêtre",
+                ))
+                .disabled(!movable)
+                .on_click(move |_, window, cx| {
+                  shell
+                    .update(cx, |shell, cx| shell.move_to_new_window(id, window, cx))
+                    .ok();
+                }),
+              )
+            }
+          })
       })
       .collect();
     // The dragged tab over the others, opaque, occluding the slots under it.

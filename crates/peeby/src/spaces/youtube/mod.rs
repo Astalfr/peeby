@@ -212,7 +212,7 @@ impl YouTubeSpace {
         .chain(initial_videos.into_iter().map(Route::Watch))
         .collect();
       let first = tabs.add(pages, None);
-      tabs.show(first);
+      tabs.remember(first);
       if videos {
         // Shown even after the tabs of other spaces; after the shell has subscribed to the
         // space's events.
@@ -389,8 +389,8 @@ impl YouTubeSpace {
     cx.notify();
   }
 
-  /// Opens `route` from a notification: in the tab of the space last shown, else in a new one,
-  /// and shows it.
+  /// Opens `route` from a notification: in the space's tab shown in `window` (the window used
+  /// last), else in its tab last shown in any window, else in a new one, and shows it.
   pub fn open_from_notification(
     &mut self,
     route: Route,
@@ -398,7 +398,11 @@ impl YouTubeSpace {
     cx: &mut Context<Self>,
   ) {
     // Not over the settings' tab: a tab of its own then.
-    match self.tabs.shown().filter(|&tab| !self.settings_shown(tab)) {
+    let in_window = self.tabs.shown_in(window.window_handle().window_id());
+    match in_window
+      .or(self.tabs.shown())
+      .filter(|&tab| !self.settings_shown(tab))
+    {
       Some(tab) => {
         cx.emit(SpaceEvent::Activate(tab));
         self.open(tab, route, window, cx);
@@ -553,11 +557,6 @@ impl Space for YouTubeSpace {
     cx.notify();
   }
 
-  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    self.tabs.show(tab);
-    cx.notify();
-  }
-
   fn title(&self, tab: TabId, _cx: &App) -> SharedString {
     self
       .tabs
@@ -669,7 +668,8 @@ impl Space for YouTubeSpace {
 
 impl Render for YouTubeSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let Some(tab) = self.tabs.shown() else {
+    // Each window renders its own tab of the space (ADR 0028).
+    let Some(tab) = self.tabs.shown_in(window.window_handle().window_id()) else {
       return div().size_full().into_any_element();
     };
     // A tab opened in the background, a page reached with "back" or "forward", a session

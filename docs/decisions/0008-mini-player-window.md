@@ -33,7 +33,9 @@ an external D3D11 texture drawn by the patched GPUI.
 
 ## Consequences
 
-- The app quits with its main window only (`on_window_closed` checks the window id).
+- The app quits with its main window only (`on_window_closed` checks the window id). Since ADR
+  0028, with any of its shells' windows (only the last one ever closes), and each window has its
+  own mini-player for its own tabs.
 - `gpui-video` releases replaced frames from every window, since a view can move between windows (ADR 0001).
 - A bounds given to a new window must come with its `display_id`, or Windows moves it to the primary screen
   at a default size (CLAUDE.md, Gotchas).

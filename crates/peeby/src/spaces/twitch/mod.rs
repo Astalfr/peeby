@@ -333,7 +333,7 @@ impl TwitchSpace {
     }
     let pages = std::iter::once(space.home()).chain(pending).collect();
     let first = space.tabs.add(pages, None);
-    space.tabs.show(first);
+    space.tabs.remember(first);
     if shown {
       // After the shell has subscribed to the space's events.
       cx.spawn(async move |this, cx| {
@@ -948,11 +948,6 @@ impl Space for TwitchSpace {
     cx.notify();
   }
 
-  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>) {
-    self.tabs.show(tab);
-    cx.notify();
-  }
-
   fn title(&self, tab: TabId, _cx: &App) -> SharedString {
     self
       .tabs
@@ -1190,7 +1185,8 @@ impl Space for TwitchSpace {
 
 impl Render for TwitchSpace {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let tab = self.tabs.shown();
+    // Each window renders its own tab of the space (ADR 0028).
+    let tab = self.tabs.shown_in(window.window_handle().window_id());
     // A tab opened in the background, a page reached with "back" or "forward", Helix connected
     // or gone: the page shown is built now.
     if let Some(tab) = tab

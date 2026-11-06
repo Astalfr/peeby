@@ -1,35 +1,26 @@
-//! Peeby on the Windows desktop (ADR 0020): its icon in the notification area, the main window
-//! hidden there rather than closed, Windows notifications, a single instance that the next
-//! launches hand their arguments to, and the start with Windows.
+//! Peeby on the Windows desktop (ADR 0020): its icon in the notification area, the last window
+//! hidden there rather than closed (the others close, ADR 0028), Windows notifications, a single
+//! instance that the next launches hand their arguments to, and the start with Windows.
 
 mod autostart;
 pub mod sys;
 pub mod toast;
 mod tray;
 
-use gpui::{AnyWindowHandle, App, Global, WeakEntity, Window};
+use gpui::{App, Global, WeakEntity, Window, WindowId};
 use raw_window_handle::RawWindowHandle;
 
 pub use autostart::BACKGROUND;
 
 use crate::settings::Settings;
-use crate::shell::Shell;
+use crate::shell::{Shell, windows};
 
 /// The app's icon, written next to the caches for the toasts' registration (Windows reads a
 /// file).
 const ICON: &[u8] = include_bytes!("../../assets/peeby.ico");
 
-/// What runs in the main window once it shows (a toast's click, a launch's arguments).
+/// What runs in the window used last once it shows (a toast's click, a launch's arguments).
 pub type InMain = Box<dyn FnOnce(&mut Window, &mut App)>;
-
-/// The main window, hidden in the notification area or shown.
-struct MainWindow {
-  handle: AnyWindowHandle,
-  hwnd: Option<isize>,
-  shell: WeakEntity<Shell>,
-}
-
-impl Global for MainWindow {}
 
 /// Whether the icon is in the notification area: without it, closing the window quits.
 struct TrayShown(bool);
@@ -69,64 +60,74 @@ pub fn set_start_with_windows(on: bool, cx: &mut App) {
     .detach();
 }
 
-/// Makes `window` (being opened, with `shell`) the main window: its close button hides it in
-/// the notification area when the settings say so.
+/// Counts `window` (being opened, with `shell`) among Peeby's windows. Its close button closes
+/// it with its tabs while another window is open (it stays as a spare, hidden: ADR 0028); the
+/// last one hides in the notification area when the settings say so, else Peeby quits.
 pub fn attach(window: &mut Window, shell: WeakEntity<Shell>, cx: &mut App) {
   let hwnd = match raw_window_handle::HasWindowHandle::window_handle(window).map(|h| h.as_raw()) {
     Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
     _ => None,
   };
-  cx.set_global(MainWindow {
-    handle: Window::window_handle(window),
-    hwnd,
-    shell,
-  });
-  window.on_window_should_close(cx, |_, cx| {
+  windows::register(window, hwnd, shell.clone(), cx);
+  let id = Window::window_handle(window).window_id();
+  window.on_window_should_close(cx, move |_, cx| {
+    if windows::others_in_use(id, cx) {
+      shell.update(cx, |shell, cx| shell.close_all(cx)).ok();
+      windows::set_spare(id, cx);
+      if let Some(hwnd) = hwnd {
+        sys::hide(hwnd);
+      }
+      return false;
+    }
     let tray = cx.try_global::<TrayShown>().is_some_and(|t| t.0);
     if !tray || !Settings::get(cx).close_to_tray {
       return true;
     }
-    hide_main(cx);
+    hide_last(cx);
     false
   });
 }
 
-/// Hides the main window in the notification area. Its player pauses: nothing plays where
+/// Hides the last window in the notification area. Its player pauses: nothing plays where
 /// nobody looks (ADR 0019); the mini-player's goes on, on screen.
-fn hide_main(cx: &mut App) {
-  let Some(main) = cx.try_global::<MainWindow>() else {
+fn hide_last(cx: &mut App) {
+  let Some(last) = windows::last(cx) else {
     return;
   };
-  let (shell, hwnd) = (main.shell.clone(), main.hwnd);
-  shell.update(cx, |shell, cx| shell.go_background(cx)).ok();
-  if let Some(hwnd) = hwnd {
+  last
+    .shell
+    .update(cx, |shell, cx| shell.go_background(cx))
+    .ok();
+  if let Some(hwnd) = last.hwnd {
     sys::hide(hwnd);
   }
 }
 
-/// The spaces of the main window's shell.
+/// The spaces, for the notification area's list of lives.
 fn spaces(cx: &App) -> Vec<crate::shell::space::SpaceHandle> {
-  cx.try_global::<MainWindow>()
-    .and_then(|main| main.shell.upgrade())
-    .map(|shell| shell.read(cx).spaces().to_vec())
+  cx.try_global::<windows::Spaces>()
+    .map(|spaces| spaces.0.clone())
     .unwrap_or_default()
 }
 
-/// Shows the main window again if it was hidden in the notification area. GPUI's
-/// `activate_window` brings a window to the front but never shows a hidden one: call this first.
-pub fn reveal_main(cx: &App) {
-  if let Some(hwnd) = cx.try_global::<MainWindow>().and_then(|main| main.hwnd) {
+/// Shows window `id` again if it was hidden in the notification area. GPUI's `activate_window`
+/// brings a window to the front but never shows a hidden one: call this first.
+pub fn reveal(id: WindowId, cx: &App) {
+  if let Some(hwnd) = windows::get(id, cx).and_then(|w| w.hwnd) {
     sys::show(hwnd);
   }
 }
 
-/// Shows the main window and brings it to the front, then runs `then` in it (a toast's click,
-/// a launch's arguments).
+/// Shows the window used last and brings it to the front, then runs `then` in it (a toast's
+/// click, a launch's arguments).
 pub fn show_main(cx: &mut App, then: Option<InMain>) {
-  let Some(handle) = cx.try_global::<MainWindow>().map(|main| main.handle) else {
+  let Some(last) = windows::last(cx) else {
     return;
   };
-  reveal_main(cx);
+  if let Some(hwnd) = last.hwnd {
+    sys::show(hwnd);
+  }
+  let handle = last.handle;
   handle
     .update(cx, |_, window, cx| {
       window.activate_window();
@@ -137,8 +138,8 @@ pub fn show_main(cx: &mut App, then: Option<InMain>) {
     .ok();
 }
 
-/// Hands what the next launches send (their arguments, one a line) to `on_launch`, in the main
-/// window shown again. The pipe is read on a thread of its own.
+/// Hands what the next launches send (their arguments, one a line) to `on_launch`, in the
+/// window used last, shown again. The pipe is read on a thread of its own.
 pub fn listen(
   listener: sys::Listener,
   on_launch: impl Fn(Vec<String>, &mut Window, &mut App) + 'static,

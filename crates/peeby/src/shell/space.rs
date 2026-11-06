@@ -12,7 +12,7 @@ use std::time::SystemTime;
 use gpui::prelude::*;
 use gpui::{
   AnyElement, AnyView, App, ClickEvent, Context, Entity, EntityId, EventEmitter, SharedString,
-  Subscription, WeakEntity, Window,
+  Subscription, WeakEntity, Window, WindowId,
 };
 use gpui_component::popover::PopoverState;
 use ui::assets::Icon;
@@ -149,6 +149,12 @@ pub enum Lives {
 pub struct TabId(u64);
 
 impl TabId {
+  /// A given id, for tests.
+  #[cfg(test)]
+  pub fn for_test(id: u64) -> Self {
+    Self(id)
+  }
+
   fn next() -> Self {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     Self(NEXT.fetch_add(1, Ordering::Relaxed))
@@ -477,11 +483,12 @@ impl<R> Tab<R> {
   }
 }
 
-/// The tabs of a space, and the one it shows (the shell's, or the last one of this space that
-/// showed).
+/// The tabs of a space, the one it renders in each window (ADR 0028), and the last one shown
+/// in any window (where a notification opens).
 pub struct Tabs<R> {
   list: Vec<Tab<R>>,
   shown: Option<TabId>,
+  windows: Vec<(WindowId, TabId)>,
 }
 
 impl<R> Default for Tabs<R> {
@@ -489,6 +496,7 @@ impl<R> Default for Tabs<R> {
     Self {
       list: Vec::new(),
       shown: None,
+      windows: Vec::new(),
     }
   }
 }
@@ -523,10 +531,12 @@ impl<R> Tabs<R> {
     id
   }
 
-  /// Closes a tab: its pages (and a video playing there) go. When it was the one shown, the
-  /// last tab of the space left takes its place (where a notification opens).
+  /// Closes a tab: its pages (and a video playing there) go. When it was the last one shown,
+  /// the last tab of the space left takes its place (where a notification opens); a window that
+  /// rendered it renders nothing of the space until its shell shows another tab.
   pub fn remove(&mut self, id: TabId) {
     self.list.retain(|t| t.id != id);
+    self.windows.retain(|&(_, tab)| tab != id);
     if self.shown == Some(id) {
       self.shown = self.list.last().map(|t| t.id);
     }
@@ -549,15 +559,37 @@ impl<R> Tabs<R> {
     self.list.iter().map(|t| t.id).collect()
   }
 
-  pub fn show(&mut self, id: TabId) {
+  /// Renders tab `id` in `window` from now on (a tab is in one window at a time: shown in
+  /// another, it leaves the one it was in).
+  pub fn show(&mut self, id: TabId, window: WindowId) {
+    if self.get(id).is_none() {
+      return;
+    }
+    self.shown = Some(id);
+    self.windows.retain(|&(w, tab)| w != window && tab != id);
+    self.windows.push((window, id));
+  }
+
+  /// Makes `id` the tab last shown before any window shows it (a space's first tab, at
+  /// startup).
+  pub fn remember(&mut self, id: TabId) {
     if self.get(id).is_some() {
       self.shown = Some(id);
     }
   }
 
-  /// The tab rendered: the shell's, or the last of this space it showed.
+  /// The tab of the space last shown, in any window: where a notification opens.
   pub fn shown(&self) -> Option<TabId> {
     self.shown
+  }
+
+  /// The tab the space renders in `window`, if that window shows one of the space's.
+  pub fn shown_in(&self, window: WindowId) -> Option<TabId> {
+    self
+      .windows
+      .iter()
+      .find(|&&(w, _)| w == window)
+      .map(|&(_, tab)| tab)
   }
 
   /// Names the page of `view` (a video's title, once loaded); `true` when a page has it.
@@ -629,8 +661,11 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
   /// Closes a tab: its pages go.
   fn close_tab(&mut self, tab: TabId, cx: &mut Context<Self>);
 
-  /// Renders `tab` from now on.
-  fn show_tab(&mut self, tab: TabId, cx: &mut Context<Self>);
+  /// Renders `tab` in `window` from now on.
+  fn show_tab(&mut self, tab: TabId, window: WindowId, cx: &mut Context<Self>) {
+    self.history_mut().show(tab, window);
+    cx.notify();
+  }
 
   /// The tab's label: the page on top.
   fn title(&self, tab: TabId, cx: &App) -> SharedString;
@@ -770,7 +805,7 @@ pub trait AnySpace {
   /// See [`Space::close_tab`].
   fn close_tab(&self, tab: TabId, cx: &mut App);
   /// See [`Space::show_tab`].
-  fn show_tab(&self, tab: TabId, cx: &mut App);
+  fn show_tab(&self, tab: TabId, window: WindowId, cx: &mut App);
   /// See [`Space::title`].
   fn title(&self, tab: TabId, cx: &App) -> SharedString;
   /// See [`Space::menu`].
@@ -843,8 +878,8 @@ impl<T: Space> AnySpace for Entity<T> {
     self.update(cx, |space, cx| space.close_tab(tab, cx));
   }
 
-  fn show_tab(&self, tab: TabId, cx: &mut App) {
-    self.update(cx, |space, cx| space.show_tab(tab, cx));
+  fn show_tab(&self, tab: TabId, window: WindowId, cx: &mut App) {
+    self.update(cx, |space, cx| space.show_tab(tab, window, cx));
   }
 
   fn title(&self, tab: TabId, cx: &App) -> SharedString {
@@ -946,6 +981,8 @@ pub type SpaceHandle = Rc<dyn AnySpace>;
 
 #[cfg(test)]
 mod tests {
+  use gpui::WindowId;
+
   use super::{MAX_ENTRIES, Page, Tab, TabId, Tabs};
 
   fn routes(tabs: &Tabs<&'static str>, id: TabId) -> Vec<&'static str> {
@@ -1082,11 +1119,30 @@ mod tests {
     let mut tabs: Tabs<&str> = Tabs::default();
     let first = tabs.add(Vec::new(), None);
     let second = tabs.add(Vec::new(), None);
-    tabs.show(second);
+    tabs.show(second, WindowId::from(1));
     tabs.remove(second);
     assert_eq!(tabs.shown(), Some(first));
+    assert_eq!(tabs.shown_in(WindowId::from(1)), None);
     assert_eq!(tabs.ids(), vec![first]);
     tabs.remove(first);
     assert_eq!(tabs.shown(), None);
+  }
+
+  #[test]
+  fn each_window_renders_its_own_tab() {
+    let (one, two) = (WindowId::from(1), WindowId::from(2));
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let (a, b) = (tabs.add(Vec::new(), None), tabs.add(Vec::new(), None));
+    tabs.show(a, one);
+    tabs.show(b, two);
+    assert_eq!(tabs.shown_in(one), Some(a));
+    assert_eq!(tabs.shown_in(two), Some(b));
+    // A notification opens in the tab shown last.
+    assert_eq!(tabs.shown(), Some(b));
+    // Tab `a` moved to window two: window one renders nothing of the space until it shows
+    // another of its tabs.
+    tabs.show(a, two);
+    assert_eq!(tabs.shown_in(one), None);
+    assert_eq!(tabs.shown_in(two), Some(a));
   }
 }

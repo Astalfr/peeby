@@ -124,8 +124,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   user before a playback test.
 - Notifications (ADR 0020): a space decides what to announce and checks its kinds' `[notifications]`
   delivery (bell, Windows); `desktop::toast` only shows. Toast images are local PNGs
-  (`ui::images::local_png`). Closing the window hides it in the notification area and pauses the
-  page's video. Reading YouTube's inbox clears its unseen count on youtube.com: read it only when
+  (`ui::images::local_png`). Closing the last window hides it in the notification area and pauses
+  the page's video; another window closes with its tabs and stays hidden as a spare (ADR 0028:
+  never destroy a window while Peeby runs, its pages may live on in another). Reading YouTube's inbox clears its unseen count on youtube.com: read it only when
   the count grows.
 - Watch progress lives on the account (ADR 0013): playing a YouTube video signed in writes its history and resume
   position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`, and so does going back in a Twitch
