@@ -11,9 +11,12 @@
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
 //! Twitch as its web player does (`twitch::spade`): without it, watching earns no points.
 //!
-//! The bonus chest is not claimed here: Twitch's integrity check refuses its mutation outside the
-//! browser (docs/twitch.md, "Channel points"). When one waits, a button opens the channel's chat
-//! on twitch.tv, where it is claimed with a click.
+//! The bonus chest is not claimed by Peeby's own calls: Twitch's integrity check refuses its
+//! mutation outside the browser (docs/twitch.md, "Channel points"). It is clicked in twitch.tv's
+//! chat, in a hidden window signed in with the auth-token (`web_sign_in::twitch_chat`): on its
+//! own a second or two after a reading shows it (the "auto-claim" setting), or from the "Bonus"
+//! button, greyed out with a spinner meanwhile. The button then hides until the points are read
+//! again, which shows it again if the bonus still waits.
 //!
 //! In debug builds, the fake chat (`super::fake_chat`) drives the same view from a local state
 //! ([`Backend::Fake`]): nothing is read from Twitch, spent or reported then.
@@ -33,8 +36,11 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
+use gpui_component::spinner::Spinner;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
+
+use crate::settings::Settings;
 use twitch::raids::{Raid, RaidEvent};
 use ui::assets::Icon;
 use ui::chat::{LEAD, Pinned, Unfolded, pinned_stack};
@@ -67,6 +73,19 @@ pub const ENDED_SHOWN: Duration = Duration::from_secs(20);
 /// An ended prediction is shown only when it ended this recently: Twitch always gives the last
 /// one, hours old or not.
 const ENDED_RECENTLY: Duration = Duration::from_secs(120);
+/// How many times a bonus is claimed automatically before it waits for a click.
+const AUTO_CLAIM_TRIES: u8 = 2;
+/// The points are read again this long after a claim, to see whether it went through.
+const AFTER_CLAIM: Duration = Duration::from_secs(2);
+
+/// A random wait of 1 to 2 s before an automatic claim, so that it does not follow the reading
+/// like clockwork.
+fn auto_claim_delay() -> Duration {
+  // `uuid`'s v4 is random: no other source of randomness in `peeby`.
+  let jitter = (uuid::Uuid::new_v4().as_u128() % 1000) as u64;
+  Duration::from_millis(1000 + jitter)
+}
+
 /// How long a first click waits for its confirmation.
 const CONFIRM_FOR: Duration = Duration::from_secs(8);
 /// Side of the channel's points icon in the balance, logical pixels (as the default icon).
@@ -160,9 +179,15 @@ pub struct PointsView {
   /// The last watch-time report failed (the next failures log at debug).
   report_failing: bool,
   points: Option<Points>,
-  /// The bonus button was clicked: hidden until the next reading, which shows it again if the
-  /// bonus still waits (not claimed on twitch.tv).
+  /// A claim went through the chat window: the button hides until the next reading, which
+  /// shows it again if the bonus still waits.
   bonus_hidden: bool,
+  /// The chat window is claiming the bonus: the button is greyed out, a spinner beside it.
+  claiming: bool,
+  /// The automatic claims tried, by claim id: at most [`AUTO_CLAIM_TRIES`] each.
+  auto_claims: HashMap<String, u8>,
+  /// The automatic claim waiting for its delay, or the claim on its way.
+  claim_task: Option<Task<()>>,
   predictions: Vec<Prediction>,
   /// No auth-token, or the channel has no points: nothing shows and nothing is read again.
   off: bool,
@@ -218,6 +243,9 @@ impl PointsView {
       report_failing: false,
       points: None,
       bonus_hidden: false,
+      claiming: false,
+      auto_claims: HashMap::new(),
+      claim_task: None,
       predictions: Vec::new(),
       off: false,
       confirm: None,
@@ -618,6 +646,86 @@ impl PointsView {
     }));
   }
 
+  /// The auth-token, for the chat window; `None` for the fake channel.
+  fn auth_token(&self) -> Option<String> {
+    self
+      .backend
+      .twitch()
+      .and_then(|c| c.auth_token())
+      .map(str::to_owned)
+  }
+
+  /// With the "auto-claim" setting, claims a waiting bonus after a short random wait, at most
+  /// [`AUTO_CLAIM_TRIES`] times per bonus. Never for the fake channel (it would open the browser).
+  fn auto_claim(&mut self, cx: &mut Context<Self>) {
+    if !Settings::get(cx).twitch.auto_claim_bonus.unwrap_or(true)
+      || self.claiming
+      || self.claim_task.is_some()
+      || self.auth_token().is_none()
+    {
+      return;
+    }
+    let Some(id) = self.points.as_ref().and_then(|p| p.claim.clone()) else {
+      return;
+    };
+    let tries = self.auto_claims.entry(id.clone()).or_default();
+    if *tries >= AUTO_CLAIM_TRIES {
+      return;
+    }
+    *tries += 1;
+    self.claim_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(auto_claim_delay()).await;
+      this
+        .update(cx, |this, cx| {
+          this.claim_task = None;
+          // Still the same bonus, still waiting.
+          if this.points.as_ref().and_then(|p| p.claim.as_deref()) == Some(id.as_str()) {
+            this.claim_bonus(cx);
+          }
+        })
+        .ok();
+    }));
+  }
+
+  /// Claims the bonus in twitch.tv's chat, in its hidden window (`web_sign_in::twitch_chat`), then
+  /// reads the points again. Without the token (the fake channel), opens the chat in the browser.
+  fn claim_bonus(&mut self, cx: &mut Context<Self>) {
+    if self.claiming {
+      return;
+    }
+    let login = self.login.clone();
+    let Some(token) = self.auth_token() else {
+      cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"));
+      self.bonus_hidden = true;
+      cx.notify();
+      return;
+    };
+    self.claiming = true;
+    cx.notify();
+    let claim = cx
+      .background_executor()
+      .spawn(async move { crate::web_sign_in::twitch_chat(&login, &token) });
+    self.claim_task = Some(cx.spawn(async move |this, cx| {
+      let claim = claim.await;
+      tracing::debug!("Twitch bonus claim: {claim:?}");
+      let Ok(()) = this.update(cx, |this, cx| {
+        this.claiming = false;
+        this.bonus_hidden = true;
+        cx.notify();
+      }) else {
+        return;
+      };
+      cx.background_executor().timer(AFTER_CLAIM).await;
+      // Detached: clearing `claim_task` drops this task.
+      this
+        .update(cx, |this, cx| {
+          this.claim_task = None;
+          this.load_points(cx).detach();
+        })
+        .ok();
+    }));
+  }
+
   fn load_points(&mut self, cx: &mut Context<Self>) -> Task<()> {
     let fetch: Later<Points> = match &self.backend {
       Backend::Twitch(client) => {
@@ -640,6 +748,7 @@ impl PointsView {
             Ok(points) if points.enabled => {
               this.points = Some(points);
               this.bonus_hidden = false;
+              this.auto_claim(cx);
             }
             Ok(_) | Err(twitch::Error::NotLoggedIn | twitch::Error::NotFound) => {
               this.off = true;
@@ -1514,34 +1623,35 @@ impl PointsView {
       );
     }
     let claim = self.points.as_ref().and_then(|p| p.claim.clone());
-    let show_bonus = claim.is_some() && !self.bonus_hidden;
-    let login = self.login.clone();
+    let show_bonus = claim.is_some() && (!self.bonus_hidden || self.claiming);
+    let claiming = self.claiming;
     let this = cx.entity().downgrade();
     h_flex()
       .gap_1()
       .items_center()
       .child(self.balance_chip(window, cx))
       .when(show_bonus, |row| {
-        row.child(
-          Button::new("twitch-points-bonus")
-            .small()
-            .primary()
-            .icon(Icon::Gift)
-            .label("Bonus")
-            .tooltip(t(
-              "A bonus is waiting: claim it in the chat on twitch.tv",
-              "Un bonus attend : le réclamer dans le chat de twitch.tv",
-            ))
-            .on_click(move |_, _, cx| {
-              cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"));
-              this
-                .update(cx, |this, cx| {
-                  this.bonus_hidden = true;
-                  cx.notify();
-                })
-                .ok();
-            }),
-        )
+        row
+          .child(
+            Button::new("twitch-points-bonus")
+              .small()
+              .primary()
+              .icon(Icon::Gift)
+              .label("Bonus")
+              .disabled(claiming)
+              .tooltip(if claiming {
+                t("Claiming the bonus…", "Réclamation du bonus…")
+              } else {
+                t(
+                  "A bonus is waiting: claim it",
+                  "Un bonus attend : le réclamer",
+                )
+              })
+              .on_click(move |_, _, cx| {
+                this.update(cx, |this, cx| this.claim_bonus(cx)).ok();
+              }),
+          )
+          .when(claiming, |row| row.child(Spinner::new().small()))
       })
       .into_any_element()
   }

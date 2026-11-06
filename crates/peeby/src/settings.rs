@@ -170,6 +170,9 @@ pub struct Twitch {
   /// (`play::CATCH_UP_BUFFER`) plays a little faster or slower to hold a small buffer; on when
   /// unset.
   pub catch_up: Option<bool>,
+  /// A live's bonus chest is claimed on its own, through twitch.tv's chat in a hidden window
+  /// (ADR 0012); on when unset.
+  pub auto_claim_bonus: Option<bool>,
   /// Codecs this PC was found to decode on the CPU only (`h265`, `av1`): no longer asked for.
   pub software_codecs: Vec<String>,
 }

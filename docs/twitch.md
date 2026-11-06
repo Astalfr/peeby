@@ -403,7 +403,14 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   `failed integrity check` (`extensions.code: IntegrityCheckFailed`, `challenge.type: integrity`),
   even with a made-up claim id. The miner sends it with the Android TV Client-ID (`ue6666…`) and a
   token from that client's own device sign-in **[src]**. Peeby does not try that route
-  (ADR 0012).
+  (ADR 0012). Twitch's chat page does not claim it on its own: 7TV's extension clicks the button
+  (the user, 2026-11-06). Peeby opens the popout chat in a hidden WebView2 window signed in with
+  the auth-token and clicks `.claimable-bonus__icon`'s button **[?: to check by the user]**.
+  Checked anonymously (2026-11-06): the hidden window renders the chat as a shown one does
+  (`visibilityState` is `visible`, the points area is there); a made-up auth-token leaves the
+  page blank. The auth-token cookie must be on `www.twitch.tv`: a bare `twitch.tv` (what the
+  `cookie` crate makes of `.twitch.tv`) is host-only, and the page is not signed in. A fresh
+  profile shows the cookie consent banner; the script's click goes through it.
 - **Points for watching**:
   - The web player reports time watched by POSTing base64 `minute-watched` events (`channel_id`,
     `broadcast_id`, `user_id`, `player: "site"`, `location: "channel"`, `live`). Without `location`,

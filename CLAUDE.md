@@ -151,7 +151,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   (a vote paid with bits or points).
 - Channel points (ADR 0012): every spend (reward, bet) waits for a second click and never happens on its
   own. `claimCommunityPoints` fails Twitch's integrity check: never route around it (another Client-ID,
-  minted integrity tokens); the bonus is claimed on twitch.tv. `minute-watched` (spade) is sent only for
+  minted integrity tokens); the bonus is clicked in twitch.tv's own chat page, in a hidden
+  window (`web_sign_in::twitch_chat`, the token on stdin, never an argument), automatically or
+  from the "Bonus" button. `minute-watched` (spade) is sent only for
   the live on screen while it plays (not its recording, ADR 0026), never from a script or for a live nobody watches.
 - Fixtures: redact Twitch's session keys by name (`USER-IP`, `SERVING-ID`, `VIDEO-SESSION-ID`, `NODE`,
   `C`/`E`…, and the ads' `*-SESSION-ID`, `RADS-TOKEN`, `*-URL`), never with a blanket IP regex (it breaks

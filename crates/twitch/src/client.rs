@@ -76,6 +76,12 @@ impl Client {
     self.auth_token.is_some()
   }
 
+  /// The auth-token, for twitch.tv's own page in Peeby's chat window (ADR 0012): a secret, never
+  /// in a log, an argument or an error.
+  pub fn auth_token(&self) -> Option<&str> {
+    self.auth_token.as_deref()
+  }
+
   /// A writer to `channel`'s chat as `login`, the account of the auth-token (ADR 0023); `None`
   /// without the auth-token. Run the future on the network runtime.
   pub fn chat_writer(

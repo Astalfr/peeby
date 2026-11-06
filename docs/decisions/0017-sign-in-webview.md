@@ -43,7 +43,12 @@ WebView2's cookie manager (HttpOnly ones included):
   ADR 0004, closed). Peeby keeps the child's stdin open; closing it (the settings page dropped,
   Peeby quit) closes the window.
 - **Only the sign-in.** The window is never kept, hidden or reused for integrity tokens, a device
-  id or anything Twitch's or Google's checks would otherwise refuse (ADRs 0012, 0016).
+  id or anything Twitch's or Google's checks would otherwise refuse (ADRs 0012, 0016). One
+  exception, since 2026-11-06 (ADR 0012): `peeby --twitch-chat <login>` shows a channel's popout
+  chat on twitch.tv, hidden and out of the taskbar (`PEEBY_CLAIM_VISIBLE` shows it, to debug),
+  InPrivate in a temporary profile, the auth-token given on stdin and set as its cookie; a script
+  clicks its "Claim Bonus" button, and the window closes. Nothing is read back from it but
+  whether the button was there (its exit code).
 - Secrets never reach a log: the child logs pages at debug level, host and path only (sign-in
   URLs carry state in their query), and Peeby discards its stderr.
 

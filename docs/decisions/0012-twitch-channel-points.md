@@ -55,9 +55,19 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
 - **Spending** takes two clicks: the button turns into "Confirmer". A reward that asks for a text
   takes it in a field. A bet takes a share of the balance (10 %, 25 %, 50 %, everything), at least
   10 points. Twitch's refusals keep their code (`Error::Refused`) and read in French.
-- **The bonus chest is not claimed by Peeby.** When one waits, a "Bonus" button opens the channel's
-  chat on twitch.tv, where it is claimed with one click. Clicking it hides it until the next
-  points reading (a minute at most), which shows it again if the bonus still waits.
+- **The bonus chest is not claimed by Peeby's own calls.** It is claimed in the channel's popout
+  chat on twitch.tv, in a hidden WebView2 window (not in the taskbar, never focused) signed in
+  with the auth-token (`peeby --twitch-chat <login>`; the user's decision, 2026-11-06). From 3 s
+  on, a script looks for the page's "Claim Bonus" button every 500 ms and clicks it, as 7TV's
+  auto-claim does in the browser; the window closes 1.5 s after the click, or after 12 s without
+  a button: the claim is twitch.tv's own request, with its own integrity token. Twitch's page
+  does not claim on its own (the user's check).
+  - **Automatic** with the "Claim the bonus automatically" setting (`[twitch] auto_claim_bonus`,
+    on by default): when a points reading shows a bonus, the claim starts after a random 1 to 2 s,
+    at most twice per bonus.
+  - **The "Bonus" button** claims it by hand: greyed out with a spinner beside it while the window
+    works, then hidden until the points are read again (2 s later), which shows it again if the
+    bonus still waits.
 - **A watch-time report** (`twitch::spade`), as the web player sends it:
   - one `minute-watched` event after each minute of the live on the watch page, and only while mpv
     plays it (`core-idle` is `no`: neither paused nor buffering);
@@ -76,9 +86,10 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
 - If Twitch adds an integrity check to the spends, they fail with "Twitch demande une vérification
   que seul son site peut faire".
 - Open, for the user to decide:
-  - **The bonus claim**: the user claims it on twitch.tv's own page, which the button opens. Making
-    integrity tokens for Peeby's own calls (a hidden WebView2, another client's identity) would be
-    the same bypass, so it is not an option.
+  - **The bonus claim**: clicked in twitch.tv's own chat page, in the window the button opens
+    (2026-11-06; whether it claims is for the user to check). Making integrity tokens for Peeby's
+    own calls (another client's identity, a token taken from the WebView for a GQL call) stays
+    out.
   - **Points for watching**: done, the balance grows. Still to see: a bonus chest after about
     15 minutes, and the button that opens twitch.tv's chat for it.
 - Revisit if Twitch requires persisted queries, or an integrity token for the spends.

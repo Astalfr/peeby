@@ -37,6 +37,10 @@ fn main() {
   if let Some(code) = web_sign_in::child_from_args() {
     std::process::exit(code);
   }
+  // `peeby --twitch-chat <login>`: a channel's chat on twitch.tv for a few seconds (ADR 0012).
+  if let Some(code) = web_sign_in::chat_from_args() {
+    std::process::exit(code);
+  }
   // `peeby --export-cookies`: the jar in clear on stdout, for the innertube examples (ADR 0022).
   if std::env::args().nth(1).as_deref() == Some(EXPORT_COOKIES) {
     std::process::exit(export_cookies());
