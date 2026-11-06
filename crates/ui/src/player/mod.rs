@@ -316,7 +316,7 @@ pub struct PlayerView {
   /// Removes the controls once their fade-out is over; they are drawn until then.
   controls_fade_task: Option<Task<()>>,
   over_controls: bool,
-  /// The mouse is over the mute button, or over the volume slider above it.
+  /// The mouse is over the mute button, or over the volume slider beside it.
   volume_hover: (bool, bool),
   /// The left button went down on the volume slider and is still held: the drag goes on
   /// wherever the mouse is, and the slider stays open.
@@ -1497,12 +1497,12 @@ impl PlayerView {
     );
   }
 
-  /// Volume from a mouse position on the vertical slider: bottom is 0 %, top 100 %.
-  fn set_volume_at(&mut self, y: Pixels, cx: &mut Context<Self>) {
+  /// Volume from a mouse position on the horizontal slider: left is 0 %, right 100 %.
+  fn set_volume_at(&mut self, x: Pixels, cx: &mut Context<Self>) {
     let bounds = self.volume_bounds.get();
-    let height = f32::from(bounds.size.height);
-    if height > 0.0 {
-      let fraction = (1.0 - f32::from(y - bounds.origin.y) / height).clamp(0.0, 1.0);
+    let width = f32::from(bounds.size.width);
+    if width > 0.0 {
+      let fraction = (f32::from(x - bounds.origin.x) / width).clamp(0.0, 1.0);
       self.set_volume((f64::from(fraction) * 100.0).round(), cx);
     }
   }
@@ -2114,7 +2114,7 @@ impl PlayerView {
       .children(preview)
   }
 
-  /// Mute button; hovering it opens a vertical volume slider above it.
+  /// Mute button; hovering it opens a horizontal volume slider beside it, in the row.
   fn render_volume(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     // Decided here rather than in the hover handlers: going from the button to the slider sends
     // a hover-out and a hover-in in a row, which must not close and reopen it.
@@ -2136,7 +2136,11 @@ impl PlayerView {
     }
     let shown = self.volume_open || self.volume_close_task.is_some();
     let (animation, opening) = (self.volume_animation, self.volume_open);
-    const TRACK_HEIGHT: f32 = 90.;
+    const TRACK_WIDTH: f32 = 64.;
+    // Room for the knob at both ends of the track, which the opening clips.
+    const PAD_LEFT: f32 = 8.;
+    const PAD_RIGHT: f32 = 10.;
+    const SLIDER_WIDTH: f32 = PAD_LEFT + TRACK_WIDTH + PAD_RIGHT;
     let primary = cx.theme().primary;
     let icon = if self.muted || self.volume == 0.0 {
       Icon::Muted
@@ -2148,20 +2152,17 @@ impl PlayerView {
     let level = if self.muted { 0.0 } else { self.volume / 100.0 } as f32;
     let bounds_cell = self.volume_bounds.clone();
     let (dragging, view) = (self.volume_dragging, cx.weak_entity());
-    // The slider sits right on top of the button, so the mouse goes from one to the other
-    // without leaving both.
+    // The slider follows the button in the row and widens from it, so the mouse goes from one
+    // to the other without leaving both.
     let slider = div()
       .id("volume-slider")
-      .occlude()
-      .absolute()
-      .bottom(relative(1.))
-      .left_0()
-      .right_0()
-      .py_3()
+      .h(px(32.))
       .flex()
-      .justify_center()
-      .rounded_md()
-      .bg(gpui::black().opacity(0.75))
+      .flex_none()
+      .items_center()
+      .overflow_hidden()
+      .pl(px(PAD_LEFT))
+      .pr(px(PAD_RIGHT))
       .cursor_pointer()
       .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
         this.volume_hover.1 = *hovered;
@@ -2171,33 +2172,34 @@ impl PlayerView {
         MouseButton::Left,
         cx.listener(|this, event: &MouseDownEvent, _, cx| {
           this.volume_dragging = true;
-          this.set_volume_at(event.position.y, cx);
+          this.set_volume_at(event.position.x, cx);
         }),
       )
       .child(
         div()
           .relative()
-          .w(px(4.))
-          .h(px(TRACK_HEIGHT))
+          .flex_none()
+          .w(px(TRACK_WIDTH))
+          .h(px(4.))
           .rounded_full()
           .bg(gpui::white().opacity(0.25))
           .child(
             div()
               .absolute()
-              .left_0()
-              .right_0()
+              .top_0()
               .bottom_0()
-              .h(relative(level))
-              .min_h(px(4.))
+              .left_0()
+              .w(relative(level))
+              .min_w(px(4.))
               .rounded_full()
               .bg(primary),
           )
           .child(
             div()
               .absolute()
-              .bottom(relative(level))
-              .left(px(-5.))
-              .mb(px(-7.))
+              .left(relative(level))
+              .top(px(-5.))
+              .ml(px(-7.))
               .size(px(14.))
               .rounded_full()
               .bg(primary)
@@ -2212,7 +2214,7 @@ impl PlayerView {
                   listen_to_drag(
                     &view,
                     window,
-                    |this, position, cx| this.set_volume_at(position.y, cx),
+                    |this, position, cx| this.set_volume_at(position.x, cx),
                     |this, _, cx| this.end_volume_drag(cx),
                   );
                 }
@@ -2224,7 +2226,8 @@ impl PlayerView {
       );
     div()
       .id("volume")
-      .relative()
+      .flex()
+      .items_center()
       .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
         this.volume_hover.0 = *hovered;
         cx.notify();
@@ -2244,7 +2247,7 @@ impl PlayerView {
           // Eased by hand so that closing replays the opening curve backwards.
           move |el, t| {
             let p = ease(if opening { t } else { 1. - t });
-            el.opacity(p).mb(px(-8. * (1. - p)))
+            el.opacity(p).w(px(SLIDER_WIDTH * p))
           },
         ))
       })
