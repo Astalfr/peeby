@@ -1809,17 +1809,24 @@ impl PlayerView {
   ) -> impl IntoElement + use<> {
     let primary = cx.theme().primary;
     let (start, end) = self.seek_range();
-    let progress = if end > start {
+    let dvr = self.dvr_window().is_some();
+    // A live played at its edge (the badge says "LIVE") shows a full bar: the few seconds of
+    // buffer it trails by are not a past to tell. A drag shows where it goes.
+    let at_edge = dvr && !self.seek_dragging && self.at_live_edge();
+    let progress = if at_edge {
+      1.0
+    } else if end > start {
       ((self.position - start) / (end - start)).clamp(0.0, 1.0)
     } else {
       0.0
     };
-    let cached = if end > start {
+    let cached = if at_edge {
+      1.0
+    } else if end > start {
       ((self.cached - start) / (end - start)).clamp(0.0, 1.0)
     } else {
       0.0
     };
-    let dvr = self.dvr_window().is_some();
     // The track thickens on hover, eased rather than at once.
     let height = motion::tween(
       "seek-height",
