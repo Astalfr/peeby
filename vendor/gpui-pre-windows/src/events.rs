@@ -109,7 +109,7 @@ impl WindowsWindowInner {
             WM_CLOSE => self.handle_close_msg(),
             WM_DESTROY => self.handle_destroy_msg(handle),
             WM_MOUSEMOVE => self.handle_mouse_move_msg(handle, lparam, wparam),
-            WM_MOUSELEAVE | WM_NCMOUSELEAVE => self.handle_mouse_leave_msg(),
+            WM_MOUSELEAVE | WM_NCMOUSELEAVE => self.handle_mouse_leave_msg(handle),
             WM_NCMOUSEMOVE => self.handle_nc_mouse_move_msg(handle, lparam),
             // Treat double click as a second single click, since we track the double clicks ourselves.
             // If you don't interact with any elements, this will fall through to the windows default
@@ -381,7 +381,7 @@ impl WindowsWindowInner {
         if handled { Some(0) } else { Some(1) }
     }
 
-    fn handle_mouse_leave_msg(&self) -> Option<isize> {
+    fn handle_mouse_leave_msg(&self, handle: HWND) -> Option<isize> {
         self.state.hovered.set(false);
         // The next window's `WM_SETCURSOR` picks its own cursor, so we just clear
         // the flag for tight `is_cursor_visible()` semantics.
@@ -393,8 +393,48 @@ impl WindowsWindowInner {
                 .hovered_status_change
                 .set(Some(callback));
         }
+        self.dispatch_mouse_left(handle);
 
         Some(0)
+    }
+
+    /// PEEBY PATCH (hover on leave): GPUI keeps the last mouse position after the pointer
+    /// leaves, so `.hover()` styles and `on_hover` stayed on whatever was under it (a fast
+    /// move to another screen sends no last `WM_MOUSEMOVE`). Send a final move outside the
+    /// client area, then `MouseExited` as the Linux backends do. Not while a button holds
+    /// the capture (moves keep coming), nor when the cursor is still over this window: going
+    /// between the client and non-client parts (title bar, caption buttons) sends a leave too,
+    /// and the next `WM_MOUSEMOVE` / `WM_NCMOUSEMOVE` carries on from there.
+    fn dispatch_mouse_left(&self, handle: HWND) {
+        if unsafe { GetCapture() } == handle {
+            return;
+        }
+        let mut screen = POINT::default();
+        if unsafe { GetCursorPos(&mut screen) }.is_err() {
+            return;
+        }
+        let under = unsafe { WindowFromPoint(screen) };
+        if under == handle || unsafe { GetAncestor(under, GA_ROOT) } == handle {
+            return;
+        }
+        // Another screen, or another window over this one (the mini-player): a point
+        // outside the client area, so that no hitbox stays hovered.
+        let position = point(px(-1.0), px(-1.0));
+        let modifiers = current_modifiers();
+        let Some(mut func) = self.state.callbacks.input.take() else {
+            return;
+        };
+        func(PlatformInput::MouseMove(MouseMoveEvent {
+            position,
+            pressed_button: None,
+            modifiers,
+        }));
+        func(PlatformInput::MouseExited(MouseExitEvent {
+            position,
+            pressed_button: None,
+            modifiers,
+        }));
+        self.state.callbacks.input.set(Some(func));
     }
 
     fn handle_syskeyup_msg(&self, wparam: WPARAM, lparam: LPARAM) -> Option<isize> {
