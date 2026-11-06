@@ -50,7 +50,10 @@ impl SettingsView {
       order.insert(0, active);
     }
     let unfolded = (0..spaces.len()).map(|i| i == 0).collect();
-    let mut subscriptions = vec![cx.observe_global::<Settings>(|_, cx| cx.notify())];
+    let mut subscriptions = vec![
+      cx.observe_global::<Settings>(|_, cx| cx.notify()),
+      cx.observe_global::<crate::update::Updater>(|_, cx| cx.notify()),
+    ];
     // A space's part changes with it (sign-in, the libraries arriving).
     for space in &spaces {
       let this = cx.weak_entity();
@@ -514,11 +517,58 @@ fn player_line(p: &RunningPlayer) -> String {
   format!("{position} · {state} · {backend}, {decoding} · {age} · {owner}")
 }
 
-fn about_section() -> AnyElement {
+/// Checks GitHub for a newer release now (ADR 0027), rather than at the next periodic check.
+fn update_row(cx: &gpui::App) -> AnyElement {
+  use crate::update::State;
+  let state = crate::update::state(cx);
+  let description = match state {
+    State::Unavailable => t(
+      "Only a copy installed with the installer updates itself.",
+      "Seule une copie installée avec l'installateur se met à jour.",
+    )
+    .to_owned(),
+    State::Idle => t(
+      "Peeby checks for a new version every few hours.",
+      "Peeby cherche une nouvelle version toutes les quelques heures.",
+    )
+    .to_owned(),
+    State::Checking => t("Checking…", "Recherche…").to_owned(),
+    State::UpToDate => t("Peeby is up to date.", "Peeby est à jour.").to_owned(),
+    State::Failed => t(
+      "The check failed. Try again later.",
+      "La recherche a échoué. Réessayez plus tard.",
+    )
+    .to_owned(),
+    State::Downloading(v) => tf!("Downloading Peeby {v}…", "Téléchargement de Peeby {v}…"),
+    State::Ready(v) => tf!(
+      "Peeby {v} is ready: use the Update button at the top to install it.",
+      "Peeby {v} est prêt : le bouton « Mettre à jour » en haut l'installe."
+    ),
+    State::Installing(v) => tf!("Installing Peeby {v}…", "Installation de Peeby {v}…"),
+  };
+  let busy = matches!(
+    state,
+    State::Checking | State::Downloading(_) | State::Installing(_)
+  );
+  row(
+    t("Updates", "Mises à jour"),
+    &description,
+    Button::new("check-update")
+      .small()
+      .label(t("Check for updates", "Rechercher les mises à jour"))
+      .loading(busy)
+      .disabled(matches!(state, State::Unavailable | State::Ready(_)))
+      .on_click(|_, _, cx| crate::update::check_now(cx)),
+  )
+  .into_any_element()
+}
+
+fn about_section(cx: &gpui::App) -> AnyElement {
   let version = env!("CARGO_PKG_VERSION");
   section(
     t("About", "À propos"),
     vec![
+      update_row(cx),
       row(
         "Peeby",
         &tf!(
@@ -561,7 +611,7 @@ impl Render for SettingsView {
     blocks.extend([
       self.storage_section(cx),
       debug_section(&players),
-      about_section(),
+      about_section(cx),
       div()
         .text_xs()
         .text_color(theme::subtle())

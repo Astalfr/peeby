@@ -17,7 +17,7 @@ A release is built by CI from a version tag.
    `peeby-setup-1.0.1-x64.exe` and publishes the release `v1.0.1` with generated notes. A tag that
    does not match `Cargo.toml` fails the `release` job.
 
-Within 4 hours, every installed copy downloads the installer, checks its SHA-256 and shows the
+Within 4 hours (at once with "Check for updates" in the settings), every installed copy downloads the installer, checks its SHA-256 and shows the
 green **Update** button in the title bar.
 
 Never publish a release by hand with another asset name or without GitHub's digest: the updater

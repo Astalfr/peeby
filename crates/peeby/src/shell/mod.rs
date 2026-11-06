@@ -1558,9 +1558,49 @@ fn choose_audio_device(device: Option<String>, cx: &mut App) {
 }
 
 /// The green button of the title bar while an update's installer is ready (ADR 0027): a click
-/// quits Peeby, installs the update and starts it again.
+/// quits Peeby, installs the update and starts it again. While the installer downloads, and
+/// while it starts, the button shows greyed out with the app's loader and takes no click.
 fn update_button(cx: &App) -> Option<Button> {
-  let version = crate::update::ready(cx)?;
+  use crate::update::State;
+  let (version, busy) = match crate::update::state(cx) {
+    State::Ready(version) => (version, None),
+    State::Downloading(version) => (
+      version,
+      Some(tf!(
+        "Downloading Peeby {version}…",
+        "Téléchargement de Peeby {version}…"
+      )),
+    ),
+    State::Installing(version) => (
+      version,
+      Some(tf!(
+        "Starting the installer of Peeby {version}…",
+        "Lancement de l'installation de Peeby {version}…"
+      )),
+    ),
+    _ => return None,
+  };
+  if let Some(tooltip) = busy {
+    // Desaturated rather than the disabled style, which would grey it out entirely; `loading`
+    // makes it inert and dims it a little more.
+    let mut color = theme::update();
+    color.s *= 0.35;
+    return Some(
+      Button::new("update")
+        .custom(
+          ButtonCustomVariant::new(cx)
+            .color(color)
+            .foreground(theme::on_accent())
+            .hover(color)
+            .active(color),
+        )
+        .small()
+        .loading(true)
+        .child(ui::widgets::loader(14., theme::on_accent()))
+        .child(t("Update", "Mettre à jour"))
+        .tooltip(tooltip),
+    );
+  }
   Some(
     Button::new("update")
       .custom(

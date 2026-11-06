@@ -28,13 +28,46 @@ const FIRST_CHECK: Duration = Duration::from_secs(20);
 /// 60 anonymous requests an hour.
 const CHECK_EVERY: Duration = Duration::from_secs(4 * 3600);
 
-/// The update's state, and the task that checks. Observed by the title bar.
+/// The update's state, and the task that checks. Observed by the title bar and the settings page.
 pub struct Updater {
   status: Status,
+  /// A check is running (the periodic one or the settings page's).
+  checking: bool,
+  /// How the last check asked from the settings page ended, until the next one.
+  asked: Option<Outcome>,
+  http: reqwest::Client,
+  dir: PathBuf,
   _checks: Task<()>,
 }
 
 impl Global for Updater {}
+
+/// How a check ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+  /// No newer release, or the newer one is already downloaded.
+  UpToDate,
+  /// A newer release was downloaded.
+  Found,
+  Failed,
+}
+
+/// What the title bar and the settings page show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
+  /// This copy does not update itself (a debug build, `cargo run`).
+  Unavailable,
+  /// Nothing to show: not checked from the settings page, nothing newer.
+  Idle,
+  Checking,
+  /// The check asked from the settings page found nothing newer.
+  UpToDate,
+  /// The check asked from the settings page failed.
+  Failed,
+  Downloading(Version),
+  Ready(Version),
+  Installing(Version),
+}
 
 /// Starts the checks, if this copy can update itself.
 pub fn init(cx: &mut App) {
@@ -50,20 +83,60 @@ pub fn init(cx: &mut App) {
     tracing::warn!("updates: no download folder or HTTP client");
     return;
   };
+  // Old installers go at once, before a check from the settings page can download a new one.
+  let clear = dir.clone();
   let checks = cx.spawn(async move |cx| {
-    cx.background_executor().timer(FIRST_CHECK).await;
-    let clear = dir.clone();
     cx.background_executor()
       .spawn(async move { github::clear_downloads(&clear) })
       .await;
+    cx.background_executor().timer(FIRST_CHECK).await;
     loop {
-      check(&http, &dir, cx).await;
+      run_check(false, cx).await;
       cx.background_executor().timer(CHECK_EVERY).await;
     }
   });
   cx.set_global(Updater {
     status: Status::Idle,
+    checking: false,
+    asked: None,
+    http,
+    dir,
     _checks: checks,
+  });
+}
+
+/// The settings page's button: checks now, unless a check is already running.
+pub fn check_now(cx: &mut App) {
+  cx.spawn(async move |cx| run_check(true, cx).await).detach();
+}
+
+/// Runs one check unless one is already running; `asked` keeps its outcome for the settings page.
+async fn run_check(asked: bool, cx: &mut AsyncApp) {
+  let start = cx.update(|cx| {
+    let updater = cx.try_global::<Updater>()?;
+    if updater.checking {
+      return None;
+    }
+    let (http, dir) = (updater.http.clone(), updater.dir.clone());
+    let updater = cx.global_mut::<Updater>();
+    updater.checking = true;
+    if asked {
+      updater.asked = None;
+    }
+    Some((http, dir))
+  });
+  let Some((http, dir)) = start else {
+    return;
+  };
+  let outcome = check(&http, &dir, cx).await;
+  cx.update(|cx| {
+    if cx.try_global::<Updater>().is_some() {
+      let updater = cx.global_mut::<Updater>();
+      updater.checking = false;
+      if asked {
+        updater.asked = Some(outcome);
+      }
+    }
   });
 }
 
@@ -73,19 +146,19 @@ fn downloads_dir() -> Option<PathBuf> {
 }
 
 /// One check: the latest release, and its installer if it is newer than this build.
-async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp) {
+async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp) -> Outcome {
   let fetch = {
     let http = http.clone();
     cx.update(|cx| runtime::spawn(cx, async move { github::latest(&http).await }))
   };
   let latest: Release = match fetch.await {
     Some(Ok(Some(release))) => release,
-    Some(Ok(None)) => return,
+    Some(Ok(None)) => return Outcome::UpToDate,
     Some(Err(e)) => {
       tracing::warn!("updates: cannot check: {e:#}");
-      return;
+      return Outcome::Failed;
     }
-    None => return,
+    None => return Outcome::Failed,
   };
   let version = latest.version;
   let wanted = cx.update(|cx| {
@@ -98,7 +171,7 @@ async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp)
     wanted
   });
   if !wanted {
-    return;
+    return Outcome::UpToDate;
   }
   tracing::info!("updates: downloading {version}");
   let download = {
@@ -110,19 +183,20 @@ async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp)
       )
     })
   };
-  let status = match download.await {
+  let (status, outcome) = match download.await {
     Some(Ok(path)) => {
       tracing::info!("updates: {version} ready");
-      Status::Ready(version, path)
+      (Status::Ready(version, path), Outcome::Found)
     }
     Some(Err(e)) => {
       // The next check tries again.
       tracing::warn!("updates: cannot download {version}: {e:#}");
-      Status::Idle
+      (Status::Idle, Outcome::Failed)
     }
-    None => Status::Idle,
+    None => (Status::Idle, Outcome::Failed),
   };
   cx.update(|cx| set_status(status, cx));
+  outcome
 }
 
 /// Changes the state; the title bar redraws (`global_mut` notifies the global's observers).
@@ -133,11 +207,23 @@ fn set_status(status: Status, cx: &mut App) {
   }
 }
 
-/// The version whose installer is ready, while the title bar's button should show.
-pub fn ready(cx: &App) -> Option<Version> {
-  match cx.try_global::<Updater>()?.status {
-    Status::Ready(version, _) => Some(version),
-    _ => None,
+/// Where the update stands, for the title bar's button and the settings page.
+pub fn state(cx: &App) -> State {
+  let Some(updater) = cx.try_global::<Updater>() else {
+    return State::Unavailable;
+  };
+  match &updater.status {
+    Status::Downloading(v) => State::Downloading(*v),
+    Status::Ready(v, _) => State::Ready(*v),
+    Status::Installing(v, _) => State::Installing(*v),
+    Status::Idle if updater.checking => State::Checking,
+    Status::Idle => match updater.asked {
+      Some(Outcome::UpToDate) => State::UpToDate,
+      Some(Outcome::Failed) => State::Failed,
+      // A download that failed afterwards went back to `Idle`.
+      Some(Outcome::Found) => State::Failed,
+      None => State::Idle,
+    },
   }
 }
 

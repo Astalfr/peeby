@@ -41,15 +41,16 @@ use, the uninstall entry). Inno Setup run silently does it all.
   the installer `peeby-setup-<version>-x64.exe` and publishes it as the tag's GitHub Release, once
   the tag is checked against the version in `Cargo.toml`.
 - **Updater** (`crates/peeby/src/update/`): only in a release build installed by the installer
-  (its `unins000.exe` beside the exe). 20 s after the start, then every 4 hours, an anonymous
+  (its `unins000.exe` beside the exe). 20 s after the start, then every 4 hours (or at once from "Check for updates" in the settings' About section, which then says whether Peeby is up to date), an anonymous
   `GET /repos/Astalfr/peeby/releases/latest` (drafts and pre-releases ignored; GitHub allows 60
   anonymous requests an hour). A tag newer than this build has its installer downloaded in the
   background into `%LOCALAPPDATA%\peeby\updates` and checked against the asset's `digest`; a
-  corrupt or failed download leaves nothing and is tried again at the next check. Only then does
-  the title bar show the green **Update** button (its tooltip names the version). A click writes the
+  corrupt or failed download leaves nothing and is tried again at the next check. While it
+  downloads, the title bar shows the **Update** button greyed out with the app's loader, taking no
+  click; once checked it turns green (its tooltip names the version). A click writes the
   settings, starts the installer (`/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
   /relaunch=1`) and quits; the installer replaces the files and starts Peeby again. Old installers
-  are deleted at the next start.
+  are deleted at the start.
 
 ## Consequences
 
