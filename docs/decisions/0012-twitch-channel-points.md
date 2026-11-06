@@ -56,7 +56,8 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   takes it in a field. A bet takes a share of the balance (10 %, 25 %, 50 %, everything), at least
   10 points. Twitch's refusals keep their code (`Error::Refused`) and read in French.
 - **The bonus chest is not claimed by Peeby.** When one waits, a "Bonus" button opens the channel's
-  chat on twitch.tv, where it is claimed with one click.
+  chat on twitch.tv, where it is claimed with one click. Clicking it hides it until the next
+  points reading (a minute at most), which shows it again if the bonus still waits.
 - **A watch-time report** (`twitch::spade`), as the web player sends it:
   - one `minute-watched` event after each minute of the live on the watch page, and only while mpv
     plays it (`core-idle` is `no`: neither paused nor buffering);

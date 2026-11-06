@@ -160,6 +160,9 @@ pub struct PointsView {
   /// The last watch-time report failed (the next failures log at debug).
   report_failing: bool,
   points: Option<Points>,
+  /// The bonus button was clicked: hidden until the next reading, which shows it again if the
+  /// bonus still waits (not claimed on twitch.tv).
+  bonus_hidden: bool,
   predictions: Vec<Prediction>,
   /// No auth-token, or the channel has no points: nothing shows and nothing is read again.
   off: bool,
@@ -214,6 +217,7 @@ impl PointsView {
       player,
       report_failing: false,
       points: None,
+      bonus_hidden: false,
       predictions: Vec::new(),
       off: false,
       confirm: None,
@@ -633,7 +637,10 @@ impl PointsView {
       this
         .update(cx, |this, cx| {
           match result {
-            Ok(points) if points.enabled => this.points = Some(points),
+            Ok(points) if points.enabled => {
+              this.points = Some(points);
+              this.bonus_hidden = false;
+            }
             Ok(_) | Err(twitch::Error::NotLoggedIn | twitch::Error::NotFound) => {
               this.off = true;
               this.points = None;
@@ -1507,12 +1514,14 @@ impl PointsView {
       );
     }
     let claim = self.points.as_ref().and_then(|p| p.claim.clone());
+    let show_bonus = claim.is_some() && !self.bonus_hidden;
     let login = self.login.clone();
+    let this = cx.entity().downgrade();
     h_flex()
       .gap_1()
       .items_center()
       .child(self.balance_chip(window, cx))
-      .when(claim.is_some(), |row| {
+      .when(show_bonus, |row| {
         row.child(
           Button::new("twitch-points-bonus")
             .small()
@@ -1524,7 +1533,13 @@ impl PointsView {
               "Un bonus attend : le réclamer dans le chat de twitch.tv",
             ))
             .on_click(move |_, _, cx| {
-              cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"))
+              cx.open_url(&format!("https://www.twitch.tv/popout/{login}/chat"));
+              this
+                .update(cx, |this, cx| {
+                  this.bonus_hidden = true;
+                  cx.notify();
+                })
+                .ok();
             }),
         )
       })
