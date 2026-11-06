@@ -4,20 +4,23 @@
 //! panel: the space's, or the settings page, which opens in a tab of its own (an entry of its
 //! history, which pages opened from there follow). Switching tabs or opening the settings
 //! while a video plays moves it to the mini-player, a window of its own above the others
-//! (docs/design.md, ADR 0008, ADR 0015, ADR 0019).
+//! (docs/design.md, ADR 0008, ADR 0015, ADR 0019). A tab held and moved is reordered along the
+//! bar (`tab_drag`, ADR 0028).
 
 pub mod lives;
 mod mini_player;
 mod settings_page;
 pub mod space;
+mod tab_drag;
 
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
   Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, NavigationDirection,
-  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, anchored, deferred, div, img,
-  px,
+  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, anchored, canvas, deferred,
+  div, img, px,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::popover::{Popover, PopoverState};
@@ -36,6 +39,7 @@ use mini_player::MiniPlayer;
 use settings_page::SettingsView;
 pub use settings_page::delivery_row;
 use space::{Avatar, HoverCard, MenuEntry, SpaceEvent, SpaceHandle, TabId};
+use tab_drag::{TabDrag, TabLayout};
 
 /// Width of the notifications panel.
 const NOTIFICATIONS_WIDTH: f32 = 440.;
@@ -102,6 +106,10 @@ pub struct Shell {
   /// `None` before the first list.
   audio_devices: Option<Vec<AudioDevice>>,
   audio_listing: Task<()>,
+  /// The tab held down with the mouse, moved along the bar once past a few pixels (ADR 0028).
+  tab_drag: Option<TabDrag>,
+  /// Where the tabs were drawn, shared with the canvases that measure them.
+  tab_layout: Rc<TabLayout>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -223,6 +231,8 @@ impl Shell {
       card_delay: Task::ready(()),
       audio_devices: None,
       audio_listing: Task::ready(()),
+      tab_drag: None,
+      tab_layout: Rc::default(),
       _subscriptions: subscriptions,
     };
     if let Some(&first) = shell.tabs.first() {
@@ -743,103 +753,45 @@ impl Shell {
 
   /// The open tabs: the service's logo and the page's title; the shown one has a light
   /// background and a line in its accent underneath. Hovered or shown, a tab has its "×" (not
-  /// the last one); a middle click closes it. Then "+", a menu of the spaces to open a tab of.
+  /// the last one); a middle click closes it. A tab held and moved follows the pointer along the
+  /// bar, its slot left empty, and takes its neighbors' places (ADR 0028). Then "+", a menu of the
+  /// spaces to open a tab of.
   fn tabs(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    let closable = self.tabs.len() > 1;
+    let dragged = self.tab_drag.filter(|d| d.moving);
+    // Placed from the last frame's tabs, before they are measured again.
+    let dragged_left = dragged.map(|drag| self.dragged_left(&drag));
+    // Refilled by each tab's canvas as it is laid out.
+    self.tab_layout.tabs.borrow_mut().clear();
     let tabs: Vec<_> = self
       .tabs
       .iter()
       .map(|&tab| {
-        let space = &self.spaces[tab.space];
-        let info = space.info(cx);
-        let title = space.title(tab.id, cx);
-        let active = Some(tab) == self.active;
-        let group = SharedString::from(format!("tab-{}", tab.id));
         let id = tab.id;
-        let close = closable.then(|| {
-          div()
-            .id(SharedString::from(format!("tab-close-{id}")))
-            .flex_none()
-            .size(px(18.))
-            .rounded(px(4.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_color(theme::muted())
-            .when(!active, |el| {
-              el.invisible().group_hover(group.clone(), |s| s.visible())
-            })
-            .hover(|s| {
-              s.bg(gpui::white().opacity(0.08))
-                .text_color(theme::foreground())
-            })
-            .child(gpui_component::Icon::new(IconName::Close).size(px(12.)))
-            .on_click(cx.listener(move |this, _, _, cx| {
-              cx.stop_propagation();
-              this.close_tab(id, cx);
-            }))
-        });
-        let tooltip = title.clone();
-        // The settings' tab has the gear rather than the service's logo.
-        let icon = if space.settings_shown(tab.id, cx) {
-          gpui_component::Icon::new(Icon::Settings)
-            .size(px(16.))
-            .into_any_element()
-        } else {
-          assets::color_svg(info.icon, 18., window, cx).into_any_element()
-        };
-        h_flex()
+        let group = SharedString::from(format!("tab-{id}"));
+        let tooltip = self.spaces[tab.space].title(id, cx);
+        let layout = self.tab_layout.clone();
+        self
+          .tab_face(tab, window, cx)
           .id(group.clone())
-          .group(group.clone())
-          .relative()
-          .h_full()
-          .min_w(px(TAB_MIN_WIDTH))
-          .max_w(px(TAB_MAX_WIDTH))
-          .flex_shrink_1()
-          .pl_3()
-          .pr_1p5()
-          .gap_2()
-          .items_center()
-          .rounded(theme::RADIUS)
-          .cursor_pointer()
-          .text_sm()
-          .text_color(if active {
-            theme::foreground()
-          } else {
-            theme::muted()
-          })
-          .when(active, |el| {
-            el.bg(gpui::white().opacity(0.06))
-              .font_weight(FontWeight::SEMIBOLD)
-              .child(
-                div()
-                  .absolute()
-                  .bottom_0()
-                  .left(px(12.))
-                  .right(px(12.))
-                  .h(px(2.))
-                  .rounded_full()
-                  .bg(info.accent.base),
-              )
-          })
-          .hover(|s| {
-            s.bg(gpui::white().opacity(0.04))
-              .text_color(theme::foreground())
-          })
+          .group(group)
+          .when(dragged.is_some_and(|d| d.tab == id), |el| el.invisible())
+          .child(
+            canvas(
+              move |bounds, _, _| layout.tabs.borrow_mut().push((id, bounds)),
+              |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0(),
+          )
           .tooltip(move |window, cx| {
             gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
           })
-          .child(
-            div()
-              .flex_none()
-              .size(px(18.))
-              .flex()
-              .items_center()
-              .justify_center()
-              .child(icon),
+          .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+              this.press_tab(id, event.position, cx)
+            }),
           )
-          .child(div().flex_1().min_w_0().truncate().child(title))
-          .children(close)
           .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
           .on_aux_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
             if event.is_middle_click() {
@@ -848,13 +800,143 @@ impl Shell {
           }))
       })
       .collect();
+    // The dragged tab over the others, opaque, occluding the slots under it.
+    let copy = dragged.zip(dragged_left).and_then(|(drag, left)| {
+      let tab = self.find(drag.tab)?;
+      Some(
+        div()
+          .id("tab-dragged")
+          .occlude()
+          .absolute()
+          .top_0()
+          .h_full()
+          .left(left)
+          .w(drag.width)
+          .rounded(theme::RADIUS)
+          .bg(theme::chrome(cx))
+          .shadow_md()
+          .child(
+            self
+              .tab_face(tab, window, cx)
+              .w_full()
+              .max_w_full()
+              .min_w_0(),
+          ),
+      )
+    });
+    let layout = self.tab_layout.clone();
+    let (held, shell) = (self.tab_drag.is_some(), cx.weak_entity());
     h_flex()
+      .relative()
       .h(px(34.))
       .min_w_0()
       .gap_1()
       .items_center()
+      .child(
+        canvas(
+          move |bounds, _, _| layout.row.set(bounds),
+          move |_, _, window, _| {
+            if held {
+              tab_drag::listen(shell, window);
+            }
+          },
+        )
+        .absolute()
+        .inset_0(),
+      )
       .children(tabs)
       .child(self.new_tab_menu(cx))
+      .children(copy)
+  }
+
+  /// What a tab shows (its logo or the gear, its title, its "×"), without the slot's listeners:
+  /// drawn in its slot and, while it is dragged, as the copy that follows the pointer.
+  fn tab_face(&self, tab: TabRef, window: &Window, cx: &mut Context<Self>) -> gpui::Div {
+    let closable = self.tabs.len() > 1;
+    let space = &self.spaces[tab.space];
+    let info = space.info(cx);
+    let title = space.title(tab.id, cx);
+    let active = Some(tab) == self.active;
+    let group = SharedString::from(format!("tab-{}", tab.id));
+    let id = tab.id;
+    let close = closable.then(|| {
+      div()
+        .id(SharedString::from(format!("tab-close-{id}")))
+        .flex_none()
+        .size(px(18.))
+        .rounded(px(4.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(theme::muted())
+        .when(!active, |el| {
+          el.invisible().group_hover(group.clone(), |s| s.visible())
+        })
+        .hover(|s| {
+          s.bg(gpui::white().opacity(0.08))
+            .text_color(theme::foreground())
+        })
+        .child(gpui_component::Icon::new(IconName::Close).size(px(12.)))
+        .on_click(cx.listener(move |this, _, _, cx| {
+          cx.stop_propagation();
+          this.close_tab(id, cx);
+        }))
+    });
+    // The settings' tab has the gear rather than the service's logo.
+    let icon = if space.settings_shown(tab.id, cx) {
+      gpui_component::Icon::new(Icon::Settings)
+        .size(px(16.))
+        .into_any_element()
+    } else {
+      assets::color_svg(info.icon, 18., window, cx).into_any_element()
+    };
+    h_flex()
+      .relative()
+      .h_full()
+      .min_w(px(TAB_MIN_WIDTH))
+      .max_w(px(TAB_MAX_WIDTH))
+      .flex_shrink_1()
+      .pl_3()
+      .pr_1p5()
+      .gap_2()
+      .items_center()
+      .rounded(theme::RADIUS)
+      .cursor_pointer()
+      .text_sm()
+      .text_color(if active {
+        theme::foreground()
+      } else {
+        theme::muted()
+      })
+      .when(active, |el| {
+        el.bg(gpui::white().opacity(0.06))
+          .font_weight(FontWeight::SEMIBOLD)
+          .child(
+            div()
+              .absolute()
+              .bottom_0()
+              .left(px(12.))
+              .right(px(12.))
+              .h(px(2.))
+              .rounded_full()
+              .bg(info.accent.base),
+          )
+      })
+      .hover(|s| {
+        s.bg(gpui::white().opacity(0.04))
+          .text_color(theme::foreground())
+      })
+      .child(
+        div()
+          .flex_none()
+          .size(px(18.))
+          .flex()
+          .items_center()
+          .justify_center()
+          .child(icon),
+      )
+      .child(div().flex_1().min_w_0().truncate().child(title))
+      .children(close)
   }
 
   /// "+": the spaces, a click opens a tab of one on its first page.
