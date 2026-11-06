@@ -755,7 +755,7 @@ impl PointsView {
       .spawn(async move { crate::web_sign_in::twitch_chat(&login, &token) });
     self.claim_task = Some(cx.spawn(async move |this, cx| {
       let claim = claim.await;
-      tracing::debug!("Twitch bonus claim: {claim:?}");
+      tracing::info!("Twitch bonus claim: {claim:?}");
       let Ok(()) = this.update(cx, |this, cx| {
         this.claiming = false;
         this.bonus_hidden = true;

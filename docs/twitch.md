@@ -410,7 +410,16 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   (`visibilityState` is `visible`, the points area is there); a made-up auth-token leaves the
   page blank. The auth-token cookie must be on `www.twitch.tv`: a bare `twitch.tv` (what the
   `cookie` crate makes of `.twitch.tv`) is host-only, and the page is not signed in. A fresh
-  profile shows the cookie consent banner; the script's click goes through it.
+  profile shows the cookie consent banner; the script's click goes through it. Signed in
+  (`twitch_capture -- chat-page`, 2026-11-06): the page has the chat's field, no "Log In" button,
+  sets its own `twilight-user` cookie, and shows the points area on a channel with points (not on
+  the account's own). It speaks the system's language (the balance's button reads "Soldes de Bits
+  et de points"), so the bonus button is found by `.claimable-bonus__icon` or a points-area button
+  whose label says "bonus", never by an English label. The window logs what the page showed at
+  info level (`%LOCALAPPDATA%\peeby\logs`, Peeby's profile name first). The page fetches its
+  integrity token on its own about 10 s after loading (Kasada's `k.twitchcdn.net/…`, then
+  `gql.twitch.tv/integrity`); a claim clicked before that answers "failed integrity check",
+  after it the claim is accepted (2026-11-06), so the click waits for that answer.
 - **Points for watching**:
   - The web player reports time watched by POSTing base64 `minute-watched` events (`channel_id`,
     `broadcast_id`, `user_id`, `player: "site"`, `location: "channel"`, `live`). Without `location`,

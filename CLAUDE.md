@@ -44,7 +44,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   positions in those VODs, read only, without spending the refresh token; `-- chat-login [login]` checks that
   the auth-token signs in to IRC, sending nothing; `-- polls-scan [--watch [min]]` finds a top live with a poll and `-- poll <login>`
   saves it, anonymous; `-- gql-probe '<query>' [login]` prints GQL's validation messages (introspection is
-  off); `-- predictions-ended <login>` probes, anonymous,
+  off); `-- chat-page <login>` runs the bonus claim's hidden chat window signed in, in dry run (clicks
+  nothing; prints whether the page is signed in, has points and a bonus button; it joins that chat as
+  the user: prefer their own channel); `-- predictions-ended <login>` probes, anonymous,
   the GQL fields of ended predictions and saves the app's predictions answer)
 - Twitch raids on PubSub (anonymous): `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>]`
   listens to channels' raid topics (`top`: 500 lives, PubSub's limit) and prints what comes (ADR 0024)

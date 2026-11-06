@@ -9,7 +9,7 @@
 //!
 //! The same way, `peeby --twitch-chat <login>` shows a channel's popout chat on twitch.tv, signed
 //! in with the `auth-token` (read from stdin, never an argument), clicks its waiting bonus chest
-//! after 3 s, as 7TV's auto-claim does, and closes (ADR 0012).
+//! once the page has its integrity token, as 7TV's auto-claim does, and closes (ADR 0012).
 
 use std::io::{PipeReader, PipeWriter, Read as _, Write as _};
 use std::os::windows::process::CommandExt as _;
@@ -317,34 +317,118 @@ fn run(service: Service, stdin: PipeReader) -> Outcome {
 const CHAT_SIZE: LogicalSize<f64> = LogicalSize::new(340.0, 520.0);
 /// When the bonus is first looked for: long enough for twitch.tv's chat to load and show it.
 const CLAIM_AFTER: Duration = Duration::from_secs(3);
-/// How often it is looked for again, when it was not there yet.
+/// How often the page is asked again: for the button, then for the claim's answer.
 const CLAIM_RETRY: Duration = Duration::from_millis(500);
-/// When the window gives up without having found it, from its start.
-const CLAIM_GIVE_UP: Duration = Duration::from_secs(12);
-/// How long the window stays after the click, for the claim's request to leave.
-const CLOSE_AFTER_CLAIM: Duration = Duration::from_millis(1500);
-/// Clicks the chat's "Claim Bonus" button, as 7TV's auto-claim does in the browser; says whether
-/// there was one. Found by its icon's class, then by its label (English and French pages).
-const CLAIM_SCRIPT: &str = r#"(() => {
+/// When the window gives up without having clicked, from its start: the page fetches its
+/// integrity token about 10 s after it loads (2026-11-06), and the click waits for it.
+const CLAIM_GIVE_UP: Duration = Duration::from_secs(25);
+/// How long the window waits, after the click, for Twitch's answer to the claim.
+const CLAIM_WAIT: Duration = Duration::from_secs(8);
+/// Watches the page's own requests from its start: counts its GQL calls, notes when its own
+/// integrity token request succeeded (`integrity: true`: a claim sent before that fails with
+/// "failed integrity check"), and keeps what Twitch answered to its claim (error codes and
+/// messages only: no token, no id). Read by [`CLAIM_SCRIPT`] as `window.__peebyClaim`.
+const WATCH_SCRIPT: &str = r#"(() => {
+  if (window.__peebyClaim) return;
+  const seen = window.__peebyClaim = { gql: 0, xhr: 0, integrity: false, claims: [] };
+  const urlOf = (input) => typeof input === 'string' ? input : (input && input.url) || String(input || '');
+  const original = window.fetch;
+  window.fetch = async function (input, init) {
+    const url = urlOf(input);
+    const body = init && typeof init.body === 'string' ? init.body : '';
+    const integrity = url.includes('gql.twitch.tv/integrity');
+    const claim = /claimCommunityPoints/i.test(body);
+    if (url.includes('gql.twitch.tv/gql')) seen.gql += 1;
+    let response;
+    try {
+      response = await original.apply(this, arguments);
+    } catch (e) {
+      if (claim) seen.claims.push({ failed: String(e) });
+      throw e;
+    }
+    if (integrity && response.ok) seen.integrity = true;
+    if (claim) {
+      response.clone().json().then((answer) => {
+        for (const item of Array.isArray(answer) ? answer : [answer]) {
+          const result = item && item.data && item.data.claimCommunityPoints;
+          const errors = (item && item.errors || []).map((e) => e.message);
+          if (!result && !errors.length) continue;
+          seen.claims.push({
+            status: response.status,
+            claimed: !!(result && result.claim),
+            error: result && result.error ? result.error.code : null,
+            errors,
+          });
+        }
+      }, (e) => seen.claims.push({ status: response.status, unreadable: String(e) }));
+    }
+    return response;
+  };
+  const open = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    if (String(url).includes('gql.twitch.tv')) seen.xhr += 1;
+    return open.apply(this, arguments);
+  };
+})();"#;
+/// Clicks the chat's "Claim Bonus" button, as 7TV's auto-claim does in the browser, once the page
+/// has its integrity token (unless `dry`, its argument: the script runs again in the same page, so
+/// it declares nothing global), and says
+/// what the page shows: whether it clicked, whether the page is signed in (its points balance, no
+/// "Log In" button), whether the points area is there, and what [`WATCH_SCRIPT`] saw. The button
+/// is found by its icon's class, then as the points area's button whose label says "bonus": the
+/// page speaks the system's language (French here: the balance's is "Soldes de Bits et de
+/// points"), and the area's other classes are generated names. Nothing it answers is a secret.
+const CLAIM_SCRIPT: &str = r#"(dry) => {
   const icon = document.querySelector('.claimable-bonus__icon');
+  const summary = '[data-test-selector="community-points-summary"] button, .community-points-summary button';
   const button = (icon && icon.closest('button'))
-    || document.querySelector('button[aria-label="Claim Bonus"], button[aria-label="Récupérer le bonus"]');
-  if (!button) return false;
-  button.click();
-  return true;
-})()"#;
+    || [...document.querySelectorAll(summary)].find(b => /bonus/i.test(b.getAttribute('aria-label') || ''));
+  const state = {
+    clicked: false,
+    button: !!button,
+    points: !!document.querySelector('[data-test-selector="community-points-summary"], .community-points-summary'),
+    loginButton: !!document.querySelector('[data-a-target="login-button"], [data-a-target="chat-login-button"]'),
+    chatInput: !!document.querySelector('[data-a-target="chat-input"]'),
+    twilightUser: document.cookie.includes('twilight-user='),
+    hidden: document.hidden,
+    title: document.title,
+    seen: window.__peebyClaim || null,
+  };
+  if (button && !dry && state.seen && state.seen.integrity) {
+    button.click();
+    state.clicked = true;
+  }
+  return state;
+}"#;
 /// Shows the window, to see what twitch.tv's page does (the window is hidden otherwise).
 const SHOW_ENV: &str = "PEEBY_CLAIM_VISIBLE";
+/// Looks for the bonus and says what the page shows, without clicking (`twitch_capture --
+/// chat-page`).
+const DRY_ENV: &str = "PEEBY_CLAIM_DRY";
 
-/// Exit code of `peeby --twitch-chat` when the page had no bonus button in time (0: clicked).
+/// Exit codes of `peeby --twitch-chat` (0: claimed, or found in a dry run).
 const NO_BONUS: i32 = 4;
+const REFUSED: i32 = 5;
 
 /// What the chat window's event loop hears.
 enum ChatEvent {
   /// Peeby closed the pipe, or quit.
   Closed,
-  /// The claim script ran: whether it clicked.
-  Clicked(bool),
+  /// The claim script ran: its answer (see [`CLAIM_SCRIPT`]).
+  Answered(String),
+}
+
+/// How a claim through the chat window went.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Claim {
+  /// Twitch answered that the bonus was claimed (or, in a dry run, the button was there).
+  Claimed,
+  /// The page showed no bonus button in time (not signed in, already claimed, Twitch changed it).
+  NoButton,
+  /// The button was clicked, but Twitch refused the claim or never answered it.
+  Refused,
+  /// The window could not open or failed (WebView2 missing…).
+  Failed,
 }
 
 /// The chat window's process, when the arguments are `--twitch-chat <login>`: returns its exit
@@ -371,8 +455,10 @@ pub fn chat_from_args() -> Option<i32> {
   let result = chat_window(&login, token.trim(), &profile);
   remove_profile(&profile);
   Some(match result {
-    Ok(true) => 0,
-    Ok(false) => NO_BONUS,
+    Ok(Claim::Claimed) => 0,
+    Ok(Claim::NoButton) => NO_BONUS,
+    Ok(Claim::Refused) => REFUSED,
+    Ok(Claim::Failed) => UNAVAILABLE,
     Err(e) => {
       tracing::error!("Twitch chat window: {e}");
       UNAVAILABLE
@@ -387,12 +473,23 @@ fn twitch_login(login: &str) -> bool {
     && login.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Runs the chat window until its bonus is clicked (`true`) or it gives up (`false`).
+/// Where the chat window is.
+#[derive(Clone, Copy)]
+enum Phase {
+  /// Waiting for the bonus button.
+  Looking,
+  /// Clicked at that moment: waiting for Twitch's answer to the claim.
+  Clicked(Instant),
+  /// Done: closes at the next wake.
+  Done(Claim),
+}
+
+/// Runs the chat window until the claim's answer, or until it gives up.
 fn chat_window(
   login: &str,
   token: &str,
   profile: &Path,
-) -> Result<bool, Box<dyn std::error::Error>> {
+) -> Result<Claim, Box<dyn std::error::Error>> {
   let mut event_loop = EventLoopBuilder::<ChatEvent>::with_user_event().build();
   let proxy = event_loop.create_proxy();
   std::thread::spawn({
@@ -419,6 +516,7 @@ fn chat_window(
   let webview = WebViewBuilder::new_with_web_context(&mut context)
     .with_url("about:blank")
     .with_incognito(true)
+    .with_initialization_script(WATCH_SCRIPT)
     .build(&window)?;
   webview.set_cookie(
     // The page's own host: `cookie` drops a domain's leading dot, and WebView2 makes a cookie
@@ -431,39 +529,78 @@ fn chat_window(
   )?;
   webview.load_url(&format!("https://www.twitch.tv/popout/{login}/chat"))?;
 
+  let dry = std::env::var_os(DRY_ENV).is_some();
+  let click = format!("({CLAIM_SCRIPT})({dry})");
+  // After the click, the page is only read: a refused claim leaves the button, never clicked twice.
+  let read = format!("({CLAIM_SCRIPT})(true)");
   let started = Instant::now();
-  let mut clicked = false;
+  let mut phase = Phase::Looking;
+  // The script's last answer, logged when the window gives up.
+  let mut last = String::new();
   event_loop.run_return(|event, _, control_flow| match event {
     Event::NewEvents(StartCause::Init) => {
       *control_flow = ControlFlow::WaitUntil(started + CLAIM_AFTER);
     }
-    // Clicked, and the request had its time: done.
-    Event::NewEvents(StartCause::ResumeTimeReached { .. }) if clicked => {
-      *control_flow = ControlFlow::Exit;
-    }
     Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-      if started.elapsed() >= CLAIM_GIVE_UP {
-        tracing::debug!("no Twitch bonus button in the chat");
-        *control_flow = ControlFlow::Exit;
-        return;
-      }
+      let script = match phase {
+        Phase::Done(_) => return *control_flow = ControlFlow::Exit,
+        Phase::Looking if started.elapsed() >= CLAIM_GIVE_UP => {
+          tracing::info!("no Twitch bonus button in the chat: {last}");
+          phase = Phase::Done(Claim::NoButton);
+          return *control_flow = ControlFlow::Exit;
+        }
+        Phase::Clicked(at) if at.elapsed() >= CLAIM_WAIT => {
+          tracing::info!("no answer to the Twitch bonus claim: {last}");
+          phase = Phase::Done(Claim::Refused);
+          return *control_flow = ControlFlow::Exit;
+        }
+        Phase::Looking => &click,
+        Phase::Clicked(_) => &read,
+      };
       let proxy = proxy.clone();
-      let ran = webview.evaluate_script_with_callback(CLAIM_SCRIPT, move |found| {
-        tracing::debug!("claim script answered {found}");
-        let _ = proxy.send_event(ChatEvent::Clicked(found.trim() == "true"));
+      let ran = webview.evaluate_script_with_callback(script, move |answer| {
+        let _ = proxy.send_event(ChatEvent::Answered(answer));
       });
       if let Err(e) = ran {
         tracing::warn!("cannot claim the Twitch bonus: {e}");
-        *control_flow = ControlFlow::Exit;
-        return;
+        phase = Phase::Done(Claim::Failed);
+        return *control_flow = ControlFlow::Exit;
       }
-      // Its answer sets the next wake; this one keeps looking if it never comes.
       *control_flow = ControlFlow::WaitUntil(Instant::now() + CLAIM_RETRY);
     }
-    Event::UserEvent(ChatEvent::Clicked(true)) => {
-      tracing::debug!("Twitch bonus clicked");
-      clicked = true;
-      *control_flow = ControlFlow::WaitUntil(Instant::now() + CLOSE_AFTER_CLAIM);
+    Event::UserEvent(ChatEvent::Answered(answer)) => {
+      let state: serde_json::Value = serde_json::from_str(&answer).unwrap_or_default();
+      tracing::debug!("claim script answered {answer}");
+      match phase {
+        Phase::Looking if dry && state["button"] == true && state["seen"]["integrity"] == true => {
+          tracing::info!("Twitch bonus found: {answer}");
+          phase = Phase::Done(Claim::Claimed);
+        }
+        Phase::Looking if state["clicked"] == true => {
+          tracing::info!("Twitch bonus clicked: {answer}");
+          phase = Phase::Clicked(Instant::now());
+        }
+        Phase::Clicked(_) => {
+          let claims = state["seen"]["claims"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+          if !claims.is_empty() {
+            let claimed = claims.iter().any(|c| c["claimed"] == true);
+            tracing::info!(
+              "Twitch bonus claim {}: {answer}",
+              if claimed { "accepted" } else { "refused" }
+            );
+            phase = Phase::Done(if claimed {
+              Claim::Claimed
+            } else {
+              Claim::Refused
+            });
+          }
+        }
+        _ => {}
+      }
+      last = answer;
     }
     Event::UserEvent(ChatEvent::Closed)
     | Event::WindowEvent {
@@ -474,18 +611,11 @@ fn chat_window(
   });
   drop(webview);
   drop(window);
-  Ok(clicked)
-}
-
-/// How a bonus claim through the chat window went.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Claim {
-  /// The bonus button was clicked.
-  Clicked,
-  /// The page showed no bonus button in time (not signed in, already claimed, Twitch changed it).
-  NoButton,
-  /// The window could not open or failed (WebView2 missing…).
-  Failed,
+  Ok(match phase {
+    Phase::Done(claim) => claim,
+    Phase::Looking => Claim::NoButton,
+    Phase::Clicked(_) => Claim::Refused,
+  })
 }
 
 /// Opens `login`'s chat in its hidden window, signed in with `token`, to click its bonus. Blocks
@@ -516,8 +646,9 @@ pub fn twitch_chat(login: &str, token: &str) -> Claim {
     tracing::warn!("cannot hand the auth-token to the Twitch chat window: {e}");
   }
   let claim = match child.wait().map(|status| status.code()) {
-    Ok(Some(0)) => Claim::Clicked,
+    Ok(Some(0)) => Claim::Claimed,
     Ok(Some(NO_BONUS)) => Claim::NoButton,
+    Ok(Some(REFUSED)) => Claim::Refused,
     Ok(code) => {
       tracing::warn!("the Twitch chat window failed (exit code {code:?})");
       Claim::Failed

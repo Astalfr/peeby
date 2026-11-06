@@ -21,6 +21,10 @@
 //! that channel's poll (`twitch::polls::poll_request`) as `gql_poll.json`, and an anonymous vote's
 //! refusal (made-up ids) as `gql_vote_unauthenticated.json`; `-- gql-probe <query>
 //! [login]` sends one query and prints GQL's messages and the data. All three are anonymous.
+//! `-- chat-page <login>` opens the bonus claim's hidden chat window (ADR 0012) on a channel with
+//! the saved `auth-token` (the debug profile's, else the release one's), in dry run: it prints what
+//! the page shows (signed in, points, the bonus button) and clicks nothing; with `--claim`, it
+//! claims the bonus (a write to the account) and prints Twitch's answer. Build `peeby` first.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -48,6 +52,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "master") {
     let login = args.get(i + 1).ok_or("master <login>")?.clone();
     return twitch::block_on(capture_master(login))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "chat-page") {
+    let login = args.get(i + 1).ok_or("chat-page <login>")?.clone();
+    return chat_page(&login, args.iter().any(|a| a == "--claim"));
   }
   if let Some(i) = args.iter().position(|a| a == "chat-login") {
     let channel = args.get(i + 1).cloned();
@@ -234,6 +242,56 @@ async fn check_chat_login(channel: Option<String>) -> Result<(), Box<dyn std::er
   let client = twitch::Client::new(None, auth_token)?;
   let status = client.check_chat_sign_in(channel.as_deref()).await?;
   println!("chat sign-in: {status:?}");
+  Ok(())
+}
+
+/// The claim window's dry run on `login`'s chat: Peeby's own `--twitch-chat`, the token on its
+/// stdin, `PEEBY_CLAIM_DRY` set unless `claim`; prints its report lines (no secret in them).
+fn chat_page(login: &str, claim: bool) -> Result<(), Box<dyn std::error::Error>> {
+  use std::io::{BufRead as _, Write as _};
+  use std::os::windows::process::CommandExt as _;
+  let (profile, token) = ["peeby-dev", "peeby"]
+    .into_iter()
+    .find_map(|profile| {
+      keyring::Entry::new(profile, "twitch|auth-token")
+        .and_then(|e| e.get_password())
+        .ok()
+        .map(|token| (profile, token))
+    })
+    .ok_or("no saved auth-token")?;
+  println!("auth-token: {profile}'s");
+  // The examples' folder is next to the binaries.
+  let exe = std::env::current_exe()?
+    .parent()
+    .and_then(Path::parent)
+    .ok_or("no target folder")?
+    .join("peeby.exe");
+  let mut command = std::process::Command::new(exe);
+  if !claim {
+    command.env("PEEBY_CLAIM_DRY", "1");
+  }
+  let mut child = command
+    .args(["--twitch-chat", login])
+    .env("RUST_LOG", "peeby=info")
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::piped())
+    // A console app in debug builds: no console window.
+    .creation_flags(0x0800_0000)
+    .spawn()?;
+  let mut stdin = child.stdin.take().ok_or("no stdin")?;
+  writeln!(stdin, "{token}")?;
+  stdin.flush()?;
+  if let Some(stderr) = child.stderr.take() {
+    for line in std::io::BufReader::new(stderr).lines() {
+      let line = line?;
+      if line.contains("bonus") || line.contains("chat window") {
+        println!("{line}");
+      }
+    }
+  }
+  drop(stdin);
+  println!("exit code {:?}", child.wait()?.code());
   Ok(())
 }
 

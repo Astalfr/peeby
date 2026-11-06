@@ -57,11 +57,13 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   10 points. Twitch's refusals keep their code (`Error::Refused`) and read in French.
 - **The bonus chest is not claimed by Peeby's own calls.** It is claimed in the channel's popout
   chat on twitch.tv, in a hidden WebView2 window (not in the taskbar, never focused) signed in
-  with the auth-token (`peeby --twitch-chat <login>`; the user's decision, 2026-11-06). From 3 s
-  on, a script looks for the page's "Claim Bonus" button every 500 ms and clicks it, as 7TV's
-  auto-claim does in the browser; the window closes 1.5 s after the click, or after 12 s without
-  a button: the claim is twitch.tv's own request, with its own integrity token. Twitch's page
-  does not claim on its own (the user's check).
+  with the auth-token (`peeby --twitch-chat <login>`; the user's decision, 2026-11-06). A script
+  watches the page's own requests and clicks the "Claim Bonus" button, as 7TV's auto-claim does in
+  the browser, once the page has fetched its integrity token (about 10 s after it loads: a claim
+  sent before that fails with "failed integrity check", measured 2026-11-06). The window closes
+  when Twitch answers the claim, or after 25 s without a button: the claim is twitch.tv's own
+  request, with its own integrity token. Twitch's page does not claim on its own (the user's
+  check). Accepted on 2026-11-06 (`twitch_capture -- chat-page <login> --claim`).
   - **Automatic** with the "Claim the bonus automatically" setting (`[twitch] auto_claim_bonus`,
     on by default): when a points reading shows a bonus, the claim starts after a random 1 to 2 s,
     at most twice per bonus.
