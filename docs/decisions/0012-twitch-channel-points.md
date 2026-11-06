@@ -65,7 +65,8 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   - **Automatic** with the "Claim the bonus automatically" setting (`[twitch] auto_claim_bonus`,
     on by default): when a points reading shows a bonus, the claim starts after a random 1 to 2 s,
     at most twice per bonus.
-  - **The "Bonus" button** claims it by hand: greyed out with a spinner beside it while the window
+  - **The "Bonus" button** comes in with a bump (it grows past its size and settles) and leaves
+    fading as it shrinks; it claims the bonus by hand: greyed out with a spinner beside it while the window
     works, then hidden until the points are read again (2 s later), which shows it again if the
     bonus still waits.
 - **A watch-time report** (`twitch::spade`), as the web player sends it:

@@ -36,8 +36,7 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
-use gpui_component::spinner::Spinner;
-use gpui_component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_component::{ActiveTheme as _, Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 
 use crate::settings::Settings;
@@ -73,6 +72,49 @@ pub const ENDED_SHOWN: Duration = Duration::from_secs(20);
 /// An ended prediction is shown only when it ended this recently: Twitch always gives the last
 /// one, hours old or not.
 const ENDED_RECENTLY: Duration = Duration::from_secs(120);
+/// The bonus button's height at rest, logical pixels (gpui-component's small button).
+const BONUS_HEIGHT: f32 = 24.;
+/// How long the bonus button takes to come in, with its bump.
+const BONUS_BUMP: Duration = Duration::from_millis(420);
+/// How long it takes to fade and shrink away.
+const BONUS_LEAVE: Duration = Duration::from_millis(220);
+
+/// The bonus button's scale and opacity at a moment of its animation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BonusLook {
+  scale: f32,
+  opacity: f32,
+}
+
+impl BonusLook {
+  const REST: Self = Self {
+    scale: 1.,
+    opacity: 1.,
+  };
+
+  /// Coming in at `t` (0 to 1): grows from nothing past its size (about 1.15×), then settles
+  /// (an "ease out back" curve), fading in over the first third.
+  fn appearing(t: f32) -> Self {
+    let t = t.clamp(0., 1.);
+    const OVERSHOOT: f32 = 2.2;
+    let u = t - 1.;
+    Self {
+      scale: 1. + (OVERSHOOT + 1.) * u * u * u + OVERSHOOT * u * u,
+      opacity: (t * 3.).min(1.),
+    }
+  }
+
+  /// Leaving at `t` (0 to 1): fades out while it shrinks to 60 %.
+  fn leaving(t: f32) -> Self {
+    let t = t.clamp(0., 1.);
+    let eased = 1. - (1. - t) * (1. - t);
+    Self {
+      scale: 1. - 0.4 * eased,
+      opacity: 1. - eased,
+    }
+  }
+}
+
 /// How many times a bonus is claimed automatically before it waits for a click.
 const AUTO_CLAIM_TRIES: u8 = 2;
 /// The points are read again this long after a claim, to see whether it went through.
@@ -184,6 +226,10 @@ pub struct PointsView {
   bonus_hidden: bool,
   /// The chat window is claiming the bonus: the button is greyed out, a spinner beside it.
   claiming: bool,
+  /// The bonus button shows (or is coming in): its presence at the last render.
+  bonus_shown: bool,
+  /// When the button started coming in or leaving, while it animates.
+  bonus_since: Option<Instant>,
   /// The automatic claims tried, by claim id: at most [`AUTO_CLAIM_TRIES`] each.
   auto_claims: HashMap<String, u8>,
   /// The automatic claim waiting for its delay, or the claim on its way.
@@ -244,6 +290,8 @@ impl PointsView {
       points: None,
       bonus_hidden: false,
       claiming: false,
+      bonus_shown: false,
+      bonus_since: None,
       auto_claims: HashMap::new(),
       claim_task: None,
       predictions: Vec::new(),
@@ -1622,36 +1670,94 @@ impl PointsView {
         cx.new(|cx| InputState::new(window, cx).placeholder(t("Your message", "Votre message"))),
       );
     }
-    let claim = self.points.as_ref().and_then(|p| p.claim.clone());
-    let show_bonus = claim.is_some() && (!self.bonus_hidden || self.claiming);
+    let shown = self.points.as_ref().is_some_and(|p| p.claim.is_some())
+      && (!self.bonus_hidden || self.claiming);
+    // Each change of the button's presence starts its animation (none with reduced motion).
+    if shown != self.bonus_shown {
+      self.bonus_shown = shown;
+      self.bonus_since = (!cx.reduce_motion()).then(Instant::now);
+    }
+    let mut look = BonusLook::REST;
+    if let Some(since) = self.bonus_since {
+      let length = if shown { BONUS_BUMP } else { BONUS_LEAVE };
+      let t = since.elapsed().as_secs_f32() / length.as_secs_f32();
+      if t < 1. {
+        look = if shown {
+          BonusLook::appearing(t)
+        } else {
+          BonusLook::leaving(t)
+        };
+        window.request_animation_frame();
+      } else {
+        self.bonus_since = None;
+      }
+    }
+    let leaving = !shown && self.bonus_since.is_some();
     let claiming = self.claiming;
-    let this = cx.entity().downgrade();
     h_flex()
       .gap_1()
       .items_center()
       .child(self.balance_chip(window, cx))
-      .when(show_bonus, |row| {
+      .when(shown || leaving, |row| {
         row
+          // The button's full height, so that the row does not move while it scales.
           .child(
-            Button::new("twitch-points-bonus")
-              .small()
-              .primary()
-              .icon(Icon::Gift)
-              .label("Bonus")
-              .disabled(claiming)
-              .tooltip(if claiming {
-                t("Claiming the bonus…", "Réclamation du bonus…")
-              } else {
-                t(
-                  "A bonus is waiting: claim it",
-                  "Un bonus attend : le réclamer",
-                )
-              })
-              .on_click(move |_, _, cx| {
-                this.update(cx, |this, cx| this.claim_bonus(cx)).ok();
-              }),
+            div()
+              .h(px(BONUS_HEIGHT))
+              .flex()
+              .items_center()
+              .child(self.bonus_button(look, claiming || leaving, cx)),
           )
-          .when(claiming, |row| row.child(Spinner::new().small()))
+          .when(claiming, |row| {
+            row.child(ui::widgets::loader(16., theme::muted()))
+          })
+      })
+      .into_any_element()
+  }
+
+  /// The "Bonus" button drawn at `look`'s scale and opacity: gpui-component's small primary
+  /// button, redrawn, since GPUI scales no element. `inert` greys it out (a claim on its way) or
+  /// only ignores clicks (leaving).
+  fn bonus_button(&self, look: BonusLook, inert: bool, cx: &mut Context<Self>) -> AnyElement {
+    let theme = cx.theme();
+    let (background, hover, foreground, radius) = (
+      theme.button_primary,
+      theme.button_primary_hover,
+      theme.button_primary_foreground,
+      theme.radius,
+    );
+    let s = look.scale;
+    let this = cx.entity().downgrade();
+    let tooltip = if self.claiming {
+      t("Claiming the bonus…", "Réclamation du bonus…")
+    } else {
+      t(
+        "A bonus is waiting: claim it",
+        "Un bonus attend : le réclamer",
+      )
+    };
+    h_flex()
+      .id("twitch-points-bonus")
+      .h(px(BONUS_HEIGHT * s))
+      .px(px(8. * s))
+      .gap(px(4. * s))
+      .items_center()
+      .rounded(radius * s)
+      .bg(background)
+      .text_color(foreground)
+      .text_size(px(14. * s))
+      .font_weight(FontWeight::MEDIUM)
+      .opacity(look.opacity * if self.claiming { 0.5 } else { 1. })
+      .child(gpui_component::Icon::new(Icon::Gift).with_size(px(14. * s)))
+      .child("Bonus")
+      .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
+      .when(!inert, |button| {
+        button
+          .cursor_pointer()
+          .hover(move |style| style.bg(hover))
+          .on_click(move |_, _, cx| {
+            this.update(cx, |this, cx| this.claim_bonus(cx)).ok();
+          })
       })
       .into_any_element()
   }
@@ -1804,6 +1910,21 @@ fn first_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+  #[test]
+  fn bonus_bumps_in_and_shrinks_away() {
+    use super::BonusLook;
+    let start = BonusLook::appearing(0.);
+    assert!(start.scale.abs() < 1e-6 && start.opacity == 0.);
+    assert_eq!(BonusLook::appearing(1.), BonusLook::REST);
+    let peak = (1..100)
+      .map(|i| BonusLook::appearing(i as f32 / 100.).scale)
+      .fold(0., f32::max);
+    assert!((1.1..1.2).contains(&peak), "bump peak {peak}");
+    assert_eq!(BonusLook::leaving(0.), BonusLook::REST);
+    let end = BonusLook::leaving(1.);
+    assert!((end.scale - 0.6).abs() < 1e-6 && end.opacity == 0.);
+  }
+
   use super::*;
 
   #[test]
