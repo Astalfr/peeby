@@ -45,7 +45,9 @@ use crate::images::Images;
 use crate::picture::{self, Picture};
 use crate::{motion, tf, theme};
 
-const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(3);
+const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(1);
+/// The controls fade in and out over this long.
+const CONTROLS_FADE: Duration = Duration::from_millis(200);
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
 /// Space or the left button held on the picture this long plays at [`HOLD_SPEED`] until the
@@ -309,6 +311,10 @@ pub struct PlayerView {
   osd: Option<SharedString>,
   osd_task: Option<Task<()>>,
   controls_visible: bool,
+  /// Counts the controls' show/hide changes, so each one starts a new fade.
+  controls_animation: u32,
+  /// Removes the controls once their fade-out is over; they are drawn until then.
+  controls_fade_task: Option<Task<()>>,
   over_controls: bool,
   /// The mouse is over the mute button, or over the volume slider above it.
   volume_hover: (bool, bool),
@@ -440,6 +446,8 @@ impl PlayerView {
       osd: None,
       osd_task: None,
       controls_visible: true,
+      controls_animation: 0,
+      controls_fade_task: None,
       over_controls: false,
       volume_hover: (false, false),
       volume_dragging: false,
@@ -1578,7 +1586,12 @@ impl PlayerView {
   }
 
   fn show_controls(&mut self, cx: &mut Context<Self>) {
-    self.controls_visible = true;
+    if !self.controls_visible {
+      // Also cuts a running fade-out short: the fade-in starts over from transparent.
+      self.controls_visible = true;
+      self.controls_animation = self.controls_animation.wrapping_add(1);
+      self.controls_fade_task = None;
+    }
     cx.notify();
     self.hide_task = Some(cx.spawn(async move |this, cx| {
       cx.background_executor().timer(HIDE_CONTROLS_AFTER).await;
@@ -1594,6 +1607,16 @@ impl PlayerView {
             || this.seek_dragging;
           if !busy {
             this.controls_visible = false;
+            this.controls_animation = this.controls_animation.wrapping_add(1);
+            this.controls_fade_task = Some(cx.spawn(async move |this, cx| {
+              cx.background_executor().timer(CONTROLS_FADE).await;
+              this
+                .update(cx, |this, cx| {
+                  this.controls_fade_task = None;
+                  cx.notify();
+                })
+                .ok();
+            }));
             // The buttons go away without a hover-out.
             this.hovered_control = None;
             gpui_video::hide_cursor_until_mouse_moves();
@@ -2913,11 +2936,26 @@ impl Render for PlayerView {
       None
     };
     root = root.children(skip).children(up_next);
-    if show_ui {
-      root = root.children(self.render_controls(window, cx));
-      if let Some(menu) = self.menu {
-        root = root.child(self.render_menu(menu, window, cx));
-      }
+    // Drawn while shown and while their fade-out runs. The wrapper has no handlers, so it
+    // takes no mouse events from the picture; its opacity applies to every bar.
+    if self.player.is_some() && (self.controls_visible || self.controls_fade_task.is_some()) {
+      let (animation, showing) = (self.controls_animation, self.controls_visible);
+      let ease = ease_out_quint();
+      root = root.child(
+        div()
+          .absolute()
+          .inset_0()
+          .children(self.render_controls(window, cx))
+          .with_animation(
+            SharedString::from(format!("controls-{animation}")),
+            Animation::new(CONTROLS_FADE),
+            // Eased by hand so that hiding replays the showing curve backwards.
+            move |el, t| el.opacity(ease(if showing { t } else { 1. - t })),
+          ),
+      );
+    }
+    if show_ui && let Some(menu) = self.menu {
+      root = root.child(self.render_menu(menu, window, cx));
     }
     if self.stats {
       root = root.child(self.render_stats(cx));

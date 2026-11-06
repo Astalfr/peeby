@@ -86,7 +86,7 @@ The volume shows no number. Hovering the mute button opens a vertical slider rig
 - Click the picture to play or pause. Double-click toggles fullscreen and undoes the pause from the first click.
 - Each play/pause change, whatever triggered it (click, Space, button), shows the new state's icon in the middle of the picture: a dark disc that grows and fades out in 600 ms. The state the file opens in shows nothing.
 - The wheel over the picture changes the volume.
-- The controls and the mouse cursor hide after 3 s without mouse movement, and the cursor comes back on the next move (`gpui_video::hide_cursor_until_mouse_moves`, from the vendored GPUI patch). They stay visible while paused, while a menu or the help is open, or while the mouse is over them.
+- After 1 s without mouse movement the controls fade out (200 ms, eased) and the mouse cursor hides; the next move fades the controls back in and brings the cursor back (`gpui_video::hide_cursor_until_mouse_moves`, from the vendored GPUI patch). They stay visible while paused, while a menu or the help is open, or while the mouse is over them.
 
 | Keys | Action |
 |---|---|
