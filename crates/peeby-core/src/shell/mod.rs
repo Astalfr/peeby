@@ -38,7 +38,7 @@ use ui::player::{AudioOutput, NowPlaying, PictureInPicture, PlayerView, now_play
 use ui::splash::Splash;
 use ui::{motion, tf, theme};
 
-use crate::settings::Settings;
+use crate::settings::{NewTabStyle, Settings};
 use mini_player::MiniPlayer;
 use settings_page::SettingsView;
 pub use settings_page::delivery_row;
@@ -49,11 +49,13 @@ use tab_drag::{Slide, TabDrag, TabLayout};
 const NOTIFICATIONS_WIDTH: f32 = 440.;
 /// Width of the audio output menu.
 const AUDIO_MENU_WIDTH: f32 = 320.;
-/// Width of the menu of new tabs.
-const NEW_TAB_MENU_WIDTH: f32 = 220.;
 /// A tab's widest; tabs narrow down to [`TAB_MIN_WIDTH`] when the bar is full.
 const TAB_MAX_WIDTH: f32 = 220.;
 const TAB_MIN_WIDTH: f32 = 140.;
+/// A cell of the new tab frame: "+" and each space's logo.
+const NEW_TAB_ITEM: f32 = 26.;
+/// Width of the menu of new tabs (`NewTabStyle::Menu`).
+const NEW_TAB_MENU_WIDTH: f32 = 220.;
 
 /// A tab of the bar: its space (an index in `Shell::spaces`, which never changes) and its id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -946,7 +948,7 @@ impl Shell {
   /// the last one); a middle click closes it. A tab held and moved follows the pointer along the
   /// bar, its slot left empty, and takes its neighbors' places (ADR 0028). Then "+", a menu of the
   /// spaces to open a tab of.
-  fn tabs(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  fn tabs(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let dragged = self.tab_drag.filter(|d| d.moving);
     // Placed from the last frame's tabs, before they are measured again.
     let dragged_left = dragged.map(|drag| self.dragged_left(&drag));
@@ -1070,7 +1072,7 @@ impl Shell {
         .inset_0(),
       )
       .children(tabs)
-      .child(self.new_tab_menu(cx))
+      .child(self.new_tab_menu(window, cx))
       .children(copy)
   }
 
@@ -1164,8 +1166,105 @@ impl Shell {
       .children(close)
   }
 
-  /// "+": the spaces, a click opens a tab of one on its first page.
-  fn new_tab_menu(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+  /// The new tab control of the setting `new_tab_style`.
+  fn new_tab_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> gpui::AnyElement {
+    match Settings::get(cx).new_tab_style {
+      NewTabStyle::Menu => self.new_tab_popover(cx).into_any_element(),
+      NewTabStyle::Expanded => self.new_tab_frame(false, window, cx),
+      NewTabStyle::OnHover => self.new_tab_frame(true, window, cx),
+    }
+  }
+
+  /// A frame with "+" (not clickable) and the spaces' logos, unfolded while hovered when
+  /// `folded`, else always: a click on one opens a tab of that space on its first page.
+  fn new_tab_frame(
+    &self,
+    folded: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> gpui::AnyElement {
+    let hovered = motion::hover_state("new-tab-hover", window, cx);
+    let open = !folded || *hovered.read(cx);
+    let duration = if !folded || cx.reduce_motion() {
+      Duration::ZERO
+    } else {
+      theme::FAST
+    };
+    let t = motion::tween(
+      "new-tab-unfold",
+      0.,
+      if open { 1. } else { 0. },
+      duration,
+      window,
+      cx,
+    );
+    let logos: Vec<_> = self
+      .spaces
+      .iter()
+      .enumerate()
+      .map(|(index, space)| {
+        let info = space.info(cx);
+        let name = info.name.clone();
+        let tooltip = tf!("New {name} tab", "Nouvel onglet {name}");
+        div()
+          .id(SharedString::from(format!("new-tab-{index}")))
+          .flex_none()
+          .size(px(NEW_TAB_ITEM))
+          .rounded(px(5.))
+          .flex()
+          .items_center()
+          .justify_center()
+          .cursor_pointer()
+          .hover(|s| s.bg(gpui::white().opacity(0.08)))
+          .child(assets::color_svg(info.icon, 18., window, cx))
+          .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+          })
+          .on_click(cx.listener(move |this, _, window, cx| this.new_tab(index, window, cx)))
+      })
+      .collect();
+    let unfolded = self.spaces.len() as f32 * NEW_TAB_ITEM;
+    h_flex()
+      .id("new-tab")
+      .flex_none()
+      .ml_1()
+      .p(px(1.))
+      .items_center()
+      .rounded(px(7.))
+      .border_1()
+      .border_color(theme::border())
+      .when(folded && open, |el| el.bg(gpui::white().opacity(0.03)))
+      .when(folded, |el| {
+        el.on_hover(move |hover, window, cx| {
+          hovered.update(cx, |h, _| *h = *hover);
+          window.refresh();
+        })
+      })
+      .child(
+        div()
+          .flex_none()
+          .size(px(NEW_TAB_ITEM))
+          .flex()
+          .items_center()
+          .justify_center()
+          .text_color(theme::muted())
+          .child(gpui_component::Icon::new(Icon::Plus).size(px(14.))),
+      )
+      // Clipped to a width growing with the unfolding, the logos fading in as they show.
+      .child(
+        h_flex()
+          .flex_none()
+          .w(px(unfolded * t))
+          .overflow_hidden()
+          .opacity(t)
+          .children(logos),
+      )
+      .into_any_element()
+  }
+
+  /// "+" opening a menu of the spaces (`NewTabStyle::Menu`): a click on one opens a tab of it
+  /// on its first page.
+  fn new_tab_popover(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let shell = cx.weak_entity();
     let spaces: Vec<_> = self.spaces.iter().map(|space| space.info(cx)).collect();
     let trigger = Button::new("new-tab-button")

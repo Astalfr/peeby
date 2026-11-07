@@ -16,7 +16,7 @@ use ui::widgets::page_title;
 use ui::{images, tf, theme};
 
 use crate::desktop;
-use crate::settings::{Delivery, Notifications, Player, Settings};
+use crate::settings::{Delivery, NewTabStyle, Notifications, Player, Settings};
 use crate::shell::space::{SpaceHandle, SpaceInfo};
 
 pub struct SettingsView {
@@ -195,6 +195,24 @@ fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
           "Les services qui ouvrent un onglet au démarrage de Peeby.",
         ),
         startup_tabs(settings, spaces),
+      )
+      .into_any_element(),
+      row(
+        t("New tab button", "Bouton nouvel onglet"),
+        t(
+          "After the tabs. Menu: \"+\" opens a list of the services. Logos: the services' logos always shown next to \"+\". On hover: \"+\" alone, the logos unfold while the pointer is over it. A click on a logo opens a tab of that service.",
+          "Après les onglets. Menu : « + » ouvre une liste des services. Logos : les logos des services toujours affichés à côté de « + ». Au survol : « + » seul, les logos se déplient quand le pointeur passe dessus. Un clic sur un logo ouvre un onglet de ce service.",
+        ),
+        chips(
+          "new-tab-style",
+          vec![
+            (NewTabStyle::Menu, t("Menu", "Menu").to_owned()),
+            (NewTabStyle::Expanded, t("Logos", "Logos").to_owned()),
+            (NewTabStyle::OnHover, t("On hover", "Au survol").to_owned()),
+          ],
+          &settings.new_tab_style,
+          |style, cx| Settings::update(cx, |s| s.new_tab_style = style),
+        ),
       )
       .into_any_element(),
       row(

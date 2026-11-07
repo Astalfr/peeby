@@ -72,6 +72,19 @@ pub enum StartPage {
   Subscriptions,
 }
 
+/// How the tab bar offers a new tab, after the tabs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NewTabStyle {
+  /// A "+" button opening a menu of the services.
+  Menu,
+  /// A frame with "+" and the services' logos, always shown.
+  Expanded,
+  /// A frame with "+" alone, unfolding the services' logos while the pointer is over it.
+  #[default]
+  OnHover,
+}
+
 /// The user's settings, a GPUI global. Unknown or missing keys take their default, so an old
 /// or hand-edited file still loads.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -116,6 +129,8 @@ pub struct Settings {
   /// The spaces (`SpaceInfo::id`) that open a tab when Peeby starts. With none of them
   /// available, the first space opens one.
   pub startup_tabs: Vec<String>,
+  /// How the tab bar offers a new tab.
+  pub new_tab_style: NewTabStyle,
 }
 
 /// `[notifications]`: where each kind shows (ADR 0020).
@@ -393,6 +408,7 @@ impl Default for Settings {
       close_to_tray: true,
       start_with_windows: false,
       startup_tabs: vec!["youtube".into()],
+      new_tab_style: NewTabStyle::OnHover,
     }
   }
 }
