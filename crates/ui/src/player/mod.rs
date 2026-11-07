@@ -150,6 +150,22 @@ pub fn now_playing(cx: &App) -> Option<Entity<PlayerView>> {
   cx.try_global::<NowPlaying>()?.0.as_ref()?.upgrade()
 }
 
+/// A player's picture-in-picture button (or I): the shell showing its page opens the
+/// mini-player on it, or closes it (`open: false`), and tells it with
+/// [`PlayerView::set_picture_in_picture`].
+#[derive(Default)]
+pub struct PictureInPicture(Option<(WeakEntity<PlayerView>, bool)>);
+
+impl Global for PictureInPicture {}
+
+impl PictureInPicture {
+  /// The player asking, while it exists, and whether it asks to open the mini-player.
+  pub fn request(&self) -> Option<(Entity<PlayerView>, bool)> {
+    let (player, open) = self.0.as_ref()?;
+    Some((player.upgrade()?, *open))
+  }
+}
+
 /// The audio output every player plays to ([`player::AudioDevice::name`]; `None`: Windows'
 /// default), a global the app sets from its settings: changing it moves the players playing.
 #[derive(Default)]
@@ -241,10 +257,18 @@ pub struct PlayerView {
   theater: bool,
   /// The page offers theater mode (button and T); not a page whose player is vertical.
   theater_offered: bool,
+  /// The page offers picture-in-picture (button and I); not a page of short looping videos.
+  pip_page_offered: bool,
+  /// The bar shows the seek buttons (back and forward a step); the keys seek either way.
+  seek_buttons: bool,
+  /// The bar shows the time (position / length, the time left).
+  time_shown: bool,
   /// The page offers speed changes (the menu, and 2× while held); not a page of short looping
   /// videos.
   speed_offered: bool,
   layout: Layout,
+  /// The mini-player shows the picture (picture-in-picture): the page shows a placeholder.
+  in_pip: bool,
   /// Second line of the title (episode, year), shown in the full-window layout.
   subtitle: SharedString,
   /// mpv's tracks of the playing file.
@@ -404,7 +428,11 @@ impl PlayerView {
       theater,
       theater_offered: true,
       speed_offered: true,
+      pip_page_offered: true,
+      seek_buttons: true,
+      time_shown: true,
       layout: Layout::Embedded,
+      in_pip: false,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
       subtitle_delay: 0.0,
@@ -828,6 +856,53 @@ impl PlayerView {
   pub fn replay(&mut self, cx: &mut Context<Self>) {
     self.seek_to(0.0, cx);
     self.with_player(|p| p.set_paused(false));
+  }
+
+  /// The shell opened (or closed) the mini-player on this player: the page shows a
+  /// placeholder where the picture was, and the button closes it.
+  pub fn set_picture_in_picture(&mut self, in_pip: bool, cx: &mut Context<Self>) {
+    if self.in_pip != in_pip {
+      self.in_pip = in_pip;
+      cx.notify();
+    }
+  }
+
+  /// Whether the mini-player shows this player's picture.
+  pub fn in_picture_in_picture(&self) -> bool {
+    self.in_pip
+  }
+
+  /// Picture-in-picture needs the app's shell (not the example's window layout) and a video.
+  fn pip_offered(&self) -> bool {
+    self.pip_page_offered && self.layout != Layout::Window && self.player.is_some()
+  }
+
+  /// The button or I: asks the shell to open the mini-player on this player, or to close it.
+  /// Out of fullscreen first: the mini-player stands beside the window.
+  fn toggle_picture_in_picture(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if window.is_fullscreen() {
+      window.toggle_fullscreen();
+    }
+    let open = !self.in_pip;
+    cx.set_global(PictureInPicture(Some((cx.weak_entity(), open))));
+  }
+
+  /// Whether the page offers picture-in-picture (its button and I); it does by default.
+  pub fn offer_picture_in_picture(&mut self, offered: bool, cx: &mut Context<Self>) {
+    self.pip_page_offered = offered;
+    cx.notify();
+  }
+
+  /// Whether the bar shows the seek buttons (← and → seek either way); it does by default.
+  pub fn show_seek_buttons(&mut self, shown: bool, cx: &mut Context<Self>) {
+    self.seek_buttons = shown;
+    cx.notify();
+  }
+
+  /// Whether the bar shows the time; it does by default.
+  pub fn show_time(&mut self, shown: bool, cx: &mut Context<Self>) {
+    self.time_shown = shown;
+    cx.notify();
   }
 
   /// Whether the page offers theater mode (its button and T); it does by default.
@@ -1691,6 +1766,7 @@ impl PlayerView {
       "t" if !window.is_fullscreen() && !page_layout && self.theater_offered => {
         self.toggle_theater(cx)
       }
+      "i" if self.pip_offered() => self.toggle_picture_in_picture(window, cx),
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
       "escape" | "backspace" if page_layout => self.close(cx),
@@ -2401,7 +2477,7 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.play_next(cx))),
         )
       })
-      .when(can_seek, |row| {
+      .when(can_seek && self.seek_buttons, |row| {
         row
           .child(
             self
@@ -2426,6 +2502,8 @@ impl PlayerView {
       .map(|row| {
         if live {
           row.child(self.render_live_badge(cx))
+        } else if !self.time_shown {
+          row
         } else {
           row.child(div().pl_2().text_sm().text_color(white(0.9)).child(format!(
             "{} / {}",
@@ -2435,13 +2513,35 @@ impl PlayerView {
         }
       })
       .child(div().flex_1())
-      .when(!embedded && !live && self.duration > 0.0, |row| {
+      .when(
+        self.time_shown && !embedded && !live && self.duration > 0.0,
+        |row| {
+          row.child(
+            div()
+              .pr_2()
+              .text_sm()
+              .text_color(white(0.85))
+              .child(format!("-{}", format_time(self.duration - self.position))),
+          )
+        },
+      )
+      // The first of the right-hand buttons.
+      .when(!fullscreen && self.pip_offered(), |row| {
         row.child(
-          div()
-            .pr_2()
-            .text_sm()
-            .text_color(white(0.85))
-            .child(format!("-{}", format_time(self.duration - self.position))),
+          self
+            .control_button("picture-in-picture", cx)
+            .icon(Icon::PictureInPicture)
+            .tooltip(if self.in_pip {
+              t(
+                "Exit picture-in-picture (I)",
+                "Quitter l'image dans l'image (I)",
+              )
+            } else {
+              t("Picture-in-picture (I)", "Image dans l'image (I)")
+            })
+            .on_click(
+              cx.listener(|this, _, window, cx| this.toggle_picture_in_picture(window, cx)),
+            ),
         )
       })
       .when(!self.chapters.is_empty(), |row| {
@@ -2828,8 +2928,25 @@ impl Render for PlayerView {
         self
           .video
           .clone()
+          .filter(|_| !self.in_pip)
           .map(|video| div().absolute().inset_0().child(video)),
       )
+      .when(self.in_pip, |root| {
+        root.child(
+          v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .justify_center()
+            .gap_2()
+            .text_color(gpui::white().opacity(0.7))
+            .child(gpui_component::Icon::new(Icon::PictureInPicture).size(px(48.)))
+            .child(t(
+              "Playing in picture-in-picture",
+              "Lecture en image dans l'image",
+            )),
+        )
+      })
       // Picture area: clicks, double-clicks, wheel and mouse moves (the bars occlude it).
       .child(
         div()

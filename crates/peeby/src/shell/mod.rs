@@ -34,7 +34,7 @@ use player::AudioDevice;
 use ui::assets::{self, Icon};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::player::{AudioOutput, NowPlaying, PlayerView, now_playing};
+use ui::player::{AudioOutput, NowPlaying, PictureInPicture, PlayerView, now_playing};
 use ui::splash::Splash;
 use ui::{motion, tf, theme};
 
@@ -66,6 +66,10 @@ struct TabRef {
 struct Mini {
   window: WindowHandle<MiniPlayer>,
   tab: TabRef,
+  /// Opened by the player's picture-in-picture button: it stays while its page shows.
+  pinned: bool,
+  /// The player told it plays in the mini-player ([`PlayerView::set_picture_in_picture`]).
+  player: Option<gpui::WeakEntity<PlayerView>>,
 }
 
 /// What a space's event asks of the shell, copied out of the event to be handled later.
@@ -179,6 +183,26 @@ impl Shell {
       if shown.is_some() && shown != now_playing(cx) {
         shell.close_mini(cx);
       }
+    }));
+    // A player's picture-in-picture button. Deferred: the click comes from this window, which
+    // cannot be updated from inside its own event, and the mini-player needs it (its screen).
+    let handle = window.window_handle();
+    subscriptions.push(cx.observe_global::<PictureInPicture>(move |_, cx| {
+      let Some((player, open)) = cx.global::<PictureInPicture>().request() else {
+        return;
+      };
+      let shell = cx.weak_entity();
+      cx.defer(move |cx| {
+        handle
+          .update(cx, |_, window, cx| {
+            shell
+              .update(cx, |shell, cx| {
+                shell.picture_in_picture(player, open, window, cx)
+              })
+              .ok();
+          })
+          .ok();
+      });
     }));
     // An update's installer is ready: the title bar shows its button (ADR 0027).
     subscriptions.push(cx.observe_global::<crate::update::Updater>(|_, cx| cx.notify()));
@@ -496,25 +520,89 @@ impl Shell {
     if player.read(cx).is_paused() {
       return;
     }
-    self.open_mini(tab, window, cx);
+    self.open_mini(tab, false, window, cx);
   }
 
   /// The tab's page is on screen again: its video leaves the mini-player and plays on.
+  /// Unless the user put it there with the picture-in-picture button.
   fn enter_page(&mut self, cx: &mut Context<Self>) {
-    if !self.in_settings(cx) && self.mini.as_ref().map(|m| m.tab) == self.active {
+    let unpinned = self.mini.as_ref().filter(|m| !m.pinned).map(|m| m.tab);
+    if !self.in_settings(cx) && unpinned.is_some() && unpinned == self.active {
       self.close_mini(cx);
     }
   }
 
-  fn open_mini(&mut self, tab: TabRef, window: &mut Window, cx: &mut Context<Self>) {
+  fn open_mini(&mut self, tab: TabRef, pinned: bool, window: &mut Window, cx: &mut Context<Self>) {
     let Some(handle) = self.spaces.get(tab.space).cloned() else {
       return;
     };
     let shell = cx.weak_entity();
     let main = window.window_handle();
     match mini_player::open(handle, tab.id, shell, main, window, cx) {
-      Ok(window) => self.mini = Some(Mini { window, tab }),
+      Ok(window) => {
+        self.mini = Some(Mini {
+          window,
+          tab,
+          pinned,
+          player: None,
+        });
+        self.sync_pip(cx);
+      }
       Err(e) => tracing::warn!("cannot open the mini-player: {e:#}"),
+    }
+  }
+
+  /// The picture-in-picture button of `player` (or I): the mini-player opens on it, its page
+  /// staying, or closes. Only for the player of the tab shown here: another window's is its own.
+  fn picture_in_picture(
+    &mut self,
+    player: Entity<PlayerView>,
+    open: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let Some(tab) = self.active else {
+      return;
+    };
+    if self.in_settings(cx) || self.spaces[tab.space].player(tab.id, cx) != Some(player) {
+      return;
+    }
+    let shown = self.mini.as_ref().is_some_and(|m| m.tab == tab);
+    match (open, shown) {
+      (true, true) => {
+        if let Some(mini) = &mut self.mini {
+          mini.pinned = true;
+        }
+      }
+      (true, false) => {
+        // Another tab's video: the one asked for takes its place.
+        self.close_mini(cx);
+        self.open_mini(tab, true, window, cx);
+      }
+      (false, true) => self.close_mini(cx),
+      (false, false) => {}
+    }
+    cx.notify();
+  }
+
+  /// Tells the players whether the mini-player shows them: the one it shows now, and the one
+  /// it showed before (a queue moved on, the mini-player closed). Their pages show a
+  /// placeholder meanwhile.
+  fn sync_pip(&mut self, cx: &mut App) {
+    let current = self.mini_player(cx);
+    let Some(mini) = &mut self.mini else {
+      return;
+    };
+    let previous = mini.player.as_ref().and_then(|p| p.upgrade());
+    if previous == current {
+      return;
+    }
+    mini.player = current.as_ref().map(|p| p.downgrade());
+    if let Some(previous) = previous {
+      previous.update(cx, |p, cx| p.set_picture_in_picture(false, cx));
+    }
+    if let Some(current) = current {
+      current.update(cx, |p, cx| p.set_picture_in_picture(true, cx));
     }
   }
 
@@ -522,6 +610,9 @@ impl Shell {
   /// click that closes it may come from that window, which cannot be updated from inside itself.
   fn close_mini(&mut self, cx: &mut App) {
     if let Some(mini) = self.mini.take() {
+      if let Some(player) = mini.player.as_ref().and_then(|p| p.upgrade()) {
+        player.update(cx, |p, cx| p.set_picture_in_picture(false, cx));
+      }
       cx.defer(move |cx| {
         if let Err(e) = mini
           .window
@@ -559,6 +650,10 @@ impl Shell {
   /// The mini-player's "back to the page": its tab shows in the main window.
   pub(crate) fn return_from_mini(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(tab) = self.mini.as_ref().map(|m| m.tab) {
+      // Back on its page, it closes even if the button opened it.
+      if let Some(mini) = &mut self.mini {
+        mini.pinned = false;
+      }
       // The window may be hidden in the notification area.
       crate::desktop::reveal(self.window, cx);
       window.activate_window();
@@ -587,11 +682,12 @@ impl Shell {
     if let Some(mini) = &self.mini
       && mini.tab.space == index
     {
-      let on_its_page = Some(mini.tab) == self.active && !self.in_settings(cx);
+      let on_its_page = !mini.pinned && Some(mini.tab) == self.active && !self.in_settings(cx);
       if on_its_page || self.mini_player(cx).is_none() {
         self.close_mini(cx);
       } else {
         mini.window.update(cx, |_, _, cx| cx.notify()).ok();
+        self.sync_pip(cx);
       }
     }
     cx.notify();

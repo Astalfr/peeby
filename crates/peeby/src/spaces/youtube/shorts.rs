@@ -115,6 +115,10 @@ impl ShortView {
       let mut player = PlayerView::new(prefs, false, cx);
       player.offer_theater(false, cx);
       player.offer_speed(false, cx);
+      // A short looping video: no picture-in-picture button, seek buttons nor time.
+      player.offer_picture_in_picture(false, cx);
+      player.show_seek_buttons(false, cx);
+      player.show_time(false, cx);
       player.set_covered(covered);
       player
     });

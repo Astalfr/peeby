@@ -19,6 +19,12 @@ an external D3D11 texture drawn by the patched GPUI.
 - It opens when the page that plays is left for another tab or the settings, and only if the video plays. It
   closes when that page shows again (its tab, or its "Revenir à la page" button, which also brings the main
   window to the front); its "×" pauses the video and closes it.
+- The player's picture-in-picture button ("Image dans l'image", the first of the bar's right-hand buttons, and I; not in fullscreen,
+  which it leaves) opens it on demand, as Chrome's does: the page stays and shows a placeholder where the
+  picture was (`PlayerView::set_picture_in_picture`), and the mini-player stays while that page shows. The
+  button asks through a global (`ui::player::PictureInPicture`) that every shell observes; the one showing that
+  player's tab acts (deferred: the click comes from its own window). The button again, its "Revenir à la page"
+  or its "×" closes it. Added 2026-11-07.
 - It holds no player: it asks its space for the current one at each render, so a queue moving to its next
   video carries on in it. A `NowPlaying` global (in `ui::player`) keeps one sound at a time: a player that
   starts pauses the previous one, and the mini-player closes if its player is no longer the one playing.

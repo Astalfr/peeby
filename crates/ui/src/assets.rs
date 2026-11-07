@@ -81,6 +81,7 @@ icons! {
   Reverse => "arrow-down-up",
   Menu => "menu",
   Theater => "rectangle-horizontal",
+  PictureInPicture => "picture-in-picture-2",
   Bell => "bell",
   BellRing => "bell-ring",
   BellOff => "bell-off",

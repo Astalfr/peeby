@@ -227,6 +227,7 @@ Principles:
 | S | Skip the current segment (intro, recap, credits…) |
 | N/P | Next / previous (episode or queue) |
 | T | Theater mode (embedded layout) |
+| I | Picture-in-picture: the video in the mini-player, the page staying (ADR 0008) |
 | F, double-click | Fullscreen |
 | Esc | Close menu or help, else leave fullscreen, else close the full-window player |
 | Backspace | Close the full-window player |

@@ -60,6 +60,7 @@ const SHORTCUTS: &[(&str, &str, &str, &str)] = &[
   ),
   ("P / N", "P / N", "Previous or next", "Précédent ou suivant"),
   ("T", "T", "Theater mode", "Mode cinéma"),
+  ("I", "I", "Picture-in-picture", "Image dans l'image"),
   (
     "F / double-click",
     "F / double-clic",
@@ -502,6 +503,7 @@ impl PlayerView {
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
     let embedded = self.layout == Layout::Embedded;
     let can_seek = self.can_seek();
+    let pip = self.pip_offered();
     let seek = tf!(
       "Seek back or forward {} (Shift: {})",
       "Reculer ou avancer de {} (Maj : {})",
@@ -557,6 +559,7 @@ impl PlayerView {
               .iter()
               // Theater mode exists in the embedded layout only; a live without DVR does not seek.
               .filter(|(keys, ..)| embedded || *keys != "T")
+              .filter(|(keys, ..)| pip || *keys != "I")
               .filter(|(keys, ..)| can_seek || !SEEK_KEYS.contains(keys))
               .map(|&(keys_en, keys_fr, action_en, action_fr)| {
                 let action: SharedString = if action_en.is_empty() {
