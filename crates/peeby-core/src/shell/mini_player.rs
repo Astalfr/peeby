@@ -2,8 +2,8 @@
 //! in Chrome's picture-in-picture (ADR 0008). It shows the video of the tab that was left
 //! while it played, without restarting it: the same player and video surface move here. On
 //! hover: buttons to go back to the page and to close (which pauses), and play/pause in the
-//! middle. Dragging the video moves the window; its edges and corners resize it at 16:9, the
-//! opposite side staying in place.
+//! middle. Dragging the video moves the window; bands along its edges (`EDGE` thick) and corners
+//! (`CORNER` squares) resize it at 16:9, the opposite side staying in place.
 
 use gpui::prelude::*;
 use gpui::{
@@ -26,9 +26,55 @@ const WIDTH: f32 = 400.;
 const MIN_WIDTH: f32 = 240.;
 /// Gap between the window and the screen's edges.
 const MARGIN: f32 = 24.;
-/// Thickness of the resizing edges, and size of the corners.
-const EDGE: f32 = 6.;
-const CORNER: f32 = 12.;
+/// Thickness of the resizing edges, and size of the corners, logical pixels (GPUI scales them
+/// by the display's factor). Wide enough to grab without aiming: the window has no frame of its
+/// own, so these bands reach inward from its sides.
+const EDGE: f32 = 12.;
+const CORNER: f32 = 24.;
+/// Height of the shade at the top, which the control row sits in.
+const SHADE: f32 = 48.;
+/// Side of the "Back to the page" and "Close" buttons, and their inset from the top right. The
+/// inset keeps them clear of the edges and leaves the top right corner an L that thick.
+const CONTROL_SIZE: f32 = 28.;
+const CONTROLS_INSET: f32 = 14.;
+/// Side of the play/pause button, centred below the shade.
+const PLAY_SIZE: f32 = 48.;
+/// Height of the smallest window the edges resize to, 16:9.
+const MIN_HEIGHT: f32 = MIN_WIDTH * 9. / 16.;
+
+// What the layout must hold, checked when the crate compiles: the smallest window
+// (`MIN_WIDTH` x `MIN_HEIGHT`) is the worst case, where the bands cost proportionally the most,
+// so bumping one of the constants above past what it holds fails the build.
+const _: () = {
+  // A corner must be easier to hit than an edge.
+  assert!(EDGE < CORNER);
+  // The top and bottom strips span `CORNER..width - CORNER`, the left and right ones
+  // `CORNER..height - CORNER`: what is left must still be at least as long as a strip is thick,
+  // or the strip is useless (and at zero or less it inverts).
+  assert!(MIN_WIDTH - 2. * CORNER >= EDGE);
+  assert!(MIN_HEIGHT - 2. * CORNER >= EDGE);
+  // Anything the bands leave moves the window when dragged: over half of the smallest one must
+  // still do, or it could no longer be moved comfortably. The inner rectangle the edge strips
+  // leave, less the four corner squares, which reach `CORNER - EDGE` further in.
+  let draggable =
+    (MIN_WIDTH - 2. * EDGE) * (MIN_HEIGHT - 2. * EDGE) - 4. * (CORNER - EDGE) * (CORNER - EDGE);
+  assert!(draggable > 0.5 * MIN_WIDTH * MIN_HEIGHT);
+  // The play/pause button, centred in the box below the shade as `render` places it, must clear
+  // all eight bands even at that size: the four strips in both axes, and the four corner squares
+  // horizontally (it sits low enough to share the bottom ones' rows).
+  let play_left = (MIN_WIDTH - PLAY_SIZE) / 2.;
+  let play_top = SHADE + (MIN_HEIGHT - SHADE - PLAY_SIZE) / 2.;
+  assert!(play_left > EDGE && play_left + PLAY_SIZE < MIN_WIDTH - EDGE);
+  assert!(play_top > EDGE && play_top + PLAY_SIZE < MIN_HEIGHT - EDGE);
+  assert!(play_left > CORNER && play_left + PLAY_SIZE < MIN_WIDTH - CORNER);
+  // The control row takes its own clicks where it covers a band (it is painted after them),
+  // which leaves the top right corner an L `CONTROLS_INSET` thick: that L must stay at least as
+  // wide as a plain edge.
+  assert!(CONTROLS_INSET >= EDGE);
+  // And the row must stay inside the gradient it sits on.
+  assert!(CONTROLS_INSET + CONTROL_SIZE <= SHADE);
+};
+
 /// The resizing edges and corners: id, edge (see [`Gesture::edge`]) and cursor.
 const EDGES: [(&str, (i8, i8), CursorStyle); 8] = [
   ("mini-edge-left", (-1, 0), CursorStyle::ResizeLeftRight),
@@ -337,6 +383,10 @@ impl Render for MiniPlayer {
           .size_0(),
         )
       })
+      // Edges and corners, over the video but under the controls: the hit test takes the
+      // last-painted occluding element, so a visible button keeps its own clicks where it
+      // overlaps a band, and every pixel it does not cover still resizes.
+      .children(edges)
       .when(show, |el| {
         el.child(
           // Shade at the top, behind the buttons.
@@ -345,7 +395,7 @@ impl Render for MiniPlayer {
             .top_0()
             .left_0()
             .right_0()
-            .h(px(40.))
+            .h(px(SHADE))
             .bg(linear_gradient(
               180.,
               linear_color_stop(gpui::black().opacity(0.6), 0.0),
@@ -355,11 +405,11 @@ impl Render for MiniPlayer {
               gpui_component::h_flex()
                 .occlude()
                 .absolute()
-                .top(px(6.))
-                .right(px(6.))
+                .top(px(CONTROLS_INSET))
+                .right(px(CONTROLS_INSET))
                 .gap_1()
                 .child(
-                  button("mini-return", Icon::Maximize, 28.)
+                  button("mini-return", Icon::Maximize, CONTROL_SIZE)
                     .tooltip(|window, cx| {
                       gpui_component::tooltip::Tooltip::new(t(
                         "Back to the page",
@@ -372,7 +422,7 @@ impl Render for MiniPlayer {
                     })),
                 )
                 .child(
-                  button("mini-close", IconName::Close, 28.)
+                  button("mini-close", IconName::Close, CONTROL_SIZE)
                     .tooltip(|window, cx| {
                       gpui_component::tooltip::Tooltip::new(t("Close", "Fermer")).build(window, cx)
                     })
@@ -386,7 +436,7 @@ impl Render for MiniPlayer {
           div()
             .absolute()
             .inset_0()
-            .top(px(40.))
+            .top(px(SHADE))
             .flex()
             .items_center()
             .justify_center()
@@ -394,7 +444,7 @@ impl Render for MiniPlayer {
               button(
                 "mini-play",
                 if paused { Icon::Play } else { Icon::Pause },
-                48.,
+                PLAY_SIZE,
               )
               .occlude()
               .on_click(cx.listener(|this, _, _, cx| {
@@ -405,13 +455,14 @@ impl Render for MiniPlayer {
             ),
         )
       })
-      // Edges and corners, over everything (the buttons keep a margin from them).
-      .children(edges)
   }
 }
 
 #[cfg(test)]
 mod tests {
+  //! The bands' and controls' geometry is constant arithmetic, so it is asserted beside the
+  //! constants instead, when the crate compiles. What is tested here is `Gesture::bounds`.
+
   use super::*;
 
   fn gesture(edge: (i8, i8)) -> Gesture {
