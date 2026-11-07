@@ -314,7 +314,7 @@ impl Shell {
   /// A tab's menu: it leaves this window for a new one (or a spare), with its pages and its
   /// video. Not the window's only tab.
   fn move_to_new_window(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
-    let Some(tab) = self.detach_tab(id, cx) else {
+    let Some(tab) = self.detach_tab(id, true, cx) else {
       return;
     };
     let (bounds, display) = windows::cascade(window, cx);
@@ -323,10 +323,11 @@ impl Shell {
   }
 
   /// Takes tab `id` out of this window without closing it (it moves to another window): the
-  /// next tab shows if it was the one shown, without moving its video to the mini-player. The
-  /// last tab stays.
-  fn detach_tab(&mut self, id: TabId, cx: &mut Context<Self>) -> Option<TabRef> {
-    if self.tabs.len() <= 1 {
+  /// next tab shows if it was the one shown, without moving its video to the mini-player. With
+  /// `keep_one`, the last tab stays (a new window for it would leave this one empty); without,
+  /// it goes too (it joins another window, this one is put aside).
+  fn detach_tab(&mut self, id: TabId, keep_one: bool, cx: &mut Context<Self>) -> Option<TabRef> {
+    if keep_one && self.tabs.len() <= 1 {
       return None;
     }
     let index = self.tabs.iter().position(|t| t.id == id)?;
@@ -339,20 +340,29 @@ impl Shell {
     }
     self.tab_drag = None;
     if self.active == Some(tab) {
-      let next = self.tabs[index.min(self.tabs.len() - 1)];
-      self.show(next, cx);
-      cx.refresh_windows();
+      match self
+        .tabs
+        .get(index.min(self.tabs.len().saturating_sub(1)))
+        .copied()
+      {
+        Some(next) => {
+          self.show(next, cx);
+          cx.refresh_windows();
+        }
+        None => self.active = None,
+      }
     }
     cx.notify();
     Some(tab)
   }
 
-  /// A tab moved in from another window, shown.
-  fn adopt_tab(&mut self, tab: TabRef, cx: &mut Context<Self>) {
+  /// A tab moved in from another window, at `index` (at the end when `None`), shown.
+  fn adopt_tab(&mut self, tab: TabRef, index: Option<usize>, cx: &mut Context<Self>) {
     if self.holds(tab.id) {
       return;
     }
-    self.tabs.push(tab);
+    let at = index.unwrap_or(self.tabs.len()).min(self.tabs.len());
+    self.tabs.insert(at, tab);
     self.show(tab, cx);
   }
 
@@ -854,12 +864,15 @@ impl Shell {
         if slide.is_some() {
           window.request_animation_frame();
         }
+        let held = dragged.filter(|d| d.tab == id);
         self
           .tab_face(tab, window, cx)
           .id(group.clone())
           .group(group)
           .when_some(slide, |el, offset| el.left(offset))
-          .when(dragged.is_some_and(|d| d.tab == id), |el| el.invisible())
+          .when(held.is_some(), |el| el.invisible())
+          // Pulled off the bar: its slot closes.
+          .when(held.is_some_and(|d| d.detached), |el| el.hidden())
           .child(
             canvas(
               move |bounds, _, _| layout.tabs.borrow_mut().push((id, bounds)),
@@ -903,30 +916,34 @@ impl Shell {
           })
       })
       .collect();
-    // The dragged tab over the others, opaque, occluding the slots under it.
-    let copy = dragged.zip(dragged_left).and_then(|(drag, left)| {
-      let tab = self.find(drag.tab)?;
-      Some(
-        div()
-          .id("tab-dragged")
-          .occlude()
-          .absolute()
-          .top_0()
-          .h_full()
-          .left(left)
-          .w(drag.width)
-          .rounded(theme::RADIUS)
-          .bg(theme::chrome(cx))
-          .shadow_md()
-          .child(
-            self
-              .tab_face(tab, window, cx)
-              .w_full()
-              .max_w_full()
-              .min_w_0(),
-          ),
-      )
-    });
+    // The dragged tab over the others, opaque, occluding the slots under it (drawn over the
+    // whole window instead once detached).
+    let copy = dragged
+      .zip(dragged_left)
+      .filter(|(drag, _)| !drag.detached)
+      .and_then(|(drag, left)| {
+        let tab = self.find(drag.tab)?;
+        Some(
+          div()
+            .id("tab-dragged")
+            .occlude()
+            .absolute()
+            .top_0()
+            .h_full()
+            .left(left)
+            .w(drag.width)
+            .rounded(theme::RADIUS)
+            .bg(theme::chrome(cx))
+            .shadow_md()
+            .child(
+              self
+                .tab_face(tab, window, cx)
+                .w_full()
+                .max_w_full()
+                .min_w_0(),
+            ),
+        )
+      });
     let layout = self.tab_layout.clone();
     let (held, shell) = (self.tab_drag.is_some(), cx.weak_entity());
     h_flex()
@@ -937,7 +954,10 @@ impl Shell {
       .items_center()
       .child(
         canvas(
-          move |bounds, _, _| layout.row.set(bounds),
+          move |bounds, window, _| {
+            layout.row.set(bounds);
+            layout.origin.set(window.bounds().origin);
+          },
           move |_, _, window, _| {
             if held {
               tab_drag::listen(shell, window);
@@ -1732,7 +1752,37 @@ impl Render for Shell {
               .children(page),
           ),
       )
+      .children(self.detached_copy(window, cx))
       .children(splash)
+  }
+}
+
+impl Shell {
+  /// A tab pulled off the bar: its copy under the pointer, over the whole window, a little
+  /// transparent.
+  fn detached_copy(&self, window: &Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    let drag = self.tab_drag.filter(|d| d.moving && d.detached)?;
+    let tab = self.find(drag.tab)?;
+    let corner = Self::detached_corner(&drag);
+    Some(
+      div()
+        .absolute()
+        .left(corner.x)
+        .top(corner.y)
+        .w(drag.width)
+        .h(px(34.))
+        .opacity(0.9)
+        .rounded(theme::RADIUS)
+        .bg(theme::chrome(cx))
+        .shadow_lg()
+        .child(
+          self
+            .tab_face(tab, window, cx)
+            .w_full()
+            .max_w_full()
+            .min_w_0(),
+        ),
+    )
   }
 }
 

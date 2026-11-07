@@ -10,7 +10,7 @@
 //! with it.
 
 use gpui::{
-  AnyWindowHandle, App, AppContext as _, Bounds, DisplayId, Global, Pixels, TitlebarOptions,
+  AnyWindowHandle, App, AppContext as _, Bounds, DisplayId, Global, Pixels, Point, TitlebarOptions,
   WeakEntity, Window, WindowBounds, WindowId, WindowOptions, px, size,
 };
 use gpui_component::{Root, TitleBar};
@@ -147,6 +147,46 @@ fn holding(id: TabId, cx: &App) -> Option<Target> {
     .map(Target::from)
 }
 
+/// The window in use, other than `except`, whose bar is under `screen` (the screen's
+/// coordinates), and the index a tab dropped there takes.
+pub(super) fn bar_at(screen: Point<Pixels>, except: WindowId, cx: &App) -> Option<(Target, usize)> {
+  let windows = cx.try_global::<Windows>()?;
+  windows
+    .in_use()
+    .filter(|w| w.handle.window_id() != except)
+    .find_map(|w| {
+      let index = w.shell.upgrade()?.read(cx).bar_slot(screen)?;
+      Some((Target::from(w), index))
+    })
+}
+
+/// Tab `tab`, dropped on `target`'s bar, joins it at `index` and shows; that window comes to the
+/// front.
+pub(super) fn merge(tab: TabRef, target: Target, index: usize, cx: &mut App) {
+  let merged = target.handle.update(cx, |_, window, cx| {
+    if let Some(hwnd) = target.hwnd {
+      desktop::sys::show(hwnd);
+    }
+    window.activate_window();
+    target
+      .shell
+      .update(cx, |shell, cx| shell.adopt_tab(tab, Some(index), cx))
+      .ok();
+  });
+  if let Err(e) = merged {
+    tracing::warn!("cannot move a tab to another window: {e:#}");
+  }
+}
+
+/// Window `id` lost its last tab to another one: it hides, a spare for the next new window.
+pub(super) fn retire(id: WindowId, cx: &mut App) {
+  let hwnd = get(id, cx).and_then(|w| w.hwnd);
+  set_spare(id, cx);
+  if let Some(hwnd) = hwnd {
+    desktop::sys::hide(hwnd);
+  }
+}
+
 /// Runs `f` in the window holding tab `tab` now, after the current update: a page that replaces
 /// itself (a queue's next video, the next episode) is built where its tab is, which may not be
 /// the window it was built in. The page takes the focus, enters fullscreen there. Nothing when
@@ -213,7 +253,7 @@ pub(super) fn open_with(
       window.activate_window();
       spare
         .shell
-        .update(cx, |shell, cx| shell.adopt_tab(tab, cx))
+        .update(cx, |shell, cx| shell.adopt_tab(tab, None, cx))
         .ok();
     });
     if let Err(e) = reused {

@@ -1,6 +1,7 @@
 # 0028: Tabs dragged along the bar, out to a window of their own and back
 
-- Status: accepted (steps 1 and 2 of 5 done: moving a tab along the bar, several windows)
+- Status: accepted (steps 1 to 4 of 5 done: along the bar, several windows, out to a new
+  window, back into another)
 - Date: 2026-11-07
 
 ## Context
@@ -72,15 +73,26 @@ five steps, each one shippable:
      any of its windows really closes, since only the last one does.
    - Each shell has its own mini-player, for its own tabs. The accent is the app's (a global
      theme): it follows the window brought to the front.
-   - Until step 3, a tab's right-click menu has "Move to a new window" ("Déplacer dans une
+   - A tab's right-click menu has (first in place of the drag-out, kept since) "Move to a new window" ("Déplacer dans une
      nouvelle fenêtre", disabled on a window's only tab): the tab leaves with its pages and its
      video (not to the mini-player), into a window of the same size 32 px right and down, or a
      spare.
-3. **Out to a new window.** A tab pulled out of the bar (vertically past its height) and released
-   off every window's bar opens a window at the pointer with that tab, its page and player kept.
-   The window it leaves needs a tab left: the last one does not tear out.
-4. **Back into a window.** Released over another window's bar, at the slot the pointer is over
-   (the screen's coordinates against each window's bar); a window whose last tab leaves closes.
+3. **Out to a new window** (done). Pulled 32 px above or below the bar, or out of the window, the
+   tab detaches: its slot closes (the tabs after it slide over the gap, and back if it returns),
+   and its copy follows the pointer over the whole window, a little transparent. Outside the
+   window nothing follows it (a window draws only inside itself; step 5). Released off every
+   window's bar, it opens in a window of the source's size placed so that the tab is under the
+   pointer where it was held, on the display under the pointer (`display_id`, see the gotcha),
+   with its pages and its video. The window's only tab does not tear out: released, it goes back
+   to its slot. The tab's menu item "Move to a new window" stays, for the keyboard-less way.
+4. **Back into a window** (done). Released over another window's bar (its row of tabs, 32 px
+   above and below it, and 160 px right of "+"), the tab joins that window where the pointer is
+   (after the tabs whose middle is left of it) and shows, and that window comes to the front. Each
+   shell keeps its window's place on the screen with its bar's layout (`TabLayout::origin`), so
+   the release's screen position is matched against every bar without updating the other
+   windows. A window whose last tab leaves this way hides as a spare. The windows are tried in the
+   order they opened, not by depth: two overlapping bars take the tab in the older window. The
+   target shows nothing while the tab hovers it.
 5. **The window follows** (optional): once torn out, the new window moves with the pointer until
    the release, as in Chrome, through `SetWindowPos` in `desktop::sys`.
 
