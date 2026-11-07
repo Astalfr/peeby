@@ -36,7 +36,9 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
   queries and mutations with the web Client-ID and the auth-token. There is no hash to maintain.
 - **On the watch page of a live** (since [ADR 0023](0023-twitch-chat-sending.md), the balance and its
   rewards sit under the chat's field; since 2026-11-04, the predictions are pinned over the chat):
-  - the balance, under the channel's name for its points, read again every minute;
+  - the balance, under the channel's name for its points, read again every minute; when a
+    reading finds it higher, the gain ("+50") rises over it and fades out in 1.6 s (only fades
+    with reduced motion; since 2026-11-07);
   - its rewards in a popover;
   - its predictions, read again every 20 s, with their odds and a countdown. As on Twitch, each
     is a bar at the top of the chat, drawn over the messages: folded by default, with its state

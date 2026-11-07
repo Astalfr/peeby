@@ -12,6 +12,8 @@ use super::super::points::{ENDED_SHOWN, Order};
 use super::super::polls::{Choice, Poll};
 use super::SCHEME;
 
+/// A bonus chest's points, as on Twitch (before a subscriber's multiplier).
+const BONUS: u64 = 50;
 /// How long the "Shoutout" reward cools down once redeemed.
 const COOLDOWN_MS: i64 = 60_000;
 
@@ -332,6 +334,13 @@ impl FakePoints {
     self.balance += payout.unwrap_or(0);
   }
 
+  /// Claims the waiting bonus chest: its points join the balance. Nothing when none waits.
+  pub fn claim_bonus(&mut self) {
+    if std::mem::take(&mut self.bonus) {
+      self.balance += BONUS;
+    }
+  }
+
   /// Cancels the first running prediction: its bet comes back.
   pub fn cancel(&mut self) {
     let Some(p) = self.running() else {
@@ -441,6 +450,18 @@ mod tests {
     // Resolving again does nothing: it has ended.
     points.resolve(1);
     assert_eq!(points.balance, 1_300);
+  }
+
+  #[test]
+  fn a_bonus_is_claimed_once() {
+    let mut points = FakePoints {
+      balance: 100,
+      bonus: true,
+      ..FakePoints::default()
+    };
+    points.claim_bonus();
+    points.claim_bonus();
+    assert_eq!((points.balance, points.bonus), (150, false));
   }
 
   #[test]

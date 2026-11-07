@@ -208,7 +208,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
       "not sent". The real 20 per 30 s limit applies.
   - Points, predictions and polls are `points::PointsView` on `Backend::Fake`, pinned over the
     chat as on a live. It reads and spends a local state that never reports `minute-watched`:
-    - The balance and a bonus chest.
+    - The balance and a bonus chest: "Bonus" claims it locally (50 points, after a second with
+      the spinner), never in twitch.tv; it is not claimed on its own.
     - Every kind of reward: with a text to write, subscribers only, unavailable, cooling down,
       unaffordable.
     - Refusal codes for spends.

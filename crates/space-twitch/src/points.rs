@@ -1,6 +1,7 @@
 //! A live's channel points, with the web `auth-token` (none: nothing shows): the viewer's
 //! balance, refreshed every minute, and the channel's rewards in a popover, under the chat's field
-//! ([`PointsFooter`], ADR 0023). Its predictions with their bets, and its polls
+//! ([`PointsFooter`], ADR 0023); what a reading finds earned since the last one rises over it and
+//! fades out. Its predictions with their bets, and its polls
 //! ([`super::polls`]), are pinned over the chat as Twitch does (`ui::chat::pinned_stack`): folded
 //! bars with their state, one card unfolded at a time, new ones folded. Polls show with or without
 //! points. A raid the channel is about to send (Twitch's PubSub, ADR 0024) is pinned first, its
@@ -113,6 +114,26 @@ impl BonusLook {
       opacity: 1. - eased,
     }
   }
+}
+
+/// How long a gain ("+50") rises over the balance and fades away.
+const GAIN_FOR: Duration = Duration::from_millis(1600);
+/// How far it rises meanwhile, logical pixels.
+const GAIN_RISE: f32 = 18.;
+/// Its line's height, logical pixels: it starts just over the balance.
+const GAIN_HEIGHT: f32 = 16.;
+
+/// A gain's rise (pixels above its start) and opacity at `t` (0 to 1): it rises fast then
+/// slows down ("ease out"), and stays visible a while before fading out. With `still` (reduced
+/// motion), it only fades.
+fn gain_look(t: f32, still: bool) -> (f32, f32) {
+  let t = t.clamp(0., 1.);
+  let rise = if still {
+    0.
+  } else {
+    GAIN_RISE * (1. - (1. - t).powi(3))
+  };
+  (rise, 1. - t * t)
 }
 
 /// How many times a bonus is claimed automatically before it waits for a click.
@@ -230,6 +251,9 @@ pub struct PointsView {
   bonus_shown: bool,
   /// When the button started coming in or leaving, while it animates.
   bonus_since: Option<Instant>,
+  /// The last rise of the balance: by how much, and when it was read (shown over the balance
+  /// for [`GAIN_FOR`]).
+  gain: Option<(u64, Instant)>,
   /// The automatic claims tried, by claim id: at most [`AUTO_CLAIM_TRIES`] each.
   auto_claims: HashMap<String, u8>,
   /// The automatic claim waiting for its delay, or the claim on its way.
@@ -292,6 +316,7 @@ impl PointsView {
       claiming: false,
       bonus_shown: false,
       bonus_since: None,
+      gain: None,
       auto_claims: HashMap::new(),
       claim_task: None,
       predictions: Vec::new(),
@@ -736,9 +761,28 @@ impl PointsView {
   }
 
   /// Claims the bonus in twitch.tv's chat, in its hidden window (`web_sign_in::twitch_chat`), then
-  /// reads the points again. Without the token (the fake channel), opens the chat in the browser.
+  /// reads the points again. Without the token, opens the chat in the browser. The fake channel
+  /// claims it in its local state, after a second with the spinner, as the chat window takes.
   fn claim_bonus(&mut self, cx: &mut Context<Self>) {
     if self.claiming {
+      return;
+    }
+    #[cfg(debug_assertions)]
+    if let Backend::Fake(fake) = &self.backend {
+      let fake = fake.clone();
+      self.claiming = true;
+      cx.notify();
+      self.claim_task = Some(cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(Duration::from_secs(1)).await;
+        fake.borrow_mut().claim_bonus();
+        this
+          .update(cx, |this, cx| {
+            this.claiming = false;
+            this.claim_task = None;
+            this.load_points(cx).detach();
+          })
+          .ok();
+      }));
       return;
     }
     let login = self.login.clone();
@@ -794,6 +838,12 @@ impl PointsView {
         .update(cx, |this, cx| {
           match result {
             Ok(points) if points.enabled => {
+              // Not at the first reading: only what was earned since one.
+              if let Some(before) = &this.points
+                && points.balance > before.balance
+              {
+                this.gain = Some((points.balance - before.balance, Instant::now()));
+              }
               this.points = Some(points);
               this.bonus_hidden = false;
               this.auto_claim(cx);
@@ -1694,10 +1744,40 @@ impl PointsView {
     }
     let leaving = !shown && self.bonus_since.is_some();
     let claiming = self.claiming;
+    let gain = self.gain.and_then(|(amount, since)| {
+      let t = since.elapsed().as_secs_f32() / GAIN_FOR.as_secs_f32();
+      (t < 1.).then(|| (amount, gain_look(t, cx.reduce_motion())))
+    });
+    if gain.is_some() {
+      window.request_animation_frame();
+    } else {
+      self.gain = None;
+    }
     h_flex()
       .gap_1()
       .items_center()
-      .child(self.balance_chip(window, cx))
+      .child(
+        // The gain floats over the balance (over the chat's field), out of the row's layout.
+        div()
+          .relative()
+          .child(self.balance_chip(window, cx))
+          .when_some(gain, |chip, (amount, (rise, opacity))| {
+            chip.child(
+              div()
+                .absolute()
+                .left(px(8.))
+                .top(px(-GAIN_HEIGHT - rise))
+                .h(px(GAIN_HEIGHT))
+                .flex()
+                .items_center()
+                .text_xs()
+                .font_weight(FontWeight::BOLD)
+                .text_color(theme::accent())
+                .opacity(opacity)
+                .child(format!("+{}", cards::grouped(amount))),
+            )
+          }),
+      )
       .when(shown || leaving, |row| {
         row
           // The button's full height, so that the row does not move while it scales.
@@ -1926,6 +2006,16 @@ mod tests {
   }
 
   use super::*;
+
+  #[test]
+  fn gain_rises_and_fades() {
+    assert_eq!(gain_look(0., false), (0., 1.));
+    let (rise, opacity) = gain_look(1., false);
+    assert!((rise - GAIN_RISE).abs() < 1e-6 && opacity == 0.);
+    let (rise, opacity) = gain_look(0.5, false);
+    assert!(rise > GAIN_RISE / 2. && opacity > 0.5);
+    assert_eq!(gain_look(0.5, true).0, 0.);
+  }
 
   #[test]
   fn refusals_read() {
