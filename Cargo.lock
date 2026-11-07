@@ -5156,16 +5156,32 @@ dependencies = [
 name = "peeby"
 version = "1.1.0"
 dependencies = [
- "anyhow",
- "async-channel",
- "dirs 6.0.0",
  "embed-resource",
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
  "innertube",
- "jellyfin-api",
  "keyring",
+ "peeby-core",
+ "serde_json",
+ "space-jellyfin",
+ "space-twitch",
+ "space-youtube",
+ "tracing",
+ "twitch",
+ "ui",
+]
+
+[[package]]
+name = "peeby-core"
+version = "1.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "dirs 6.0.0",
+ "gpui-component",
+ "gpui-pre",
+ "innertube",
  "player",
  "raw-window-handle",
  "reqwest",
@@ -6792,6 +6808,53 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "space-jellyfin"
+version = "1.1.0"
+dependencies = [
+ "dirs 6.0.0",
+ "gpui-component",
+ "gpui-pre",
+ "jellyfin-api",
+ "keyring",
+ "peeby-core",
+ "player",
+ "serde_json",
+ "tracing",
+ "ui",
+ "uuid",
+]
+
+[[package]]
+name = "space-twitch"
+version = "1.1.0"
+dependencies = [
+ "gpui-component",
+ "gpui-pre",
+ "keyring",
+ "peeby-core",
+ "player",
+ "tracing",
+ "twitch",
+ "ui",
+ "uuid",
+]
+
+[[package]]
+name = "space-youtube"
+version = "1.1.0"
+dependencies = [
+ "dirs 6.0.0",
+ "gpui-component",
+ "gpui-pre",
+ "innertube",
+ "peeby-core",
+ "player",
+ "serde_json",
+ "tracing",
+ "ui",
 ]
 
 [[package]]

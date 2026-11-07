@@ -1,0 +1,68 @@
+[package]
+name = "peeby-core"
+description = "Peeby's shell (windows, tabs, mini-player, settings page), settings, desktop integration, updates and sign-in window. Knows no service: spaces plug into it (ADR 0029)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = "1"
+# Toast clicks and tray events arrive on other threads (ADR 0020).
+async-channel = "2"
+dirs = "6"
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui-component = "=0.8.1"
+innertube = { workspace = true }
+player = { workspace = true }
+# The main window's HWND, to hide it in the notification area (ADR 0020).
+raw-window-handle = "0.6"
+# Updates from GitHub Releases (ADR 0027): the check and the installer's download, the
+# workspace's version and TLS.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "http2", "charset"] }
+serde = { version = "1", features = ["derive"] }
+# GitHub's release object (ADR 0027).
+serde_json = "1"
+# The downloaded installer's digest, checked against GitHub's (ADR 0027).
+sha2 = "0.10"
+# The sign-in window (ADR 0017), a separate process: its event loop cannot share GPUI's.
+tao = "0.37"
+toml = "1"
+# The icon in the notification area and its menu (ADR 0020). Its default features are Linux only.
+tray-icon = { version = "0.26", default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+twitch = { workspace = true }
+ui = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+# Its default features are Linux only (WebKitGTK, X11).
+wry = { version = "0.57", default-features = false }
+# Toasts (WinRT), the window's visibility, the single instance and the place of the list of
+# lives (ADR 0020), DPAPI for the cookie jar (ADR 0022), Windows' display language (ADR
+# 0014) and the audio output's volume (Core Audio): the version GPUI's Windows platform uses,
+# and features the dependencies already build but `Win32_Media_Audio*`, small bindings.
+windows = { version = "0.62", features = [
+  "Data_Xml_Dom",
+  "Foundation",
+  "UI_Notifications",
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Graphics_Gdi",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+# The `Run` key (start with Windows) and the toasts' app id.
+windows-registry = "0.6"
+
+[lints]
+workspace = true

@@ -120,8 +120,8 @@ crates/twitch/                  NEW, no GPUI; thiserror; lenient parsing from se
 crates/ui/src/player/           live mode and a generic notice (step 4), for any space
 crates/ui/src/chat/             NEW, generic: ChatMessage / Fragment / ChatEvent, ChatPanel, watch layout
                                 with a chat column (step 9), for Twitch now and YouTube lives later
-crates/peeby/src/spaces/twitch/
-  mod.rs                        TwitchSpace: Space impl, page stack, sidebar
+crates/space-twitch/src/         (was crates/peeby/src/spaces/twitch/, ADR 0029)
+  lib.rs                        TwitchSpace: Space impl, page stack, sidebar
   session.rs                    keyring entries, restore before the UI, save in the background
   play.rs                       resolve a live/VOD/clip into a ui::player::Source (starts the proxy)
   watch.rs                      watch page on ui's layout with a chat column: title, channel, viewers, uptime

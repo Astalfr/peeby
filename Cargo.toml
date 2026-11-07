@@ -15,6 +15,10 @@ player = { path = "crates/player" }
 gpui-video = { path = "crates/gpui-video" }
 innertube = { path = "crates/innertube" }
 jellyfin-api = { path = "crates/jellyfin-api" }
+peeby-core = { path = "crates/peeby-core" }
+space-jellyfin = { path = "crates/space-jellyfin" }
+space-twitch = { path = "crates/space-twitch" }
+space-youtube = { path = "crates/space-youtube" }
 twitch = { path = "crates/twitch" }
 ui = { path = "crates/ui" }
 
@@ -29,6 +33,11 @@ expect_used = "warn"
 dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
+
+# Line tables only (backtraces, breakpoints by line; no local variables in a debugger): full
+# debug info cost about a third of every rebuild of our crates and made a 500 MB PDB.
+[profile.dev]
+debug = "line-tables-only"
 
 # GPUI is far too slow to render unoptimized; our own crates stay at opt-level 0.
 [profile.dev.package."*"]

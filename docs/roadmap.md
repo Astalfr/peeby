@@ -293,6 +293,14 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   app, a member's playback through yt-dlp; search results (`videoRenderer`) carry no badge (anonymous
   searches, global or in a channel, leave these videos out: no response to parse).
 
+## Build times
+
+- Done (2026-11-07, [ADR 0029](decisions/0029-crates-per-space.md)): the dev profile keeps line tables only
+  (the PDB was 537 MB), and the binary is split into `peeby-core` (shell, settings, desktop, updates, sign-in
+  window) and one crate per space. A one-line change in a space now rebuilds in 8–12 s instead of 17–36 s; in
+  `peeby-core` it still takes 18–32 s (every space is rebuilt after it). The 97 tests of the former `peeby`
+  crate all pass in their new crates. **Not verified:** the app run after the split (it builds and links).
+
 ## Visual refresh
 
 - Done (2026-11-01): peeby's visual system ([design.md](design.md), [ADR 0006](decisions/0006-peeby-visual-system.md)): card hover (lift, red ring, play button), image fade-in, page fade, skeletons on the feeds and the watch page, Fluent sidebar, settings rows, account card, centered empty and error states.

@@ -1,0 +1,24 @@
+[package]
+name = "space-jellyfin"
+description = "Peeby's Jellyfin space: home, libraries, a title's page, Direct Play with reports (ADR 0009)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+dirs = "6"
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui-component = "=0.8.1"
+jellyfin-api = { workspace = true }
+keyring = "4"
+peeby-core = { workspace = true }
+player = { workspace = true }
+serde_json = "1"
+tracing = "0.1"
+ui = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+
+[lints]
+workspace = true

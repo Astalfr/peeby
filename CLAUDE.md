@@ -90,7 +90,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Indent with 2 spaces in every file type (.editorconfig, rustfmt.toml).
 - No `unwrap()`/`expect()` outside tests unless the invariant is explained in a comment next to it.
 - Errors: `thiserror` in library crates, `anyhow` in the `peeby` binary.
-- `unsafe` only in FFI modules (`player::sys`, `player::d3d`, `gpui-video`, `peeby::desktop::sys`), each block with a `// SAFETY:` comment.
+- `unsafe` only in FFI modules (`player::sys`, `player::d3d`, `gpui-video`, `peeby_core::desktop::sys`), each block with a `// SAFETY:` comment.
 - Every `#[allow(...)]` carries a comment saying why.
 - Log with `tracing`. Cookies never appear in logs; stream URLs only at debug level, never in error messages.
 - Nothing blocking on the GPUI UI thread: network and disk I/O run in the background.
@@ -111,7 +111,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - VISIONOS needs a session `visitorData` (else `LOGIN_REQUIRED`); refresh it once and retry before failing.
 
 ## Spaces
-- A service is a space under `crates/peeby/src/spaces/<name>/` implementing `shell::space::Space`; the shell and the
+- A service is a space, a crate `crates/space-<name>/` implementing `peeby_core::shell::space::Space` (ADR 0029:
+  one crate per space, the shell and what they share in `peeby-core`, `peeby` is only `main.rs`; a space never
+  depends on another, and what it uses from the core is `pub` and documented); the shell and the
   `ui` crate know no service. Its settings are its part of the gear's page (`Space::settings`); player settings shared
   by every space are `[player]` (`settings::Player`). Pages keep a `Nav` (their space and their tab, ADR 0015) to
   navigate: what they open goes to their tab. A tab opened in the background builds nothing until it shows (a `Page` has no

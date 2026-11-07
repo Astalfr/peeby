@@ -189,7 +189,7 @@ Two credentials, for different things. Both are secrets, under the same rules as
 - **Order of work** (done on 2026-11-01, animation included): anonymous IRC with Twitch emotes from the
   tag, deleted messages, 7TV, badges; FFZ dropped (the user's choice). BTTV added on 2026-11-02 (the user
   asked: its global `D:` is common in chats).
-- **Fake chat** (debug builds only, `crates/peeby/src/spaces/twitch/fake_chat/`): "Faux chat" at the
+- **Fake chat** (debug builds only, `crates/space-twitch/src/fake_chat/`): "Faux chat" at the
   bottom of the Twitch sidebar, or `cargo run -p peeby -- --fake-chat`. It tests the chat column
   without a channel, an account or the network:
   - Generated lines are raw IRC (tags escaped, `char` emote ranges). They go through

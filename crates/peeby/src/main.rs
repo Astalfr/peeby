@@ -3,25 +3,18 @@
 // Release builds are GUI apps without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod desktop;
-mod logs;
-mod settings;
-mod shell;
-mod spaces;
-mod update;
-mod web_sign_in;
-
 use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{App, AppContext, Bounds, DisplayId, Entity, WeakEntity, Window, px, size};
 use gpui_component::Root;
 use gpui_platform::application;
-use shell::Shell;
-use shell::space::SpaceHandle;
-use spaces::jellyfin::{JellyfinSpace, session};
-use spaces::twitch::TwitchSpace;
-use spaces::youtube::{YouTubeSpace, convert, prefetch, tools};
+use peeby_core::shell::Shell;
+use peeby_core::shell::space::SpaceHandle;
+use peeby_core::{desktop, logs, settings, shell, update, web_sign_in};
+use space_jellyfin::{JellyfinSpace, session};
+use space_twitch::TwitchSpace;
+use space_youtube::{YouTubeSpace, convert, prefetch, tools};
 use ui::{assets, images, runtime, theme};
 
 fn main() {
@@ -86,7 +79,7 @@ fn main() {
     ..prefs.jellyfin.clone()
   });
   // Twitch's secrets (Credential Manager, blocking), and its sign-in client.
-  let twitch_secrets = spaces::twitch::session::restore();
+  let twitch_secrets = space_twitch::session::restore();
   let twitch_auth = match twitch::auth::Auth::new(prefs.twitch.client_id.clone()) {
     Ok(auth) => Some(auth),
     Err(e) => {
@@ -227,7 +220,7 @@ fn youtube_videos(args: &[String]) -> Vec<String> {
     .filter(|arg| !arg.contains("twitch.tv/"))
     // Eleven characters a video id could have.
     .filter(|arg| *arg != FAKE_CHAT)
-    .filter_map(|arg| spaces::youtube::video_id(arg).map(str::to_owned))
+    .filter_map(|arg| space_youtube::video_id(arg).map(str::to_owned))
     .collect()
 }
 
@@ -236,14 +229,14 @@ const FAKE_CHAT: &str = "--fake-chat";
 
 /// The Twitch page among a launch's arguments: a live, a VOD or a clip (or the fake chat in a
 /// debug build).
-fn twitch_route(args: &[String]) -> Option<spaces::twitch::Route> {
+fn twitch_route(args: &[String]) -> Option<space_twitch::Route> {
   #[cfg(debug_assertions)]
   if args.iter().any(|arg| arg == FAKE_CHAT) {
-    return Some(spaces::twitch::Route::FakeChat);
+    return Some(space_twitch::Route::FakeChat);
   }
   args
     .iter()
-    .find_map(|arg| spaces::twitch::Route::from_url(arg))
+    .find_map(|arg| space_twitch::Route::from_url(arg))
 }
 
 /// The spaces that open what a next launch was given (ADR 0020).
@@ -258,7 +251,7 @@ impl Launches {
       self
         .youtube
         .update(cx, |space, cx| {
-          space.open_from_notification(spaces::youtube::Route::Watch(id), window, cx)
+          space.open_from_notification(space_youtube::Route::Watch(id), window, cx)
         })
         .ok();
     }

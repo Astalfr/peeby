@@ -40,7 +40,7 @@ use, the uninstall entry). Inno Setup run silently does it all.
   `v<version>` tag (only a tag) also fetches the pinned libmpv, yt-dlp and Deno, builds the release, compiles
   the installer `peeby-setup-<version>-x64.exe` and publishes it as the tag's GitHub Release, once
   the tag is checked against the version in `Cargo.toml`.
-- **Updater** (`crates/peeby/src/update/`): only in a release build installed by the installer
+- **Updater** (`crates/peeby-core/src/update/`, ADR 0029): only in a release build installed by the installer
   (its `unins000.exe` beside the exe). 20 s after the start, then every 4 hours (or at once from "Check for updates" in the settings' About section, which then says whether Peeby is up to date), an anonymous
   `GET /repos/Astalfr/peeby/releases/latest` (drafts and pre-releases ignored; GitHub allows 60
   anonymous requests an hour). A tag newer than this build has its installer downloaded in the

@@ -5,7 +5,7 @@
 ; Expects a release build in target\release\peeby.exe, libmpv in third_party\mpv\
 ; (scripts/fetch-mpv.ps1) and yt-dlp + Deno in third_party\yt-dlp\ (scripts/fetch-tools.ps1);
 ; writes target\installer\peeby-setup-<version>-x64.exe, the name the updater looks for
-; (crates/peeby/src/update/release.rs).
+; (crates/peeby-core/src/update/release.rs).
 
 #ifndef AppVersion
   #error Pass the version: iscc /DAppVersion=x.y.z installer\peeby.iss
@@ -48,7 +48,7 @@ WizardStyle=modern
 ShowLanguageDialog=no
 ; Closing Peeby's window only hides it in the notification area (ADR 0020), so Restart
 ; Manager's polite request can fail: `force` ends it, and the yt-dlp or Deno it started, which
-; hold files of tools\. The updater has already quit it (crates/peeby/src/update).
+; hold files of tools\. The updater has already quit it (crates/peeby-core/src/update).
 CloseApplications=force
 ; Peeby is started again by [Run] below, not by Restart Manager (twice would hand the second
 ; launch to the first, ADR 0020).
@@ -100,7 +100,7 @@ Type: filesandordirs; Name: "{app}\tools"
 ; reinstall keeps the sessions.
 
 [Code]
-// Peeby's updater passes /relaunch=1 (crates/peeby/src/update/github.rs).
+// Peeby's updater passes /relaunch=1 (crates/peeby-core/src/update/github.rs).
 function Relaunch: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:relaunch|0}') = '1');
