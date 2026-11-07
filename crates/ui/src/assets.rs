@@ -101,6 +101,7 @@ icons! {
   Smile => "smile",
   Poll => "chart-column",
   Download => "download",
+  Link => "link",
 }
 
 macro_rules! files {

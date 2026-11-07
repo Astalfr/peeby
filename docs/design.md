@@ -47,7 +47,7 @@ One accent at a time, the open space's (`theme::set_accent`; the settings page d
 - **Saving to a playlist**:
   - grid cards, list rows and related videos show, on hover only, a round **Watch later** button at the thumbnail's top right: a clock, or a check when the video is in "Watch later" already (a click then removes it; the "⋮" menu entry toggles the same way) and (except on related videos) a **⋮** button by the title. Their clicks are their own, not the card's;
   - **⋮** opens a popover with "À regarder plus tard" and "Ajouter à une playlist", which turns into the list of playlists;
-  - the watch page has a ghost **⋮** button right of the votes, a popover with "Enregistrer dans une playlist", which turns into that list;
+  - the watch page has a ghost **⋮** button right of the votes, a popover with "Enregistrer dans une playlist", which turns into that list, and "Copier le lien de la vidéo" (`https://www.youtube.com/watch?v=<id>` to the clipboard, a "Lien copié" toast);
   - the list ("Enregistrer dans…") checks the playlists holding the video (a red box with a check), a lock marks private ones; a click adds or removes at once and undoes the check if YouTube refuses;
   - in a playlist the user can edit (their own, "Watch later"), each video of the playlist page and of the queue panel gets an **x** on hover, removing it from the playlist (the playing one plays on, and Next goes to the video that followed it);
   - while a request runs, its "x" or "Watch later" button shows a small spinner and stays visible after the mouse leaves; a second click sends nothing;

@@ -16,8 +16,8 @@ use std::collections::HashSet;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyWindowHandle, App, AppContext, Context, ElementId, Entity, EventEmitter, FontWeight,
-  Global, MouseButton, SharedString, Window, div, px,
+  Anchor, AnyWindowHandle, App, AppContext, ClipboardItem, Context, ElementId, Entity,
+  EventEmitter, FontWeight, Global, MouseButton, SharedString, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::Notification;
@@ -418,7 +418,7 @@ pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
 }
 
 /// The "⋮" button of the watch page: a menu with "Save to a playlist", which turns into the
-/// list of playlists.
+/// list of playlists, and "Copy video link".
 pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
   let key = format!("watch-menu-{video_id}");
   let video_id = video_id.to_owned();
@@ -438,7 +438,7 @@ pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
 enum Menu {
   /// A card's: "Watch later" and "Add to a playlist".
   Card,
-  /// The watch page's: "Save to a playlist".
+  /// The watch page's: "Save to a playlist" and "Copy video link".
   Watch,
 }
 
@@ -464,6 +464,7 @@ fn picker_content(
     return div().w(px(POPOVER_WIDTH)).child(picker).into_any_element();
   }
   let video_id = video_id.to_owned();
+  let link = format!("https://www.youtube.com/watch?v={video_id}");
   let item = |id: &'static str, icon: Icon, label: &'static str| {
     h_flex()
       .id(id)
@@ -511,6 +512,20 @@ fn picker_content(
         picker.update(cx, |picker, cx| picker.load(cx));
       }),
     )
+    .when(menu == Menu::Watch, |el| {
+      el.child(
+        item(
+          "menu-copy-link",
+          Icon::Link,
+          t("Copy video link", "Copier le lien de la vidéo"),
+        )
+        .on_click(cx.listener(move |state, _, window, cx| {
+          cx.write_to_clipboard(ClipboardItem::new_string(link.clone()));
+          window.push_notification(Notification::success(t("Link copied", "Lien copié")), cx);
+          state.dismiss(window, cx);
+        })),
+      )
+    })
     .into_any_element()
 }
 
