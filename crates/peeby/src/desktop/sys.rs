@@ -23,7 +23,9 @@ use windows::Win32::System::Pipes::{
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
-use windows::Win32::UI::WindowsAndMessaging::{IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, ShowWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+  IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, ShowWindow,
+};
 use windows::core::{HSTRING, PCWSTR};
 
 /// The pipes' folder. A pipe is named after the profile and the user: pipe names are
@@ -52,6 +54,15 @@ pub fn show(hwnd: isize) {
       SW_SHOW
     };
     let _ = ShowWindow(hwnd, command);
+  }
+}
+
+/// Shows the window `hwnd` without activating it: a tab torn out of another window, which keeps
+/// the mouse (and its capture) until the release.
+pub fn show_inactive(hwnd: isize) {
+  // SAFETY: as in `hide`, any value is accepted.
+  unsafe {
+    let _ = ShowWindow(HWND(hwnd as *mut _), SW_SHOWNOACTIVATE);
   }
 }
 

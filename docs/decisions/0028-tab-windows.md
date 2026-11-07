@@ -1,7 +1,7 @@
 # 0028: Tabs dragged along the bar, out to a window of their own and back
 
-- Status: accepted (steps 1 to 4 of 5 done: along the bar, several windows, out to a new
-  window, back into another)
+- Status: accepted (the five steps done: along the bar, several windows, out to a new window,
+  back into another, the torn-out window following the pointer)
 - Date: 2026-11-07
 
 ## Context
@@ -93,8 +93,17 @@ five steps, each one shippable:
    windows. A window whose last tab leaves this way hides as a spare. The windows are tried in the
    order they opened, not by depth: two overlapping bars take the tab in the older window. The
    target shows nothing while the tab hovers it.
-5. **The window follows** (optional): once torn out, the new window moves with the pointer until
-   the release, as in Chrome, through `SetWindowPos` in `desktop::sys`.
+5. **The window follows** (done). Steps 3 and 4 opened the window at the release; now the tab
+   tears out as soon as it detaches, into its window (new or spare) under the pointer, and that
+   window moves with the pointer until the release (`ui::set_window_bounds`, as the
+   mini-player moves). It opens without the focus (`focus: false`, a spare shown with
+   `SW_SHOWNOACTIVATE`): activating it could take the mouse's capture from the window the drag
+   started in, which goes on receiving the moves and the release. Released over a bar (the
+   source window's too, not its own), the tab leaves its window, which is put aside, and joins
+   that bar; elsewhere, its window comes to the front where it is. A window's only tab still
+   does not tear out (that would move the source window itself, whose coordinates the pointer's
+   are measured in): detached, its copy follows the pointer over the window, and it can still be
+   dropped on another window's bar.
 
 ## Consequences
 

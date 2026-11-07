@@ -1,10 +1,13 @@
 //! Moving a tab with the mouse, as in a browser (ADR 0028). Pressed and moved past
 //! [`THRESHOLD`], the tab leaves its slot empty and a copy of it follows the pointer along the
 //! bar; when the copy's middle passes a neighbor's, the tab takes that neighbor's place. Pulled
-//! [`DETACH`] above or below the bar (or out of the window), the tab detaches: its slot closes and
-//! the copy follows the pointer anywhere over the window. Released detached, it opens in a window
-//! of its own under the pointer, or joins the bar of another of Peeby's windows it was released
-//! over, at the place under the pointer; a window whose last tab leaves goes.
+//! [`DETACH`] above or below the bar (or out of the window), the tab tears out at once into a
+//! window of its own, which follows the pointer (without the focus: the window the drag started
+//! in keeps the mouse's capture) until the release. Released over the bar of one of Peeby's
+//! windows (the one it came from included), it joins that bar at the place under the pointer and
+//! its window goes; elsewhere, its window stays there and comes to the front. A window's only
+//! tab does not tear out: detached, its copy follows the pointer over the window, and released
+//! over another window's bar it joins it (its window goes), else it goes back to its slot.
 //!
 //! The drag is followed with window listeners rather than GPUI's `on_drag`, which ends at the
 //! window's edge: the window captures the mouse while the button is held, so the release is seen
@@ -15,8 +18,8 @@ use std::cell::{Cell, RefCell};
 use std::time::{Duration, Instant};
 
 use gpui::{
-  App, Bounds, Context, DispatchPhase, DisplayId, MouseButton, MouseMoveEvent, MouseUpEvent,
-  Pixels, Point, WeakEntity, Window, point, px,
+  AnyWindowHandle, App, Bounds, Context, DispatchPhase, DisplayId, MouseButton, MouseMoveEvent,
+  MouseUpEvent, Pixels, Point, Size, WeakEntity, Window, point, px,
 };
 
 use super::space::TabId;
@@ -89,6 +92,8 @@ pub(super) struct TabDrag {
   grab: Point<Pixels>,
   /// The tab's width when the button went down: the copy's.
   pub width: Pixels,
+  /// Torn out: the window it is in now, following the pointer, and that window's size.
+  torn: Option<(AnyWindowHandle, Size<Pixels>)>,
 }
 
 impl Shell {
@@ -105,6 +110,7 @@ impl Shell {
       detached: false,
       grab: position - bounds.origin,
       width: bounds.size.width,
+      torn: None,
     });
     // Drawn again, to listen to the window while the button is held.
     cx.notify();
@@ -129,15 +135,63 @@ impl Shell {
       }
     }
     let Some(drag) = self.tab_drag else { return };
+    if let Some((handle, size)) = drag.torn {
+      let bounds = self.torn_bounds(&drag, window.bounds().origin + position, size);
+      windows::move_to(handle, bounds, cx);
+      return;
+    }
     let viewport = Bounds::new(Point::default(), window.viewport_size());
     let detached = off_bar(self.tab_layout.row.get(), viewport, position);
     if detached != drag.detached {
       self.set_detached(detached, cx);
+      if detached && self.tabs.len() > 1 {
+        self.tear_out(window, cx);
+      }
     }
     if !detached {
       self.reorder_dragged(cx);
     }
     cx.notify();
+  }
+
+  /// The dragged tab leaves this window for one of its own under the pointer, which follows it
+  /// until the release. This window keeps the drag (and the mouse).
+  fn tear_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(drag) = self.tab_drag else { return };
+    let Some(tab) = self.detach_tab(drag.tab, true, cx) else {
+      return;
+    };
+    let size = window.window_bounds().get_bounds().size;
+    let screen = window.bounds().origin + drag.at;
+    let bounds = self.torn_bounds(&drag, screen, size);
+    match windows::open_with(tab, bounds, display_at(screen, cx), false, cx) {
+      Some(handle) => {
+        self.tab_drag = Some(TabDrag {
+          torn: Some((handle, size)),
+          ..drag
+        });
+      }
+      None => {
+        // No window for it: it stays here, still held.
+        self.adopt_tab(tab, None, cx);
+        self.tab_drag = Some(drag);
+      }
+    }
+  }
+
+  /// A torn-out window's bounds with the pointer at `screen`: its tab under the pointer, where
+  /// it was held (its bar laid out as this one's).
+  fn torn_bounds(
+    &self,
+    drag: &TabDrag,
+    screen: Point<Pixels>,
+    size: Size<Pixels>,
+  ) -> Bounds<Pixels> {
+    let row = self.tab_layout.row.get();
+    Bounds::new(
+      screen - point(row.left() + drag.grab.x, row.top() + drag.grab.y),
+      size,
+    )
   }
 
   /// The dragged tab leaves the bar (its slot closes) or comes back to it (its slot opens): the
@@ -215,7 +269,23 @@ impl Shell {
     }
     let origin = window.bounds().origin;
     let screen = origin + position;
-    if let Some((target, index)) = windows::bar_at(screen, self.window, cx) {
+    if let Some((handle, _)) = drag.torn {
+      // Deferred: other windows are updated, and the torn-out one may be put aside.
+      let tab = drag.tab;
+      // This window's own bar first: its shell is being updated, the scan cannot read it.
+      let own = self
+        .bar_slot(screen)
+        .and_then(|index| Some((windows::get(self.window, cx)?, index)));
+      let target = own.or_else(|| windows::bar_at(screen, &[handle.window_id(), self.window], cx));
+      match target {
+        Some((target, index)) => {
+          cx.defer(move |cx| windows::bring_back(handle, tab, target, index, cx));
+        }
+        None => cx.defer(move |cx| windows::focus(handle, cx)),
+      }
+      return;
+    }
+    if let Some((target, index)) = windows::bar_at(screen, &[self.window], cx) {
       let Some(tab) = self.detach_tab(drag.tab, false, cx) else {
         return;
       };
@@ -234,15 +304,15 @@ impl Shell {
       self.set_detached(false, cx);
       return;
     }
+    // Detached without a window of its own (none could open): one now, under the pointer.
     let Some(tab) = self.detach_tab(drag.tab, true, cx) else {
       return;
     };
-    // The new window's tab under the pointer, where it was held.
-    let row = self.tab_layout.row.get();
-    let corner = screen - point(row.left() + drag.grab.x, row.top() + drag.grab.y);
-    let bounds = Bounds::new(corner, window.window_bounds().get_bounds().size);
+    let bounds = self.torn_bounds(&drag, screen, window.window_bounds().get_bounds().size);
     let display = display_at(screen, cx);
-    cx.defer(move |cx| windows::open_with(tab, bounds, display, cx));
+    cx.defer(move |cx| {
+      windows::open_with(tab, bounds, display, true, cx);
+    });
   }
 
   /// Where a tab dropped at `screen` (the screen's coordinates) goes in this window's bar, if

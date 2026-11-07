@@ -147,13 +147,18 @@ fn holding(id: TabId, cx: &App) -> Option<Target> {
     .map(Target::from)
 }
 
-/// The window in use, other than `except`, whose bar is under `screen` (the screen's
-/// coordinates), and the index a tab dropped there takes.
-pub(super) fn bar_at(screen: Point<Pixels>, except: WindowId, cx: &App) -> Option<(Target, usize)> {
+/// The window in use, other than those of `except`, whose bar is under `screen` (the screen's
+/// coordinates), and the index a tab dropped there takes. `except` must name the window whose
+/// shell is being updated (the drag's): reading it would panic.
+pub(super) fn bar_at(
+  screen: Point<Pixels>,
+  except: &[WindowId],
+  cx: &App,
+) -> Option<(Target, usize)> {
   let windows = cx.try_global::<Windows>()?;
   windows
     .in_use()
-    .filter(|w| w.handle.window_id() != except)
+    .filter(|w| !except.contains(&w.handle.window_id()))
     .find_map(|w| {
       let index = w.shell.upgrade()?.read(cx).bar_slot(screen)?;
       Some((Target::from(w), index))
@@ -238,19 +243,30 @@ pub fn cascade(window: &Window, cx: &App) -> (Bounds<Pixels>, Option<DisplayId>)
 }
 
 /// Opens `tab` in a window of its own at `bounds`: a spare one if there is, else a new one.
+///
+/// With `focus`, the window comes to the front; without (a tab torn out and still dragged), it
+/// shows behind the pointer without the focus, which the window the drag started in keeps, with
+/// the mouse's capture. Its handle, to move it.
 pub(super) fn open_with(
   tab: TabRef,
   bounds: Bounds<Pixels>,
   display: Option<DisplayId>,
+  focus: bool,
   cx: &mut App,
-) {
+) -> Option<AnyWindowHandle> {
   if let Some(spare) = take_spare(cx) {
     let reused = spare.handle.update(cx, |_, window, cx| {
       ui::set_window_bounds(window, cx, bounds);
       if let Some(hwnd) = spare.hwnd {
-        desktop::sys::show(hwnd);
+        if focus {
+          desktop::sys::show(hwnd);
+        } else {
+          desktop::sys::show_inactive(hwnd);
+        }
       }
-      window.activate_window();
+      if focus {
+        window.activate_window();
+      }
       spare
         .shell
         .update(cx, |shell, cx| shell.adopt_tab(tab, None, cx))
@@ -258,20 +274,63 @@ pub(super) fn open_with(
     });
     if let Err(e) = reused {
       tracing::warn!("cannot reuse a window: {e:#}");
+      return None;
     }
-    return;
+    return Some(spare.handle);
   }
-  let Some(spaces) = cx.try_global::<Spaces>().map(|s| s.0.clone()) else {
-    return;
-  };
-  let options = options(bounds, display, true, cx);
+  let spaces = cx.try_global::<Spaces>().map(|s| s.0.clone())?;
+  let mut options = options(bounds, display, true, cx);
+  options.focus = focus;
   let opened = cx.open_window(options, |window, cx| {
     let shell = cx.new(|cx| Shell::with_tabs(spaces, Some(vec![tab]), false, window, cx));
     desktop::attach(window, shell.downgrade(), cx);
     cx.new(|cx| Root::new(shell, window, cx))
   });
-  if let Err(e) = opened {
-    tracing::error!("cannot open a window: {e:#}");
+  match opened {
+    Ok(handle) => Some(handle.into()),
+    Err(e) => {
+      tracing::error!("cannot open a window: {e:#}");
+      None
+    }
+  }
+}
+
+/// Moves window `handle` (a torn-out tab's, following the pointer) to `bounds`.
+pub(super) fn move_to(handle: AnyWindowHandle, bounds: Bounds<Pixels>, cx: &mut App) {
+  handle
+    .update(cx, |_, window, cx| {
+      ui::set_window_bounds(window, cx, bounds)
+    })
+    .ok();
+}
+
+/// A torn-out tab was released: its window comes to the front and takes the focus.
+pub(super) fn focus(handle: AnyWindowHandle, cx: &mut App) {
+  handle
+    .update(cx, |_, window, _| window.activate_window())
+    .ok();
+}
+
+/// A torn-out tab `id` was released over `target`'s bar: it leaves the window it was torn out
+/// to (`from`, put aside) and joins `target` at `index`.
+pub(super) fn bring_back(
+  from: AnyWindowHandle,
+  id: TabId,
+  target: Target,
+  index: usize,
+  cx: &mut App,
+) {
+  let Some(source) = get(from.window_id(), cx) else {
+    return;
+  };
+  let tab = source
+    .shell
+    .update(cx, |shell, cx| shell.detach_tab(id, false, cx))
+    .ok()
+    .flatten();
+  if let Some(tab) = tab {
+    merge(tab, target, index, cx);
+    retire(from.window_id(), cx);
   }
 }
 

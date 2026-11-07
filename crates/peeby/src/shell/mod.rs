@@ -319,7 +319,9 @@ impl Shell {
     };
     let (bounds, display) = windows::cascade(window, cx);
     // Deferred: a spare window is updated, which cannot happen from inside this one's event.
-    cx.defer(move |cx| windows::open_with(tab, bounds, display, cx));
+    cx.defer(move |cx| {
+      windows::open_with(tab, bounds, display, true, cx);
+    });
   }
 
   /// Takes tab `id` out of this window without closing it (it moves to another window): the

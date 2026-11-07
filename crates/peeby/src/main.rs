@@ -176,6 +176,7 @@ fn main() {
       // and Peeby does not stay in the notification area (ADR 0028). Not with the mini-player's.
       cx.on_window_closed(move |cx, closed| {
         if shell::windows::get(closed, cx).is_some() {
+          tracing::info!("a window closed: quitting");
           cx.quit();
         }
       })
