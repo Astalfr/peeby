@@ -351,7 +351,15 @@ pub struct ChatPanel {
   /// Where the messages are in the window, from the last paint: the card is placed in there,
   /// by the name clicked.
   messages_area: Rc<Cell<Bounds<Pixels>>>,
+  /// The channel's owner: mentions of them are red, as on Twitch.
+  streamer: Option<SharedString>,
+  /// The viewer's name, read at each render (they may sign in or out): messages mentioning
+  /// them are on a red tint, as on Twitch.
+  viewer: Option<Viewer>,
 }
+
+/// Gives the viewer's name, `None` when signed out ([`ChatPanel::set_viewer`]).
+pub type Viewer = Rc<dyn Fn(&App) -> Option<SharedString>>;
 
 impl gpui::EventEmitter<ChatPanelEvent> for ChatPanel {}
 
@@ -387,6 +395,8 @@ impl ChatPanel {
       lookup: None,
       card: None,
       messages_area: Rc::default(),
+      streamer: None,
+      viewer: None,
     }
   }
 
@@ -394,6 +404,18 @@ impl ChatPanel {
   /// has not written) from the space's service.
   pub fn set_user_lookup(&mut self, lookup: UserLookup) {
     self.lookup = Some(lookup);
+  }
+
+  /// The channel's owner, by the name chatters mention (a Twitch login): their mentions are
+  /// red.
+  pub fn set_streamer(&mut self, name: impl Into<SharedString>) {
+    self.streamer = Some(name.into());
+  }
+
+  /// Who is watching, by the name chatters mention: messages mentioning them, but their own,
+  /// are on a red tint.
+  pub fn set_viewer(&mut self, viewer: Viewer) {
+    self.viewer = Some(viewer);
   }
 
   /// Draws `view` over the top of the messages, without moving them: its root is absolute
@@ -726,7 +748,26 @@ impl ChatPanel {
         cx,
       )
     };
-    let line = push_fragments(line, message, text_color, action, &panel, &mut image);
+    let streamer = self.streamer.clone();
+    let line = push_fragments(
+      line,
+      message,
+      text_color,
+      action,
+      streamer.as_ref(),
+      &panel,
+      &mut image,
+    );
+    // A message naming the viewer, from someone else.
+    let me = self.viewer.as_ref().and_then(|viewer| viewer(cx));
+    let mentions_me = me.is_some_and(|me| {
+      !message.deleted
+        && !message.author.as_ref().is_some_and(|a| {
+          super::same_user(&a.name, &me)
+            || a.channel.as_ref().is_some_and(|c| super::same_user(c, &me))
+        })
+        && super::mentions(message, &me)
+    });
 
     let item = div()
       .w_full()
@@ -759,6 +800,16 @@ impl ChatPanel {
             .when(!message.fragments.is_empty(), |el| el.child(line)),
         )
         .into_any_element(),
+      MessageKind::Highlighted | MessageKind::Normal | MessageKind::Action if mentions_me => item
+        .child(
+          div()
+            .px_2()
+            .py_1()
+            .rounded(theme::RADIUS)
+            .bg(theme::mention_soft())
+            .child(line),
+        )
+        .into_any_element(),
       MessageKind::Highlighted => item
         .child(
           div()
@@ -775,7 +826,7 @@ impl ChatPanel {
 }
 
 /// `line` with the fragments of `message` after it, in `text_color` (italic for an `action`):
-/// a mention opens its user's card in `panel`, a link the browser, an emote shows its preview
+/// a mention opens its user's card in `panel` (red when it names the `streamer`), a link the browser, an emote shows its preview
 /// on hover; `image` gives an emote's image with its effects, for a width and a height in
 /// logical pixels.
 fn push_fragments(
@@ -783,6 +834,7 @@ fn push_fragments(
   message: &ChatMessage,
   text_color: gpui::Hsla,
   action: bool,
+  streamer: Option<&SharedString>,
   panel: &WeakEntity<ChatPanel>,
   image: &mut impl FnMut(&Picture, Effects, f32, f32) -> Option<Arc<RenderImage>>,
 ) -> gpui::Div {
@@ -815,6 +867,8 @@ fn push_fragments(
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(if message.deleted {
               theme::subtle()
+            } else if streamer.is_some_and(|s| super::names(name, s)) {
+              theme::mention()
             } else {
               theme::foreground()
             })

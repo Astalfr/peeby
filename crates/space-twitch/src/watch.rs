@@ -218,6 +218,17 @@ impl WatchView {
       Kind::Live(login) => {
         let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
         user_cards(&panel, &view.catalog, &view.nav, cx);
+        // The streamer's mentions in red, those of the signed-in viewer on a red tint.
+        let nav = view.nav.clone();
+        let viewer: ui::chat::Viewer = std::rc::Rc::new(move |cx: &gpui::App| {
+          nav
+            .upgrade()
+            .and_then(|nav| nav.read(cx).account().map(|a| a.login.clone().into()))
+        });
+        panel.update(cx, |panel, _| {
+          panel.set_streamer(login.clone());
+          panel.set_viewer(viewer);
+        });
         let (reader, extras) = chat::start(
           &login,
           view.client.clone(),
@@ -610,6 +621,14 @@ impl WatchView {
       this
         .update(cx, |this, cx| {
           if let Some(Ok((video, avatars))) = info {
+            // The replay's mentions of the streamer in red.
+            if let Some(chat) = &this.chat {
+              let login = video.user_login.clone();
+              chat.update(cx, |chat, cx| {
+                chat.set_streamer(login);
+                cx.notify();
+              });
+            }
             this.header = Some(Header {
               title: video.title.clone(),
               name: video.user_name.clone(),

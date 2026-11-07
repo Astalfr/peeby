@@ -112,6 +112,14 @@ pub fn subtle() -> Hsla {
 pub fn muted_audio() -> Hsla {
   color(0xe5484d)
 }
+/// A chat's mention of the streamer: red whatever the space's accent, as on Twitch.
+pub fn mention() -> Hsla {
+  color(0xff4f4d)
+}
+/// Behind a chat message that mentions the viewer: a red tint, as on Twitch.
+pub fn mention_soft() -> Hsla {
+  color_alpha(0xeb0400, 0.2)
+}
 /// The accent color of a space and its hover and pressed shades.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Accent {

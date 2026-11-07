@@ -313,6 +313,7 @@ impl ChatPanel {
       )
     };
     let today = Local::now().date_naive();
+    let streamer = self.streamer.clone();
     let lines = messages.iter().enumerate().map(|(i, message)| {
       let action = message.kind == MessageKind::Action;
       let text_color = if message.deleted {
@@ -345,7 +346,13 @@ impl ChatPanel {
             .child(sent_at(message.time, today)),
         )
         .child(push_fragments(
-          line, message, text_color, action, &panel, &mut image,
+          line,
+          message,
+          text_color,
+          action,
+          streamer.as_ref(),
+          &panel,
+          &mut image,
         ))
     });
     let scroll = card.scroll.clone();

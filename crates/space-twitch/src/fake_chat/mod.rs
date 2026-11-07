@@ -136,6 +136,8 @@ impl FakeChatView {
     let panel = cx.new(|cx| {
       let mut panel = ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS);
       panel.set_emotes(extras.picker.clone(), cx);
+      panel.set_streamer(CHANNEL);
+      panel.set_viewer(Rc::new(|_| Some(ME.login.into())));
       panel.push(seventv_looks(), cx);
       panel
     });

@@ -20,7 +20,9 @@ use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
 pub use paint::{Paint, PaintFill, image_colors};
-pub use panel::{ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
+pub use panel::{
+  ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES, Viewer,
+};
 pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
 pub use user::{UserLookup, UserProfile, UserQuery, same_user};
 
@@ -176,6 +178,22 @@ impl ChatMessage {
   }
 }
 
+/// `word` (an `@name` or a bare word, punctuation after it aside: `@name,`) names `user`, case
+/// aside.
+pub fn names(word: &str, user: &str) -> bool {
+  let word = word.trim_end_matches(|c: char| !(c.is_alphanumeric() || c == '_'));
+  same_user(word, user)
+}
+
+/// `message` mentions `user`, as Twitch highlights it: an `@` mention, or their name as a word.
+pub fn mentions(message: &ChatMessage, user: &str) -> bool {
+  message.fragments.iter().any(|fragment| match fragment {
+    Fragment::Mention(name) => names(name, user),
+    Fragment::Text(text) => text.split_whitespace().any(|word| names(word, user)),
+    Fragment::Emote(_) | Fragment::Link(_) => false,
+  })
+}
+
 /// `text` as fragments: `@name` words become mentions and `http(s)://` words links.
 pub fn split_text(text: &str) -> Vec<Fragment> {
   let mut fragments = Vec::new();
@@ -259,6 +277,20 @@ fn luminance(color: Hsla) -> f32 {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn mentions_name_the_user_whatever_the_punctuation() {
+    assert!(names("@Streamer,", "streamer"));
+    assert!(names("streamer!", "Streamer"));
+    assert!(names("@viewer_1", "viewer_1"));
+    assert!(!names("@streamers", "streamer"));
+    assert!(!names("@", "streamer"));
+    let message = ChatMessage::new("1", None, split_text("hi viewer1, look"));
+    assert!(mentions(&message, "Viewer1"));
+    assert!(!mentions(&message, "viewer2"));
+    let message = ChatMessage::new("2", None, split_text("gg @viewer2"));
+    assert!(mentions(&message, "viewer2"));
+  }
 
   fn texts(fragments: &[Fragment]) -> Vec<String> {
     fragments
