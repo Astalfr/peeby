@@ -17,6 +17,7 @@ use gpui_component::{Root, TitleBar};
 use ui::theme;
 
 use super::space::{SpaceEvent, SpaceHandle, TabId};
+use super::tab_drag::TabDrag;
 use super::{Request, Shell, TabRef};
 use crate::{desktop, settings};
 
@@ -153,6 +154,7 @@ fn holding(id: TabId, cx: &App) -> Option<Target> {
 pub(super) fn bar_at(
   screen: Point<Pixels>,
   except: &[WindowId],
+  reach: Pixels,
   cx: &App,
 ) -> Option<(Target, usize)> {
   let windows = cx.try_global::<Windows>()?;
@@ -160,7 +162,7 @@ pub(super) fn bar_at(
     .in_use()
     .filter(|w| !except.contains(&w.handle.window_id()))
     .find_map(|w| {
-      let index = w.shell.upgrade()?.read(cx).bar_slot(screen)?;
+      let index = w.shell.upgrade()?.read(cx).bar_slot(screen, reach)?;
       Some((Target::from(w), index))
     })
 }
@@ -308,16 +310,70 @@ pub(super) fn open_with(
   }
 }
 
-/// Moves window `handle` (a torn-out tab's, following the pointer) to `bounds`.
-pub(super) fn move_to(handle: AnyWindowHandle, bounds: Bounds<Pixels>, cx: &mut App) {
-  handle
-    .update(cx, |_, window, cx| {
-      ui::set_window_bounds(window, cx, bounds)
-    })
-    .ok();
+/// A tab torn out and still held: it opens in a window of its own at `bounds` (a spare one if
+/// there is), raised without the focus, which takes the drag and the mouse's capture from the
+/// window it left. `false` when no window could open.
+pub(super) fn tear(
+  tab: TabRef,
+  bounds: Bounds<Pixels>,
+  display: Option<DisplayId>,
+  drag: TabDrag,
+  screen: Point<Pixels>,
+  cx: &mut App,
+) -> bool {
+  let Some(handle) = open_with(tab, bounds, display, false, cx) else {
+    return false;
+  };
+  if let Some(target) = get(handle.window_id(), cx) {
+    target
+      .shell
+      .update(cx, |shell, cx| shell.take_drag(drag, screen, cx))
+      .ok();
+    if let Some(hwnd) = target.hwnd {
+      desktop::sys::capture(hwnd);
+    }
+  }
+  true
 }
 
-/// A torn-out tab was released: its window comes to the front and takes the focus.
+/// A tab still held slides into `target`'s bar at `index` (at the end when `None`): it shows
+/// there, that window comes above the others (without the focus, until the release) and takes
+/// the drag and the mouse's capture.
+pub(super) fn hand_over(
+  target: Target,
+  tab: TabRef,
+  index: Option<usize>,
+  drag: TabDrag,
+  screen: Point<Pixels>,
+  cx: &mut App,
+) {
+  target
+    .shell
+    .update(cx, |shell, cx| {
+      shell.adopt_tab(tab, index, cx);
+      shell.take_drag(drag, screen, cx);
+    })
+    .ok();
+  if let Some(hwnd) = target.hwnd {
+    desktop::sys::raise(hwnd);
+    desktop::sys::capture(hwnd);
+  }
+}
+
+/// [`hand_over`] to window `id`, at the end of its bar.
+pub(super) fn hand_over_to(
+  id: WindowId,
+  tab: TabRef,
+  drag: TabDrag,
+  screen: Point<Pixels>,
+  cx: &mut App,
+) {
+  if let Some(target) = get(id, cx) {
+    hand_over(target, tab, None, drag, screen, cx);
+  }
+}
+
+/// A window comes to the front and takes the focus.
 pub(super) fn focus(handle: AnyWindowHandle, cx: &mut App) {
   if let Some(hwnd) = get(handle.window_id(), cx).and_then(|w| w.hwnd) {
     desktop::sys::raise(hwnd);
@@ -325,29 +381,6 @@ pub(super) fn focus(handle: AnyWindowHandle, cx: &mut App) {
   handle
     .update(cx, |_, window, _| window.activate_window())
     .ok();
-}
-
-/// A torn-out tab `id` was released over `target`'s bar: it leaves the window it was torn out
-/// to (`from`, put aside) and joins `target` at `index`.
-pub(super) fn bring_back(
-  from: AnyWindowHandle,
-  id: TabId,
-  target: Target,
-  index: usize,
-  cx: &mut App,
-) {
-  let Some(source) = get(from.window_id(), cx) else {
-    return;
-  };
-  let tab = source
-    .shell
-    .update(cx, |shell, cx| shell.detach_tab(id, false, cx))
-    .ok()
-    .flatten();
-  if let Some(tab) = tab {
-    merge(tab, target, index, cx);
-    retire(from.window_id(), cx);
-  }
 }
 
 /// The tab whose window takes `request`: the one to show, the one a tab was opened from.

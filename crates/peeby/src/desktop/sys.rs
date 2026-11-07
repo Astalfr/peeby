@@ -22,7 +22,7 @@ use windows::Win32::System::Pipes::{
   PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
-use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
   HWND_TOP, IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE,
   SWP_NOSIZE, SetWindowPos, ShowWindow,
@@ -64,6 +64,16 @@ pub fn show_inactive(hwnd: isize) {
   // SAFETY: as in `hide`, any value is accepted.
   unsafe {
     let _ = ShowWindow(HWND(hwnd as *mut _), SW_SHOWNOACTIVATE);
+  }
+}
+
+/// Sends the mouse to the window `hwnd` until the button is released: a tab's drag moves from
+/// one of Peeby's windows to another (ADR 0028), the one whose bar or window holds the tab.
+pub fn capture(hwnd: isize) {
+  // SAFETY: `SetCapture` takes any window of this thread (Peeby's windows all run on the UI
+  // thread); a value that is no longer a window only fails.
+  unsafe {
+    let _ = SetCapture(HWND(hwnd as *mut _));
   }
 }
 

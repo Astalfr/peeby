@@ -52,7 +52,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 - Done (2026-11-07, [ADR 0028](decisions/0028-tab-windows.md), steps 3 and 4): a tab pulled 32 px off the bar (or out of the window) detaches, its slot closing and its copy following the pointer over the window; released elsewhere, it opens in a window of its own under the pointer, released over another window's bar, it joins that window at the place under the pointer (a window emptied this way hides as a spare). 1 test (`shell::tab_drag`). Verified: clippy, tests. **Not verified:** in the app.
 - Done (2026-11-07, [ADR 0028](decisions/0028-tab-windows.md), step 5): the tab tears out as soon as it leaves the bar, into a window that follows the pointer (without the focus, so the source keeps the mouse's capture) until the release; released over a bar (its first window's too), it joins it and its window goes. Verified: clippy, tests. **Not verified:** in the app (above all that the capture holds while the new window shows).
 - Done (2026-11-07): a window's only tab carries its window, as in Chrome (not a maximized one), and dropped over another window's bar joins it. **Not verified:** in the app.
-- Next: a hint on the bar a tab hovers; a maximized window's only tab restoring and carrying its window; restore the tabs at startup (their routes), other keyboard shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab).
+- Done (2026-11-07): as in Chrome, a carried tab slides into the bar of the window it hovers (its own window hiding) and tears out again when pulled off it; the window holding the tab drives the drag with the mouse's capture (`SetCapture` handed over). **Not verified:** in the app.
+- Next: a maximized window's only tab restoring and carrying its window; restore the tabs at startup (their routes), other keyboard shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab).
 
 ## Tab history
 

@@ -93,22 +93,28 @@ five steps, each one shippable:
    windows. A window whose last tab leaves this way hides as a spare. The windows are tried in the
    order they opened, not by depth: two overlapping bars take the tab in the older window. The
    target shows nothing while the tab hovers it.
-5. **The window follows** (done). Steps 3 and 4 opened the window at the release; now the tab
-   tears out as soon as it detaches, into its window (new or spare) under the pointer, and that
-   window moves with the pointer until the release (`ui::set_window_bounds`, as the
-   mini-player moves). It opens without the focus (`focus: false`, a spare shown with
-   `SW_SHOWNOACTIVATE`): activating it could take the mouse's capture from the window the drag
-   started in, which goes on receiving the moves and the release. Shown so, Windows leaves it
-   under the active window: it is raised to the top without being activated
-   (`desktop::sys::raise`, `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)`), and raised and activated at
-   the release. A window opened from the tab's menu is raised and activated at once. Released over a bar (the
-   source window's too, not its own), the tab leaves its window, which is put aside, and joins
-   that bar; elsewhere, its window comes to the front where it is. A window's only tab carries
-   its window instead, as in Chrome: from the first move, the window follows the pointer (its
-   corner plus the pointer's position in it is the pointer on the screen, which holds while the
-   window moves, as for the mini-player's move), and released over another window's bar the tab
-   joins it and the emptied window is put aside. A maximized window is not carried: its only tab
-   detaches as a copy over the window, and can still be dropped on another window's bar.
+5. **The window follows, and slides into bars, as in Chrome** (done). The tab tears out as soon
+   as it detaches, into its window (new or spare) under the pointer. **The window that holds the
+   tab drives the drag**: the torn-out window takes it, with the mouse's capture
+   (`desktop::sys::capture`, `SetCapture`; the vendored GPUI reads the held button from each
+   message, so the new window's listeners see the moves and the release), and carries itself as
+   a window's only tab does: from the first move it follows the pointer (its corner plus the
+   pointer's position in it is the pointer on the screen, which holds while the window moves, as
+   for the mini-player's move; `ui::set_window_bounds`).
+   - Carried within 8 px of another window's bar (the source's included; less than the 32 px a
+     tab detaches at, so the edge does not flip), the tab leaves its window, which hides as a
+     spare, and slides into that bar where the pointer is (`windows::hand_over`): that window
+     comes above the others, takes the drag and the capture, and the tab moves along its bar,
+     changing places; pulled off it, it tears out again, into the spare.
+   - Released, the tab stays where it is, and the window holding it takes the focus. A torn-out
+     window opens without it (`focus: false`, a spare shown with `SW_SHOWNOACTIVATE`), raised to
+     the top without being activated (`desktop::sys::raise`, `SetWindowPos(HWND_TOP,
+     SWP_NOACTIVATE)`; else Windows leaves it under the active window). A window opened from the
+     tab's menu is raised and activated at once.
+   - The handovers are deferred: `SetCapture` tells the window losing it at once, and a window
+     hides, neither from inside its own event.
+   - A maximized window is not carried: its only tab detaches as a copy over the window, and can
+     still be dropped on another window's bar (32 px reach).
 
 ## Consequences
 
