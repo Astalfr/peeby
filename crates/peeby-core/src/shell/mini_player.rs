@@ -2,8 +2,8 @@
 //! in Chrome's picture-in-picture (ADR 0008). It shows the video of the tab that was left
 //! while it played, without restarting it: the same player and video surface move here. On
 //! hover: buttons to go back to the page and to close (which pauses), and play/pause in the
-//! middle. Dragging the video moves the window; its edges (12 px bands) and corners (24 px
-//! squares) resize it at 16:9, the opposite side staying in place.
+//! middle. Dragging the video moves the window; bands along its edges (`EDGE` thick) and corners
+//! (`CORNER` squares) resize it at 16:9, the opposite side staying in place.
 
 use gpui::prelude::*;
 use gpui::{
@@ -49,18 +49,24 @@ const _: () = {
   // A corner must be easier to hit than an edge.
   assert!(EDGE < CORNER);
   // The top and bottom strips span `CORNER..width - CORNER`, the left and right ones
-  // `CORNER..height - CORNER`: a length of zero or less would invert the strip.
-  assert!(MIN_WIDTH - 2. * CORNER > 0.);
-  assert!(MIN_HEIGHT - 2. * CORNER > 0.);
+  // `CORNER..height - CORNER`: what is left must still be at least as long as a strip is thick,
+  // or the strip is useless (and at zero or less it inverts).
+  assert!(MIN_WIDTH - 2. * CORNER >= EDGE);
+  assert!(MIN_HEIGHT - 2. * CORNER >= EDGE);
   // Anything the bands leave moves the window when dragged: over half of the smallest one must
-  // still do, or it could no longer be moved comfortably.
-  assert!((MIN_WIDTH - 2. * EDGE) * (MIN_HEIGHT - 2. * EDGE) > 0.5 * MIN_WIDTH * MIN_HEIGHT);
+  // still do, or it could no longer be moved comfortably. The inner rectangle the edge strips
+  // leave, less the four corner squares, which reach `CORNER - EDGE` further in.
+  let draggable =
+    (MIN_WIDTH - 2. * EDGE) * (MIN_HEIGHT - 2. * EDGE) - 4. * (CORNER - EDGE) * (CORNER - EDGE);
+  assert!(draggable > 0.5 * MIN_WIDTH * MIN_HEIGHT);
   // The play/pause button, centred in the box below the shade as `render` places it, must clear
-  // all four bands even at that size.
+  // all eight bands even at that size: the four strips in both axes, and the four corner squares
+  // horizontally (it sits low enough to share the bottom ones' rows).
   let play_left = (MIN_WIDTH - PLAY_SIZE) / 2.;
   let play_top = SHADE + (MIN_HEIGHT - SHADE - PLAY_SIZE) / 2.;
   assert!(play_left > EDGE && play_left + PLAY_SIZE < MIN_WIDTH - EDGE);
   assert!(play_top > EDGE && play_top + PLAY_SIZE < MIN_HEIGHT - EDGE);
+  assert!(play_left > CORNER && play_left + PLAY_SIZE < MIN_WIDTH - CORNER);
   // The control row takes its own clicks where it covers a band (it is painted after them),
   // which leaves the top right corner an L `CONTROLS_INSET` thick: that L must stay at least as
   // wide as a plain edge.
@@ -454,6 +460,9 @@ impl Render for MiniPlayer {
 
 #[cfg(test)]
 mod tests {
+  //! The bands' and controls' geometry is constant arithmetic, so it is asserted beside the
+  //! constants instead, when the crate compiles. What is tested here is `Gesture::bounds`.
+
   use super::*;
 
   fn gesture(edge: (i8, i8)) -> Gesture {
@@ -467,9 +476,6 @@ mod tests {
   fn at(g: &Gesture, dx: f32, dy: f32) -> Bounds<Pixels> {
     g.bounds(g.from + point(px(dx), px(dy)), MIN_WIDTH, 1920.)
   }
-
-  // The bands' and controls' geometry is constant arithmetic, so it is asserted beside the
-  // constants instead, when the crate compiles.
 
   #[test]
   fn a_move_keeps_the_size() {

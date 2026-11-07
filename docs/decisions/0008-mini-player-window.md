@@ -40,8 +40,10 @@ an external D3D11 texture drawn by the patched GPUI.
 - On hover: play/pause in the middle, the two buttons at the top right (14 px in, inside the 48 px shade).
   Whether the controls show is the window's hover state, not an element's: the buttons occlude the element and
   its hover would flicker. The resizing bands are painted before them, so a visible button takes its own
-  clicks where it overlaps one (the hit test keeps the last-painted occluding element) and the top right
-  corner is an L 14 px thick while the controls show.
+  clicks where it overlaps one and the top right corner is an L 14 px thick while the controls show. The
+  hit test walks the hitboxes from the last painted and stops at the first occluding one, keeping it and
+  everything above: the buttons are non-occluding children of the occluding control row, painted after it,
+  so a click there reaches the button and never the band below.
 
 ## Consequences
 
