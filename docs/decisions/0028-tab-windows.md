@@ -100,10 +100,12 @@ five steps, each one shippable:
    `SW_SHOWNOACTIVATE`): activating it could take the mouse's capture from the window the drag
    started in, which goes on receiving the moves and the release. Released over a bar (the
    source window's too, not its own), the tab leaves its window, which is put aside, and joins
-   that bar; elsewhere, its window comes to the front where it is. A window's only tab still
-   does not tear out (that would move the source window itself, whose coordinates the pointer's
-   are measured in): detached, its copy follows the pointer over the window, and it can still be
-   dropped on another window's bar.
+   that bar; elsewhere, its window comes to the front where it is. A window's only tab carries
+   its window instead, as in Chrome: from the first move, the window follows the pointer (its
+   corner plus the pointer's position in it is the pointer on the screen, which holds while the
+   window moves, as for the mini-player's move), and released over another window's bar the tab
+   joins it and the emptied window is put aside. A maximized window is not carried: its only tab
+   detaches as a copy over the window, and can still be dropped on another window's bar.
 
 ## Consequences
 

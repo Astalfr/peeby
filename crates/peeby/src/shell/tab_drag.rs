@@ -6,8 +6,9 @@
 //! in keeps the mouse's capture) until the release. Released over the bar of one of Peeby's
 //! windows (the one it came from included), it joins that bar at the place under the pointer and
 //! its window goes; elsewhere, its window stays there and comes to the front. A window's only
-//! tab does not tear out: detached, its copy follows the pointer over the window, and released
-//! over another window's bar it joins it (its window goes), else it goes back to its slot.
+//! tab carries its window instead, as in Chrome: from the first move the window follows the
+//! pointer, and released over another window's bar the tab joins it (its window goes). A
+//! maximized window is not carried: its only tab detaches as a copy over the window.
 //!
 //! The drag is followed with window listeners rather than GPUI's `on_drag`, which ends at the
 //! window's edge: the window captures the mouse while the button is held, so the release is seen
@@ -94,6 +95,9 @@ pub(super) struct TabDrag {
   pub width: Pixels,
   /// Torn out: the window it is in now, following the pointer, and that window's size.
   torn: Option<(AnyWindowHandle, Size<Pixels>)>,
+  /// The window's only tab, carrying its window: where the pointer was on the screen and the
+  /// window's top left corner when the window started following it.
+  carry: Option<(Point<Pixels>, Point<Pixels>)>,
 }
 
 impl Shell {
@@ -111,6 +115,7 @@ impl Shell {
       grab: position - bounds.origin,
       width: bounds.size.width,
       torn: None,
+      carry: None,
     });
     // Drawn again, to listen to the window while the button is held.
     cx.notify();
@@ -135,6 +140,12 @@ impl Shell {
       }
     }
     let Some(drag) = self.tab_drag else { return };
+    // Not once a tab tore out: this window may be left with one tab, which is not the one held.
+    let only_tab = drag.torn.is_none() && self.tabs.len() == 1 && !window.is_maximized();
+    if drag.carry.is_some() || only_tab {
+      self.carry_window(position, window, cx);
+      return;
+    }
     if let Some((handle, size)) = drag.torn {
       let bounds = self.torn_bounds(&drag, window.bounds().origin + position, size);
       windows::move_to(handle, bounds, cx);
@@ -152,6 +163,23 @@ impl Shell {
       self.reorder_dragged(cx);
     }
     cx.notify();
+  }
+
+  /// The window's only tab is dragged: the window follows the pointer, as when dragged by its
+  /// title bar (the pointer's screen position is the window's corner plus `position`, which the
+  /// mini-player's move relies on too).
+  fn carry_window(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(drag) = &mut self.tab_drag else {
+      return;
+    };
+    let bounds = window.bounds();
+    let screen = bounds.origin + position;
+    let (from, corner) = *drag.carry.get_or_insert((screen, bounds.origin));
+    ui::set_window_bounds(
+      window,
+      cx,
+      Bounds::new(corner + (screen - from), bounds.size),
+    );
   }
 
   /// The dragged tab leaves this window for one of its own under the pointer, which follows it
@@ -260,6 +288,14 @@ impl Shell {
     if !drag.moving {
       return;
     }
+    if drag.carry.is_some() {
+      // The window stays where it was carried, unless it was over another window's bar.
+      let screen = window.bounds().origin + position;
+      if let Some((target, index)) = windows::bar_at(screen, &[self.window], cx) {
+        self.join(drag.tab, target, index, cx);
+      }
+      return;
+    }
     if !drag.detached {
       if let Some(slot) = self.tab_layout.bounds(drag.tab) {
         let copy = self.tab_layout.row.get().left() + self.dragged_left(&drag);
@@ -286,17 +322,7 @@ impl Shell {
       return;
     }
     if let Some((target, index)) = windows::bar_at(screen, &[self.window], cx) {
-      let Some(tab) = self.detach_tab(drag.tab, false, cx) else {
-        return;
-      };
-      let (emptied, this) = (self.tabs.is_empty(), self.window);
-      // Deferred: other windows are updated, and this one may be put aside.
-      cx.defer(move |cx| {
-        windows::merge(tab, target, index, cx);
-        if emptied {
-          windows::retire(this, cx);
-        }
-      });
+      self.join(drag.tab, target, index, cx);
       return;
     }
     if self.tabs.len() <= 1 {
@@ -312,6 +338,22 @@ impl Shell {
     let display = display_at(screen, cx);
     cx.defer(move |cx| {
       windows::open_with(tab, bounds, display, true, cx);
+    });
+  }
+
+  /// Tab `id` leaves this window for `target`'s bar, at `index`; emptied, this window is put
+  /// aside.
+  fn join(&mut self, id: TabId, target: windows::Target, index: usize, cx: &mut Context<Self>) {
+    let Some(tab) = self.detach_tab(id, false, cx) else {
+      return;
+    };
+    let (emptied, this) = (self.tabs.is_empty(), self.window);
+    // Deferred: other windows are updated, and this one may be put aside.
+    cx.defer(move |cx| {
+      windows::merge(tab, target, index, cx);
+      if emptied {
+        windows::retire(this, cx);
+      }
     });
   }
 
