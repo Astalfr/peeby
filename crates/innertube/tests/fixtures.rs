@@ -6,7 +6,7 @@
 
 use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
-  NotificationLevel, Progress, SearchResult, Watchtime, hls, hls_manifest_url,
+  NotificationLevel, Progress, Related, SearchResult, Watchtime, hls, hls_manifest_url,
   parse_channel_search, parse_feed, parse_members_only, parse_oembed_title, parse_playlist,
   parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
   parse_shorts_sequence, parse_tracking, parse_watch,
@@ -162,7 +162,9 @@ fn watch_page() {
   assert!(page.notifications.is_some());
 
   assert_eq!(page.related.len(), 20);
-  let related = &page.related[0];
+  let Related::Video(related) = &page.related[0] else {
+    panic!("a video first");
+  };
   // Related videos carry the channel row, then views · date.
   assert_eq!(related.channel.as_deref(), Some("Retro Pulse"));
   assert!(
@@ -845,8 +847,8 @@ fn player_storyboard() {
 #[test]
 fn search_results() {
   let page = parse_search(&fixture("search.json"));
-  // Videos and the channel, in order; the Shorts shelf, the playlist and the courses are left out.
-  assert_eq!(page.results.len(), 5);
+  // Videos, the course, the playlist and the channel, in order; the Shorts shelf is left out.
+  assert_eq!(page.results.len(), 7);
   assert!(page.continuation.is_some());
   let SearchResult::Video(first) = &page.results[0] else {
     panic!("a video first");
@@ -862,7 +864,28 @@ fn search_results() {
   assert_eq!(first.metadata, ["663\u{a0}k\u{a0}vues", "il y a 2 ans"]);
   assert!(first.thumbnails.iter().any(|t| t.width >= 720));
   assert!(!first.avatar.is_empty());
-  let SearchResult::Channel(channel) = &page.results[4] else {
+  // A course is a playlist too.
+  let SearchResult::Playlist(course) = &page.results[4] else {
+    panic!("the course after the videos");
+  };
+  assert_eq!(course.id, "PLzMcBGfZo4-nyLTlSRBvo0zjSnCnqjHYQ");
+  assert_eq!(course.title, "Rust Programming Tutorial");
+  assert_eq!(course.metadata, ["Cours"]);
+  let SearchResult::Playlist(playlist) = &page.results[5] else {
+    panic!("the playlist after the course");
+  };
+  assert_eq!(playlist.id, "PLai5B987bZ9CoVR-QEIN9foz4QCJ0H2Y8");
+  assert_eq!(playlist.title, "The Rust Lang Book");
+  assert_eq!(playlist.channel.as_deref(), Some("Let's Get Rusty"));
+  assert_eq!(
+    playlist.channel_id.as_deref(),
+    Some("UCSp-OaMpsO8K0KkOqyBl7_w")
+  );
+  // Its first videos, its page's link and its description are no details.
+  assert_eq!(playlist.metadata, ["Playlist"]);
+  assert_eq!(playlist.count.as_deref(), Some("44\u{a0}vidéos"));
+  assert!(!playlist.thumbnails.is_empty());
+  let SearchResult::Channel(channel) = &page.results[6] else {
     panic!("the channel last");
   };
   assert_eq!(channel.id, "UCaYhcUwRBNscFNUKTjgPFiA");
@@ -884,7 +907,7 @@ fn search_result_progress() {
     .iter()
     .filter_map(|r| match r {
       SearchResult::Video(v) => v.progress.map(|p| (v.id.as_str(), p)),
-      SearchResult::Channel(_) => None,
+      SearchResult::Channel(_) | SearchResult::Playlist(_) => None,
     })
     .collect();
   assert_eq!(
@@ -996,6 +1019,25 @@ fn web_player_tracking_urls() {
 }
 
 #[test]
+fn related_playlist() {
+  // The related list of a Rust tutorial, captured anonymously 2026-11-07, trimmed to a playlist
+  // between two videos.
+  let page = parse_watch("OX9HJsJUDxA", &fixture("next_related_playlist.json"));
+  assert_eq!(page.related.len(), 3);
+  assert!(matches!(page.related[0], Related::Video(_)));
+  assert!(matches!(page.related[2], Related::Video(_)));
+  let Related::Playlist(playlist) = &page.related[1] else {
+    panic!("the playlist between the videos");
+  };
+  assert_eq!(playlist.id, "PLai5B987bZ9CoVR-QEIN9foz4QCJ0H2Y8");
+  assert_eq!(playlist.title, "The Rust Lang Book");
+  assert_eq!(playlist.channel.as_deref(), Some("Let's Get Rusty"));
+  assert_eq!(playlist.metadata, ["Playlist"]);
+  assert_eq!(playlist.count.as_deref(), Some("44\u{a0}vidéos"));
+  assert!(page.related_continuation.is_some());
+}
+
+#[test]
 fn search_lives() {
   // A search filtered on lives, captured 2026-11-02, trimmed to its first three results.
   let page = parse_search(&fixture("search_live.json"));
@@ -1015,6 +1057,7 @@ fn search_next_page() {
     .map(|r| match r {
       SearchResult::Video(v) => v.id.as_str(),
       SearchResult::Channel(c) => c.id.as_str(),
+      SearchResult::Playlist(p) => p.id.as_str(),
     })
     .collect();
   assert_eq!(
@@ -1024,7 +1067,8 @@ fn search_next_page() {
       "d9ahpl1gHVA",
       "k9zj8i8FBzE",
       "UCaYhcUwRBNscFNUKTjgPFiA",
-      "QNPwKMOQIKM"
+      "QNPwKMOQIKM",
+      "PLPoSdR46FgI412aItyJhj2bF66cudB6Qs"
     ]
   );
   assert!(page.continuation.is_some());

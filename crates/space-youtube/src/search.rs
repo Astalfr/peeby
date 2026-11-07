@@ -12,7 +12,7 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{h_flex, v_flex};
 use innertube::{Channel, Client, Error, SearchResult};
 
-use crate::cards::video_row;
+use crate::cards::{playlist_result_row, video_row};
 use crate::convert::{self, error_text};
 use crate::{Nav, Route};
 use peeby_core::shell::space::middle_click;
@@ -247,11 +247,12 @@ impl SearchView {
   }
 }
 
-/// What tells two results apart: the video or channel id.
+/// What tells two results apart: the video, channel or playlist id.
 fn key(result: &SearchResult) -> &str {
   match result {
     SearchResult::Video(video) => &video.id,
     SearchResult::Channel(channel) => &channel.id,
+    SearchResult::Playlist(playlist) => &playlist.id,
   }
 }
 
@@ -299,6 +300,9 @@ impl Render for SearchView {
           .map(|result| match result {
             SearchResult::Video(video) => video_row(video, &self.nav, window, cx),
             SearchResult::Channel(channel) => self.channel_row(channel, window, cx),
+            SearchResult::Playlist(playlist) => {
+              playlist_result_row(playlist, &self.nav, window, cx)
+            }
           })
           .collect();
         let end = if self.more_failed {

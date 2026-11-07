@@ -12,7 +12,7 @@ use crate::hls;
 use crate::live::LiveProxy;
 use crate::models::{
   Channel, CommentPage, Feed, LikeStatus, Live, LiveChatPage, NotificationPage, Playlist,
-  PlaylistChoice, PlaylistSummary, SearchPage, SearchResult, ShortsPage, Stream, Tracking,
+  PlaylistChoice, PlaylistSummary, Related, SearchPage, SearchResult, ShortsPage, Stream, Tracking,
   VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
@@ -508,7 +508,10 @@ impl Client {
       id, title, related, ..
     } = &mut page;
     let titles = std::iter::once((id.as_str(), title))
-      .chain(related.iter_mut().map(|v| (v.id.as_str(), &mut v.title)))
+      .chain(related.iter_mut().filter_map(|r| match r {
+        Related::Video(v) => Some((v.id.as_str(), &mut v.title)),
+        Related::Playlist(_) => None,
+      }))
       .collect();
     self.untranslate_titles(titles).await;
     Ok(page)
@@ -700,7 +703,7 @@ impl Client {
   async fn untranslated_search(&self, mut page: SearchPage) -> SearchPage {
     let videos = page.results.iter_mut().filter_map(|result| match result {
       SearchResult::Video(video) => Some(video),
-      SearchResult::Channel(_) => None,
+      SearchResult::Channel(_) | SearchResult::Playlist(_) => None,
     });
     self.untranslate(videos).await;
     page

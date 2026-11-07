@@ -51,7 +51,7 @@ pub use models::{
   ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
   Live, LiveChatPage, LiveFormat, Notification, NotificationKind, NotificationLevel,
   NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
-  SearchPage, SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, Subscription,
+  Related, SearchPage, SearchResult, ShortsPage, Storyboard, StoryboardFrame, Stream, Subscription,
   TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{

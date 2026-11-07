@@ -27,9 +27,9 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, h_flex, v_flex};
-use innertube::{Client, LikeStatus, TextLink, Votes, WatchPage};
+use innertube::{Client, LikeStatus, Related, TextLink, Votes, WatchPage};
 
-use crate::cards::{compact_card, playlist_row};
+use crate::cards::{compact_card, playlist_compact_card, playlist_row};
 use crate::comments::{CommentSection, HoveredLink, Links, linked_text};
 use crate::convert::{self, error_text};
 use crate::history::{self, Reporter};
@@ -1087,7 +1087,10 @@ impl Render for WatchView {
       Some(page) => page
         .related
         .iter()
-        .map(|v| compact_card(v, &self.nav, window, cx))
+        .map(|related| match related {
+          Related::Video(v) => compact_card(v, &self.nav, window, cx),
+          Related::Playlist(p) => playlist_compact_card(p, &self.nav, window, cx),
+        })
         .collect(),
       None => (0..8)
         .map(|_| skeleton_compact().into_any_element())

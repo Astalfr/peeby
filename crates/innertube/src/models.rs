@@ -50,6 +50,15 @@ pub struct VideoItem {
   pub progress: Option<Progress>,
 }
 
+/// An entry of a watch page's related list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Related {
+  /// A video.
+  Video(VideoItem),
+  /// A playlist (or a course).
+  Playlist(PlaylistSummary),
+}
+
 /// How much of a video the user watched, as its card shows it (the red bar).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Progress {
@@ -110,8 +119,8 @@ pub struct WatchPage {
   pub description: String,
   /// The description's links (URLs, timestamps, channels, hashtags), by position.
   pub description_links: Vec<TextLink>,
-  /// Related videos.
-  pub related: Vec<VideoItem>,
+  /// Related videos and playlists, in display order (mixes are left out).
+  pub related: Vec<Related>,
   /// Token of the next page of related videos.
   pub related_continuation: Option<String>,
   /// Token of the first comments page (`next` continuation).
@@ -599,12 +608,14 @@ pub enum SearchResult {
   Video(VideoItem),
   /// A channel.
   Channel(Channel),
+  /// A playlist (or a course).
+  Playlist(PlaylistSummary),
 }
 
 /// A page of search results and the token of the next page.
 #[derive(Clone, Debug, Default)]
 pub struct SearchPage {
-  /// Videos and channels in display order; Shorts shelves, playlists and courses are left out.
+  /// Videos, channels and playlists in display order; Shorts shelves and mixes are left out.
   pub results: Vec<SearchResult>,
   /// Token for [`crate::Client::search_more`], when there is more.
   pub continuation: Option<String>,
@@ -715,8 +726,9 @@ pub struct ShortsPage {
   pub continuation: Option<String>,
 }
 
-/// A playlist of the user's library (`FEplaylist_aggregation`): their own playlists, saved
-/// ones, "Watch later" (`WL`) and "Liked videos" (`LL`).
+/// A playlist card: of the user's library (`FEplaylist_aggregation`: their own playlists, saved
+/// ones, "Watch later" (`WL`) and "Liked videos" (`LL`)), a search or a watch page's related
+/// list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlaylistSummary {
   /// Playlist id (`PL…`, `WL`, `LL`…).
@@ -725,7 +737,12 @@ pub struct PlaylistSummary {
   pub title: String,
   /// Localized video count as the badge shows it, e.g. `17 vidéos`.
   pub count: Option<String>,
-  /// Localized details, e.g. `["Privée", "Playlist", "Mise à jour aujourd'hui"]`.
+  /// Its channel's name, outside the library.
+  pub channel: Option<String>,
+  /// Its channel's id (`UC…`), outside the library.
+  pub channel_id: Option<String>,
+  /// Localized details, e.g. `["Privée", "Playlist", "Mise à jour aujourd'hui"]` (library),
+  /// `["Playlist"]` (search).
   pub metadata: Vec<String>,
   /// Thumbnail of its first video.
   pub thumbnails: Vec<Thumbnail>,

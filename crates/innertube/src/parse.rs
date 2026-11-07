@@ -2,7 +2,7 @@
 //! - grids (home, subscriptions, channel tabs): `richGridRenderer > richItemRenderer >
 //!   content > lockupViewModel`, continuation in `continuationItemRenderer`; shelves between the
 //!   items in `richSectionRenderer` (subscriptions: "Les plus pertinentes", Shorts);
-//! - related videos: `lockupViewModel` under `secondaryResults`;
+//! - related videos: video and playlist `lockupViewModel`s under `secondaryResults`;
 //! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`, the rating
 //!   in its `segmentedLikeDislikeButtonViewModel`;
 //! - the playlists library: playlist `lockupViewModel`s with a `collectionThumbnailViewModel`;
@@ -16,7 +16,7 @@
 //!   `multiPageMenuNotificationSectionRenderer`s, a next page in `appendContinuationItemsAction`;
 //! - search results (`search`): `videoRenderer`s and `channelRenderer`s in an
 //!   `itemSectionRenderer`, beside Shorts shelves (`gridShelfViewModel`) and playlist or course
-//!   lockups; a next page in `appendContinuationItemsAction`;
+//!   `lockupViewModel`s; a next page in `appendContinuationItemsAction`;
 //! - a channel's sort orders: the `chipViewModel`s of its grid's `chipBarViewModel`, each a
 //!   `continuationCommand` whose answer replaces the grid (`reloadContinuationItemsCommand`);
 //! - a channel's search (its `expandableTabRenderer`): one `videoRenderer` per
@@ -34,8 +34,8 @@ use crate::models::{
   ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
   Live, LiveChatPage, LiveFormat, Notification, NotificationKind, NotificationLevel,
   NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
-  SearchPage, SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail, Tracking,
-  VideoItem, WatchPage,
+  Related, SearchPage, SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail,
+  Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -101,7 +101,7 @@ pub fn parse_channel_search(response: &Value) -> Feed {
           avatar: Vec::new(),
           ..video
         }),
-        SearchResult::Channel(_) => None,
+        SearchResult::Channel(_) | SearchResult::Playlist(_) => None,
       })
       .collect(),
     continuation: find_continuation(response),
@@ -135,8 +135,16 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     .find_map(find_continuation);
 
   let secondary_results = &results["secondaryResults"]["secondaryResults"];
-  let mut related = Vec::new();
-  collect_lockups(secondary_results, true, &mut related);
+  let mut lockups = Vec::new();
+  find_all(secondary_results, "lockupViewModel", &mut lockups);
+  let related = lockups
+    .into_iter()
+    .filter_map(|lockup| {
+      parse_lockup(lockup)
+        .map(Related::Video)
+        .or_else(|| parse_playlist_lockup(lockup).map(Related::Playlist))
+    })
+    .collect();
 
   let (like_status, like_params) = parse_like_buttons(&primary["videoActions"]);
   let (likes, likes_liked) = parse_like_counts(&primary["videoActions"]);
@@ -638,7 +646,8 @@ pub fn parse_search(response: &Value) -> SearchPage {
   }
 }
 
-/// Collects the videos and channels under `value` in document order, skipping malformed ones.
+/// Collects the videos, channels and playlists under `value` in document order, skipping
+/// malformed ones and mixes.
 fn collect_search_results(value: &Value, out: &mut Vec<SearchResult>) {
   match value {
     Value::Object(map) => {
@@ -646,6 +655,8 @@ fn collect_search_results(value: &Value, out: &mut Vec<SearchResult>) {
         out.extend(parse_video_renderer(video).map(SearchResult::Video));
       } else if let Some(channel) = map.get("channelRenderer") {
         out.extend(parse_channel(channel).map(SearchResult::Channel));
+      } else if let Some(lockup) = map.get("lockupViewModel") {
+        out.extend(parse_playlist_lockup(lockup).map(SearchResult::Playlist));
       } else {
         map.values().for_each(|v| collect_search_results(v, out));
       }
@@ -824,8 +835,15 @@ pub fn parse_playlists(response: &Value) -> Vec<PlaylistSummary> {
     .collect()
 }
 
+/// One playlist lockup: of the library, a search (where courses are playlists too) or the
+/// related videos. Its rows hold plain details ("Privée", "Playlist"), the byline's channel
+/// link, links to its first videos and to its page, and a description: only the first two are
+/// kept.
 fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
-  if lockup["contentType"] != "LOCKUP_CONTENT_TYPE_PLAYLIST" {
+  if !matches!(
+    lockup["contentType"].as_str(),
+    Some("LOCKUP_CONTENT_TYPE_PLAYLIST" | "LOCKUP_CONTENT_TYPE_COURSE")
+  ) {
     return None;
   }
   let id = lockup["contentId"]
@@ -845,19 +863,43 @@ fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
     })
     .find_map(|b| b["thumbnailBadgeViewModel"]["text"].as_str())
     .map(str::to_owned);
+  let mut channel = None;
+  let mut metadata = Vec::new();
+  let rows = meta["metadata"]["contentMetadataViewModel"]["metadataRows"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter(|row| {
+      row["lockupContentMetadataRowExtension"]["contentType"]
+        != "METADATA_ROW_CONTENT_TYPE_DESCRIPTION"
+    });
+  for part in rows.flat_map(|row| row["metadataParts"].as_array().into_iter().flatten()) {
+    let Some(content) = part["text"]["content"].as_str() else {
+      continue;
+    };
+    let Some(runs) = part["text"].get("commandRuns") else {
+      metadata.push(content.to_owned());
+      continue;
+    };
+    // Its channel's name, then a label leading there too ("Playlist", "Cours"); the links to
+    // its videos and to its page are no details.
+    let browse = runs[0]["onTap"]["innertubeCommand"]["browseEndpoint"]["browseId"].as_str();
+    match browse.filter(|id| id.starts_with("UC")) {
+      Some(channel_id) if channel.is_none() => {
+        channel = Some((content.to_owned(), channel_id.to_owned()));
+      }
+      Some(_) => metadata.push(content.to_owned()),
+      None => {}
+    }
+  }
+  let (channel, channel_id) = channel.unzip();
   Some(PlaylistSummary {
     id: id.to_owned(),
     title: meta["title"]["content"].as_str()?.to_owned(),
     count,
-    // The last row is a link ("Afficher la playlist complète"), not a detail.
-    metadata: meta["metadata"]["contentMetadataViewModel"]["metadataRows"]
-      .as_array()
-      .into_iter()
-      .flatten()
-      .flat_map(|row| row["metadataParts"].as_array().into_iter().flatten())
-      .filter(|part| part["text"].get("commandRuns").is_none())
-      .filter_map(|part| part["text"]["content"].as_str().map(str::to_owned))
-      .collect(),
+    channel,
+    channel_id,
+    metadata,
     thumbnails: thumbnails(&image["image"]["sources"]),
   })
 }

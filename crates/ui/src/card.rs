@@ -29,6 +29,8 @@ pub const COMPACT_WIDTH: f32 = 168.;
 pub const BADGE_LABEL_WIDTH: f32 = 200.;
 /// Width of a list row's thumbnail.
 pub const ROW_WIDTH: f32 = 246.;
+/// How far a stacked picture's layers rise above it ([`MediaCard::stacked`]).
+pub const STACK: f32 = 8.;
 /// Aspect ratio of video thumbnails.
 pub const WIDE: f32 = 16. / 9.;
 /// Aspect ratio of posters (movies, series).
@@ -100,6 +102,7 @@ pub struct MediaCard {
   picture: Picture,
   avatar: Option<Picture>,
   badge: Option<SharedString>,
+  badge_icon: Option<Icon>,
   badge_left: Option<SharedString>,
   badge_left_icon: Option<Icon>,
   badge_dot: Option<Hsla>,
@@ -107,6 +110,7 @@ pub struct MediaCard {
   progress: Option<f32>,
   corner: Option<Corner>,
   play: bool,
+  stacked: bool,
   title_click: Option<Rc<Handler>>,
   title_middle_click: Option<Rc<Handler>>,
   overlays: Vec<AnyElement>,
@@ -132,6 +136,7 @@ impl MediaCard {
       picture,
       avatar: None,
       badge: None,
+      badge_icon: None,
       badge_left: None,
       badge_left_icon: None,
       badge_dot: None,
@@ -139,6 +144,7 @@ impl MediaCard {
       progress: None,
       corner: None,
       play: true,
+      stacked: false,
       title_click: None,
       title_middle_click: None,
       overlays: Vec::new(),
@@ -168,6 +174,19 @@ impl MediaCard {
   /// Text in a dark badge at the picture's bottom right (duration).
   pub fn badge(mut self, badge: Option<impl Into<SharedString>>) -> Self {
     self.badge = badge.map(Into::into);
+    self
+  }
+
+  /// An icon before the bottom right badge's text (a playlist's count).
+  pub fn badge_icon(mut self, icon: Option<Icon>) -> Self {
+    self.badge_icon = icon;
+    self
+  }
+
+  /// Whether the picture stands on a stack, two thin layers peeking out above it (a
+  /// playlist). The picture box is then [`STACK`] taller, the picture at its bottom.
+  pub fn stacked(mut self, stacked: bool) -> Self {
+    self.stacked = stacked;
     self
   }
 
@@ -324,7 +343,7 @@ impl MediaCard {
   ) -> gpui::Div {
     let t = self.hover.t;
     let play = play.filter(|_| self.play);
-    div()
+    let picture = div()
       .relative()
       .w(px(width))
       .h(px(width / aspect))
@@ -340,7 +359,7 @@ impl MediaCard {
           .badge
           .take()
           .filter(|_| !self.live)
-          .map(|t| badge(Some(t), self.badge_dot, None).right(px(8.))),
+          .map(|t| badge(Some(t), self.badge_dot, self.badge_icon).right(px(8.))),
       )
       .children({
         let icon = self.badge_left_icon.take();
@@ -350,7 +369,30 @@ impl MediaCard {
           .filter(|_| icon.is_none() || width >= BADGE_LABEL_WIDTH);
         (icon.is_some() || text.is_some()).then(|| badge(text, None, icon).left(px(8.)))
       })
-      .children(self.overlays.drain(..))
+      .children(self.overlays.drain(..));
+    if !self.stacked {
+      return picture;
+    }
+    // Layers behind the picture: narrower, peeking out above it, as on the playlists page.
+    let inset = (width * 0.05).round().max(8.);
+    let layer = |inset: f32, top: f32, opacity: f32| {
+      div()
+        .absolute()
+        .top(px(top))
+        .left(px(inset))
+        .right(px(inset))
+        .h(px(12.))
+        .rounded_t(theme::RADIUS)
+        .bg(theme::muted().opacity(opacity))
+    };
+    div()
+      .relative()
+      .w(px(width))
+      .h(px(width / aspect + STACK))
+      .flex_none()
+      .child(layer(inset, 0., 0.25))
+      .child(layer(inset / 2., STACK / 2., 0.45))
+      .child(div().absolute().top(px(STACK)).left_0().child(picture))
   }
 
   /// Grid card, `width` wide: the 16:9 picture, then the avatar, title and lines. On hover it
