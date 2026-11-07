@@ -63,6 +63,41 @@ impl Effects {
   }
 }
 
+/// How [`ImageStore::get_fit`] shrinks an image to the box it is drawn in, keeping its ratio.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Fit {
+  /// Until it just covers the box (`ObjectFit::Cover`): nothing is cropped, the GPU crops.
+  Cover,
+  /// Until it just fits inside the box (a logo).
+  Contain,
+}
+
+/// How a decoded image is scaled.
+#[derive(Clone, Copy, Debug)]
+enum Scale {
+  /// As it is.
+  None,
+  /// Scaled and cropped to exactly this size.
+  Fill(u32, u32),
+  /// Shrunk (never enlarged) to this box, keeping its ratio.
+  Fit(Fit, u32, u32),
+}
+
+impl From<Option<(u32, u32)>> for Scale {
+  fn from(size: Option<(u32, u32)>) -> Self {
+    size.map_or(Self::None, |(w, h)| Self::Fill(w, h))
+  }
+}
+
+/// A drawn size (device pixels) rounded up to a step of about 1/16 of it, so that resizing a
+/// window does not decode an image again for every pixel; the GPU's last shrink, by at most
+/// that much, does not show.
+fn bucket(pixels: u32) -> u32 {
+  let pixels = pixels.max(1);
+  let step = (pixels.next_power_of_two() / 16).max(8);
+  pixels.div_ceil(step) * step
+}
+
 /// One round of [`Tint::Party`]'s hue.
 pub const PARTY_PERIOD_MS: u32 = 1500;
 /// Frames a still image gets for one round of [`Tint::Party`].
@@ -109,6 +144,9 @@ pub struct ImageStore {
   failed: HashSet<String>,
   /// Decoded BlurHashes by hash and aspect ratio (`None`: the hash is invalid).
   blurhashes: HashMap<String, Option<Arc<RenderImage>>>,
+  /// The last key [`Self::get_fit`] drew for an image (URL and effects), shown while the image
+  /// is decoded for a new size.
+  shown: HashMap<String, String>,
 }
 
 impl ImageStore {
@@ -130,6 +168,7 @@ impl ImageStore {
       pending: HashSet::new(),
       failed: HashSet::new(),
       blurhashes: HashMap::new(),
+      shown: HashMap::new(),
     }
   }
 
@@ -167,7 +206,13 @@ impl ImageStore {
       return Some(image);
     }
     if !self.pending.contains(url) && !self.failed.contains(url) {
-      self.load(url.to_owned(), url.to_owned(), None, Effects::default(), cx);
+      self.load(
+        url.to_owned(),
+        url.to_owned(),
+        Scale::None,
+        Effects::default(),
+        cx,
+      );
     }
     None
   }
@@ -182,14 +227,49 @@ impl ImageStore {
     if effects.is_none() {
       return self.get(url, cx);
     }
-    let key = format!("{url}#fx-{:?}-{:?}", effects.turn, effects.tint);
+    let key = effects_key(url, effects);
     if let Some(image) = self.touch(&key) {
       return Some(image);
     }
     if !self.pending.contains(&key) && !self.failed.contains(&key) {
-      self.load(url.to_owned(), key, None, effects, cx);
+      self.load(url.to_owned(), key, Scale::None, effects, cx);
     }
     None
+  }
+
+  /// Like [`Self::get_with`], shrunk on the CPU (Lanczos) to the box it is drawn in, `width`×
+  /// `height` device pixels, as `fit` says. GPUI samples without mipmaps, so a large image drawn
+  /// small looks pixelated: images drawn smaller than their file go through here. While a new
+  /// size decodes (a window being resized), the last size drawn is returned.
+  pub fn get_fit(
+    &mut self,
+    url: &str,
+    effects: Effects,
+    fit: Fit,
+    width: u32,
+    height: u32,
+    cx: &mut Context<Self>,
+  ) -> Option<Arc<RenderImage>> {
+    let base = effects_key(url, effects);
+    let (width, height) = (bucket(width), bucket(height));
+    let key = format!("{base}#{fit:?}-{width}x{height}");
+    if let Some(image) = self.touch(&key) {
+      if self.shown.get(&base) != Some(&key) {
+        self.shown.insert(base, key);
+      }
+      return Some(image);
+    }
+    if !self.pending.contains(&key) && !self.failed.contains(&key) {
+      self.load(
+        url.to_owned(),
+        key,
+        Scale::Fit(fit, width, height),
+        effects,
+        cx,
+      );
+    }
+    let shown = self.shown.get(&base)?.clone();
+    self.touch(&shown)
   }
 
   /// Like [`Self::get`], but scaled and cropped on the CPU to exactly `width`×`height` pixels.
@@ -210,7 +290,7 @@ impl ImageStore {
       self.load(
         url.to_owned(),
         key,
-        Some((width, height)),
+        Scale::Fill(width, height),
         Effects::default(),
         cx,
       );
@@ -227,13 +307,13 @@ impl ImageStore {
     Some(cached.image.clone())
   }
 
-  /// Loads `url` into the store under `key`, scaled to `size` when given, with `effects`. The
-  /// disk cache keeps the downloaded file, whatever the size and the effects.
+  /// Loads `url` into the store under `key`, scaled as `scale` says, with `effects`. The disk
+  /// cache keeps the downloaded file, whatever the size and the effects.
   fn load(
     &mut self,
     url: String,
     key: String,
-    size: Option<(u32, u32)>,
+    scale: Scale,
     effects: Effects,
     cx: &mut Context<Self>,
   ) {
@@ -291,7 +371,7 @@ impl ImageStore {
       let image = match bytes {
         Some(bytes) => {
           executor
-            .spawn(async move { decode_with(&bytes, size, effects) })
+            .spawn(async move { decode_scaled(&bytes, scale, effects) })
             .await
         }
         None => None,
@@ -338,6 +418,15 @@ impl ImageStore {
   }
 }
 
+/// The store's key of `url` with `effects`.
+fn effects_key(url: &str, effects: Effects) -> String {
+  if effects.is_none() {
+    url.to_owned()
+  } else {
+    format!("{url}#fx-{:?}-{:?}", effects.turn, effects.tint)
+  }
+}
+
 fn image_bytes(image: &RenderImage) -> usize {
   (0..image.frame_count())
     .map(|frame| {
@@ -369,11 +458,22 @@ pub fn decode_with(
   size: Option<(u32, u32)>,
   effects: Effects,
 ) -> Option<Arc<RenderImage>> {
-  let resize = |buffer: image::RgbaImage| match size {
-    Some((w, h)) => image::DynamicImage::ImageRgba8(buffer)
+  decode_scaled(bytes, size.into(), effects)
+}
+
+/// [`decode_with`], scaled as `scale` says.
+fn decode_scaled(bytes: &[u8], scale: Scale, effects: Effects) -> Option<Arc<RenderImage>> {
+  // The box is the image as drawn, after a quarter turn.
+  let scale = match (scale, effects.turn) {
+    (Scale::Fit(fit, w, h), Turn::Left | Turn::Right) => Scale::Fit(fit, h, w),
+    (scale, _) => scale,
+  };
+  let resize = |buffer: image::RgbaImage| match scale {
+    Scale::None => buffer,
+    Scale::Fill(w, h) => image::DynamicImage::ImageRgba8(buffer)
       .resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3)
       .into_rgba8(),
-    None => buffer,
+    Scale::Fit(fit, w, h) => shrink(buffer, fit, w, h),
   };
   // Each frame with its delay and its start (milliseconds, for the party's hue); `None` for a
   // still image.
@@ -417,6 +517,40 @@ pub fn decode_with(
     })
     .collect();
   Some(Arc::new(RenderImage::new(frames)))
+}
+
+/// `buffer` shrunk to the `width`×`height` box as `fit` says, keeping its ratio; as it is when
+/// it is not larger. Filtered with premultiplied alpha, so that the color of transparent pixels
+/// (often black) does not bleed into an emote's or a logo's edges.
+fn shrink(buffer: image::RgbaImage, fit: Fit, width: u32, height: u32) -> image::RgbaImage {
+  let (w, h) = buffer.dimensions();
+  if w == 0 || h == 0 {
+    return buffer;
+  }
+  let (sx, sy) = (width as f32 / w as f32, height as f32 / h as f32);
+  let s = match fit {
+    Fit::Cover => sx.max(sy),
+    Fit::Contain => sx.min(sy),
+  };
+  if s >= 1. {
+    return buffer;
+  }
+  let size = |n: u32| ((n as f32 * s).ceil() as u32).clamp(1, n);
+  let (nw, nh) = (size(w), size(h));
+  let filter = image::imageops::FilterType::Lanczos3;
+  if buffer.pixels().all(|px| px[3] == 255) {
+    return image::imageops::resize(&buffer, nw, nh, filter);
+  }
+  let premultiplied = image::Rgba32FImage::from_fn(w, h, |x, y| {
+    let [r, g, b, a] = buffer.get_pixel(x, y).0.map(|c| f32::from(c) / 255.);
+    image::Rgba([r * a, g * a, b * a, a])
+  });
+  let shrunk = image::imageops::resize(&premultiplied, nw, nh, filter);
+  image::RgbaImage::from_fn(nw, nh, |x, y| {
+    let [r, g, b, a] = shrunk.get_pixel(x, y).0.map(|c| c.clamp(0., 1.));
+    let straight = |c: f32| if a > 0. { (c / a).min(1.) } else { 0. };
+    image::Rgba([straight(r), straight(g), straight(b), a].map(|c| (c * 255.).round() as u8))
+  })
 }
 
 fn delay_ms(delay: image::Delay) -> u32 {
@@ -732,6 +866,47 @@ mod tests {
     let party = with(Turn::None, Tint::Party);
     assert_eq!(party.frame_count(), PARTY_FRAMES as usize);
     assert_ne!(party.as_bytes(0), party.as_bytes(PARTY_FRAMES as usize / 2));
+  }
+
+  #[test]
+  fn buckets_round_up_by_about_a_sixteenth() {
+    assert_eq!(bucket(0), 8);
+    assert_eq!(bucket(40), 40);
+    assert_eq!(bucket(41), 48);
+    assert_eq!(bucket(168), 176);
+    assert_eq!(bucket(1000), 1024);
+    assert!((1..4000).all(|n| bucket(n) >= n && bucket(n) <= n + n / 8 + 8));
+  }
+
+  #[test]
+  fn fits_shrink_keeping_the_ratio_and_never_enlarge() {
+    let wide = image::RgbaImage::from_pixel(400, 100, image::Rgba([10, 20, 30, 255]));
+    let cover = shrink(wide.clone(), Fit::Cover, 100, 100);
+    assert_eq!(cover.dimensions(), (400, 100));
+    let cover = shrink(wide.clone(), Fit::Cover, 100, 50);
+    assert_eq!(cover.dimensions(), (200, 50));
+    let contain = shrink(wide.clone(), Fit::Contain, 100, 100);
+    assert_eq!(contain.dimensions(), (100, 25));
+    assert_eq!(
+      shrink(wide, Fit::Contain, 800, 800).dimensions(),
+      (400, 100)
+    );
+  }
+
+  #[test]
+  fn transparent_pixels_do_not_darken_the_edges() {
+    // White on the left, transparent black on the right.
+    let half = image::RgbaImage::from_fn(64, 8, |x, _| {
+      image::Rgba(if x < 32 {
+        [255, 255, 255, 255]
+      } else {
+        [0, 0, 0, 0]
+      })
+    });
+    let shrunk = shrink(half, Fit::Contain, 16, 2);
+    for px in shrunk.pixels().filter(|px| px[3] > 8) {
+      assert!(px[0] > 240, "{px:?}");
+    }
   }
 
   #[test]

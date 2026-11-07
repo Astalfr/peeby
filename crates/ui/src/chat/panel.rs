@@ -28,7 +28,7 @@ use super::{
 };
 use crate::assets::Icon;
 use crate::i18n::t;
-use crate::images::{Effects, Images, Turn};
+use crate::images::{Effects, Fit, Images, Turn};
 use crate::picture::Picture;
 use crate::{tf, theme};
 
@@ -128,8 +128,8 @@ fn emote_image(render: Arc<RenderImage>, fill: bool, shake: bool) -> gpui::Canva
   )
 }
 
-/// The image of `picture` with `effects`, its file picked for `width`×`height` logical pixels;
-/// `None` while it loads.
+/// The image of `picture` with `effects`, its file picked for `width`×`height` logical pixels
+/// and shrunk to fit them; `None` while it loads.
 fn store_image(
   images: Option<&Images>,
   picture: &Picture,
@@ -138,13 +138,14 @@ fn store_image(
   scale: f32,
   cx: &mut App,
 ) -> Option<Arc<RenderImage>> {
-  let url = picture.url(
+  let (width, height) = (
     (width * scale).round() as u32,
     (height * scale).round() as u32,
-  )?;
-  images?
-    .0
-    .update(cx, |store, cx| store.get_with(&url, effects, cx))
+  );
+  let url = picture.url(width, height)?;
+  images?.0.update(cx, |store, cx| {
+    store.get_fit(&url, effects, Fit::Contain, width, height, cx)
+  })
 }
 
 /// An emote and the overlays drawn on it, `height` high and centered on the widest, each with

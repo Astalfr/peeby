@@ -7,7 +7,7 @@ use std::rc::Rc;
 use gpui::prelude::*;
 use gpui::{AnyElement, App, ImageSource, ObjectFit, Pixels, SharedString, Window, div, img};
 
-use crate::images::Images;
+use crate::images::{Effects, Fit, Images};
 use crate::{motion, theme};
 
 /// One size of an image.
@@ -93,7 +93,9 @@ pub fn image_fill(
   ) else {
     return base.into_any_element();
   };
-  let ready = images.0.update(cx, |store, cx| store.get(&url, cx));
+  let ready = images.0.update(cx, |store, cx| {
+    store.get_fit(&url, Effects::default(), Fit::Cover, pixels, height, cx)
+  });
   let opacity = motion::tween(
     SharedString::from(format!("fade-{url}")),
     0.,
@@ -134,11 +136,14 @@ pub fn logo(
 ) -> Option<AnyElement> {
   let images = cx.try_global::<Images>().cloned()?;
   let scale = window.scale_factor();
-  let url = picture.url(
+  let (width, height) = (
     (max_width * scale).round() as u32,
     (max_height * scale).round() as u32,
-  )?;
-  let render = images.0.update(cx, |store, cx| store.get(&url, cx))?;
+  );
+  let url = picture.url(width, height)?;
+  let render = images.0.update(cx, |store, cx| {
+    store.get_fit(&url, Effects::default(), Fit::Contain, width, height, cx)
+  })?;
   let size = render.size(0);
   let (w, h) = (size.width.0 as f32 / scale, size.height.0 as f32 / scale);
   let fit = (max_width / w.max(1.)).min(max_height / h.max(1.)).min(1.);
