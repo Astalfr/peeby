@@ -258,7 +258,13 @@ pub(super) fn open_with(
 ) -> Option<AnyWindowHandle> {
   if let Some(spare) = take_spare(cx) {
     let reused = spare.handle.update(cx, |_, window, cx| {
-      ui::set_window_bounds(window, cx, bounds);
+      place(
+        spare.handle.window_id(),
+        bounds,
+        window.scale_factor(),
+        true,
+        cx,
+      );
       if let Some(hwnd) = spare.hwnd {
         if focus {
           desktop::sys::show(hwnd);
@@ -310,6 +316,23 @@ pub(super) fn open_with(
   }
 }
 
+/// Places window `id`'s client area (what GPUI's bounds measure) at `bounds` (logical pixels,
+/// the screen's coordinates, at that window's `scale`), or only moves it there without `resize`.
+/// As a task: `SetWindowPos` sends its messages at once (see `desktop::sys::set_client_bounds`).
+/// GPUI's own move (`ui::set_window_bounds`) places the whole window, its frame included, which
+/// would shrink or move a framed window by its borders at each call.
+pub(super) fn place(id: WindowId, bounds: Bounds<Pixels>, scale: f32, resize: bool, cx: &App) {
+  let Some(hwnd) = get(id, cx).and_then(|w| w.hwnd) else {
+    return;
+  };
+  let device = |v: Pixels| (f32::from(v) * scale).round() as i32;
+  let origin = (device(bounds.origin.x), device(bounds.origin.y));
+  let size = resize.then(|| (device(bounds.size.width), device(bounds.size.height)));
+  cx.foreground_executor()
+    .spawn(async move { desktop::sys::set_client_bounds(hwnd, origin, size) })
+    .detach();
+}
+
 /// A tab torn out and still held: it opens in a window of its own at `bounds` (a spare one if
 /// there is), raised without the focus, which takes the drag and the mouse's capture from the
 /// window it left. `false` when no window could open.
@@ -327,7 +350,9 @@ pub(super) fn tear(
   if let Some(target) = get(handle.window_id(), cx) {
     target
       .shell
-      .update(cx, |shell, cx| shell.take_drag(drag, screen, cx))
+      .update(cx, |shell, cx| {
+        shell.take_drag(drag, screen, Some(bounds.origin), cx)
+      })
       .ok();
     if let Some(hwnd) = target.hwnd {
       desktop::sys::capture(hwnd);
@@ -351,7 +376,7 @@ pub(super) fn hand_over(
     .shell
     .update(cx, |shell, cx| {
       shell.adopt_tab(tab, index, cx);
-      shell.take_drag(drag, screen, cx);
+      shell.take_drag(drag, screen, None, cx);
     })
     .ok();
   if let Some(hwnd) = target.hwnd {

@@ -111,6 +111,13 @@ five steps, each one shippable:
      the top without being activated (`desktop::sys::raise`, `SetWindowPos(HWND_TOP,
      SWP_NOACTIVATE)`; else Windows leaves it under the active window). A window opened from the
      tab's menu is raised and activated at once.
+   - Windows are placed by their client area (`windows::place`, `desktop::sys::set_client_bounds`):
+     GPUI's bounds are the client area's, while `SetWindowPos`, behind `ui::set_window_bounds`,
+     places the whole window with its invisible resize borders, so a framed window moved with it
+     shrank and shifted at each move. The difference is measured (`GetWindowRect`,
+     `GetClientRect`, `ClientToScreen`) and added back; a carried window is only moved, its size
+     kept. A torn-out window is carried from the corner it is being placed at, not from its own
+     bounds, which a spare placed by a task may not have updated yet.
    - The handovers are deferred: `SetCapture` tells the window losing it at once, and a window
      hides, neither from inside its own event.
    - A maximized window is not carried: its only tab detaches as a copy over the window, and can

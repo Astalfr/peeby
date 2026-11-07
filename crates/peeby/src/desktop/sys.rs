@@ -10,9 +10,10 @@ use std::time::Duration;
 
 use windows::Win32::Foundation::{
   E_INVALIDARG, ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, HWND, LocalFree, POINT,
+  RECT,
 };
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
-use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+use windows::Win32::Graphics::Gdi::{ClientToScreen, MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
 use windows::Win32::Security::Cryptography::{
   CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
@@ -24,8 +25,9 @@ use windows::Win32::System::Pipes::{
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-  HWND_TOP, IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE,
-  SWP_NOSIZE, SetWindowPos, ShowWindow,
+  GetClientRect, GetWindowRect, HWND_TOP, IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW,
+  SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
+  ShowWindow,
 };
 use windows::core::{HSTRING, PCWSTR};
 
@@ -74,6 +76,50 @@ pub fn capture(hwnd: isize) {
   // thread); a value that is no longer a window only fails.
   unsafe {
     let _ = SetCapture(HWND(hwnd as *mut _));
+  }
+}
+
+/// Places the client area of the window `hwnd` (physical pixels, the screen's coordinates) at
+/// `origin`, and sizes it to `size` when given, without activating it or changing its depth.
+/// GPUI's window bounds are its client area's (`WM_MOVE`, `WM_SIZE`), while `SetWindowPos` places
+/// the whole window, with its frame and the invisible borders it resizes by: the difference is
+/// measured from the window now and added back.
+///
+/// Sends `WM_MOVE` (and `WM_SIZE`) at once: never call it from inside an update of the app (an
+/// event, `cx.defer`), whose handlers would find the app borrowed; run it as a task.
+pub fn set_client_bounds(hwnd: isize, origin: (i32, i32), size: Option<(i32, i32)>) {
+  let hwnd = HWND(hwnd as *mut _);
+  let (mut outer, mut inner, mut corner) = (RECT::default(), RECT::default(), POINT::default());
+  // SAFETY: the three calls only read the window's rectangles into the locals they are given;
+  // an `hwnd` that is no longer a window makes them fail, and nothing is moved then.
+  let measured = unsafe {
+    GetWindowRect(hwnd, &mut outer).is_ok()
+      && GetClientRect(hwnd, &mut inner).is_ok()
+      && ClientToScreen(hwnd, &mut corner).as_bool()
+  };
+  if !measured {
+    return;
+  }
+  let (left, top) = (corner.x - outer.left, corner.y - outer.top);
+  let extra = (
+    (outer.right - outer.left) - (inner.right - inner.left),
+    (outer.bottom - outer.top) - (inner.bottom - inner.top),
+  );
+  let (width, height, flags) = match size {
+    Some((w, h)) => (w + extra.0, h + extra.1, SWP_NOZORDER | SWP_NOACTIVATE),
+    None => (0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE),
+  };
+  // SAFETY: as in `hide`, any value is accepted; the flags keep its depth and activation.
+  unsafe {
+    let _ = SetWindowPos(
+      hwnd,
+      None,
+      origin.0 - left,
+      origin.1 - top,
+      width,
+      height,
+      flags,
+    );
   }
 }
 

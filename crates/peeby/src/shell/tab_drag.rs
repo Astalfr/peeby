@@ -126,15 +126,24 @@ impl Shell {
   }
 
   /// The drag of a tab this window just took (torn out into it, or slid into its bar), with the
-  /// pointer at `screen`: it goes on here, the mouse captured by this window.
-  pub(super) fn take_drag(&mut self, drag: TabDrag, screen: Point<Pixels>, cx: &mut Context<Self>) {
+  /// pointer at `screen`: it goes on here, the mouse captured by this window. Torn out, `corner`
+  /// is where its window is being placed (the client area's top left corner): it carries the
+  /// window from there, since the window's own bounds may not have caught up with the move yet
+  /// (a spare is placed by a task), which would offset the tab from the pointer for the whole drag.
+  pub(super) fn take_drag(
+    &mut self,
+    drag: TabDrag,
+    screen: Point<Pixels>,
+    corner: Option<Point<Pixels>>,
+    cx: &mut Context<Self>,
+  ) {
     let at = screen - self.tab_layout.origin.get();
     self.tab_drag = Some(TabDrag {
       from: at,
       at,
       moving: true,
       detached: false,
-      carry: None,
+      carry: corner.map(|corner| (screen, corner)),
       ..drag
     });
     self.reorder_dragged(cx);
@@ -190,10 +199,13 @@ impl Shell {
     let screen = bounds.origin + position;
     let (from, corner) = *drag.carry.get_or_insert((screen, bounds.origin));
     let drag = *drag;
-    ui::set_window_bounds(
-      window,
-      cx,
+    // Moved only: its size stays as it is.
+    windows::place(
+      self.window,
       Bounds::new(corner + (screen - from), bounds.size),
+      window.scale_factor(),
+      false,
+      cx,
     );
     // Over another window's bar: the tab slides into it, still held, and this window hides.
     let Some((target, index)) = windows::bar_at(screen, &[self.window], px(JOIN), cx) else {
