@@ -39,7 +39,9 @@ const MODES_DELAY: Duration = Duration::from_millis(200);
 const IMAGE_PAINTS: usize = 512;
 /// Size of a badge, logical pixels.
 const BADGE_SIZE: f32 = 18.;
-/// Hover time before an emote's preview shows.
+/// Size of a badge in its preview, logical pixels (Twitch's 4x).
+const BADGE_PREVIEW_SIZE: f32 = 72.;
+/// Hover time before an emote's or a badge's preview shows.
 const PREVIEW_DELAY: Duration = Duration::from_millis(300);
 /// Height of an emote in its preview, logical pixels (Twitch's 3.0 size, 7TV's 4x).
 const PREVIEW_HEIGHT: f32 = 112.;
@@ -228,6 +230,36 @@ fn emote_preview(layers: &[Emote], window: &mut Window, cx: &mut App) -> gpui::D
         ),
       )
     })
+}
+
+/// A badge's preview on hover, as on Twitch: it at [`BADGE_PREVIEW_SIZE`] above its title.
+fn badge_preview(badge: &Badge, window: &mut Window, cx: &mut App) -> gpui::Div {
+  let scale = window.scale_factor();
+  let images = cx.try_global::<Images>().cloned();
+  let size = BADGE_PREVIEW_SIZE;
+  let render = store_image(
+    images.as_ref(),
+    &badge.picture,
+    Effects::default(),
+    (size, size),
+    scale,
+    cx,
+  );
+  v_flex()
+    .items_center()
+    .gap_2()
+    .p_1()
+    .child(
+      div()
+        .size(px(size))
+        .children(render.map(|render| img(ImageSource::Render(render)).size(px(size)))),
+    )
+    .child(
+      div()
+        .text_sm()
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(badge.title.clone()),
+    )
 }
 
 /// Time since the first animated emote: copies of an emote play in step, as on Twitch.
@@ -594,11 +626,23 @@ impl ChatPanel {
     if let Some(author) = &message.author {
       let style = self.styles.get(&author.id);
       let extra = style.and_then(|s| s.badge.as_ref());
-      for Badge { picture, .. } in author.badges.iter().chain(extra) {
+      let badges_id: SharedString = format!("{}:badges", message.id).into();
+      for (at, badge) in author.badges.iter().chain(extra).enumerate() {
+        let drawn = div().size(px(BADGE_SIZE)).children(
+          image(&badge.picture, Effects::default(), BADGE_SIZE, BADGE_SIZE)
+            .map(|render| img(ImageSource::Render(render)).size(px(BADGE_SIZE))),
+        );
+        let badge = badge.clone();
         line = line.child(
-          div().size(px(BADGE_SIZE)).flex_none().mr_1().children(
-            image(picture, Effects::default(), BADGE_SIZE, BADGE_SIZE)
-              .map(|render| img(ImageSource::Render(render)).size(px(BADGE_SIZE))),
+          div().flex_none().mr_1().child(
+            HoverCard::new(ElementId::NamedInteger(badges_id.clone(), at as u64))
+              .anchor(Anchor::BottomCenter)
+              .bg(theme::surface().opacity(0.8))
+              .open_delay(PREVIEW_DELAY)
+              .close_delay(Duration::ZERO)
+              .trigger_style(StyleRefinement::default().flex_none())
+              .trigger(drawn)
+              .content(move |_, window, cx| badge_preview(&badge, window, cx)),
           ),
         );
       }

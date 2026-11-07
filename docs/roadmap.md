@@ -123,6 +123,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Badge hover (2026-11-07, the user's request): a hovered chat badge (Twitch's, 7TV's) opens a
+  hover card with it at 72 px (Twitch's 4x) above its title, as on twitch.tv, with the emotes'
+  delay. Lint passes. **Not verified:** the hover in the app.
 - 7TV paints and badges (2026-11-07, the user's request, [ADR 0031](decisions/0031-seventv-cosmetics.md)):
   the chat's EventAPI connection also follows the channel's `cosmetic.*` and `entitlement.*`. A
   chatter's gradient paint colors each letter of their name (image paints: each letter the
