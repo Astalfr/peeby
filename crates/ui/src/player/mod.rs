@@ -28,8 +28,8 @@ use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, ClickEvent, Context, Corners, DispatchPhase,
   Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent, KeyUpEvent,
   MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
-  SharedString, Task, WeakEntity, Window, canvas, div, ease_out_quint, img, linear_color_stop,
-  linear_gradient, px, relative,
+  SharedString, Task, WeakEntity, Window, WindowId, canvas, div, ease_out_quint, img,
+  linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::tooltip::Tooltip;
@@ -138,16 +138,28 @@ pub enum PlayerEvent {
   Close,
 }
 
-/// The player that started last, as a global the shell observes (its mini-player shows only
-/// that one).
+/// The player that started last in each window, as a global the shells observe (a window's
+/// mini-player shows only its window's). One sound at a time per window: videos in different
+/// windows play together.
 #[derive(Default)]
-pub struct NowPlaying(Option<WeakEntity<PlayerView>>);
+pub struct NowPlaying(Vec<(Option<WindowId>, WeakEntity<PlayerView>)>);
 
 impl Global for NowPlaying {}
 
-/// The player that started last, while it exists.
-pub fn now_playing(cx: &App) -> Option<Entity<PlayerView>> {
-  cx.try_global::<NowPlaying>()?.0.as_ref()?.upgrade()
+/// The player that started last in `window` (the window its page shows in), while it exists.
+pub fn now_playing(window: WindowId, cx: &App) -> Option<Entity<PlayerView>> {
+  cx.try_global::<NowPlaying>()?
+    .0
+    .iter()
+    .find(|(w, _)| *w == Some(window))?
+    .1
+    .upgrade()
+}
+
+/// `player` is the one that started last in its window.
+pub fn is_now_playing(player: &Entity<PlayerView>, cx: &App) -> bool {
+  cx.try_global::<NowPlaying>()
+    .is_some_and(|playing| playing.0.iter().any(|(_, p)| p == &player.downgrade()))
 }
 
 /// A player's picture-in-picture button (or I): the shell showing its page opens the
@@ -269,6 +281,9 @@ pub struct PlayerView {
   layout: Layout,
   /// The mini-player shows the picture (picture-in-picture): the page shows a placeholder.
   in_pip: bool,
+  /// The window the page shows in, from the last render (the mini-player draws only the
+  /// picture, never this view): its other players pause when this one starts.
+  window: Option<WindowId>,
   /// Second line of the title (episode, year), shown in the full-window layout.
   subtitle: SharedString,
   /// mpv's tracks of the playing file.
@@ -437,6 +452,7 @@ impl PlayerView {
       time_shown: true,
       layout: Layout::Embedded,
       in_pip: false,
+      window: None,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
       subtitle_delay: 0.0,
@@ -1034,15 +1050,44 @@ impl PlayerView {
     self.with_player(|p| p.set_paused(true));
   }
 
-  /// Becomes the player that plays, pausing the previous one: one sound at a time.
+  /// Becomes the player that plays in its window, pausing the one that played there before: one
+  /// sound at a time per window, other windows' videos play on.
   fn take_over(&self, cx: &mut Context<Self>) {
-    let me = cx.entity();
-    if let Some(previous) = now_playing(cx)
-      && previous != me
-    {
-      previous.read(cx).pause();
+    let me = cx.entity().downgrade();
+    let mut playing = cx
+      .try_global::<NowPlaying>()
+      .map(|p| p.0.clone())
+      .unwrap_or_default();
+    playing.retain(|(window, player)| {
+      if *player == me {
+        return false;
+      }
+      if *window != self.window {
+        return player.upgrade().is_some();
+      }
+      if let Some(previous) = player.upgrade() {
+        previous.read(cx).pause();
+      }
+      false
+    });
+    playing.push((self.window, me));
+    cx.set_global(NowPlaying(playing));
+  }
+
+  /// The page now shows in another window (its tab was dragged there): playing, it takes over
+  /// that window; paused, it only leaves the previous one's place.
+  fn moved_window(&mut self, cx: &mut Context<Self>) {
+    if !self.started {
+      return;
     }
-    cx.set_global(NowPlaying(Some(me.downgrade())));
+    if !self.paused {
+      self.take_over(cx);
+    } else if let Some(playing) = cx.try_global::<NowPlaying>() {
+      let me = cx.entity().downgrade();
+      let mut playing = playing.0.clone();
+      playing.retain(|(_, p)| *p != me);
+      cx.set_global(NowPlaying(playing));
+    }
   }
 
   /// Asks the page to close the player (full-window layout).
@@ -3021,6 +3066,18 @@ pub fn format_time(seconds: f64) -> String {
 
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let id = window.window_handle().window_id();
+    if self.window != Some(id) {
+      let moved = self.window.is_some();
+      self.window = Some(id);
+      // Deferred: setting the global wakes the shells, which update windows.
+      if moved {
+        let me = cx.weak_entity();
+        cx.defer(move |cx| {
+          me.update(cx, |this, cx| this.moved_window(cx)).ok();
+        });
+      }
+    }
     let show_ui = (self.controls_visible || self.failed) && self.player.is_some();
     // A page of its own fills the panel like theater mode.
     let radii = corner_radii(window, self.theater || self.layout == Layout::Page);

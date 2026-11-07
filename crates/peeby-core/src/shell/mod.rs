@@ -179,10 +179,11 @@ impl Shell {
         }
       }
     }));
-    // Another player started: the mini-player shows only the one that plays.
+    // Another player started in this window: the mini-player shows only the one that plays.
+    // Another window's player is its own.
     subscriptions.push(cx.observe_global::<NowPlaying>(|shell, cx| {
       let shown = shell.mini_player(cx);
-      if shown.is_some() && shown != now_playing(cx) {
+      if shown.is_some() && shown != now_playing(shell.window, cx) {
         shell.close_mini(cx);
       }
     }));

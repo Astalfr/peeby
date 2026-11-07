@@ -55,8 +55,9 @@ five steps, each one shippable:
      `Tabs::shown_in`; a tab shown in a window leaves the one it was in); `Tabs::shown` stays
      the tab shown last in any window, where a notification opens. YouTube's notification
      opens in its tab of the window used last, else its tab shown last. A tab nobody looks at
-     still builds nothing and never plays (ADR 0019); `minute-watched` already follows the
-     player that started last (`NowPlaying`), wherever it is.
+     still builds nothing and never plays (ADR 0019); `minute-watched` follows the
+     player that started last in each window (`NowPlaying`, one sound per window: videos in
+     different windows play together).
    - **A window is never destroyed while Peeby runs.** Closed while another is open, its tabs
      close (their pages and videos), as a browser's do, and it hides as a spare that the next
      new window reuses. A page keeps what it was built with: subscriptions through its window

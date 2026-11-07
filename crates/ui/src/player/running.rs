@@ -40,7 +40,7 @@ pub struct RunningPlayer {
   pub title: SharedString,
   /// Where it stands with its page.
   pub owner: Owner,
-  /// It is the player that started last (the mini-player's).
+  /// It is the player that started last in its window (that window's mini-player's).
   pub now_playing: bool,
   /// Time since it started.
   pub age: Duration,
@@ -74,7 +74,6 @@ pub fn running(cx: &App) -> Vec<RunningPlayer> {
   let Some(running) = cx.try_global::<Running>() else {
     return Vec::new();
   };
-  let now_playing = super::now_playing(cx).map(|v| v.entity_id());
   running
     .0
     .iter()
@@ -95,8 +94,7 @@ pub fn running(cx: &App) -> Vec<RunningPlayer> {
       Some(RunningPlayer {
         title,
         owner,
-        now_playing: owner == Owner::Page
-          && view.is_some_and(|v| Some(v.entity_id()) == now_playing),
+        now_playing: owner == Owner::Page && view.is_some_and(|v| super::is_now_playing(&v, cx)),
         age: entry.started.elapsed(),
         position: number("time-pos"),
         duration: number("duration"),

@@ -76,8 +76,9 @@ web Client-ID and the user's auth-token (details in twitch.md, "Channel points")
 - **A watch-time report** (`twitch::spade`), as the web player sends it:
   - one `minute-watched` event after each minute of the live on the watch page, and only while mpv
     plays it (`core-idle` is `no`: neither paused nor buffering);
-  - one live at a time: only for the player that started last (`ui::player::now_playing`), never a
-    channel that is not on screen;
+  - one live at a time per window, as one per browser tab on twitch.tv: only for the player that
+    started last in its window (`ui::player::is_now_playing`), never a channel that is not on
+    screen (2026-11-07: lives in two windows each count; it was one for the whole app before);
   - it carries the channel id, the live's id and the viewer's id (read with the points), never logged;
   - the endpoint is `spade_url`, read once from twitch.tv's settings script.
 - Polling, not PubSub: one context request a minute and one predictions request every 20 s per open

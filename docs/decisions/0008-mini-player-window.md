@@ -26,8 +26,11 @@ an external D3D11 texture drawn by the patched GPUI.
   player's tab acts (deferred: the click comes from its own window). The button again, its "Revenir à la page"
   or its "×" closes it. Added 2026-11-07.
 - It holds no player: it asks its space for the current one at each render, so a queue moving to its next
-  video carries on in it. A `NowPlaying` global (in `ui::player`) keeps one sound at a time: a player that
-  starts pauses the previous one, and the mini-player closes if its player is no longer the one playing.
+  video carries on in it. A `NowPlaying` global (in `ui::player`) keeps one sound at a time per window: a player
+  that starts pauses the previous one of its window, and that window's mini-player closes if its player is no
+  longer the one playing there. Videos in different windows play together (2026-11-07; it was one sound for
+  the whole app before). A player's window is the one its page last rendered in; a playing page dragged to
+  another window takes over that window.
 - Dragging the video moves the window, and its edges and corners (invisible, 12 px; 24 px corners, logical
   pixels, scaled by the display's factor) resize it at 16:9, the opposite side staying in place (the middle,
   along the axis no edge holds). The window has no frame of its own, so the bands reach inward from its sides:

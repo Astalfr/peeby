@@ -870,11 +870,10 @@ impl PointsView {
     // Never for the fake channel: nobody watches a live there.
     let client = self.backend.twitch()?;
     let points = self.points.as_ref().filter(|_| !self.off)?;
-    // Only the player that started last (the one on screen or in the mini-player): one live at a
-    // time.
-    let current = ui::player::now_playing(cx).map(|p| p.entity_id());
+    // Only the player that started last in its window (the one on screen there or in its
+    // mini-player): one live at a time per window, as one per browser tab on twitch.tv.
     let playing = self.player.upgrade().is_some_and(|player| {
-      if current != Some(player.entity_id()) {
+      if !ui::player::is_now_playing(&player, cx) {
         return false;
       }
       let player = player.read(cx);
