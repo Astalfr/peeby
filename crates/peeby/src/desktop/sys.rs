@@ -24,7 +24,8 @@ use windows::Win32::System::Pipes::{
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
 use windows::Win32::UI::WindowsAndMessaging::{
-  IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, ShowWindow,
+  HWND_TOP, IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE,
+  SWP_NOSIZE, SetWindowPos, ShowWindow,
 };
 use windows::core::{HSTRING, PCWSTR};
 
@@ -63,6 +64,23 @@ pub fn show_inactive(hwnd: isize) {
   // SAFETY: as in `hide`, any value is accepted.
   unsafe {
     let _ = ShowWindow(HWND(hwnd as *mut _), SW_SHOWNOACTIVATE);
+  }
+}
+
+/// Puts the window `hwnd` above the others without activating it: a window shown without the
+/// focus stays under the active one otherwise (a tab torn out, under the window it came from).
+pub fn raise(hwnd: isize) {
+  // SAFETY: as in `hide`, any value is accepted; the flags keep its place, size and activation.
+  unsafe {
+    let _ = SetWindowPos(
+      HWND(hwnd as *mut _),
+      Some(HWND_TOP),
+      0,
+      0,
+      0,
+      0,
+      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+    );
   }
 }
 

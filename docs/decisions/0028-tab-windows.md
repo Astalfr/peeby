@@ -98,7 +98,10 @@ five steps, each one shippable:
    window moves with the pointer until the release (`ui::set_window_bounds`, as the
    mini-player moves). It opens without the focus (`focus: false`, a spare shown with
    `SW_SHOWNOACTIVATE`): activating it could take the mouse's capture from the window the drag
-   started in, which goes on receiving the moves and the release. Released over a bar (the
+   started in, which goes on receiving the moves and the release. Shown so, Windows leaves it
+   under the active window: it is raised to the top without being activated
+   (`desktop::sys::raise`, `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)`), and raised and activated at
+   the release. A window opened from the tab's menu is raised and activated at once. Released over a bar (the
    source window's too, not its own), the tab leaves its window, which is put aside, and joins
    that bar; elsewhere, its window comes to the front where it is. A window's only tab carries
    its window instead, as in Chrome: from the first move, the window follows the pointer (its

@@ -276,6 +276,9 @@ pub(super) fn open_with(
       tracing::warn!("cannot reuse a window: {e:#}");
       return None;
     }
+    if !focus && let Some(hwnd) = spare.hwnd {
+      desktop::sys::raise(hwnd);
+    }
     return Some(spare.handle);
   }
   let spaces = cx.try_global::<Spaces>().map(|s| s.0.clone())?;
@@ -287,7 +290,17 @@ pub(super) fn open_with(
     cx.new(|cx| Root::new(shell, window, cx))
   });
   match opened {
-    Ok(handle) => Some(handle.into()),
+    Ok(handle) => {
+      let handle: AnyWindowHandle = handle.into();
+      if focus {
+        // In front with the focus, whatever window the click that opened it was in.
+        self::focus(handle, cx);
+      } else if let Some(hwnd) = get(handle.window_id(), cx).and_then(|w| w.hwnd) {
+        // Shown without the focus, it would stay under the window the drag started in.
+        desktop::sys::raise(hwnd);
+      }
+      Some(handle)
+    }
     Err(e) => {
       tracing::error!("cannot open a window: {e:#}");
       None
@@ -306,6 +319,9 @@ pub(super) fn move_to(handle: AnyWindowHandle, bounds: Bounds<Pixels>, cx: &mut 
 
 /// A torn-out tab was released: its window comes to the front and takes the focus.
 pub(super) fn focus(handle: AnyWindowHandle, cx: &mut App) {
+  if let Some(hwnd) = get(handle.window_id(), cx).and_then(|w| w.hwnd) {
+    desktop::sys::raise(hwnd);
+  }
   handle
     .update(cx, |_, window, _| window.activate_window())
     .ok();
