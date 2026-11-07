@@ -2932,7 +2932,7 @@ checksum = "e0f9dae92b9bc15baa6e530c90bdd4c689d3710bd4d18c3566deb1d6ae182daf"
 
 [[package]]
 name = "gpui-video"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-channel",
  "gpui-pre",
@@ -3504,7 +3504,7 @@ dependencies = [
 
 [[package]]
 name = "innertube"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "reqwest",
  "serde_json",
@@ -3627,7 +3627,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jellyfin-api"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "reqwest",
  "serde",
@@ -5154,7 +5154,7 @@ dependencies = [
 
 [[package]]
 name = "peeby"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "embed-resource",
  "gpui-component",
@@ -5174,7 +5174,7 @@ dependencies = [
 
 [[package]]
 name = "peeby-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -5349,7 +5349,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "player"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-channel",
  "libloading",
@@ -6812,7 +6812,7 @@ dependencies = [
 
 [[package]]
 name = "space-jellyfin"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "dirs 6.0.0",
  "gpui-component",
@@ -6829,7 +6829,7 @@ dependencies = [
 
 [[package]]
 name = "space-twitch"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "gpui-component",
  "gpui-pre",
@@ -6844,7 +6844,7 @@ dependencies = [
 
 [[package]]
 name = "space-youtube"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "dirs 6.0.0",
  "gpui-component",
@@ -6859,7 +6859,7 @@ dependencies = [
 
 [[package]]
 name = "spike-twitch-play"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-channel",
  "gpui-pre",
@@ -6874,7 +6874,7 @@ dependencies = [
 
 [[package]]
 name = "spike-yt-play"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-channel",
  "gpui-pre",
@@ -7800,7 +7800,7 @@ dependencies = [
 
 [[package]]
 name = "twitch"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -7832,7 +7832,7 @@ dependencies = [
 
 [[package]]
 name = "ui"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-channel",
  "blurhash",
