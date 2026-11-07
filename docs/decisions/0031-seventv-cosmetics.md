@@ -30,10 +30,12 @@ GPUI draws a glyph in one color: it has no `background-clip: text` and no text s
   by Twitch user id. A change goes to the panel as `ChatEvent::AuthorStyle`, which applies when
   drawing: lines already on screen take it too.
 - A gradient paint (linear or radial, repeating or not) colors each letter with the gradient's
-  color at the letter's middle. The letters are taken as equal cells. Image paints (about 30%)
-  show only their plain `color` when they give one, else the name keeps its Twitch color
-  (none of the 29 seen gave one: in practice they look like no paint).
-  Shadows are not drawn. Faint colors are raised to 60% opacity and made readable, as Twitch
+  color at the letter's middle. The letters are taken as equal cells. An image paint (about 30%;
+  none of the 29 seen gave a plain `color`) is stretched over the name, as the extension does
+  (`background-size: 100% 100%`, its `useCosmetics.ts` read on 2026-11-07): each letter takes the
+  average color of its slice of the image, weighted by opacity (`ui::chat::image_colors`), from
+  the image store's copy (its first frame for an animated one). Until it is loaded the name keeps
+  its Twitch color. Shadows are not drawn. Faint colors are raised to 60% opacity and made readable, as Twitch
   colors are.
 - The 7TV badge comes after the Twitch badges.
 - Personal emotes are left for later: entitlements of emote sets, and updates of sets no chat
@@ -45,5 +47,6 @@ GPUI draws a glyph in one color: it has no `background-clip: text` and no text s
   emotes.
 - A chatter who announced their presence before the chat opened has no paint until they
   announce it again (the extension does so often: about three times each in 3 minutes).
-- The look is close to 7TV's for gradients, not exact: no glow, no image through the letters.
+- The look is close to 7TV's, not exact: no glow, one color per letter (an image paint's
+  pattern inside a letter, and its animation, are lost).
 - Revisit for personal emotes, or if GPUI gains gradient text.

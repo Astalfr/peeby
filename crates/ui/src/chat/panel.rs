@@ -23,7 +23,7 @@ pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
   AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
-  name_color,
+  PaintFill, image_colors, name_color,
 };
 use crate::assets::Icon;
 use crate::i18n::t;
@@ -35,6 +35,8 @@ use crate::{tf, theme};
 pub const MAX_MESSAGES: usize = 500;
 /// Hover time before the room's modes show.
 const MODES_DELAY: Duration = Duration::from_millis(200);
+/// Image paints' letter colors kept ([`ChatPanel::image_paints`]).
+const IMAGE_PAINTS: usize = 512;
 /// Size of a badge, logical pixels.
 const BADGE_SIZE: f32 = 18.;
 /// Hover time before an emote's preview shows.
@@ -298,6 +300,8 @@ pub struct ChatPanel {
   loading: bool,
   /// Authors' looks by user id ([`ChatEvent::AuthorStyle`]).
   styles: HashMap<SharedString, AuthorStyle>,
+  /// The letters' colors of image paints, by URL and name length, once their image is loaded.
+  image_paints: HashMap<(SharedString, usize), Vec<gpui::Hsla>>,
   title: SharedString,
   /// The writing area, for a space that sends to its chat.
   composer: Option<composer::Composer>,
@@ -332,6 +336,7 @@ impl ChatPanel {
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
       loading: true,
       styles: HashMap::new(),
+      image_paints: HashMap::new(),
       title: t("Live chat", "Chat du live").into(),
       composer: None,
       pinned: None,
@@ -509,6 +514,39 @@ impl ChatPanel {
     cx.notify();
   }
 
+  /// The colors of the letters of `name`, by the paint of the author `id` wears; `None` without
+  /// one, and for an image paint until its image is loaded (the author's color meanwhile).
+  fn name_colors(
+    &mut self,
+    id: &SharedString,
+    name: &str,
+    images: Option<&Images>,
+    cx: &mut Context<Self>,
+  ) -> Option<Vec<gpui::Hsla>> {
+    let paint = self.styles.get(id)?.paint.as_ref()?;
+    let letters = name.chars().count();
+    let PaintFill::Image(url) = &paint.fill else {
+      return paint.colors(letters);
+    };
+    let key = (url.clone(), letters);
+    if let Some(colors) = self.image_paints.get(&key) {
+      return Some(colors.clone());
+    }
+    let image = images?.0.update(cx, |store, cx| store.get(url, cx))?;
+    let size = image.size(0);
+    let (width, height) = (
+      usize::try_from(size.width.0).ok()?,
+      usize::try_from(size.height.0).ok()?,
+    );
+    let colors = image_colors(image.as_bytes(0)?, width, height, letters);
+    // Names come and go: a bounded cache, emptied when full.
+    if self.image_paints.len() >= IMAGE_PAINTS {
+      self.image_paints.clear();
+    }
+    self.image_paints.insert(key, colors.clone());
+    Some(colors)
+  }
+
   fn render_message(
     &mut self,
     ix: usize,
@@ -528,11 +566,17 @@ impl ChatPanel {
       }
       _ => 1.,
     };
+    let images = cx.try_global::<Images>().cloned();
+    let colors = self
+      .messages
+      .get(ix)
+      .and_then(|m| m.author.as_ref())
+      .map(|a| (a.id.clone(), a.name.clone()))
+      .and_then(|(id, name)| self.name_colors(&id, &name, images.as_ref(), cx));
     let Some(message) = self.messages.get(ix) else {
       return div().into_any_element();
     };
     let scale = window.scale_factor();
-    let images = cx.try_global::<Images>().cloned();
     let mut image = |picture: &Picture, effects: Effects, width: f32, height: f32| {
       store_image(
         images.as_ref(),
@@ -563,10 +607,8 @@ impl ChatPanel {
         text_color = color;
       }
       let name: SharedString = author.name.clone();
-      let paint = style.and_then(|s| s.paint.as_ref());
       // Each letter in its paint's color; the colon after it in the author's own.
-      let painted = paint.map(|paint| {
-        let colors = paint.colors(name.chars().count());
+      let painted = colors.map(|colors| {
         let highlights: Vec<_> = name
           .char_indices()
           .zip(colors)

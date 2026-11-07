@@ -245,8 +245,10 @@ Two credentials, for different things. Both are secrets, under the same rules as
     entitlement other than the paint or badge in the user's `style` is ignored.
   - Peeby (`twitch::seventv::cosmetics`, `chat::watch_seventv`, `ui::chat::Paint`): each letter of
     the name in the gradient's color at its middle (letters as equal cells), the colon in the
-    author's color. Image paints show their `color` when they have one, else nothing (none of the 29 seen
-    had one). No
+    author's color. An image paint is stretched over the name (7TV's `background-size: 100% 100%`)
+    and each letter takes the average color of its slice, weighted by opacity
+    (`ui::chat::image_colors`; the first frame of an animated one; none of the 29 seen gave a plain
+    `color`), the author's color until the image is loaded. No
     shadows. The 7TV badge comes after Twitch's. The panel applies a look (`ChatEvent::AuthorStyle`)
     to every line of that user, the ones already shown included.
   - `EMOTE_SET` entitlements are personal emotes (flags 4, "Personal Emote Set") and event sets

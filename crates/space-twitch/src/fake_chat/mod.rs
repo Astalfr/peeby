@@ -509,7 +509,7 @@ impl FakeChatView {
 
 /// The fake channel's 7TV and BTTV emotes, a picker set big enough to scroll, and the badges.
 /// 7TV's cosmetics on some chatters, as `chat::watch_seventv` would give them: a linear paint, a
-/// repeating radial one, an image paint's plain color, and a 7TV badge.
+/// repeating radial one, an image paint, and a 7TV badge.
 fn seventv_looks() -> Vec<ChatEvent> {
   use ui::chat::{AuthorStyle, Badge, Paint, PaintFill};
   let paint = |fill, stops: &[(f32, u32)], repeat| Paint {
@@ -545,8 +545,16 @@ fn seventv_looks() -> Vec<ChatEvent> {
       )),
       None,
     ),
-    // Vip4: an image paint, drawn in its plain color.
-    style("1004", Some(Paint::solid(gpui::rgba(0x7FFF_D4FF))), None),
+    // Vip4: an image paint (a fake square, one color).
+    style(
+      "1004",
+      Some(Paint {
+        fill: PaintFill::Image(format!("{SCHEME}paint/vip4?w=64&h=16").into()),
+        stops: Vec::new(),
+        repeat: false,
+      }),
+      None,
+    ),
     // Modo_Trois: only the badge.
     style("1003", None, Some(badge)),
   ]

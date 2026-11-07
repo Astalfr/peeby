@@ -125,9 +125,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - 7TV paints and badges (2026-11-07, the user's request, [ADR 0031](decisions/0031-seventv-cosmetics.md)):
   the chat's EventAPI connection also follows the channel's `cosmetic.*` and `entitlement.*`. A
-  chatter's gradient paint colors each letter of their name (image paints: their plain color),
+  chatter's gradient paint colors each letter of their name (image paints: each letter the
+  average color of its slice of the image, stretched over the name, 2026-11-07, the user's request),
   their 7TV badge follows the Twitch ones, on their lines already shown too. The fake chat shows
-  four of them. `twitch::seventv::cosmetics`, `ui::chat::Paint`, the probe's `--cosmetics`. 11 new
+  four of them. `twitch::seventv::cosmetics`, `ui::chat::Paint`, the probe's `--cosmetics`. 12 new
   tests, 1 fixture (`seventv_cosmetics.jsonl`). Personal emotes are left for later.
   **Not verified:** in the app.
 - 7TV live updates (2026-11-07, the user's request, [ADR 0030](decisions/0030-seventv-event-api.md)): a live's

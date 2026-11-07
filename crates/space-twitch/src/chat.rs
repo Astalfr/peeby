@@ -434,13 +434,13 @@ fn push_styles(
   panel.update(cx, |p, cx| p.push(events, cx))
 }
 
-/// A 7TV paint as the panel draws it: its gradient, or for an image (which a name cannot show
-/// through its letters here) its plain color when it gives one.
+/// A 7TV paint as the panel draws it: its gradient, or its image (whose colors the panel takes
+/// letter by letter).
 fn name_paint(paint: &cosmetics::Paint) -> Option<ui::chat::Paint> {
   let fill = match &paint.fill {
     Fill::Linear(angle) => ui::chat::PaintFill::Linear(*angle),
     Fill::Radial { circle } => ui::chat::PaintFill::Radial { circle: *circle },
-    Fill::Image(_) => return paint.color.map(|c| ui::chat::Paint::solid(gpui::rgba(c))),
+    Fill::Image(url) => ui::chat::PaintFill::Image(url.clone().into()),
   };
   Some(ui::chat::Paint {
     fill,
