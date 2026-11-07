@@ -123,6 +123,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Chat user cards (2026-11-07, the user's request), YouTube and Twitch: a click on an author's name or
+  on a mention opens their card over the chat, with their picture, their name, their last messages in
+  this chat and a button opening their channel in a new tab (docs/design.md, `Chat panel`). Lint and tests
+  pass. **Not verified:** in the app (the card, a Twitch picture's lookup, a YouTube mention's search).
 - Badge hover (2026-11-07, the user's request): a hovered chat badge (Twitch's, 7TV's) opens a
   hover card with it at 72 px (Twitch's 4x) above its title, as on twitch.tv, with the emotes'
   delay. Lint passes. **Not verified:** the hover in the app.

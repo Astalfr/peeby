@@ -872,6 +872,8 @@ fn live_chat_page() {
   let first = messages[0];
   assert_eq!(first.author, "@viewer1");
   assert_eq!(first.author_id.as_deref(), Some("UCviewer1xxxxxxxxxxxxxxx"));
+  assert_eq!(first.author_photo.len(), 1);
+  assert!(first.author_photo[0].url.contains("ggpht.com"));
   assert_eq!(first.runs, [ChatRun::Text("Parkour!!!".into())]);
   assert_eq!(first.timestamp_usec, Some(1_793_563_401_559_297));
 

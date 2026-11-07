@@ -127,6 +127,8 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
       name: name.into(),
       color: colors[rng.below(colors.len())],
       badges,
+      avatar: None,
+      channel: None,
     }),
     fragments,
   );
@@ -216,6 +218,8 @@ fn main() {
             name: "me".into(),
             color: None,
             badges: Vec::new(),
+            avatar: None,
+            channel: None,
           };
           let echo = ChatMessage::new(format!("me-{text}"), Some(me), split_text(text));
           panel.update(cx, |p, cx| p.push([ChatEvent::Message(echo)], cx));

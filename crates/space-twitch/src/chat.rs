@@ -38,7 +38,8 @@ use twitch::seventv::events::{self, Topic};
 use twitch::{bttv, seventv};
 use ui::chat::{
   Author, AuthorStyle, Badge, ChatEvent, ChatMessage, ChatOption, ChatPanel, ChatPanelEvent,
-  Composing, EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, MessageKind, split_text,
+  Composing, EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, MessageKind, UserLookup, UserProfile,
+  UserQuery, split_text,
 };
 use ui::i18n::t;
 use ui::picture::Picture;
@@ -1131,6 +1132,47 @@ pub(super) fn writer_event(update: WriterUpdate) -> (Option<Composing>, Option<C
   }
 }
 
+/// How the chat's user cards find a user's picture (IRC has none) and someone mentioned who has
+/// not written: the catalog's user (anonymous GQL), by login, or by the name mentioned
+/// (`@name`, a login or a display name that differs from it only by case). Answers are kept
+/// for the panel's life.
+pub fn user_lookup(catalog: Catalog) -> UserLookup {
+  let found: Rc<RefCell<HashMap<String, Option<UserProfile>>>> = Rc::default();
+  Rc::new(move |query: UserQuery, cx: &mut App| {
+    let login = query
+      .channel
+      .as_deref()
+      .unwrap_or(&query.name)
+      .trim_start_matches('@')
+      .to_lowercase();
+    let found = found.clone();
+    if let Some(known) = found.borrow().get(&login).cloned() {
+      return cx.spawn(async move |_| known);
+    }
+    let catalog = catalog.clone();
+    let wanted = login.clone();
+    let fetch = runtime::spawn(cx, async move { catalog.user(&wanted).await });
+    cx.spawn(async move |_| {
+      let profile = match fetch.await? {
+        Ok(user) => Some(UserProfile {
+          name: user.display_name.into(),
+          avatar: (!user.profile_image_url.is_empty())
+            .then(|| crate::cards::template(&user.profile_image_url)),
+          channel: Some(user.login.into()),
+        }),
+        // Nobody by that name: kept, so that it is not asked again.
+        Err(twitch::Error::NotFound) => None,
+        Err(e) => {
+          tracing::debug!("chat user lookup: {e}");
+          return None;
+        }
+      };
+      found.borrow_mut().insert(login, profile.clone());
+      profile
+    })
+  })
+}
+
 /// A user's message, or a notice with `notice`'s text.
 pub(super) fn message(
   line: &ChatLine,
@@ -1162,6 +1204,9 @@ pub(super) fn message(
       .filter_map(|key| extras.badges.get(key))
       .map(badge_of)
       .collect(),
+    // IRC has no picture: the card asks the catalog for it ([`user_lookup`]).
+    avatar: None,
+    channel: (!line.login.is_empty()).then(|| line.login.clone().into()),
   };
   let mut message = ChatMessage::new(line.id.clone(), Some(author), fragments);
   message.kind = match notice {

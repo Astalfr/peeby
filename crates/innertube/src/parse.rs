@@ -325,6 +325,7 @@ fn parse_chat_message(r: &Value) -> Option<ChatMessage> {
     id,
     author: text(&r["authorName"]),
     author_id: r["authorExternalChannelId"].as_str().map(str::to_owned),
+    author_photo: thumbnails(&r["authorPhoto"]["thumbnails"]),
     badges,
     runs,
     timestamp_usec: r["timestampUsec"].as_str().and_then(|t| t.parse().ok()),

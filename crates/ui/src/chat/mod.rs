@@ -10,6 +10,7 @@ mod layout;
 mod paint;
 mod panel;
 mod pinned;
+mod user;
 
 use std::time::SystemTime;
 
@@ -21,6 +22,7 @@ pub use layout::{CHAT_WIDTH, watch_layout};
 pub use paint::{Paint, PaintFill, image_colors};
 pub use panel::{ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
 pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
+pub use user::{UserLookup, UserProfile, UserQuery, same_user};
 
 /// One line of the chat.
 #[derive(Clone)]
@@ -50,6 +52,11 @@ pub struct Author {
   pub color: Option<Hsla>,
   /// Shown before the name.
   pub badges: Vec<Badge>,
+  /// Their picture, for their card; the space's [`UserLookup`] finds it when `None`.
+  pub avatar: Option<Picture>,
+  /// What opens their channel ([`ChatPanelEvent::OpenChannel`]): the service's own key (a
+  /// Twitch login, a YouTube channel id); the space's [`UserLookup`] finds it when `None`.
+  pub channel: Option<SharedString>,
 }
 
 /// What a third party adds to an author's look, apart from the message (7TV's cosmetics): it
@@ -297,6 +304,8 @@ mod tests {
       name: name.to_owned().into(),
       color: None,
       badges: Vec::new(),
+      avatar: None,
+      channel: None,
     };
     assert_eq!(
       name_color(&author("viewer1")),

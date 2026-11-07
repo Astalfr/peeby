@@ -57,6 +57,14 @@ pub enum ChatPanelEvent {
   Send(String),
   /// The viewer chose this option of the gear's menu, by its [`ChatOption::id`].
   Option(SharedString),
+  /// The viewer asked for a user's channel in a new tab, from their card: its key
+  /// ([`crate::chat::Author::channel`]) and the user's name, for the tab until it loads.
+  OpenChannel {
+    /// The channel's key.
+    channel: SharedString,
+    /// The user's name.
+    name: SharedString,
+  },
 }
 
 /// An entry of the composer's options menu (the gear left of "Send"), in the menu's order.

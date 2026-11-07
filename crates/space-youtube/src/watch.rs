@@ -41,7 +41,7 @@ use peeby_core::settings::{Player, Settings};
 use peeby_core::shell::space::middle_click;
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
-use ui::chat::{ChatPanel, watch_layout};
+use ui::chat::{ChatPanel, ChatPanelEvent, watch_layout};
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
@@ -421,7 +421,23 @@ impl WatchView {
     if self.chat.is_some() {
       return;
     }
-    let panel = cx.new(ChatPanel::new);
+    let panel = cx.new(|cx| {
+      let mut panel = ChatPanel::new(cx);
+      panel.set_user_lookup(chat::user_lookup());
+      panel
+    });
+    // A user card's "Open channel": their channel in a new tab, the live going on.
+    let nav = self.nav.clone();
+    cx.subscribe(&panel, move |_, _, event: &ChatPanelEvent, cx| {
+      if let ChatPanelEvent::OpenChannel { channel, name } = event {
+        let route = Route::Channel {
+          id: channel.to_string(),
+          name: name.to_string(),
+        };
+        nav.open_in_new_tab(route, Some(name.clone()), cx);
+      }
+    })
+    .detach();
     let task = chat::start(self.client.clone(), continuation, &panel, cx);
     self.chat = Some((panel, task));
   }

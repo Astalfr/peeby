@@ -11,11 +11,20 @@
 //! take YouTube's colors instead (the owner's gold, moderators' blue). A member's badge is the
 //! channel's own image. Unicode emojis stay text; the channel's emojis are images.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui::{App, Entity, Hsla, SharedString, Task};
-use innertube::{ChatAction, ChatBadgeKind, ChatRun, Client};
-use ui::chat::{Author, Badge, ChatEvent, ChatMessage, ChatPanel, Emote, Fragment, split_text};
+use innertube::{ChatAction, ChatBadgeKind, ChatRun, Client, SearchResult};
+use peeby_core::settings::Settings;
+use ui::chat::{
+  Author, Badge, ChatEvent, ChatMessage, ChatPanel, Emote, Fragment, UserLookup, UserProfile,
+  UserQuery, same_user, split_text,
+};
+
+use crate::convert;
 use ui::i18n::t;
 use ui::picture::Picture;
 use ui::{runtime, tf};
@@ -163,6 +172,63 @@ async fn pace(
   true
 }
 
+/// How the chat's user cards find someone mentioned who has not written (an `@handle`): a
+/// search of the handle, anonymous so that it stays out of the account's search history, its
+/// channel whose handle it is. Answers are kept for the panel's life.
+pub fn user_lookup() -> UserLookup {
+  let found: Rc<RefCell<HashMap<String, Option<UserProfile>>>> = Rc::default();
+  Rc::new(move |query: UserQuery, cx: &mut App| {
+    let handle = format!("@{}", query.name.trim_start_matches('@'));
+    let key = handle.to_lowercase();
+    let found = found.clone();
+    if let Some(known) = found.borrow().get(&key).cloned() {
+      return cx.spawn(async move |_| known);
+    }
+    // The chat has their channel already (they wrote): nothing to find.
+    if query.channel.is_some() {
+      return cx.spawn(async move |_| None);
+    }
+    let (language, region) = {
+      let settings = Settings::get(cx);
+      (settings.language.clone(), settings.region.clone())
+    };
+    let wanted = handle.clone();
+    let search = runtime::spawn(cx, async move {
+      let client = Client::new(None, None, &language, &region)?;
+      let page = client.search(&wanted).await?;
+      Ok::<_, innertube::Error>(page.results.into_iter().find_map(|result| {
+        match result {
+          SearchResult::Channel(channel)
+            if channel
+              .handle
+              .as_deref()
+              .is_some_and(|h| same_user(h, &wanted)) =>
+          {
+            Some(channel)
+          }
+          _ => None,
+        }
+      }))
+    });
+    cx.spawn(async move |_| {
+      let channel = match search.await? {
+        Ok(channel) => channel,
+        Err(e) => {
+          tracing::debug!("chat user lookup: {e}");
+          return None;
+        }
+      };
+      let profile = channel.map(|channel| UserProfile {
+        name: channel.handle.unwrap_or(channel.name).into(),
+        avatar: (!channel.avatar.is_empty()).then(|| convert::picture(&channel.avatar)),
+        channel: Some(channel.id.into()),
+      });
+      found.borrow_mut().insert(key, profile.clone());
+      profile
+    })
+  })
+}
+
 /// A YouTube message as the panel's.
 fn chat_message(message: innertube::ChatMessage) -> ChatMessage {
   let color = message.badges.iter().find_map(|b| match b.kind {
@@ -184,11 +250,14 @@ fn chat_message(message: innertube::ChatMessage) -> ChatMessage {
   let author = Author {
     id: message
       .author_id
+      .clone()
       .unwrap_or_else(|| message.author.clone())
       .into(),
     name: message.author.into(),
     color: color.map(|rgb| Hsla::from(gpui::rgb(rgb))),
     badges,
+    avatar: (!message.author_photo.is_empty()).then(|| convert::picture(&message.author_photo)),
+    channel: message.author_id.map(SharedString::from),
   };
   let mut fragments = Vec::new();
   for run in message.runs {

@@ -226,6 +226,8 @@ pub struct ChatMessage {
   pub author: String,
   /// The author's channel id (`UC…`).
   pub author_id: Option<String>,
+  /// The author's avatar sizes.
+  pub author_photo: Vec<Thumbnail>,
   /// The author's badges, in YouTube's order.
   pub badges: Vec<ChatBadge>,
   /// The text, as words and emojis.

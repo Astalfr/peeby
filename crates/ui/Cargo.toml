@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 async-channel = "2"
 blurhash = "0.2"
+# The local time of chat messages (user cards); the version the `twitch` crate already uses,
+# agreed with the user on 2026-11-07.
+chrono = "0.4.45"
 dirs = "6"
 gpui = { package = "gpui-pre", version = "=0.3.10" }
 gpui-component = "=0.8.1"

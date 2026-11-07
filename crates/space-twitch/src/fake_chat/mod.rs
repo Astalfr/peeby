@@ -171,6 +171,8 @@ impl FakeChatView {
     let send = cx.subscribe(&panel, |this, _, event: &ChatPanelEvent, cx| match event {
       ChatPanelEvent::Send(text) => this.send(text, cx),
       ChatPanelEvent::Option(id) => this.chose(id, cx),
+      // Its chatters are made up: no channel to open.
+      ChatPanelEvent::OpenChannel { .. } => {}
     });
     let now = Instant::now();
     let mut view = Self {

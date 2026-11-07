@@ -22,7 +22,7 @@ use twitch::catalog::Catalog;
 use twitch::gql::Channel;
 use twitch::usher::Codec;
 use twitch::{Proxy, Target};
-use ui::chat::{ChatPanel, watch_layout};
+use ui::chat::{ChatPanel, ChatPanelEvent, watch_layout};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
@@ -78,6 +78,20 @@ impl Header {
         .map(|url| Picture::sized(move |_, _| url.clone())),
     })
   }
+}
+
+/// Lets `panel`'s user cards find a user's picture in `catalog`, and open their channel in a
+/// new tab of `nav`'s, the live going on.
+fn user_cards(panel: &Entity<ChatPanel>, catalog: &Catalog, nav: &Nav, cx: &mut gpui::App) {
+  let lookup = chat::user_lookup(catalog.clone());
+  panel.update(cx, |panel, _| panel.set_user_lookup(lookup));
+  let nav = nav.clone();
+  cx.subscribe(panel, move |_, event: &ChatPanelEvent, cx| {
+    if let ChatPanelEvent::OpenChannel { channel, name } = event {
+      nav.open_in_new_tab(Route::Channel(channel.to_string()), Some(name.clone()), cx);
+    }
+  })
+  .detach();
 }
 
 pub struct WatchView {
@@ -203,6 +217,7 @@ impl WatchView {
     match view.kind.clone() {
       Kind::Live(login) => {
         let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
+        user_cards(&panel, &view.catalog, &view.nav, cx);
         let (reader, extras) = chat::start(
           &login,
           view.client.clone(),
@@ -255,6 +270,7 @@ impl WatchView {
       }
       Kind::Vod { id, start } => {
         let panel = cx.new(|cx| ChatPanel::new(cx).titled(t("Chat replay", "Rediffusion du chat")));
+        user_cards(&panel, &view.catalog, &view.nav, cx);
         view._tasks.push(replay::start(
           id.clone(),
           view.client.clone(),

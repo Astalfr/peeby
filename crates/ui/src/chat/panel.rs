@@ -3,6 +3,7 @@
 //! until "Resume scrolling", so that what is read does not move. With a composer, the viewer
 //! writes under it ([`composer`]).
 
+mod card;
 mod composer;
 
 use std::collections::{HashMap, VecDeque};
@@ -13,7 +14,7 @@ use gpui::prelude::*;
 use gpui::{
   Anchor, AnyElement, AnyView, App, Bounds, Context, Corners, ElementId, FollowMode, FontWeight,
   HighlightStyle, ImageSource, ListAlignment, ListState, ObjectFit, Pixels, RenderImage,
-  SharedString, StyleRefinement, StyledText, Window, canvas, div, img, list, px,
+  SharedString, StyleRefinement, StyledText, WeakEntity, Window, canvas, div, img, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
@@ -23,7 +24,7 @@ pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
   AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
-  PaintFill, image_colors, name_color,
+  PaintFill, UserLookup, UserQuery, image_colors, name_color,
 };
 use crate::assets::Icon;
 use crate::i18n::t;
@@ -339,6 +340,10 @@ pub struct ChatPanel {
   composer: Option<composer::Composer>,
   /// Drawn over the top of the messages: what the channel pins ([`super::pinned_stack`]).
   pinned: Option<AnyView>,
+  /// How the space finds what the chat does not tell about a user, for their card.
+  lookup: Option<UserLookup>,
+  /// The user card open over the messages ([`card`]).
+  card: Option<card::UserCard>,
 }
 
 impl gpui::EventEmitter<ChatPanelEvent> for ChatPanel {}
@@ -372,7 +377,15 @@ impl ChatPanel {
       title: t("Live chat", "Chat du live").into(),
       composer: None,
       pinned: None,
+      lookup: None,
+      card: None,
     }
+  }
+
+  /// Lets the user cards find what the chat does not tell (a picture, a channel, someone who
+  /// has not written) from the space's service.
+  pub fn set_user_lookup(&mut self, lookup: UserLookup) {
+    self.lookup = Some(lookup);
   }
 
   /// Draws `view` over the top of the messages, without moving them: its root is absolute
@@ -669,103 +682,41 @@ impl ChatPanel {
         StyledText::new(name.clone()).with_highlights(highlights)
       });
       let after = if action { " " } else { t(": ", " : ") };
-      line = line.child(div().font_weight(FontWeight::BOLD).text_color(color).child(
-        match painted {
-          Some(painted) => h_flex().child(painted).child(after).into_any_element(),
-          None => format!("{name}{after}").into_any_element(),
-        },
-      ));
+      // A click opens their card.
+      let query = UserQuery {
+        id: Some(author.id.clone()),
+        name: author.name.clone(),
+        channel: author.channel.clone(),
+      };
+      line = line.child(
+        div()
+          .id(SharedString::from(format!("{}:name", message.id)))
+          .font_weight(FontWeight::BOLD)
+          .text_color(color)
+          .cursor_pointer()
+          .hover(|s| s.underline())
+          .on_click(cx.listener(move |this, _, _, cx| this.toggle_card(query.clone(), cx)))
+          .child(match painted {
+            Some(painted) => h_flex().child(painted).child(after).into_any_element(),
+            None => format!("{name}{after}").into_any_element(),
+          }),
+      );
     }
     if message.deleted {
       text_color = theme::subtle();
     }
-    let fragments = &message.fragments;
-    let mut index = 0;
-    while index < fragments.len() {
-      match &fragments[index] {
-        Fragment::Text(text) => {
-          for word in text.split_inclusive(' ') {
-            line = line.child(
-              div()
-                .max_w_full()
-                .text_color(text_color)
-                .when(action, |el| el.italic())
-                .child(SharedString::from(word.to_owned())),
-            );
-          }
-        }
-        Fragment::Mention(name) => {
-          line = line.child(
-            div()
-              .font_weight(FontWeight::SEMIBOLD)
-              .text_color(if message.deleted {
-                theme::subtle()
-              } else {
-                theme::foreground()
-              })
-              .child(name.clone()),
-          );
-        }
-        Fragment::Link(url) => {
-          // Opened in the browser by a click; a deleted message's link stays inert.
-          let target = url.clone();
-          line = line.child(
-            div()
-              .id(ElementId::NamedInteger(message.id.clone(), index as u64))
-              .max_w_full()
-              .text_color(if message.deleted {
-                theme::subtle()
-              } else {
-                theme::accent_hover()
-              })
-              .underline()
-              .when(!message.deleted, |el| {
-                el.cursor_pointer()
-                  .hover(|s| s.text_color(theme::accent()))
-                  .on_click(move |_, _, cx| cx.open_url(&target))
-              })
-              .child(url.clone()),
-          );
-        }
-        Fragment::Emote(emote) => {
-          // The overlays that follow it (blank text between) are drawn on it.
-          let mut overlays = Vec::new();
-          let mut next = index + 1;
-          if !emote.overlay {
-            let mut look = next;
-            loop {
-              while matches!(fragments.get(look), Some(Fragment::Text(t)) if t.trim().is_empty()) {
-                look += 1;
-              }
-              match fragments.get(look) {
-                Some(Fragment::Emote(over)) if over.overlay => {
-                  overlays.push(over);
-                  look += 1;
-                  next = look;
-                }
-                _ => break,
-              }
-            }
-          }
-          let layers: Vec<Emote> = std::iter::once(emote).chain(overlays).cloned().collect();
-          let drawn = emote_stack(&layers, EMOTE_HEIGHT, &mut image)
-            .when(message.deleted, |el| el.opacity(0.35));
-          line = line.child(
-            HoverCard::new(ElementId::NamedInteger(message.id.clone(), index as u64))
-              .anchor(Anchor::BottomCenter)
-              .bg(theme::surface().opacity(0.8))
-              .open_delay(PREVIEW_DELAY)
-              .close_delay(Duration::ZERO)
-              .trigger_style(StyleRefinement::default().flex_none())
-              .trigger(drawn)
-              .content(move |_, window, cx| emote_preview(&layers, window, cx)),
-          );
-          index = next;
-          continue;
-        }
-      }
-      index += 1;
-    }
+    let panel = cx.entity().downgrade();
+    let mut image = |picture: &Picture, effects: Effects, width: f32, height: f32| {
+      store_image(
+        images.as_ref(),
+        picture,
+        effects,
+        (width, height),
+        scale,
+        cx,
+      )
+    };
+    let line = push_fragments(line, message, text_color, action, &panel, &mut image);
 
     let item = div()
       .w_full()
@@ -811,6 +762,123 @@ impl ChatPanel {
       MessageKind::Normal | MessageKind::Action => item.child(line).into_any_element(),
     }
   }
+}
+
+/// `line` with the fragments of `message` after it, in `text_color` (italic for an `action`):
+/// a mention opens its user's card in `panel`, a link the browser, an emote shows its preview
+/// on hover; `image` gives an emote's image with its effects, for a width and a height in
+/// logical pixels.
+fn push_fragments(
+  mut line: gpui::Div,
+  message: &ChatMessage,
+  text_color: gpui::Hsla,
+  action: bool,
+  panel: &WeakEntity<ChatPanel>,
+  image: &mut impl FnMut(&Picture, Effects, f32, f32) -> Option<Arc<RenderImage>>,
+) -> gpui::Div {
+  let fragments = &message.fragments;
+  let mut index = 0;
+  while index < fragments.len() {
+    match &fragments[index] {
+      Fragment::Text(text) => {
+        for word in text.split_inclusive(' ') {
+          line = line.child(
+            div()
+              .max_w_full()
+              .text_color(text_color)
+              .when(action, |el| el.italic())
+              .child(SharedString::from(word.to_owned())),
+          );
+        }
+      }
+      Fragment::Mention(name) => {
+        // A click opens the card of who it names.
+        let query = UserQuery {
+          id: None,
+          name: name.clone(),
+          channel: None,
+        };
+        let panel = panel.clone();
+        line = line.child(
+          div()
+            .id(ElementId::NamedInteger(message.id.clone(), index as u64))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(if message.deleted {
+              theme::subtle()
+            } else {
+              theme::foreground()
+            })
+            .cursor_pointer()
+            .hover(|s| s.underline())
+            .on_click(move |_, _, cx| {
+              panel
+                .update(cx, |panel, cx| panel.toggle_card(query.clone(), cx))
+                .ok();
+            })
+            .child(name.clone()),
+        );
+      }
+      Fragment::Link(url) => {
+        // Opened in the browser by a click; a deleted message's link stays inert.
+        let target = url.clone();
+        line = line.child(
+          div()
+            .id(ElementId::NamedInteger(message.id.clone(), index as u64))
+            .max_w_full()
+            .text_color(if message.deleted {
+              theme::subtle()
+            } else {
+              theme::accent_hover()
+            })
+            .underline()
+            .when(!message.deleted, |el| {
+              el.cursor_pointer()
+                .hover(|s| s.text_color(theme::accent()))
+                .on_click(move |_, _, cx| cx.open_url(&target))
+            })
+            .child(url.clone()),
+        );
+      }
+      Fragment::Emote(emote) => {
+        // The overlays that follow it (blank text between) are drawn on it.
+        let mut overlays = Vec::new();
+        let mut next = index + 1;
+        if !emote.overlay {
+          let mut look = next;
+          loop {
+            while matches!(fragments.get(look), Some(Fragment::Text(t)) if t.trim().is_empty()) {
+              look += 1;
+            }
+            match fragments.get(look) {
+              Some(Fragment::Emote(over)) if over.overlay => {
+                overlays.push(over);
+                look += 1;
+                next = look;
+              }
+              _ => break,
+            }
+          }
+        }
+        let layers: Vec<Emote> = std::iter::once(emote).chain(overlays).cloned().collect();
+        let drawn = emote_stack(&layers, EMOTE_HEIGHT, &mut *image)
+          .when(message.deleted, |el| el.opacity(0.35));
+        line = line.child(
+          HoverCard::new(ElementId::NamedInteger(message.id.clone(), index as u64))
+            .anchor(Anchor::BottomCenter)
+            .bg(theme::surface().opacity(0.8))
+            .open_delay(PREVIEW_DELAY)
+            .close_delay(Duration::ZERO)
+            .trigger_style(StyleRefinement::default().flex_none())
+            .trigger(drawn)
+            .content(move |_, window, cx| emote_preview(&layers, window, cx)),
+        );
+        index = next;
+        continue;
+      }
+    }
+    index += 1;
+  }
+  line
 }
 
 impl Render for ChatPanel {
@@ -892,6 +960,7 @@ impl Render for ChatPanel {
     // Waiting for its first lines: in the middle of the chat rather than over its top.
     let centered = empty && self.loading;
     let composer = self.render_composer(window, cx);
+    let card = self.render_card(window, cx);
     v_flex()
       .size_full()
       .overflow_hidden()
@@ -948,7 +1017,8 @@ impl Render for ChatPanel {
             )
           })
           .children(resume)
-          .children(self.pinned.clone()),
+          .children(self.pinned.clone())
+          .children(card),
       )
       .children(composer)
   }
