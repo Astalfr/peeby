@@ -293,6 +293,8 @@ pub struct ChatPanel {
   glide: Option<Glide>,
   modes: Vec<SharedString>,
   status: Option<SharedString>,
+  /// `status` waits for something ([`ChatEvent::Loading`]).
+  loading: bool,
   title: SharedString,
   /// The writing area, for a space that sends to its chat.
   composer: Option<composer::Composer>,
@@ -325,6 +327,7 @@ impl ChatPanel {
       glide: None,
       modes: Vec::new(),
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
+      loading: true,
       title: t("Live chat", "Chat du live").into(),
       composer: None,
       pinned: None,
@@ -380,7 +383,14 @@ impl ChatPanel {
           added = 0;
         }
         ChatEvent::State(modes) => self.modes = modes,
-        ChatEvent::Status(status) => self.status = status,
+        ChatEvent::Status(status) => {
+          self.status = status;
+          self.loading = false;
+        }
+        ChatEvent::Loading(status) => {
+          self.status = Some(status);
+          self.loading = true;
+        }
       }
     }
     if added > 0 {
@@ -763,12 +773,14 @@ impl Render for ChatPanel {
         )
     });
     let empty = self.messages.is_empty() && held == 0;
+    // Waiting for its first lines: in the middle of the chat rather than over its top.
+    let centered = empty && self.loading;
     let composer = self.render_composer(window, cx);
     v_flex()
       .size_full()
       .overflow_hidden()
       .child(header)
-      .children(self.status.clone().map(|status| {
+      .children(self.status.clone().filter(|_| !centered).map(|status| {
         div()
           .flex_none()
           .px_3()
@@ -792,6 +804,20 @@ impl Render for ChatPanel {
             )
             .size_full(),
           )
+          .when(centered, |el| {
+            el.children(self.status.clone().map(|status| {
+              v_flex()
+                .absolute()
+                .inset_0()
+                .gap_3()
+                .items_center()
+                .justify_center()
+                .text_base()
+                .text_color(theme::muted())
+                .child(crate::widgets::loader(28., theme::accent()))
+                .child(status)
+            }))
+          })
           .when(empty && self.status.is_none(), |el| {
             el.child(
               div()

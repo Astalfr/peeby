@@ -180,6 +180,13 @@ Two credentials, for different things. Both are secrets, under the same rules as
       Peeby (`twitch::bttv::Modifier`, `chat::with_words`): turns and colors are done to the pixels when
       decoding (`ui::images::Effects`), wide and shake when drawing (`ui::chat::Modifiers`).
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
+- **The chat waits for its extras** (`chat::start`): a live's messages are held from the
+  connection until the channel's 7TV and BTTV sets and badges have loaded (the room's id comes
+  with its first `ROOMSTATE`; the panel says "Loading emotes…" in its middle, under the app's loader, as it does
+  "Connecting to chat…": `ui::chat::ChatEvent::Loading`), then shown at once with their
+  emotes. A load past 5 s (`EXTRAS_WAIT`: the emote APIs have no timeout of their own) lets the
+  held messages show as words, and the emotes apply from the next ones. The session's copies make
+  a second open of a channel immediate.
 - **Chat options** (the gear left of "Send"): the panel offers what the space names
   (`ui::chat::ChatOption`, `ChatPanel::set_options`) and tells it which was chosen
   (`ChatPanelEvent::Option`), so the `ui` crate still knows no service. For now one option,

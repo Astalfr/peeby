@@ -6,7 +6,9 @@
 //! replace the words they name (BTTV's global set, 7TV's, then the channel's BTTV and 7TV sets,
 //! each winning over the ones before; animated ones play, zero-width ones are drawn over the emote
 //! before them), and the chat badges (global, then the channel's over them). Both are
-//! kept for the session ([`ChatSets`]). Messages that arrived before keep their words and no badges.
+//! kept for the session ([`ChatSets`]). The chat's messages wait for them ("Loading emotes…"), so
+//! that it opens with its emotes; past [`EXTRAS_WAIT`] they show without, and only the next ones get
+//! them. The VOD chat (`super::replay`) does not wait.
 //! The 7TV and BTTV sets also fill the panel's picker, and 7TV's EventAPI keeps its sets current
 //! while the chat is open ([`watch_seventv`], ADR 0030).
 //!
@@ -19,7 +21,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::task::Poll;
+use std::time::Duration;
 
 use gpui::{App, Entity, Global, Hsla, SharedString, Subscription, Task, WeakEntity};
 use twitch::catalog::Catalog;
@@ -39,6 +44,10 @@ use ui::{runtime, tf};
 
 /// Updates given to the panel at most at once, so that a burst does not stall a frame.
 pub(super) const BATCH: usize = 200;
+
+/// How long a live's first messages wait for the channel's emotes and badges ([`load_extras`])
+/// before they show without them: 7TV or BTTV may hang, the chat must not.
+const EXTRAS_WAIT: Duration = Duration::from_secs(5);
 
 /// The id of the gear's "Reload 7TV emotes" option.
 pub(super) const RELOAD_SEVENTV: &str = "reload-7tv";
@@ -99,8 +108,68 @@ pub fn start(
     let extras = shared.extras.clone();
     let mut room = RoomState::default();
     let mut extras_asked = false;
+    // What the connection said before the channel's extras were loaded, `None` once they are:
+    // the chat opens with its 7TV and BTTV emotes and badges rather than their plain words.
+    let mut held: Option<Vec<Update>> = Some(Vec::new());
+    // The extras' load and its deadline, while the messages wait for it.
+    let mut loading: Option<(Task<()>, Task<()>)> = None;
     let mut _seventv_live: Option<Task<()>> = None;
-    while let Some(first) = updates.recv().await {
+    loop {
+      let next = match loading.as_mut() {
+        Some((load, deadline)) => race(|ctx| updates.poll_recv(ctx), load, deadline).await,
+        None => Next::Update(updates.recv().await),
+      };
+      let first = match next {
+        Next::Update(Some(update)) => update,
+        Next::Update(None) => return,
+        Next::Loaded | Next::Late => {
+          let Some((load, _)) = loading.take() else {
+            continue;
+          };
+          // A finished task is not polled again; a late one goes on loading for the next lines.
+          let load = if matches!(next, Next::Loaded) {
+            Task::ready(())
+          } else {
+            tracing::info!("chat: the emotes are late, the messages show without them");
+            load
+          };
+          let (client, catalog, panel_, handle) = (
+            client.clone(),
+            catalog.clone(),
+            panel.clone(),
+            shared.clone(),
+          );
+          // Once the sets are known, 7TV's pushes keep them current; the task ends with this one.
+          _seventv_live = Some(cx.update(|cx| {
+            cx.spawn(async move |cx| {
+              load.await;
+              let groups = handle.extras.borrow().picker.clone();
+              if panel_.update(cx, |p, cx| p.set_emotes(groups, cx)).is_err() {
+                return;
+              }
+              let live = cx.update(|cx| watch_seventv(handle, client, catalog, panel_, cx));
+              live.await;
+            })
+          }));
+          let known = extras.borrow().clone();
+          let mut events: Vec<ChatEvent> = held
+            .take()
+            .into_iter()
+            .flatten()
+            .filter_map(|update| event(update, &mut room, &known))
+            .collect();
+          // The status said the emotes were loading: the connection is up.
+          events.push(ChatEvent::Status(None));
+          while !events.is_empty() {
+            let rest = events.split_off(events.len().min(BATCH));
+            if panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
+              return;
+            }
+            events = rest;
+          }
+          continue;
+        }
+      };
       let mut batch = vec![first];
       while batch.len() < BATCH
         && let Ok(more) = updates.try_recv()
@@ -108,35 +177,64 @@ pub fn start(
         batch.push(more);
       }
       let known = extras.borrow().clone();
-      let events: Vec<ChatEvent> = batch
-        .into_iter()
-        .filter_map(|update| event(update, &mut room, &known))
-        .collect();
+      let mut events = Vec::new();
+      for update in batch {
+        match (&mut held, update) {
+          // The room's state carries its id, which the extras' load needs.
+          (_, update @ (Update::Status(_) | Update::Event(Event::RoomState(_))))
+          | (None, update) => {
+            let connected = matches!(update, Update::Status(Status::Connected));
+            events.extend(event(update, &mut room, &known));
+            if connected && held.is_some() {
+              events.push(ChatEvent::Loading(
+                t("Loading emotes…", "Chargement des emotes…").into(),
+              ));
+            }
+          }
+          (Some(held), update) => held.push(update),
+        }
+      }
       if !extras_asked && let Some(room_id) = room.room_id.clone() {
         extras_asked = true;
         *shared.room_id.borrow_mut() = Some(room_id.clone());
-        let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
-        let (panel, handle) = (panel.clone(), shared.clone());
-        // Once the sets are known, 7TV's pushes keep them current; the task ends with this one.
-        _seventv_live = Some(cx.update(|cx| {
+        loading = Some(cx.update(|cx| {
           let load = load_extras(room_id, client.clone(), catalog.clone(), extras.clone(), cx);
-          cx.spawn(async move |cx| {
-            load.await;
-            let groups = extras.borrow().picker.clone();
-            if panel.update(cx, |p, cx| p.set_emotes(groups, cx)).is_err() {
-              return;
-            }
-            let live = cx.update(|cx| watch_seventv(handle, client, catalog, panel, cx));
-            live.await;
-          })
+          (load, cx.background_executor().timer(EXTRAS_WAIT))
         }));
       }
-      if panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
+      if !events.is_empty() && panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
         return;
       }
     }
   });
   (task, handle)
+}
+
+/// What a live's chat task wakes up for while its messages wait for the channel's extras.
+enum Next {
+  /// The connection said something (`None`: it ended).
+  Update(Option<Update>),
+  /// The extras are loaded.
+  Loaded,
+  /// [`EXTRAS_WAIT`] went by first.
+  Late,
+}
+
+/// Whichever comes first: the extras' `load`, its `deadline`, or the connection's next update.
+fn race<'a>(
+  mut poll_update: impl FnMut(&mut std::task::Context) -> Poll<Option<Update>> + 'a,
+  load: &'a mut Task<()>,
+  deadline: &'a mut Task<()>,
+) -> impl Future<Output = Next> + 'a {
+  std::future::poll_fn(move |ctx| {
+    if Pin::new(&mut *load).poll(ctx).is_ready() {
+      return Poll::Ready(Next::Loaded);
+    }
+    if Pin::new(&mut *deadline).poll(ctx).is_ready() {
+      return Poll::Ready(Next::Late);
+    }
+    poll_update(ctx).map(Next::Update)
+  })
 }
 
 /// The chat's options under the gear, left of "Send": the panel offers them and the subscription
@@ -667,7 +765,7 @@ where
 pub(super) fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEvent> {
   Some(match update {
     Update::Status(Status::Connecting) => {
-      ChatEvent::Status(Some(t("Connecting to chat…", "Connexion au chat…").into()))
+      ChatEvent::Loading(t("Connecting to chat…", "Connexion au chat…").into())
     }
     Update::Status(Status::Connected) => ChatEvent::Status(None),
     Update::Status(Status::Retrying(seconds)) => ChatEvent::Status(Some(

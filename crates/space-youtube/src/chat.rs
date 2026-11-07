@@ -46,9 +46,9 @@ pub fn start(
       panel.update(cx, |p, cx| p.push(events, cx)).is_ok()
     };
     if !push(
-      vec![ChatEvent::Status(Some(
+      vec![ChatEvent::Loading(
         t("Connecting to the chat…", "Connexion au chat…").into(),
-      ))],
+      )],
       cx,
     ) {
       return;

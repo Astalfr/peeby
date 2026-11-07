@@ -132,6 +132,9 @@ pub enum ChatEvent {
   State(Vec<SharedString>),
   /// The connection's state when it is not simply connected ("Connexion…", "Reconnexion…").
   Status(Option<SharedString>),
+  /// A [`ChatEvent::Status`] that waits for something ("Connecting to chat…", "Loading
+  /// emotes…"): while the chat is empty it is drawn in its middle, under the app's loader.
+  Loading(SharedString),
 }
 
 impl ChatMessage {

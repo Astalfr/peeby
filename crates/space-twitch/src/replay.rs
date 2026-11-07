@@ -204,9 +204,9 @@ pub fn start(
         }
         started = true;
         replay.reset(position);
-        events.push(ChatEvent::Status(Some(
+        events.push(ChatEvent::Loading(
           t("Loading chat…", "Chargement du chat…").into(),
-        )));
+        ));
         // A seek bar being dragged moves on every tick: ask once it settles.
         not_before = Instant::now() + SETTLE;
       } else if let Some(from) = replay.wants(position)
