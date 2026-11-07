@@ -204,6 +204,7 @@ fn chat_message(message: innertube::ChatMessage) -> ChatMessage {
         // The channel's emojis are square.
         aspect: 1.,
         overlay: false,
+        modifiers: Default::default(),
       })),
       ChatRun::Emoji { name, .. } => fragments.push(Fragment::Text(name.into())),
     }

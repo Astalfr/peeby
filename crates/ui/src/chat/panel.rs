@@ -26,7 +26,7 @@ use super::{
 };
 use crate::assets::Icon;
 use crate::i18n::t;
-use crate::images::Images;
+use crate::images::{Effects, Images, Turn};
 use crate::picture::Picture;
 use crate::{tf, theme};
 
@@ -40,26 +40,73 @@ const BADGE_SIZE: f32 = 18.;
 const PREVIEW_DELAY: Duration = Duration::from_millis(300);
 /// Height of an emote in its preview, logical pixels (Twitch's 3.0 size, 7TV's 4x).
 const PREVIEW_HEIGHT: f32 = 112.;
-/// Width an emote is drawn at, [`EMOTE_HEIGHT`] high.
-fn emote_width(emote: &Emote) -> f32 {
+/// Width a wide emote ([`super::Modifiers::wide`]) is drawn at, in heights.
+const WIDE: f32 = 4.;
+/// A shaking emote's offsets, in pixels of an [`EMOTE_HEIGHT`]-high emote, one after the other
+/// over [`SHAKE_PERIOD`] (BTTV's `s!`, its keyframes as `step-start` plays them).
+const SHAKE: [(f32, f32); 10] = [
+  (2., 0.),
+  (1., -2.),
+  (-2., 1.),
+  (0., -1.),
+  (2., 2.),
+  (-1., -1.),
+  (-2., 2.),
+  (2., 1.),
+  (-1., -2.),
+  (1., 0.),
+];
+const SHAKE_PERIOD: Duration = Duration::from_millis(500);
+
+/// Width of an emote's image, [`EMOTE_HEIGHT`] high, before its modifiers.
+fn source_width(emote: &Emote) -> f32 {
   EMOTE_HEIGHT * emote.aspect.max(0.1)
+}
+
+/// Width an emote is drawn at, [`EMOTE_HEIGHT`] high: stretched when wide; turned a quarter,
+/// its height becomes its width, at most a square.
+fn emote_width(emote: &Emote) -> f32 {
+  if emote.modifiers.wide {
+    return EMOTE_HEIGHT * WIDE;
+  }
+  match emote.modifiers.effects.turn {
+    Turn::Left | Turn::Right => EMOTE_HEIGHT * (1. / emote.aspect.max(0.1)).min(1.),
+    _ => source_width(emote),
+  }
 }
 
 /// An emote's image, its frame picked from the time when it is animated: GPUI's `img` plays
 /// frames only while the window is active, and the chat goes on beside a video watched from
-/// another window. Not animated with reduced motion.
-fn emote_image(render: Arc<RenderImage>) -> gpui::Canvas<()> {
+/// another window. Not animated with reduced motion. `fill` stretches it to its bounds (else it
+/// fits in them); `shake` moves it a few pixels at a time.
+fn emote_image(render: Arc<RenderImage>, fill: bool, shake: bool) -> gpui::Canvas<()> {
   canvas(
     |_, _, _| {},
     move |bounds: Bounds<Pixels>, (), window: &mut Window, cx: &mut App| {
-      let animated = render.frame_count() > 1 && !cx.reduce_motion();
-      let frame = if animated {
+      let motion = !cx.reduce_motion();
+      let animated = render.frame_count() > 1 && motion;
+      if animated || (shake && motion) {
         window.request_animation_frame();
+      }
+      let frame = if animated {
         frame_at(&render, clock())
       } else {
         0
       };
-      let fitted = ObjectFit::Contain.get_bounds(bounds, render.size(frame));
+      let mut bounds = bounds;
+      if shake && motion {
+        let step = (clock().as_millis() % SHAKE_PERIOD.as_millis()) as usize * SHAKE.len()
+          / SHAKE_PERIOD.as_millis() as usize;
+        let (x, y) = SHAKE[step.min(SHAKE.len() - 1)];
+        let unit = f32::from(bounds.size.height) / EMOTE_HEIGHT;
+        bounds.origin.x += px(x * unit);
+        bounds.origin.y += px(y * unit);
+      }
+      let fitted = if fill {
+        bounds
+      } else {
+        ObjectFit::Contain.get_bounds(bounds, render.size(frame))
+      };
       // A frame that cannot be drawn leaves the emote's place empty.
       window
         .paint_image(
@@ -75,12 +122,32 @@ fn emote_image(render: Arc<RenderImage>) -> gpui::Canvas<()> {
   )
 }
 
-/// An emote and the overlays drawn on it, `height` high and centered on the widest; `image`
-/// gives a layer's image for a width and a height in logical pixels.
+/// The image of `picture` with `effects`, its file picked for `width`×`height` logical pixels;
+/// `None` while it loads.
+fn store_image(
+  images: Option<&Images>,
+  picture: &Picture,
+  effects: Effects,
+  (width, height): (f32, f32),
+  scale: f32,
+  cx: &mut App,
+) -> Option<Arc<RenderImage>> {
+  let url = picture.url(
+    (width * scale).round() as u32,
+    (height * scale).round() as u32,
+  )?;
+  images?
+    .0
+    .update(cx, |store, cx| store.get_with(&url, effects, cx))
+}
+
+/// An emote and the overlays drawn on it, `height` high and centered on the widest, each with
+/// its modifiers; `image` gives a layer's image with its effects, for a width and a height in
+/// logical pixels.
 fn emote_stack<'a>(
   layers: impl IntoIterator<Item = &'a Emote>,
   height: f32,
-  mut image: impl FnMut(&Picture, f32, f32) -> Option<Arc<RenderImage>>,
+  mut image: impl FnMut(&Picture, Effects, f32, f32) -> Option<Arc<RenderImage>>,
 ) -> gpui::Div {
   let layers: Vec<&Emote> = layers.into_iter().collect();
   let scale = height / EMOTE_HEIGHT;
@@ -92,9 +159,12 @@ fn emote_stack<'a>(
   let mut drawn = div().relative().w(px(width)).h(px(height)).flex_none();
   for layer in layers {
     let layer_width = emote_width(layer) * scale;
-    if let Some(render) = image(&layer.picture, layer_width, height) {
+    let modifiers = &layer.modifiers;
+    // The file is picked for the emote as it is, before it is stretched or turned.
+    let file_width = source_width(layer) * scale;
+    if let Some(render) = image(&layer.picture, modifiers.effects, file_width, height) {
       drawn = drawn.child(
-        emote_image(render)
+        emote_image(render, modifiers.wide, modifiers.shake)
           .absolute()
           .bottom_0()
           .left(px((width - layer_width) / 2.))
@@ -110,13 +180,15 @@ fn emote_stack<'a>(
 fn emote_preview(layers: &[Emote], window: &mut Window, cx: &mut App) -> gpui::Div {
   let scale = window.scale_factor();
   let images = cx.try_global::<Images>().cloned();
-  let stack = emote_stack(layers, PREVIEW_HEIGHT, |picture, width, height| {
-    let images = images.as_ref()?;
-    let url = picture.url(
-      (width * scale).round() as u32,
-      (height * scale).round() as u32,
-    )?;
-    images.0.update(cx, |store, cx| store.get(&url, cx))
+  let stack = emote_stack(layers, PREVIEW_HEIGHT, |picture, effects, width, height| {
+    store_image(
+      images.as_ref(),
+      picture,
+      effects,
+      (width, height),
+      scale,
+      cx,
+    )
   });
   v_flex()
     .items_center()
@@ -124,10 +196,23 @@ fn emote_preview(layers: &[Emote], window: &mut Window, cx: &mut App) -> gpui::D
     .p_1()
     .child(stack)
     .children(layers.first().map(|emote| {
-      div()
-        .text_sm()
-        .font_weight(FontWeight::SEMIBOLD)
-        .child(emote.name.clone())
+      h_flex()
+        .gap_1()
+        .child(
+          div()
+            .text_sm()
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(emote.name.clone()),
+        )
+        // The modifiers that changed it, as they were written.
+        .when(!emote.modifiers.codes.is_empty(), |el| {
+          el.child(
+            div()
+              .text_xs()
+              .text_color(theme::muted())
+              .child(emote.modifiers.codes.join(" ")),
+          )
+        })
     }))
     .when(layers.len() > 1, |el| {
       el.child(
@@ -427,13 +512,15 @@ impl ChatPanel {
     };
     let scale = window.scale_factor();
     let images = cx.try_global::<Images>().cloned();
-    let mut image = |picture: &Picture, width: f32, height: f32| {
-      let images = images.as_ref()?;
-      let url = picture.url(
-        (width * scale).round() as u32,
-        (height * scale).round() as u32,
-      )?;
-      images.0.update(cx, |store, cx| store.get(&url, cx))
+    let mut image = |picture: &Picture, effects: Effects, width: f32, height: f32| {
+      store_image(
+        images.as_ref(),
+        picture,
+        effects,
+        (width, height),
+        scale,
+        cx,
+      )
     };
 
     let mut line = h_flex().flex_wrap().items_center().text_sm().min_w_0();
@@ -443,7 +530,7 @@ impl ChatPanel {
       for Badge { picture, .. } in &author.badges {
         line = line.child(
           div().size(px(BADGE_SIZE)).flex_none().mr_1().children(
-            image(picture, BADGE_SIZE, BADGE_SIZE)
+            image(picture, Effects::default(), BADGE_SIZE, BADGE_SIZE)
               .map(|render| img(ImageSource::Render(render)).size(px(BADGE_SIZE))),
           ),
         );

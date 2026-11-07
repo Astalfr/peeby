@@ -106,6 +106,7 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
             1.
           },
           overlay: kind == "over",
+          modifiers: Default::default(),
         }));
       }
       2 if rng.below(4) == 0 => {
@@ -187,6 +188,7 @@ fn main() {
                 picture: picture(format!("{kind}/{i}")),
                 aspect: if i % 7 == 0 { 2. } else { 1. },
                 overlay: false,
+                modifiers: Default::default(),
               })
               .collect()
           };

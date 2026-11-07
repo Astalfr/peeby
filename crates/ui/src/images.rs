@@ -17,6 +17,57 @@ use tokio::sync::Semaphore;
 
 use crate::runtime;
 
+/// How an image is turned before it is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Turn {
+  /// As it is.
+  #[default]
+  None,
+  /// Mirrored left to right.
+  FlipX,
+  /// Mirrored top to bottom.
+  FlipY,
+  /// A quarter turn counterclockwise.
+  Left,
+  /// A quarter turn clockwise.
+  Right,
+}
+
+/// A color filter on an image, as CSS writes it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Tint {
+  /// Its own colors.
+  #[default]
+  None,
+  /// `grayscale(1) brightness(0.7) contrast(2.5)`.
+  Cursed,
+  /// `sepia(0.5) hue-rotate(θ) saturate(2.5)`, θ going round in [`PARTY_PERIOD_MS`]: a still
+  /// image becomes [`PARTY_FRAMES`] frames, an animated one takes each frame's hue from its time.
+  Party,
+}
+
+/// What is done to an image's pixels after decoding (off the UI thread), cached apart from the
+/// image itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Effects {
+  /// Its orientation.
+  pub turn: Turn,
+  /// Its colors.
+  pub tint: Tint,
+}
+
+impl Effects {
+  /// Nothing is done.
+  pub fn is_none(&self) -> bool {
+    *self == Self::default()
+  }
+}
+
+/// One round of [`Tint::Party`]'s hue.
+pub const PARTY_PERIOD_MS: u32 = 1500;
+/// Frames a still image gets for one round of [`Tint::Party`].
+const PARTY_FRAMES: u32 = 20;
+
 /// Decoded images kept in memory (BGRA bytes), beyond which the least recently used are dropped.
 const MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 /// Parallel downloads, so a fast scroll does not queue dozens of requests at once.
@@ -116,7 +167,27 @@ impl ImageStore {
       return Some(image);
     }
     if !self.pending.contains(url) && !self.failed.contains(url) {
-      self.load(url.to_owned(), url.to_owned(), None, cx);
+      self.load(url.to_owned(), url.to_owned(), None, Effects::default(), cx);
+    }
+    None
+  }
+
+  /// Like [`Self::get`], with `effects` done to its pixels (the downloaded file is the same).
+  pub fn get_with(
+    &mut self,
+    url: &str,
+    effects: Effects,
+    cx: &mut Context<Self>,
+  ) -> Option<Arc<RenderImage>> {
+    if effects.is_none() {
+      return self.get(url, cx);
+    }
+    let key = format!("{url}#fx-{:?}-{:?}", effects.turn, effects.tint);
+    if let Some(image) = self.touch(&key) {
+      return Some(image);
+    }
+    if !self.pending.contains(&key) && !self.failed.contains(&key) {
+      self.load(url.to_owned(), key, None, effects, cx);
     }
     None
   }
@@ -136,7 +207,13 @@ impl ImageStore {
       return Some(image);
     }
     if !self.pending.contains(&key) && !self.failed.contains(&key) {
-      self.load(url.to_owned(), key, Some((width, height)), cx);
+      self.load(
+        url.to_owned(),
+        key,
+        Some((width, height)),
+        Effects::default(),
+        cx,
+      );
     }
     None
   }
@@ -150,15 +227,25 @@ impl ImageStore {
     Some(cached.image.clone())
   }
 
-  /// Loads `url` into the store under `key`, scaled to `size` when given. The disk cache keeps
-  /// the downloaded file, whatever the size.
-  fn load(&mut self, url: String, key: String, size: Option<(u32, u32)>, cx: &mut Context<Self>) {
+  /// Loads `url` into the store under `key`, scaled to `size` when given, with `effects`. The
+  /// disk cache keeps the downloaded file, whatever the size and the effects.
+  fn load(
+    &mut self,
+    url: String,
+    key: String,
+    size: Option<(u32, u32)>,
+    effects: Effects,
+    cx: &mut Context<Self>,
+  ) {
     self.pending.insert(key.clone());
     let fetcher = self.fetcher_for(&url);
     let downloads = self.downloads.clone();
+    // Only downloads go to the disk cache: what another scheme names is made in memory (the
+    // fake chat's squares), and a stale copy would hide a change to it.
     let path = self
       .cache_dir
       .as_ref()
+      .filter(|_| url.starts_with("http://") || url.starts_with("https://"))
       .map(|dir| dir.join(cache_name(&url)));
     let executor = cx.background_executor().clone();
 
@@ -202,7 +289,11 @@ impl ImageStore {
       };
       // 3. Decode off the UI thread.
       let image = match bytes {
-        Some(bytes) => executor.spawn(async move { decode(&bytes, size) }).await,
+        Some(bytes) => {
+          executor
+            .spawn(async move { decode_with(&bytes, size, effects) })
+            .await
+        }
         None => None,
       };
       this
@@ -269,32 +360,172 @@ const MAX_FRAMES: usize = 300;
 /// their frames and delays: the chat panel plays them (`chat::panel`), an `img` with an id too
 /// (GPUI's own animation, only while the window is active).
 pub fn decode(bytes: &[u8], size: Option<(u32, u32)>) -> Option<Arc<RenderImage>> {
-  if let Some(frames) = animation(bytes) {
-    let frames: Vec<image::Frame> = frames
-      .into_iter()
-      .map(|frame| {
-        let delay = frame.delay();
-        let mut buffer = frame.into_buffer();
-        if let Some((w, h)) = size {
-          buffer = image::DynamicImage::ImageRgba8(buffer)
-            .resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3)
-            .into_rgba8();
-        }
-        for px in buffer.as_chunks_mut::<4>().0 {
-          px.swap(0, 2);
-        }
-        image::Frame::from_parts(buffer, 0, 0, delay)
-      })
-      .collect();
-    return Some(Arc::new(RenderImage::new(frames)));
+  decode_with(bytes, size, Effects::default())
+}
+
+/// [`decode`], then `effects` done to every frame.
+pub fn decode_with(
+  bytes: &[u8],
+  size: Option<(u32, u32)>,
+  effects: Effects,
+) -> Option<Arc<RenderImage>> {
+  let resize = |buffer: image::RgbaImage| match size {
+    Some((w, h)) => image::DynamicImage::ImageRgba8(buffer)
+      .resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3)
+      .into_rgba8(),
+    None => buffer,
+  };
+  // Each frame with its delay and its start (milliseconds, for the party's hue); `None` for a
+  // still image.
+  let frames: Vec<(image::RgbaImage, Option<image::Delay>, u32)> = match animation(bytes) {
+    Some(frames) => {
+      let mut start = 0u32;
+      frames
+        .into_iter()
+        .map(|frame| {
+          let delay = frame.delay();
+          let at = start;
+          start = start.saturating_add(delay_ms(delay));
+          (resize(frame.into_buffer()), Some(delay), at)
+        })
+        .collect()
+    }
+    None => {
+      let still = resize(image::load_from_memory(bytes).ok()?.into_rgba8());
+      if effects.tint == Tint::Party {
+        let step = PARTY_PERIOD_MS / PARTY_FRAMES;
+        let delay = image::Delay::from_numer_denom_ms(step, 1);
+        (0..PARTY_FRAMES)
+          .map(|i| (still.clone(), Some(delay), i * step))
+          .collect()
+      } else {
+        vec![(still, None, 0)]
+      }
+    }
+  };
+  let frames: Vec<image::Frame> = frames
+    .into_iter()
+    .map(|(buffer, delay, at)| {
+      let mut buffer = apply(buffer, effects, at);
+      for px in buffer.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+      }
+      match delay {
+        Some(delay) => image::Frame::from_parts(buffer, 0, 0, delay),
+        None => image::Frame::new(buffer),
+      }
+    })
+    .collect();
+  Some(Arc::new(RenderImage::new(frames)))
+}
+
+fn delay_ms(delay: image::Delay) -> u32 {
+  let (numer, denom) = delay.numer_denom_ms();
+  numer.checked_div(denom).unwrap_or(0)
+}
+
+/// `effects` done to an RGBA frame shown at `at` milliseconds.
+fn apply(buffer: image::RgbaImage, effects: Effects, at: u32) -> image::RgbaImage {
+  use image::imageops;
+  let mut buffer = match effects.turn {
+    Turn::None => buffer,
+    Turn::FlipX => imageops::flip_horizontal(&buffer),
+    Turn::FlipY => imageops::flip_vertical(&buffer),
+    Turn::Left => imageops::rotate270(&buffer),
+    Turn::Right => imageops::rotate90(&buffer),
+  };
+  let filters = match effects.tint {
+    Tint::None => return buffer,
+    Tint::Cursed => vec![
+      Filter::Matrix(grayscale()),
+      Filter::Linear(0.7, 0.),
+      Filter::Linear(2.5, 0.5 - 0.5 * 2.5),
+    ],
+    Tint::Party => {
+      let turn = (at % PARTY_PERIOD_MS) as f32 / PARTY_PERIOD_MS as f32;
+      vec![
+        Filter::Matrix(sepia(0.5)),
+        Filter::Matrix(hue_rotate(turn * std::f32::consts::TAU)),
+        Filter::Matrix(saturate(2.5)),
+      ]
+    }
+  };
+  for px in buffer.pixels_mut() {
+    let mut rgb = [px[0], px[1], px[2]].map(|c| f32::from(c) / 255.);
+    for filter in &filters {
+      rgb = filter.on(rgb);
+    }
+    for (channel, value) in px.0.iter_mut().zip(rgb) {
+      *channel = (value * 255.).round() as u8;
+    }
   }
-  let mut image = image::load_from_memory(bytes).ok()?;
-  if let Some((w, h)) = size {
-    image = image.resize_to_fill(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3);
+  buffer
+}
+
+/// One of CSS's filter functions on straight sRGB values in 0..=1, clamped after each, as a
+/// browser chains them.
+enum Filter {
+  /// A color matrix, a row per output channel.
+  Matrix([[f32; 3]; 3]),
+  /// `c × slope + intercept` on each channel (brightness, contrast).
+  Linear(f32, f32),
+}
+
+impl Filter {
+  fn on(&self, rgb: [f32; 3]) -> [f32; 3] {
+    let out = match self {
+      Self::Matrix(m) => m.map(|row| row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]),
+      Self::Linear(slope, intercept) => rgb.map(|c| c * slope + intercept),
+    };
+    out.map(|c| c.clamp(0., 1.))
   }
-  let rgba = image.into_rgba8();
-  let (w, h) = rgba.dimensions();
-  bgra_image(w, h, rgba.into_raw())
+}
+
+/// CSS `grayscale(1)`.
+fn grayscale() -> [[f32; 3]; 3] {
+  let row = [0.2126, 0.7152, 0.0722];
+  [row, row, row]
+}
+
+/// CSS `sepia(amount)`.
+fn sepia(amount: f32) -> [[f32; 3]; 3] {
+  let a = 1. - amount;
+  [
+    [0.393 + 0.607 * a, 0.769 - 0.769 * a, 0.189 - 0.189 * a],
+    [0.349 - 0.349 * a, 0.686 + 0.314 * a, 0.168 - 0.168 * a],
+    [0.272 - 0.272 * a, 0.534 - 0.534 * a, 0.131 + 0.869 * a],
+  ]
+}
+
+/// CSS `hue-rotate(angle)`, radians.
+fn hue_rotate(angle: f32) -> [[f32; 3]; 3] {
+  let (sin, cos) = angle.sin_cos();
+  [
+    [
+      0.213 + cos * 0.787 - sin * 0.213,
+      0.715 - cos * 0.715 - sin * 0.715,
+      0.072 - cos * 0.072 + sin * 0.928,
+    ],
+    [
+      0.213 - cos * 0.213 + sin * 0.143,
+      0.715 + cos * 0.285 + sin * 0.140,
+      0.072 - cos * 0.072 - sin * 0.283,
+    ],
+    [
+      0.213 - cos * 0.213 - sin * 0.787,
+      0.715 - cos * 0.715 + sin * 0.715,
+      0.072 + cos * 0.928 + sin * 0.072,
+    ],
+  ]
+}
+
+/// CSS `saturate(amount)`.
+fn saturate(s: f32) -> [[f32; 3]; 3] {
+  [
+    [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s],
+  ]
 }
 
 /// The frames of an animated GIF or WebP (full canvases, RGBA), at most [`MAX_FRAMES`]; `None` for
@@ -467,6 +698,34 @@ mod tests {
     assert_eq!(&image.as_bytes(0).expect("frame 0")[..4], &[0, 0, 255, 255]);
     assert_eq!(&image.as_bytes(1).expect("frame 1")[..4], &[255, 0, 0, 255]);
     assert_eq!(image_bytes(&image), 2 * 4 * 4 * 4);
+  }
+
+  #[test]
+  fn effects_turn_and_tint_the_pixels() {
+    // 2×1: red then blue.
+    let mut png = Vec::new();
+    image::RgbaImage::from_fn(2, 1, |x, _| {
+      image::Rgba(if x == 0 {
+        [255, 0, 0, 255]
+      } else {
+        [0, 0, 255, 255]
+      })
+    })
+    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+    .expect("a PNG");
+    let with = |turn, tint| decode_with(&png, None, Effects { turn, tint }).expect("an image");
+    // Blue first now (BGRA).
+    let flipped = with(Turn::FlipX, Tint::None);
+    assert_eq!(&flipped.as_bytes(0).expect("frame")[..4], &[255, 0, 0, 255]);
+    let turned = with(Turn::Right, Tint::None);
+    assert_eq!((turned.size(0).width.0, turned.size(0).height.0), (1, 2));
+    // Gray: the same in every channel, alpha kept.
+    let cursed = with(Turn::None, Tint::Cursed);
+    let px = &cursed.as_bytes(0).expect("frame")[..4];
+    assert!(px[0] == px[1] && px[1] == px[2] && px[3] == 255);
+    let party = with(Turn::None, Tint::Party);
+    assert_eq!(party.frame_count(), PARTY_FRAMES as usize);
+    assert_ne!(party.as_bytes(0), party.as_bytes(PARTY_FRAMES as usize / 2));
   }
 
   #[test]

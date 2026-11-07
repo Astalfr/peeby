@@ -166,9 +166,19 @@ Two credentials, for different things. Both are secrets, under the same rules as
       2026-11-02: anonymous; the global set is an array of `{id, code, imageType, animated, modifier}`, a
       channel's answer has `channelEmotes` and `sharedEmotes` (those carry the uploader's `user`); entries
       give `width`/`height` only when not 28 px square; `modifier` entries (`w!`, `h!`…) change the emote after
-      them and are no image; files `https://cdn.betterttv.net/emote/{id}/{1x|2x|3x}.webp` (animated ones
+      them and are no image (the set does not say how: their meaning is BTTV's own table, below); files `https://cdn.betterttv.net/emote/{id}/{1x|2x|3x}.webp` (animated ones
       animate, no still variant); overlays are a fixed list of global codes (`cvMask`, `cvHazmat`, `TopHat`…);
       a Twitch user without BTTV answers 404 `{"message":"user not found"}`;
+    - BTTV's modifiers (its chat module `src/modules/chat`, read on 2026-11-07; 7TV has none of its own and its
+      extension only strips them): written just before a 7TV or BTTV emote (not Twitch's own, as in BTTV),
+      `w!` stretches it to 112×28, `h!`/`v!` flip it, `l!`/`r!` turn it a quarter, `z!` takes away the space
+      before it, `c!` is `grayscale(1) brightness(0.7) contrast(2.5)`, `p!` `sepia(0.5) hue-rotate(0→360°)
+      saturate(2.5)` over 1.5 s (on an animated emote, each frame takes the hue of its time, so it may jump when the
+      loop restarts), `s!` shakes it (ten 1–2 px steps in 500 ms); FFZ's `ffzW`/`ffzX`/`ffzY`/
+      `ffzCursed` after an emote do the same. One turn wins (quarter turn, then `v!`, then `h!`) and the party
+      wins over the cursed colors, as BTTV's style sheet orders them. Not before an emote, they stay text.
+      Peeby (`twitch::bttv::Modifier`, `chat::with_words`): turns and colors are done to the pixels when
+      decoding (`ui::images::Effects`), wide and shake when drawing (`ui::chat::Modifiers`).
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
   `contentOffsetSeconds` is a whole second: the app spreads each second's messages evenly over it, and estimates the playhead between the player's quarter-second position reports, so that a busy chat scrolls one message at a time instead of by blocks.
@@ -195,7 +205,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
   without a channel, an account or the network:
   - Generated lines are raw IRC (tags escaped, `char` emote ranges). They go through
     `twitch::chat::irc::parse` and `chat::event`, as a live's do.
-  - Fake 7TV/BTTV words (animated, wide, zero-width), badges and the points icon are drawn in memory
+  - Fake 7TV/BTTV words (animated, wide, zero-width, BTTV's modifiers before some; the squares' white
+    corner shows a flip or a turn), badges and the points icon are drawn in memory
     (`ui::chat::fake::Squares`, under `fake-chat://`). Only Twitch's own emotes, off by default,
     load from Twitch's CDN. "Vraies 7TV / BTTV", off by default too, loads the real global sets
     (anonymous, the live chat's session cache) and writes their words, zero-width ones stacked

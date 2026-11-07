@@ -28,6 +28,21 @@ fn the_global_set_skips_modifiers_and_marks_overlays() {
 }
 
 #[test]
+fn the_global_set_modifiers_are_all_known() {
+  use twitch::bttv::{Modifier, PREFIX_MODIFIERS};
+  // The fixture's modifier entry, and BTTV's whole list.
+  assert_eq!(Modifier::prefix("w!"), Some(Modifier::Wide));
+  assert!(
+    PREFIX_MODIFIERS
+      .iter()
+      .all(|m| Modifier::prefix(m).is_some())
+  );
+  assert_eq!(Modifier::suffix("ffzX"), Some(Modifier::FlipX));
+  assert_eq!(Modifier::prefix("ffzX"), None);
+  assert_eq!(Modifier::prefix("x!"), None);
+}
+
+#[test]
 fn a_channel_set_has_its_own_and_its_shared_emotes() {
   let emotes = parse_user(include_str!("fixtures/bttv_user.json")).expect("a set");
   let names: Vec<&str> = emotes.iter().map(|e| e.name.as_str()).collect();

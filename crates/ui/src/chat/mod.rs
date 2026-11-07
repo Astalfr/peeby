@@ -83,6 +83,21 @@ pub struct Emote {
   pub aspect: f32,
   /// Drawn over the emote before it (7TV's zero-width emotes), else as an ordinary one.
   pub overlay: bool,
+  /// What changes its look in this message (BTTV's modifiers, say).
+  pub modifiers: Modifiers,
+}
+
+/// What a message changes in an emote's look; none by default.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Modifiers {
+  /// Done to its pixels: turned, tinted.
+  pub effects: crate::images::Effects,
+  /// Stretched to four times its height.
+  pub wide: bool,
+  /// Shakes, a few pixels at a time (not with reduced motion).
+  pub shake: bool,
+  /// The words that changed it, shown in its preview.
+  pub codes: Vec<SharedString>,
 }
 
 /// Height of an emote, logical pixels (Twitch's 1.0 size).

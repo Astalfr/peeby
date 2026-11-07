@@ -595,11 +595,13 @@ impl ChatPanel {
           for (column, emote) in emotes.iter().enumerate() {
             // A wide emote is drawn lower, so that it fits in its cell.
             let height = EMOTE_HEIGHT.min((CELL - 6.) / emote.aspect.max(0.1));
-            let drawn = emote_stack(std::iter::once(emote), height, |picture: &Picture, w, h| {
-              let images = images.as_ref()?;
-              let url = picture.url((w * scale).round() as u32, (h * scale).round() as u32)?;
-              images.0.update(cx, |store, cx| store.get(&url, cx))
-            });
+            let drawn = emote_stack(
+              std::iter::once(emote),
+              height,
+              |picture: &Picture, effects, w, h| {
+                super::store_image(images.as_ref(), picture, effects, (w, h), scale, cx)
+              },
+            );
             row = row.child(cell(
               ElementId::NamedInteger("chat-pick".into(), (ix * PER_ROW + column) as u64),
               emote.name.clone(),
@@ -648,11 +650,13 @@ fn emote_token(
   let height = f32::from(token.line_height()).max(1.);
   let scale = window.scale_factor();
   let images = cx.try_global::<Images>().cloned();
-  emote_stack(std::iter::once(emote), height, |picture: &Picture, w, h| {
-    let images = images.as_ref()?;
-    let url = picture.url((w * scale).round() as u32, (h * scale).round() as u32)?;
-    images.0.update(cx, |store, cx| store.get(&url, cx))
-  })
+  emote_stack(
+    std::iter::once(emote),
+    height,
+    |picture: &Picture, effects, w, h| {
+      super::store_image(images.as_ref(), picture, effects, (w, h), scale, cx)
+    },
+  )
   .rounded(px(2.))
   .when(token.is_selected(), |el| el.bg(theme::accent_soft()))
   .into_any_element()
@@ -700,6 +704,7 @@ mod tests {
       picture: Picture::sized(|_, _| String::new()),
       aspect: 1.,
       overlay: false,
+      modifiers: Default::default(),
     }
   }
 

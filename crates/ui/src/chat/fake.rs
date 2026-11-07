@@ -6,9 +6,10 @@ use std::io::Cursor;
 
 use crate::images::{Download, Fetch};
 
-/// Draws emotes and badges from their URL alone: a colored square as PNG, picked by the URL; a
-/// URL with `/anim/` is a square that blinks (a GIF), one with `/over/` a ring that grows, on a
-/// transparent background (drawn over the emote before it). Any scheme works: give it a prefix
+/// Draws emotes and badges from their URL alone: a colored square as PNG, picked by the URL, its
+/// top left corner white (so that a flip or a turn shows); a URL with `/anim/` is a square that
+/// blinks (a GIF), one with `/over/` a ring that grows, on a transparent background (drawn over
+/// the emote before it). Any scheme works: give it a prefix
 /// with `images::route`.
 pub struct Squares;
 
@@ -35,7 +36,11 @@ impl Fetch for Squares {
                 image::Rgba(if on { [255, 255, 0, 255] } else { [0, 0, 0, 0] })
               } else {
                 let shade = 60 + step as u8 * 60;
-                image::Rgba([shade, (seed >> 8) as u8, 255 - shade, 255])
+                image::Rgba(if corner(x, y) {
+                  [255, 255, 255, 255]
+                } else {
+                  [shade, (seed >> 8) as u8, 255 - shade, 255]
+                })
               }
             });
             let delay = image::Delay::from_numer_denom_ms(150, 1);
@@ -54,7 +59,7 @@ impl Fetch for Squares {
         255,
       ];
       for (x, y, px) in image.enumerate_pixels_mut() {
-        let edge = x < 4 || y < 4 || x > 51 || y > 51;
+        let edge = x < 4 || y < 4 || x > 51 || y > 51 || corner(x, y);
         *px = image::Rgba(if edge { [255, 255, 255, 255] } else { color });
       }
       let mut bytes = Vec::new();
@@ -64,6 +69,11 @@ impl Fetch for Squares {
       Ok(bytes)
     })
   }
+}
+
+/// The top left corner's triangle of a 56-pixel square.
+fn corner(x: u32, y: u32) -> bool {
+  x + y < 22
 }
 
 /// A small pseudo-random generator (xorshift): the same seed gives the same sequence.

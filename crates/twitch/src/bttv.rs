@@ -23,6 +23,62 @@ const OVERLAYS: [&str; 8] = [
   "cvHazmat",
 ];
 
+/// What a modifier word does to the emote it goes with (BTTV's chat, `src/modules/chat`): the
+/// set only marks modifiers (`"modifier": true`), so their meaning is BTTV's own table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Modifier {
+  /// `w!`: stretched to 112×28 (four times as wide as high).
+  Wide,
+  /// `h!`: mirrored left to right.
+  FlipX,
+  /// `v!`: mirrored top to bottom.
+  FlipY,
+  /// `z!`: no space before it.
+  ZeroSpace,
+  /// `c!`: `grayscale(1) brightness(0.7) contrast(2.5)`.
+  Cursed,
+  /// `l!`: a quarter turn counterclockwise.
+  RotateLeft,
+  /// `r!`: a quarter turn clockwise.
+  RotateRight,
+  /// `p!`: its hue goes round in 1.5 s.
+  Party,
+  /// `s!`: shakes.
+  Shake,
+}
+
+impl Modifier {
+  /// The modifier written just before an emote (`w!`…), else `None`.
+  pub fn prefix(word: &str) -> Option<Self> {
+    Some(match word {
+      "w!" => Self::Wide,
+      "h!" => Self::FlipX,
+      "v!" => Self::FlipY,
+      "z!" => Self::ZeroSpace,
+      "c!" => Self::Cursed,
+      "l!" => Self::RotateLeft,
+      "r!" => Self::RotateRight,
+      "p!" => Self::Party,
+      "s!" => Self::Shake,
+      _ => return None,
+    })
+  }
+
+  /// FFZ's modifier written just after an emote (`ffzX`…), which BTTV reads too, else `None`.
+  pub fn suffix(word: &str) -> Option<Self> {
+    Some(match word {
+      "ffzW" => Self::Wide,
+      "ffzX" => Self::FlipX,
+      "ffzY" => Self::FlipY,
+      "ffzCursed" => Self::Cursed,
+      _ => return None,
+    })
+  }
+}
+
+/// The modifiers written before an emote, as [`Modifier::prefix`] reads them.
+pub const PREFIX_MODIFIERS: [&str; 9] = ["w!", "h!", "v!", "z!", "c!", "l!", "r!", "p!", "s!"];
+
 /// An emote of a BTTV set.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Emote {
@@ -52,7 +108,8 @@ impl Emote {
 }
 
 /// The emotes of a list of set entries. Entries without an id or a code are skipped, and so are
-/// modifiers (`w!`, `h!`…): they change the emote after them and are not images of their own.
+/// modifiers (`w!`, `h!`…): they change the emote after them and are not images of their own
+/// ([`Modifier`]).
 fn parse_list(list: Option<&Value>) -> Vec<Emote> {
   list
     .and_then(Value::as_array)

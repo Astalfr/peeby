@@ -187,7 +187,7 @@ const LINKS: &[&str] = &[
 pub struct Content {
   /// Twitch's emotes (ranges in the `emotes` tag; images from Twitch's CDN).
   pub twitch_emotes: bool,
-  /// 7TV and BTTV words, animated and zero-width ones included.
+  /// 7TV and BTTV words, animated and zero-width ones included, BTTV's modifiers too.
   pub third_party: bool,
   pub badges: bool,
   pub colors: bool,
@@ -292,6 +292,16 @@ impl Feed {
             }
           };
           let mut word = self.rng.pick(&plain).copied().unwrap_or("EZ").to_owned();
+          // Now and then one of BTTV's modifiers before it (`w!`, `h!`…), more rarely two.
+          for _ in 0..2 {
+            if self.rng.one_in(5)
+              && let Some(modifier) = self.rng.pick(&twitch::bttv::PREFIX_MODIFIERS)
+            {
+              word = format!("{modifier} {word}");
+            } else {
+              break;
+            }
+          }
           // Now and then one overlay, more rarely two: 7TV stacks them all on the emote.
           for _ in 0..2 {
             if self.rng.one_in(3)

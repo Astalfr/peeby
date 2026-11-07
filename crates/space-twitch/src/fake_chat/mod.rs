@@ -493,6 +493,7 @@ fn extras() -> Extras {
       picture: Picture::sized(move |w, h| format!("{SCHEME}{path}?w={w}&h={h}")),
       aspect: if look == Look::Wide { 2. } else { 1. },
       overlay: look == Look::Overlay,
+      modifiers: Default::default(),
     }
   };
   let channel: Vec<Emote> = THIRD_PARTY

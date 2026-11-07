@@ -532,6 +532,7 @@ pub(super) fn message(
         // Twitch's own emotes are square.
         aspect: 1.,
         overlay: false,
+        modifiers: Default::default(),
       })],
     })
     .collect();
@@ -576,19 +577,92 @@ fn with_words(text: &str, words: &Words) -> Vec<Fragment> {
   }
   let mut fragments = Vec::new();
   let mut plain = String::new();
+  // BTTV's modifiers written just before the next word, and where their text starts in `plain`:
+  // an emote takes them and their text goes, another word leaves them as text.
+  let mut prefixes: Vec<(&str, bttv::Modifier)> = Vec::new();
+  let mut prefixes_at = 0;
   for word in text.split_inclusive(' ') {
     let bare = word.trim_end_matches(' ');
-    match words.get(bare) {
-      Some(emote) => {
-        fragments.extend(split_text(&std::mem::take(&mut plain)));
-        fragments.push(Fragment::Emote(emote.clone()));
-        plain.push_str(&word[bare.len()..]);
+    let space = &word[bare.len()..];
+    if let Some(modifier) = bttv::Modifier::prefix(bare) {
+      if prefixes.is_empty() {
+        prefixes_at = plain.len();
       }
-      None => plain.push_str(word),
+      prefixes.push((bare, modifier));
+      plain.push_str(word);
+      continue;
     }
+    if let Some(emote) = words.get(bare) {
+      let mut emote = emote.clone();
+      if !prefixes.is_empty() {
+        plain.truncate(prefixes_at);
+        for (code, modifier) in prefixes.drain(..) {
+          if modifier == bttv::Modifier::ZeroSpace {
+            // Against what comes before it.
+            if plain.ends_with(' ') {
+              plain.pop();
+            }
+          }
+          modify(&mut emote, code, modifier);
+        }
+      }
+      fragments.extend(split_text(&std::mem::take(&mut plain)));
+      fragments.push(Fragment::Emote(emote));
+      plain.push_str(space);
+      continue;
+    }
+    prefixes.clear();
+    // FFZ's modifiers go with the emote just before them (only blanks between): their word goes.
+    if let Some(modifier) = bttv::Modifier::suffix(bare)
+      && plain.trim().is_empty()
+      && let Some(Fragment::Emote(emote)) = fragments.last_mut()
+    {
+      modify(emote, bare, modifier);
+      plain.clear();
+      plain.push_str(space);
+      continue;
+    }
+    plain.push_str(word);
   }
   fragments.extend(split_text(&plain));
   fragments
+}
+
+/// `modifier` (written `code`) done to `emote`. Of the turns, the strongest wins, as in BTTV's
+/// style sheet where the last rule sets `transform`: a quarter turn, then a vertical flip, then
+/// a horizontal one; the party's colors win over the cursed ones the same way.
+fn modify(emote: &mut Emote, code: &str, modifier: bttv::Modifier) {
+  use bttv::Modifier as M;
+  use ui::images::{Tint, Turn};
+  let rank = |turn: Turn| match turn {
+    Turn::None => 0,
+    Turn::FlipX => 1,
+    Turn::FlipY => 2,
+    Turn::Left => 3,
+    Turn::Right => 4,
+  };
+  let effects = &mut emote.modifiers.effects;
+  let mut turn = |to: Turn| {
+    if rank(to) > rank(effects.turn) {
+      effects.turn = to;
+    }
+  };
+  match modifier {
+    M::Wide => emote.modifiers.wide = true,
+    M::FlipX => turn(Turn::FlipX),
+    M::FlipY => turn(Turn::FlipY),
+    M::RotateLeft => turn(Turn::Left),
+    M::RotateRight => turn(Turn::Right),
+    M::ZeroSpace => {}
+    M::Cursed => {
+      if effects.tint != Tint::Party {
+        effects.tint = Tint::Cursed;
+      }
+    }
+    M::Party => effects.tint = Tint::Party,
+    M::Shake => emote.modifiers.shake = true,
+  }
+  emote.modifiers.codes.push(code.to_owned().into());
 }
 
 fn seventv_emote(emote: &seventv::Emote) -> Emote {
@@ -598,6 +672,7 @@ fn seventv_emote(emote: &seventv::Emote) -> Emote {
     picture: Picture::sized(move |width, _| urls.url(width, false).unwrap_or_default()),
     aspect: emote.width as f32 / emote.height.max(1) as f32,
     overlay: emote.zero_width,
+    modifiers: Default::default(),
   }
 }
 
@@ -608,6 +683,7 @@ fn bttv_emote(emote: &bttv::Emote) -> Emote {
     picture: Picture::sized(move |_, height| urls.url(scale(height))),
     aspect: emote.width as f32 / emote.height.max(1) as f32,
     overlay: emote.zero_width,
+    modifiers: Default::default(),
   }
 }
 
@@ -729,6 +805,44 @@ mod tests {
       ]
     );
     assert!(with_words("", &words).is_empty());
+  }
+
+  #[test]
+  fn bttv_modifiers_change_the_emote_beside_them_and_disappear() {
+    use ui::images::{Tint, Turn};
+    let bttv = r#"[{"id":"b","code":"D:"},{"id":"c","code":"Pog"}]"#;
+    let mut words: Words = Words::new();
+    for emote in bttv::parse_global(bttv).expect("a set") {
+      words.insert(emote.name.clone(), bttv_emote(&emote));
+    }
+    let shown = |text: &str| -> Vec<String> {
+      with_words(text, &words)
+        .iter()
+        .map(|f| match f {
+          Fragment::Text(t) => format!("t:{t}"),
+          Fragment::Emote(e) => format!("e:{}:{}", e.name, e.modifiers.codes.join("+")),
+          _ => "other".into(),
+        })
+        .collect()
+    };
+    // Prefixes before an emote, a suffix after it; the modifiers' words go with their space.
+    assert_eq!(
+      shown("a w! h! Pog ffzY b"),
+      ["t:a ", "e:Pog:w!+h!+ffzY", "t: b"]
+    );
+    // Not before an emote: plain text, as BTTV leaves them.
+    assert_eq!(shown("w! hello ffzX"), ["t:w! hello ffzX"]);
+    assert_eq!(shown("h! w!"), ["t:h! w!"]);
+    // `z!` takes the space before it away.
+    assert_eq!(shown("Pog z! D:"), ["e:Pog:", "e:D::z!"]);
+    let fragments = with_words("v! h! r! c! p! s! Pog", &words);
+    let Some(Fragment::Emote(pog)) = fragments.first() else {
+      panic!("an emote");
+    };
+    // The quarter turn wins over the flips, the party over the cursed colors.
+    assert_eq!(pog.modifiers.effects.turn, Turn::Right);
+    assert_eq!(pog.modifiers.effects.tint, Tint::Party);
+    assert!(pog.modifiers.shake && !pog.modifiers.wide);
   }
 
   #[test]
