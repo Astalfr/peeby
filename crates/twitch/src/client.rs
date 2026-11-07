@@ -282,13 +282,13 @@ impl Client {
     gql::parse_comments(&answer)
   }
 
-  /// The 7TV emotes of the channel whose Twitch user id is `user_id`; empty without a 7TV account.
-  pub async fn seventv_channel(&self, user_id: &str) -> Result<Vec<crate::seventv::Emote>> {
+  /// The 7TV set of the channel whose Twitch user id is `user_id`; empty without a 7TV account.
+  pub async fn seventv_channel(&self, user_id: &str) -> Result<crate::seventv::Set> {
     crate::seventv::channel(&self.http, user_id).await
   }
 
-  /// 7TV's global emotes.
-  pub async fn seventv_global(&self) -> Result<Vec<crate::seventv::Emote>> {
+  /// 7TV's global set.
+  pub async fn seventv_global(&self) -> Result<crate::seventv::Set> {
     crate::seventv::global(&self.http).await
   }
 

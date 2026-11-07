@@ -7,7 +7,8 @@
 //! each winning over the ones before; animated ones play, zero-width ones are drawn over the emote
 //! before them), and the chat badges (global, then the channel's over them). Both are
 //! kept for the session ([`ChatSets`]). Messages that arrived before keep their words and no badges.
-//! The 7TV and BTTV sets also fill the panel's picker.
+//! The 7TV and BTTV sets also fill the panel's picker, and 7TV's EventAPI keeps its sets current
+//! while the chat is open ([`watch_seventv`], ADR 0030).
 //!
 //! With the auth-token, [`start_writer`] signs in a second connection that sends what the viewer
 //! writes (ADR 0023); the reader shows those messages when Twitch relays them to it.
@@ -20,12 +21,13 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::rc::Rc;
 
-use gpui::{App, Entity, Global, Hsla, SharedString, Subscription, Task};
+use gpui::{App, Entity, Global, Hsla, SharedString, Subscription, Task, WeakEntity};
 use twitch::catalog::Catalog;
 use twitch::chat::{
   ChatLine, Event, Piece, RoomState, Status, Update, Writer, WriterStatus, WriterUpdate, emote_url,
 };
 use twitch::helix;
+use twitch::seventv::events::{self, Topic};
 use twitch::{bttv, seventv};
 use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatOption, ChatPanel, ChatPanelEvent, Composing,
@@ -59,7 +61,7 @@ pub(super) struct Extras {
 /// id. Failed loads are not kept, so the next live tries again.
 #[derive(Default)]
 struct ChatSets {
-  seventv: HashMap<String, Rc<Vec<seventv::Emote>>>,
+  seventv: HashMap<String, Rc<seventv::Set>>,
   bttv: HashMap<String, Rc<Vec<bttv::Emote>>>,
   badges: HashMap<String, Rc<Vec<helix::Badge>>>,
 }
@@ -97,6 +99,7 @@ pub fn start(
     let extras = shared.extras.clone();
     let mut room = RoomState::default();
     let mut extras_asked = false;
+    let mut _seventv_live: Option<Task<()>> = None;
     while let Some(first) = updates.recv().await {
       let mut batch = vec![first];
       while batch.len() < BATCH
@@ -113,16 +116,20 @@ pub fn start(
         extras_asked = true;
         *shared.room_id.borrow_mut() = Some(room_id.clone());
         let (client, catalog, extras) = (client.clone(), catalog.clone(), extras.clone());
-        let panel = panel.clone();
-        cx.update(|cx| {
-          let load = load_extras(room_id, client, catalog, extras.clone(), cx);
+        let (panel, handle) = (panel.clone(), shared.clone());
+        // Once the sets are known, 7TV's pushes keep them current; the task ends with this one.
+        _seventv_live = Some(cx.update(|cx| {
+          let load = load_extras(room_id, client.clone(), catalog.clone(), extras.clone(), cx);
           cx.spawn(async move |cx| {
             load.await;
             let groups = extras.borrow().picker.clone();
-            panel.update(cx, |p, cx| p.set_emotes(groups, cx)).ok();
+            if panel.update(cx, |p, cx| p.set_emotes(groups, cx)).is_err() {
+              return;
+            }
+            let live = cx.update(|cx| watch_seventv(handle, client, catalog, panel, cx));
+            live.await;
           })
-          .detach();
-        });
+        }));
       }
       if panel.update(cx, |p, cx| p.push(events, cx)).is_err() {
         return;
@@ -133,8 +140,8 @@ pub fn start(
 }
 
 /// The chat's options under the gear, left of "Send": the panel offers them and the subscription
-/// does them until it is dropped. For now, reloading the channel's 7TV emotes (7TV pushes nothing
-/// to us: a set changed while watching is only seen by asking again, docs/twitch.md).
+/// does them until it is dropped. For now, reloading the channel's 7TV emotes: 7TV's pushes
+/// ([`watch_seventv`]) usually keep them current, the reload is for when that connection is down.
 pub fn start_options(
   handle: ChatExtras,
   client: twitch::Client,
@@ -221,8 +228,8 @@ pub fn reload_seventv(
     };
     tracing::info!(
       "chat: 7TV reloaded, {} global and {} channel emotes",
-      global.len(),
-      channel.len()
+      global.emotes.len(),
+      channel.emotes.len()
     );
     cx.update(|cx| {
       let sets = &mut cx.default_global::<ChatSets>().seventv;
@@ -235,6 +242,220 @@ pub fn reload_seventv(
     let groups = extras.borrow().picker.clone();
     panel.update(cx, |p, cx| p.set_emotes(groups, cx)).is_ok()
   })
+}
+
+/// The EventAPI topics of the sets `room_id`'s chat shows, from the session's copies: the global
+/// set, the channel's, and the channel's 7TV user (a switch to another set).
+fn seventv_topics(room_id: &str, cx: &mut App) -> Vec<Topic> {
+  let sets = &cx.default_global::<ChatSets>().seventv;
+  let mut topics = Vec::new();
+  for set in [sets.get(""), sets.get(room_id)].into_iter().flatten() {
+    topics.extend(set.id.clone().map(Topic::EmoteSet));
+    topics.extend(set.owner.clone().map(Topic::User));
+  }
+  topics
+}
+
+/// The 7TV id of `room_id`'s set in the session's copies.
+fn channel_set_id(room_id: &str, cx: &mut App) -> Option<String> {
+  cx.default_global::<ChatSets>()
+    .seventv
+    .get(room_id)
+    .and_then(|set| set.id.clone())
+}
+
+/// Keeps the chat's 7TV emotes current with 7TV's EventAPI (docs/twitch.md, "7TV live updates")
+/// until the task is dropped: a set change is applied to the session's copy and the words and the
+/// picker are built again from it (no request), with a notice line (the channel's set or the global
+/// one); a
+/// [`events::Update::Resync`] asks 7TV for the sets again ([`reload_seventv`]), and a channel that
+/// switched to another set is watched under its new id and says so in the chat.
+fn watch_seventv(
+  handle: ChatExtras,
+  client: twitch::Client,
+  catalog: Catalog,
+  panel: WeakEntity<ChatPanel>,
+  cx: &mut App,
+) -> Task<()> {
+  let Some(room_id) = handle.room_id.borrow().clone() else {
+    return Task::ready(());
+  };
+  cx.spawn(async move |cx| {
+    let mut topics = cx.update(|cx| seventv_topics(&room_id, cx));
+    while !topics.is_empty() {
+      let (mut updates, run) = events::connect(topics.clone());
+      // The connection runs on the network runtime and ends when `updates` is dropped.
+      cx.update(|cx| drop(runtime::spawn(cx, run)));
+      let mut switched = false;
+      while let Some(update) = updates.recv().await {
+        match update {
+          events::Update::Set { id, changes } => {
+            let scope = cx.update(|cx| apply_seventv(&room_id, &id, &changes, cx));
+            let load = cx.update(|cx| {
+              load_extras(
+                room_id.clone(),
+                client.clone(),
+                catalog.clone(),
+                handle.extras.clone(),
+                cx,
+              )
+            });
+            load.await;
+            let groups = handle.extras.borrow().picker.clone();
+            let lines: Vec<ChatEvent> = scope
+              .map(|scope| changes.iter().map(|c| seventv_changed(c, scope)).collect())
+              .unwrap_or_default();
+            let shown = panel.update(cx, |p, cx| {
+              p.set_emotes(groups, cx);
+              p.push(lines, cx);
+            });
+            if shown.is_err() {
+              return;
+            }
+          }
+          events::Update::Resync => {
+            let before = cx.update(|cx| channel_set_id(&room_id, cx));
+            let Some(reload) = cx.update(|cx| {
+              let panel = panel.upgrade()?;
+              Some(reload_seventv(
+                &handle,
+                client.clone(),
+                catalog.clone(),
+                &panel,
+                cx,
+              ))
+            }) else {
+              return;
+            };
+            reload.await;
+            let after = cx.update(|cx| channel_set_id(&room_id, cx));
+            if before.is_some()
+              && after.is_some()
+              && before != after
+              && panel
+                .update(cx, |p, cx| p.push([seventv_switched()], cx))
+                .is_err()
+            {
+              return;
+            }
+            let now = cx.update(|cx| seventv_topics(&room_id, cx));
+            if now != topics {
+              topics = now;
+              switched = true;
+              break;
+            }
+          }
+        }
+      }
+      // The connection stopped on its own (a close that trying again would repeat).
+      if !switched {
+        return;
+      }
+    }
+  })
+}
+
+/// Which of a chat's 7TV sets a pushed change was for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SetScope {
+  /// The channel's own set.
+  Channel,
+  /// 7TV's global set.
+  Global,
+}
+
+/// Applies a set's changes to the session's copies that hold it; which of `room_id`'s chat sets it
+/// was (the channel's when it is both), `None` when the chat shows neither.
+fn apply_seventv(
+  room_id: &str,
+  set_id: &str,
+  changes: &[events::Change],
+  cx: &mut App,
+) -> Option<SetScope> {
+  let mut scope = None;
+  for (key, set) in &mut cx.default_global::<ChatSets>().seventv {
+    if set.id.as_deref() != Some(set_id) {
+      continue;
+    }
+    let set = Rc::make_mut(set);
+    for change in changes {
+      set.apply(change);
+    }
+    if key == room_id {
+      scope = Some(SetScope::Channel);
+    } else if key.is_empty() && scope.is_none() {
+      scope = Some(SetScope::Global);
+    }
+  }
+  scope
+}
+
+/// A new id for each 7TV notice line: the same emote may be added, removed and added again.
+fn seventv_line(kind: &str, text: String) -> ChatEvent {
+  use std::sync::atomic::{AtomicU64, Ordering};
+  static NEXT: AtomicU64 = AtomicU64::new(0);
+  let n = NEXT.fetch_add(1, Ordering::Relaxed);
+  notice_line(&format!("7tv-{kind}-{n}"), text)
+}
+
+/// The line that tells the chat a 7TV emote was added, removed or renamed, in the channel's set
+/// or in 7TV's global one.
+fn seventv_changed(change: &events::Change, scope: SetScope) -> ChatEvent {
+  let global = scope == SetScope::Global;
+  match change {
+    events::Change::Added(emote) => {
+      let name = &emote.name;
+      let text = if global {
+        tf!(
+          "7TV: new global emote {name}",
+          "7TV : nouvelle emote globale {name}"
+        )
+      } else {
+        tf!(
+          "7TV: new emote {name} added",
+          "7TV : nouvelle emote {name} ajoutée"
+        )
+      };
+      seventv_line("added", text)
+    }
+    events::Change::Removed { name, .. } => {
+      let text = if global {
+        tf!(
+          "7TV: global emote {name} removed",
+          "7TV : emote globale {name} retirée"
+        )
+      } else {
+        tf!("7TV: emote {name} removed", "7TV : emote {name} retirée")
+      };
+      seventv_line("removed", text)
+    }
+    events::Change::Renamed { from, to, .. } => {
+      let text = if global {
+        tf!(
+          "7TV: global emote {from} renamed {to}",
+          "7TV : emote globale {from} renommée {to}"
+        )
+      } else {
+        tf!(
+          "7TV: emote {from} renamed {to}",
+          "7TV : emote {from} renommée {to}"
+        )
+      };
+      seventv_line("renamed", text)
+    }
+  }
+}
+
+/// The line that tells the chat the channel now uses another 7TV set (its emotes replaced).
+fn seventv_switched() -> ChatEvent {
+  seventv_line(
+    "switched",
+    t(
+      "7TV: the channel switched to another emote set",
+      "7TV : la chaîne utilise un autre jeu d'emotes",
+    )
+    .into(),
+  )
 }
 
 /// The line shown when the 7TV reload brought nothing (7TV unreachable, or the room's id is not
@@ -319,10 +540,10 @@ pub(super) fn load_extras(
     let as_bttv = |set: &Option<Rc<Vec<bttv::Emote>>>| -> Vec<Emote> {
       set.iter().flat_map(|s| s.iter()).map(bttv_emote).collect()
     };
-    let as_seventv = |set: &Option<Rc<Vec<seventv::Emote>>>| -> Vec<Emote> {
+    let as_seventv = |set: &Option<Rc<seventv::Set>>| -> Vec<Emote> {
       set
         .iter()
-        .flat_map(|s| s.iter())
+        .flat_map(|s| s.emotes.iter())
         .map(seventv_emote)
         .collect()
     };
@@ -393,7 +614,7 @@ pub(super) fn global_emotes(client: twitch::Client, cx: &mut App) -> Task<Vec<Em
     let seventv: Vec<Emote> = seventv
       .await
       .iter()
-      .flat_map(|s| s.iter())
+      .flat_map(|s| s.emotes.iter())
       .map(seventv_emote)
       .collect();
     let bttv: Vec<Emote> = bttv
@@ -417,13 +638,13 @@ pub(super) fn global_emotes(client: twitch::Client, cx: &mut App) -> Task<Vec<Em
 /// runtime) and kept; `None` when it fails.
 fn set<T, F>(
   key: String,
-  cache: fn(&mut ChatSets) -> &mut HashMap<String, Rc<Vec<T>>>,
+  cache: fn(&mut ChatSets) -> &mut HashMap<String, Rc<T>>,
   fetch: impl FnOnce() -> F,
   cx: &mut App,
-) -> Task<Option<Rc<Vec<T>>>>
+) -> Task<Option<Rc<T>>>
 where
   T: Send + 'static,
-  F: Future<Output = twitch::Result<Vec<T>>> + Send + 'static,
+  F: Future<Output = twitch::Result<T>> + Send + 'static,
 {
   if let Some(set) = cache(cx.default_global::<ChatSets>()).get(&key).cloned() {
     return Task::ready(Some(set));
@@ -939,7 +1160,7 @@ mod tests {
       words.insert(emote.name.clone(), bttv_emote(&emote));
     }
     // 7TV after BTTV: its Pog wins.
-    for emote in seventv::parse_global(set).expect("a set") {
+    for emote in seventv::parse_global(set).expect("a set").emotes {
       words.insert(emote.name.clone(), seventv_emote(&emote));
     }
     let fragments = with_words("so Pog @viewer Pogs Pog D:", &words);
@@ -1004,6 +1225,56 @@ mod tests {
     assert_eq!(pog.modifiers.effects.turn, Turn::Right);
     assert_eq!(pog.modifiers.effects.tint, Tint::Party);
     assert!(pog.modifiers.shake && !pog.modifiers.wide);
+  }
+
+  #[test]
+  fn seventv_pushes_read_as_chat_lines() {
+    let text = |line: ChatEvent| match line {
+      ChatEvent::Message(ChatMessage {
+        kind: MessageKind::Notice(text),
+        id,
+        ..
+      }) => (id.to_string(), text.to_string()),
+      _ => panic!("a notice line"),
+    };
+    let set = include_str!("../../twitch/tests/fixtures/seventv_global.json");
+    let ez = seventv::parse_global(set)
+      .expect("a set")
+      .emotes
+      .into_iter()
+      .find(|e| e.name == "EZ")
+      .expect("EZ");
+    let added = events::Change::Added(ez);
+    let (first, line) = text(seventv_changed(&added, SetScope::Channel));
+    assert_eq!(line, "7TV: new emote EZ added");
+    // The same emote added again gets a line of its own.
+    let (second, _) = text(seventv_changed(&added, SetScope::Channel));
+    assert_ne!(first, second);
+    assert_eq!(
+      text(seventv_changed(&added, SetScope::Global)).1,
+      "7TV: new global emote EZ"
+    );
+    let removed = events::Change::Removed {
+      id: "e".into(),
+      name: "EZ".into(),
+    };
+    assert_eq!(
+      text(seventv_changed(&removed, SetScope::Channel)).1,
+      "7TV: emote EZ removed"
+    );
+    let renamed = events::Change::Renamed {
+      id: "e".into(),
+      from: "EZ".into(),
+      to: "EZY".into(),
+    };
+    assert_eq!(
+      text(seventv_changed(&renamed, SetScope::Global)).1,
+      "7TV: global emote EZ renamed EZY"
+    );
+    assert_eq!(
+      text(seventv_switched()).1,
+      "7TV: the channel switched to another emote set"
+    );
   }
 
   #[test]

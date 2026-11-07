@@ -123,6 +123,18 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- 7TV live updates (2026-11-07, the user's request, [ADR 0030](decisions/0030-seventv-event-api.md)): a live's
+  chat follows 7TV's EventAPI (`wss://events.7tv.io/v3`, anonymous) for the global set, the channel's set and
+  the channel's 7TV user, so an emote the streamer adds, removes or renames shows in the words and the picker
+  without a reload, each with a notice line in the chat (added, removed, renamed, for the channel's set and the
+  global one; the channel switching to another set). `twitch::seventv::events` (heartbeat, close codes,
+  reconnects with a resync), `seventv::Set` keeps the set's and the user's ids, `Set::apply`; the space applies
+  changes to the session's copies and rebuilds the extras from them. New example `seventv_events`. 8 new tests,
+  1 fixture (`seventv_event_pushed.json`). Verified: clippy, tests; the protocol against the live service (Hello,
+  Acks, real pushes). **Not verified:** in the app on a live whose set changes; a removal, a rename or a channel
+  switching its set (`user.update`) as 7TV sends them (not seen while probing, read from 7TV's README; only
+  the subscriptions' Acks were seen for `user.update`).
+
 - Chat options and the 7TV reload (2026-11-07, the user's request): a gear left of "Send" opens a menu with
   "Reload 7TV emotes", which asks 7TV for the global and the channel's sets again and replaces the ones kept
   for the session only once both have answered (a failed half leaves the chat's emotes alone), then rebuilds
@@ -131,9 +143,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   service. The fake chat has the same gear. 2 new tests. Verified in the app (debug build, fake chat): the gear
   draws left of "Send", its menu opens upward, the option fires, and a reload with the real global sets on
   keeps the emotes drawn. **Not verified:** a live's channel reload (needs a real live).
-  Researched: 7TV's REST answers carry no cache header, so asking again is enough; automatic updates would
-  need its EventAPI WebSocket (`wss://events.7tv.io/v3`, op 35 `emote_set.update` on the set's id, heartbeat
-  and resume) and keeping `emote_set.id`, a feature of its own — see [twitch.md](twitch.md).
+  Researched: 7TV's REST answers carry no cache header, so asking again is enough; automatic updates came
+  next, over its EventAPI (above).
 
 - Clickable chat links (2026-11-07, the user's request): a link in a chat message (live, VOD replay, fake chat; any `ui::chat` panel) opens in the browser on a click, with a pointer cursor and the plain accent on hover; a deleted message's link stays inert. Only `http(s)://` words become links (`split_text`), so no other scheme's handler runs. Checked: clippy. **Not verified:** in the app.
 

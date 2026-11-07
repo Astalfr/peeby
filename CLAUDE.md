@@ -48,6 +48,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   nothing; prints whether the page is signed in, has points and a bonus button; it joins that chat as
   the user: prefer their own channel); `-- predictions-ended <login>` probes, anonymous,
   the GQL fields of ended predictions and saves the app's predictions answer)
+- 7TV's EventAPI (anonymous): `cargo run -p twitch --example seventv_events -- <minutes> (<login>… | top) [--save <file>]`
+  subscribes to channels' 7TV sets and users and prints what comes (ADR 0030; trim the `actor` before a fixture)
 - Twitch raids on PubSub (anonymous): `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>]`
   listens to channels' raid topics (`top`: 500 lives, PubSub's limit) and prints what comes (ADR 0024)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
