@@ -16,12 +16,12 @@ use crate::models::{
   VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
-  find_continuation, is_mix, parse_captions, parse_channel_search, parse_channels, parse_comments,
-  parse_feed, parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix,
-  parse_mixes, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
-  parse_watch, tracking_param,
+  find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
+  parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat, parse_live_formats,
+  parse_members_only, parse_mix, parse_mixes, parse_notifications, parse_oembed_title,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// "My Mix": the account's own mix, in no feed.
@@ -449,6 +449,21 @@ impl Client {
       .await?;
     self.check_session(&response)?;
     Ok(parse_notifications(&response))
+  }
+
+  /// The account's channel handle (`@name`), as its live chat messages show it; `None` for an
+  /// account without a channel. Needs cookies.
+  pub async fn account_handle(&self) -> Result<Option<String>> {
+    Ok(parse_account_handle(&self.account_menu().await?))
+  }
+
+  /// `account/account_menu` as YouTube answers it (the account's name, handle and picture):
+  /// for a fixture (the `account` example). Needs cookies.
+  pub async fn account_menu(&self) -> Result<Value> {
+    self.require_session()?;
+    let response = self.web("account/account_menu", json!({}), true).await?;
+    self.check_session(&response)?;
+    Ok(response)
   }
 
   /// How many notifications arrived since the user last opened the inbox (youtube.com's

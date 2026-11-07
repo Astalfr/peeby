@@ -36,7 +36,9 @@ Both cost a proxy or a second stream path for little gain: an hour back covers w
   for up to 10 s), each page's messages spread over the time to the next as they were sent. It shows on
   `ui::chat`, as Twitch's, in the same layout. It shows the present even when the player is behind.
   Read-only, text messages and removals; Super Chats and memberships are skipped until a real response
-  with them is saved.
+  with them is saved. As on Twitch, mentions of the channel's handle (`WatchPage::channel_handle`,
+  from the owner's link) are red, and messages mentioning the signed-in account's handle
+  (`account/account_menu`, read once per session when a chat first opens) on a red tint (2026-11-07).
 
 ## Consequences
 

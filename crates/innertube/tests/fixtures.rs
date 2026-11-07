@@ -752,6 +752,16 @@ fn unseen_notifications_count() {
 }
 
 #[test]
+fn account_handle() {
+  // Captured 2026-11-07, the header alone, the account renamed.
+  assert_eq!(
+    innertube::parse_account_handle(&fixture("account_menu.json")).as_deref(),
+    Some("@viewer1")
+  );
+  assert_eq!(innertube::parse_account_handle(&fixture("next.json")), None);
+}
+
+#[test]
 fn live_player_and_media_playlist() {
   // Lofi Girl's live, captured 2026-11-02; its media playlist trimmed to 8 segments.
   let player = fixture("player_visionos_live.json");
@@ -842,9 +852,18 @@ fn live_watch_page_has_its_chat() {
       .is_some_and(|t| t.starts_with("0ofMyAO"))
   );
   assert!(!page.title.is_empty());
+  // Its chat names the streamer by their handle.
+  assert_eq!(page.channel_handle.as_deref(), Some("@chrystalghost"));
   assert_eq!(
     parse_watch("dQw4w9WgXcQ", &fixture("next.json")).live_chat,
     None
+  );
+  // The name's link is the channel's id: the owner's own link has the handle.
+  assert_eq!(
+    parse_watch("dQw4w9WgXcQ", &fixture("next.json"))
+      .channel_handle
+      .as_deref(),
+    Some("@RickAstleyYT")
   );
 }
 

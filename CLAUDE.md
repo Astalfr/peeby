@@ -24,6 +24,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   (`peeby.exe` for the release profile's), never committed nor logged; both write the rotated cookies back)
 - Jellyfin live tests (ignored by default): set `$env:PEEBY_TEST_SERVER`, `PEEBY_TEST_USER`, `PEEBY_TEST_PASSWORD`,
   then `cargo test -p jellyfin-api --test live -- --ignored --nocapture`
+- The signed-in account's handle: `cargo run -p innertube --example account -- <cookies.txt> [--save <file>]`
+  (an exported copy, as for `home`; `--save` writes the whole response, account data included: trim it before a fixture)
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (an exported copy, as for `home`)
 - A YouTube live through its proxy, anonymous: `cargo run -p innertube --example live_probe -- [id | "query"] [--serve <s>]`

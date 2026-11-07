@@ -416,14 +416,20 @@ impl WatchView {
     );
   }
 
-  /// Follows the live's chat from `continuation`.
-  fn start_chat(&mut self, continuation: String, cx: &mut Context<Self>) {
+  /// Follows the live's chat from `continuation`; mentions of `streamer` (the channel's
+  /// handle) are red.
+  fn start_chat(&mut self, continuation: String, streamer: Option<String>, cx: &mut Context<Self>) {
     if self.chat.is_some() {
       return;
     }
     let panel = cx.new(|cx| {
       let mut panel = ChatPanel::new(cx);
       panel.set_user_lookup(chat::user_lookup());
+      if let Some(streamer) = streamer {
+        panel.set_streamer(streamer);
+      }
+      // Messages mentioning the signed-in account on a red tint.
+      panel.set_viewer(chat::viewer(cx));
       panel
     });
     // A user card's "Open channel": their channel in a new tab, the live going on.
@@ -464,7 +470,7 @@ impl WatchView {
               });
               this.rating = Rating::of(&page);
               if let Some(continuation) = page.live_chat.clone() {
-                this.start_chat(continuation, cx);
+                this.start_chat(continuation, page.channel_handle.clone(), cx);
               }
               let token = page.comments_continuation.clone();
               this.comments.update(cx, |c, cx| c.start(token, cx));

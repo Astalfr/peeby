@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui::{App, Entity, Hsla, SharedString, Task};
+use gpui::{App, Entity, Global, Hsla, SharedString, Task};
 use innertube::{ChatAction, ChatBadgeKind, ChatRun, Client, SearchResult};
 use peeby_core::settings::Settings;
 use ui::chat::{
@@ -285,4 +285,56 @@ fn chat_message(message: innertube::ChatMessage) -> ChatMessage {
     chat.time = SystemTime::now();
   }
   chat
+}
+
+/// The signed-in account's handle, as its chat messages show it: read once per session, when a
+/// chat first opens, for the red tint of the messages mentioning it.
+#[derive(Default)]
+struct AccountHandle {
+  /// Counts the sessions: a reading from the previous one is dropped.
+  generation: u64,
+  asked: bool,
+  handle: Option<SharedString>,
+}
+
+impl Global for AccountHandle {}
+
+/// Forgets the handle: called on every session change.
+pub fn reset_account_handle(cx: &mut App) {
+  let state = cx.default_global::<AccountHandle>();
+  state.generation += 1;
+  state.asked = false;
+  state.handle = None;
+}
+
+/// The viewer for a chat panel ([`ChatPanel::set_viewer`]): the account's handle, read in the
+/// background the first time (signed in only).
+pub fn viewer(cx: &mut App) -> ui::chat::Viewer {
+  let client = cx
+    .try_global::<crate::save::Session>()
+    .map(|s| s.0.clone())
+    .filter(Client::signed_in);
+  let state = cx.default_global::<AccountHandle>();
+  if let Some(client) = client
+    && !state.asked
+  {
+    state.asked = true;
+    let generation = state.generation;
+    let task = runtime::spawn(cx, async move { client.account_handle().await });
+    cx.spawn(async move |cx| {
+      let handle = match task.await {
+        Some(Ok(handle)) => handle,
+        Some(Err(e)) => return tracing::warn!("account handle: {e}"),
+        None => return,
+      };
+      cx.update(|cx| {
+        let state = cx.default_global::<AccountHandle>();
+        if state.generation == generation {
+          state.handle = handle.map(SharedString::from);
+        }
+      });
+    })
+    .detach();
+  }
+  Rc::new(|cx: &App| cx.try_global::<AccountHandle>()?.handle.clone())
 }

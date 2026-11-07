@@ -174,6 +174,15 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     channel_id: owner_run["navigationEndpoint"]["browseEndpoint"]["browseId"]
       .as_str()
       .map(str::to_owned),
+    // The name's link or, when it goes to `/channel/UC…`, the owner's own.
+    channel_handle: [
+      &owner_run["navigationEndpoint"],
+      &owner["navigationEndpoint"],
+    ]
+    .into_iter()
+    .filter_map(|e| e["browseEndpoint"]["canonicalBaseUrl"].as_str())
+    .find_map(|url| url.strip_prefix('/').filter(|h| h.starts_with('@')))
+    .map(str::to_owned),
     channel_avatar: thumbnails(&owner["thumbnail"]["thumbnails"]),
     subscribers: non_empty(text(&owner["subscriberCountText"])),
     views: non_empty(text(
@@ -1516,6 +1525,17 @@ pub(crate) fn tracking_param(response: &Value, key: &str) -> Option<String> {
 }
 
 /// Every value under `key`, depth first (not looking inside matches).
+/// The account's channel handle (`@name`, as its live chat messages show it) in
+/// `account/account_menu`'s header; `None` for an account without a channel.
+pub fn parse_account_handle(response: &Value) -> Option<String> {
+  let mut headers = Vec::new();
+  find_all(response, "activeAccountHeaderRenderer", &mut headers);
+  headers.into_iter().find_map(|header| {
+    let handle = text(&header["channelHandle"]);
+    handle.starts_with('@').then_some(handle)
+  })
+}
+
 fn find_all<'a>(value: &'a Value, key: &str, out: &mut Vec<&'a Value>) {
   match value {
     Value::Object(map) => match map.get(key) {

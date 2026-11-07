@@ -110,6 +110,8 @@ pub struct WatchPage {
   pub channel: Option<String>,
   /// Channel id (`UC…`).
   pub channel_id: Option<String>,
+  /// Channel handle (`@name`), from its link: what its live chat shows and mentions.
+  pub channel_handle: Option<String>,
   /// Channel avatar sizes.
   pub channel_avatar: Vec<Thumbnail>,
   /// Localized subscriber count, e.g. `4,55 M d'abonnés`.

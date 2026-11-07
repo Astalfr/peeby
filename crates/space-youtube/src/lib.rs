@@ -227,6 +227,7 @@ impl YouTubeSpace {
     }
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
+    chat::reset_account_handle(cx);
     bell::reset(cx);
     subscribe::reset(cx);
     let unseen = inbox::inbox(cx);
@@ -289,6 +290,7 @@ impl YouTubeSpace {
     }));
     cx.set_global(save::Session(client.clone()));
     save::load_watch_later(cx);
+    chat::reset_account_handle(cx);
     bell::reset(cx);
     subscribe::reset(cx);
     inbox::reset(cx.weak_entity(), cx);
