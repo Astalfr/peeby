@@ -28,14 +28,20 @@ an external D3D11 texture drawn by the patched GPUI.
 - It holds no player: it asks its space for the current one at each render, so a queue moving to its next
   video carries on in it. A `NowPlaying` global (in `ui::player`) keeps one sound at a time: a player that
   starts pauses the previous one, and the mini-player closes if its player is no longer the one playing.
-- Dragging the video moves the window, and its edges and corners (invisible, 6 px; 12 px corners) resize it
-  at 16:9, the opposite side staying in place (the middle, along the axis no edge holds). Both follow the mouse
-  in screen coordinates and set the bounds with `gpui_windows::set_window_bounds` (a small addition to the
-  patched GPUI, ADR 0001), run as a task: from inside an update, even a `cx.defer`, the app is still borrowed
-  when `SetWindowPos` sends `WM_SIZE`. The move is not a caption area
+- Dragging the video moves the window, and its edges and corners (invisible, 12 px; 24 px corners, logical
+  pixels, scaled by the display's factor) resize it at 16:9, the opposite side staying in place (the middle,
+  along the axis no edge holds). The window has no frame of its own, so the bands reach inward from its sides:
+  there is no grab margin outside it, and they are wide enough to hit without aiming (2026-11-07, from 6/12 px,
+  which was too fiddly to grab). Both follow the mouse in screen coordinates and set the bounds with
+  `gpui_windows::set_window_bounds` (a small addition to the patched GPUI, ADR 0001), run as a task: from inside
+  an update, even a `cx.defer`, the app is still borrowed when `SetWindowPos` sends `WM_SIZE`. The move is not a
+  caption area
   (`WindowControlArea::Drag`): crossing between caption and client areas resets the window's hover.
-- On hover: play/pause in the middle, the two buttons at the top right. Whether the controls show is the
-  window's hover state, not an element's: the buttons occlude the element and its hover would flicker.
+- On hover: play/pause in the middle, the two buttons at the top right (14 px in, inside the 48 px shade).
+  Whether the controls show is the window's hover state, not an element's: the buttons occlude the element and
+  its hover would flicker. The resizing bands are painted before them, so a visible button takes its own
+  clicks where it overlaps one (the hit test keeps the last-painted occluding element) and the top right
+  corner is an L 14 px thick while the controls show.
 
 ## Consequences
 
