@@ -224,6 +224,49 @@ pub(super) fn load_extras(
   })
 }
 
+/// The global 7TV and BTTV emotes (from the session's cache, else fetched), as the picker's
+/// groups, 7TV first; a set that fails to load is left out. For the fake chat.
+#[cfg(debug_assertions)]
+pub(super) fn global_emotes(client: twitch::Client, cx: &mut App) -> Task<Vec<EmoteGroup>> {
+  let seventv = set(
+    String::new(),
+    |s| &mut s.seventv,
+    {
+      let client = client.clone();
+      move || async move { client.seventv_global().await }
+    },
+    cx,
+  );
+  let bttv = set(
+    String::new(),
+    |s| &mut s.bttv,
+    move || async move { client.bttv_global().await },
+    cx,
+  );
+  cx.spawn(async move |_| {
+    let seventv: Vec<Emote> = seventv
+      .await
+      .iter()
+      .flat_map(|s| s.iter())
+      .map(seventv_emote)
+      .collect();
+    let bttv: Vec<Emote> = bttv
+      .await
+      .iter()
+      .flat_map(|s| s.iter())
+      .map(bttv_emote)
+      .collect();
+    [("7TV", seventv), ("BTTV", bttv)]
+      .into_iter()
+      .filter(|(_, emotes)| !emotes.is_empty())
+      .map(|(title, emotes)| EmoteGroup {
+        title: title.into(),
+        emotes,
+      })
+      .collect()
+  })
+}
+
 /// The set under `key` in the session's `cache`, else fetched with `fetch` (on the network
 /// runtime) and kept; `None` when it fails.
 fn set<T, F>(

@@ -197,7 +197,9 @@ Two credentials, for different things. Both are secrets, under the same rules as
     `twitch::chat::irc::parse` and `chat::event`, as a live's do.
   - Fake 7TV/BTTV words (animated, wide, zero-width), badges and the points icon are drawn in memory
     (`ui::chat::fake::Squares`, under `fake-chat://`). Only Twitch's own emotes, off by default,
-    load from Twitch's CDN.
+    load from Twitch's CDN. "Vraies 7TV / BTTV", off by default too, loads the real global sets
+    (anonymous, the live chat's session cache) and writes their words, zero-width ones stacked
+    by one or two on an emote, in place of the squares; they also lead the picker.
   - Controls on the left:
     - Feed: the interval (one message every 10, 5 or 2 s, up to 300 a second), bursts sent `BATCH` at a
       time, the connection state.

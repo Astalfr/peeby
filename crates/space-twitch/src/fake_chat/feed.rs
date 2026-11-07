@@ -230,8 +230,18 @@ pub enum Notice {
   Raid,
 }
 
+/// Real 7TV and BTTV words for the messages, in place of [`THIRD_PARTY`].
+pub struct RealWords {
+  /// Emotes of their own.
+  pub plain: Vec<String>,
+  /// Zero-width ones, written after another.
+  pub overlays: Vec<String>,
+}
+
 /// Writes the chat's lines.
 pub struct Feed {
+  /// The real global emotes' words, while the fake chat uses them.
+  pub real: Option<RealWords>,
   rng: Rng,
   n: u64,
   /// The last messages' ids, with their author's id.
@@ -241,6 +251,7 @@ pub struct Feed {
 impl Feed {
   pub fn new(seed: u64) -> Self {
     Self {
+      real: None,
       rng: Rng::new(seed),
       n: 0,
       recent: VecDeque::new(),
@@ -264,20 +275,31 @@ impl Feed {
     for _ in 0..count {
       let word = match self.rng.below(14) {
         0 | 1 if content.third_party => {
-          let plain: Vec<&str> = THIRD_PARTY
-            .iter()
-            .filter(|(_, look)| *look != Look::Overlay)
-            .map(|(name, _)| *name)
-            .collect();
+          let (plain, overlays): (Vec<&str>, Vec<&str>) = match &self.real {
+            Some(real) => (
+              real.plain.iter().map(String::as_str).collect(),
+              real.overlays.iter().map(String::as_str).collect(),
+            ),
+            None => {
+              let named = |overlay: bool| {
+                THIRD_PARTY
+                  .iter()
+                  .filter(move |(_, look)| (*look == Look::Overlay) == overlay)
+                  .map(|(name, _)| *name)
+                  .collect()
+              };
+              (named(false), named(true))
+            }
+          };
           let mut word = self.rng.pick(&plain).copied().unwrap_or("EZ").to_owned();
-          if self.rng.one_in(4) {
-            let overlays: Vec<&str> = THIRD_PARTY
-              .iter()
-              .filter(|(_, look)| *look == Look::Overlay)
-              .map(|(name, _)| *name)
-              .collect();
-            if let Some(overlay) = self.rng.pick(&overlays) {
+          // Now and then one overlay, more rarely two: 7TV stacks them all on the emote.
+          for _ in 0..2 {
+            if self.rng.one_in(3)
+              && let Some(overlay) = self.rng.pick(&overlays)
+            {
               word = format!("{word} {overlay}");
+            } else {
+              break;
             }
           }
           word

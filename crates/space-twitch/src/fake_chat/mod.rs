@@ -10,8 +10,8 @@
 //!
 //! The controls on the left set the rate of messages (and bursts), what they hold, the
 //! moderation, the channel's events, the room's modes, the connection's state, the field's state,
-//! the points, the rewards, the predictions and the polls. Only Twitch's own emotes (off by default) load
-//! from Twitch's CDN.
+//! the points, the rewards, the predictions and the polls. Only Twitch's own emotes and the real
+//! global 7TV and BTTV sets (both off by default) reach the network: Twitch's CDN, 7TV and BTTV.
 
 mod feed;
 mod points;
@@ -43,7 +43,7 @@ use ui::{form, images, tf, theme};
 use super::chat::{self, BATCH, Extras};
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
 use super::polls;
-use feed::{CHANNEL, Content, Feed, Look, ME, Notice, THIRD_PARTY};
+use feed::{CHANNEL, Content, Feed, Look, ME, Notice, RealWords, THIRD_PARTY};
 pub use points::FakePoints;
 use twitch::raids::RaidEvent;
 
@@ -92,6 +92,12 @@ pub struct FakeChatView {
   points: Rc<RefCell<FakePoints>>,
   feed: Feed,
   extras: Extras,
+  /// The real global 7TV and BTTV sets used in place of the fake ones.
+  real_emotes: bool,
+  /// Those sets, once loaded.
+  real: Option<Vec<EmoteGroup>>,
+  /// They are loading.
+  loading_real: bool,
   room: RoomState,
   content: Content,
   /// Messages a minute (6: one every 10 s).
@@ -170,6 +176,9 @@ impl FakeChatView {
       points,
       feed: Feed::new(0x9e37_79b9),
       extras,
+      real_emotes: false,
+      real: None,
+      loading_real: false,
       room: RoomState::default(),
       content: Content::default(),
       rate: 300,
@@ -376,6 +385,91 @@ impl FakeChatView {
       .filter(|(key, _)| *key == tag)
       .collect();
     self.deliver_lines(&[feed::room_state(&tags)], cx);
+  }
+
+  /// Uses the real global 7TV and BTTV sets (`on`) or the fake ones; loads them the first time.
+  fn set_real_emotes(&mut self, on: bool, cx: &mut Context<Self>) {
+    self.real_emotes = on;
+    if !on || self.real.is_some() {
+      self.apply_emotes(cx);
+      return;
+    }
+    if self.loading_real {
+      return;
+    }
+    let client = match twitch::Client::new(None, None) {
+      Ok(client) => client,
+      Err(e) => {
+        tracing::info!("fake chat: no client for the real emotes: {e}");
+        self.real_emotes = false;
+        return;
+      }
+    };
+    self.loading_real = true;
+    let load = chat::global_emotes(client, cx);
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      let groups = load.await;
+      this
+        .update(cx, |this, cx| {
+          this.loading_real = false;
+          if groups.is_empty() {
+            this.real_emotes = false;
+            let line = chat::notice_line(
+              "fake-emotes",
+              t(
+                "Fake chat: the 7TV and BTTV emotes could not be loaded.",
+                "Faux chat : les emotes 7TV et BTTV n'ont pas pu être chargées.",
+              )
+              .into(),
+            );
+            this.push(line, cx);
+          } else {
+            this.real = Some(groups);
+          }
+          this.apply_emotes(cx);
+          cx.notify();
+        })
+        .ok();
+    }));
+  }
+
+  /// The words, the picker and the feed's words for the emotes in use: the fake ones, with the
+  /// real global sets over them (and first in the picker) while they are on.
+  fn apply_emotes(&mut self, cx: &mut Context<Self>) {
+    let mut extras = extras();
+    self.feed.real = None;
+    if self.real_emotes
+      && let Some(groups) = &self.real
+    {
+      // BTTV first, so that 7TV wins, as on a live.
+      for group in groups.iter().rev() {
+        for emote in &group.emotes {
+          extras.words.insert(emote.name.to_string(), emote.clone());
+        }
+      }
+      let (mut plain, mut overlays) = (Vec::new(), Vec::new());
+      for emote in extras.words.values() {
+        if groups
+          .iter()
+          .any(|g| g.emotes.iter().any(|e| e.name == emote.name))
+        {
+          let list = if emote.overlay {
+            &mut overlays
+          } else {
+            &mut plain
+          };
+          list.push(emote.name.to_string());
+        }
+      }
+      // The words' map has no order: sorted, the feed stays the same for a seed.
+      plain.sort();
+      overlays.sort();
+      self.feed.real = Some(RealWords { plain, overlays });
+      extras.picker.splice(0..0, groups.iter().cloned());
+    }
+    let picker = extras.picker.clone();
+    self.panel.update(cx, |p, cx| p.set_emotes(picker, cx));
+    self.extras = extras;
   }
 
   fn points_changed(&mut self, change: impl FnOnce(&mut FakePoints), cx: &mut Context<Self>) {
@@ -627,6 +721,23 @@ impl FakeChatView {
         t("7TV / BTTV emotes", "Emotes 7TV / BTTV"),
         c.third_party,
         |this, on, _| this.content.third_party = on,
+        cx,
+      ),
+      self.switch(
+        "real-emotes",
+        if self.loading_real {
+          t(
+            "Real 7TV / BTTV (loading…)",
+            "Vraies 7TV / BTTV (chargement…)",
+          )
+        } else {
+          t(
+            "Real 7TV / BTTV (global sets)",
+            "Vraies 7TV / BTTV (sets globaux)",
+          )
+        },
+        self.real_emotes,
+        Self::set_real_emotes,
         cx,
       ),
       self.switch(

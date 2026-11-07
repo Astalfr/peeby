@@ -84,7 +84,11 @@ fn emote_stack<'a>(
 ) -> gpui::Div {
   let layers: Vec<&Emote> = layers.into_iter().collect();
   let scale = height / EMOTE_HEIGHT;
-  let width = layers.first().map_or(0., |e| emote_width(e) * scale);
+  // As wide as its widest layer, so that a wide overlay does not spill over the words beside it.
+  let width = layers
+    .iter()
+    .map(|e| emote_width(e) * scale)
+    .fold(0., f32::max);
   let mut drawn = div().relative().w(px(width)).h(px(height)).flex_none();
   for layer in layers {
     let layer_width = emote_width(layer) * scale;
