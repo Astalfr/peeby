@@ -27,6 +27,7 @@ PeebTube additions to `player`:
 - `StartOptions::readahead_secs` (`cache-secs`: YouTube refuses segments fetched in a burst; Twitch VODs would be fetched whole);
 - `Player::add_subtitle` (`sub-add`, captions fetched on demand);
 - `Player::property`, read-only, for the player's statistics panel;
+- `VOLUME_MAX` (mpv's `volume-max`, 200) and `Player::set_volume` up to it, for the volume boost;
 - `Player::set_speed` (`speed`), for the 2× speed while Space or the left button is held;
 - `Event::Cached` (`demuxer-cache-time`, observed), for the loaded part drawn on the seek bar;
 - `StartOptions::audio_device`, `Player::set_audio_device` and `audio_devices` (an mpv without render context, `sys::RenderBackend::None`), for the top bar's audio output menu;

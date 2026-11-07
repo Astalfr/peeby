@@ -14,6 +14,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **5: distribution (1.0)** | 🚧 (done once v1.0.0 is published and installed) | CI, installer with libmpv, yt-dlp and Deno in `tools/` (Inno Setup, after Twitty's), releases from version tags, updates from GitHub Releases with the title bar's button ([ADR 0027](decisions/0027-installer-and-updates.md), [release.md](release.md)) | Downloadable build |
 
 
+## Volume boost
+
+- Done (2026-11-07): a "Boost" button after the volume slider (shown on hover) lets the player's volume go up to 200 % ([playback-ux.md](player/playback-ux.md)): mpv's `volume-max` is 200 (`player::VOLUME_MAX`), the track doubles, marks 100 % and draws the boost in the warning color; the keys and the wheel go up to it. Never remembered: each player starts without it, the kept volume is 100 % at most. Checked: build, clippy, tests. **Not verified:** in the app.
+
 ## BTTV emote modifiers
 
 - Done (2026-11-07, the user's request for "7TV's modifiers": 7TV has none of its own, these are BTTV's, which BTTV also applies to 7TV emotes): `w! h! v! z! c! l! r! p! s!` before a 7TV or BTTV emote, and FFZ's `ffzW/X/Y/Cursed` after one, in the live and VOD chat ([twitch.md](twitch.md), "BTTV's modifiers"). Flips, quarter turns, cursed and party colors are done to the pixels when decoding (`ui::images::Effects`, `ImageStore::get_with`), wide and shake when drawing; the preview lists them. The fake chat writes some, its squares have a white corner so a flip shows; "Vraies 7TV / BTTV" (fake chat) loads the real global sets. 3 new tests. Checked: clippy, tests. **Not verified:** in the app.

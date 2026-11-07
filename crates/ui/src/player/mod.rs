@@ -331,6 +331,10 @@ pub struct PlayerView {
   hold_ended: bool,
   buffering: bool,
   volume: f64,
+  /// The boost button beside the volume slider is on: the volume goes up to
+  /// [`player::VOLUME_MAX`] (mpv amplifies past 100). Never remembered: each player starts
+  /// without it.
+  boosted: bool,
   muted: bool,
   /// Another page is on top: the player stays paused, even if it starts after being covered.
   covered: bool,
@@ -470,7 +474,8 @@ impl PlayerView {
       speed: 1.0,
       hold_ended: false,
       buffering: false,
-      volume: prefs.volume,
+      volume: prefs.volume.clamp(0.0, 100.0),
+      boosted: false,
       muted: prefs.muted,
       covered: false,
       osd: None,
@@ -1561,8 +1566,36 @@ impl PlayerView {
     self.seek_to(self.position + delta, cx);
   }
 
+  /// The volume slider's end: 100, or [`player::VOLUME_MAX`] with the boost.
+  fn volume_max(&self) -> f64 {
+    if self.boosted {
+      player::VOLUME_MAX
+    } else {
+      100.0
+    }
+  }
+
+  /// The boost button: past 100 % or back to it (a louder volume comes down to 100 %).
+  fn toggle_boost(&mut self, cx: &mut Context<Self>) {
+    self.boosted = !self.boosted;
+    if self.volume > self.volume_max() {
+      self.set_volume(self.volume_max(), cx);
+    }
+    let text: SharedString = if self.boosted {
+      tf!(
+        "Volume boost, up to {:.0}%",
+        "Volume amplifié, jusqu'à {:.0} %",
+        player::VOLUME_MAX
+      )
+      .into()
+    } else {
+      t("Volume boost off", "Amplification coupée").into()
+    };
+    self.show_osd(text, cx);
+  }
+
   fn set_volume(&mut self, volume: f64, cx: &mut Context<Self>) {
-    self.volume = volume.clamp(0.0, 100.0);
+    self.volume = volume.clamp(0.0, self.volume_max());
     self.with_player(|p| p.set_volume(self.volume));
     if self.muted {
       self.toggle_mute(cx);
@@ -1574,13 +1607,13 @@ impl PlayerView {
     );
   }
 
-  /// Volume from a mouse position on the horizontal slider: left is 0 %, right 100 %.
+  /// Volume from a mouse position on the horizontal slider: left is 0 %, right the maximum.
   fn set_volume_at(&mut self, x: Pixels, cx: &mut Context<Self>) {
     let bounds = self.volume_bounds.get();
     let width = f32::from(bounds.size.width);
     if width > 0.0 {
       let fraction = (f32::from(x - bounds.origin.x) / width).clamp(0.0, 1.0);
-      self.set_volume((f64::from(fraction) * 100.0).round(), cx);
+      self.set_volume((f64::from(fraction) * self.volume_max()).round(), cx);
     }
   }
 
@@ -1627,11 +1660,13 @@ impl PlayerView {
   }
 
   /// Tells the page, which keeps it for the next video (and the next launch).
+  /// A boosted volume is kept as 100 %: the boost is never remembered.
   fn remember_sound(&mut self, cx: &mut Context<Self>) {
-    self.prefs.volume = self.volume;
+    let volume = self.volume.min(100.0);
+    self.prefs.volume = volume;
     self.prefs.muted = self.muted;
     cx.emit(PlayerEvent::Sound {
-      volume: self.volume,
+      volume,
       muted: self.muted,
     });
   }
@@ -2214,11 +2249,16 @@ impl PlayerView {
     }
     let shown = self.volume_open || self.volume_close_task.is_some();
     let (animation, opening) = (self.volume_animation, self.volume_open);
-    const TRACK_WIDTH: f32 = 64.;
+    // 100 % stays where it was without the boost: the boost lengthens the track.
+    let boost = (self.volume_max() / 100.0) as f32;
+    let track_width = 64. * boost;
     // Room for the knob at both ends of the track, which the opening clips.
     const PAD_LEFT: f32 = 8.;
     const PAD_RIGHT: f32 = 10.;
-    const SLIDER_WIDTH: f32 = PAD_LEFT + TRACK_WIDTH + PAD_RIGHT;
+    // The boost button after the track, and the gap before it.
+    const BOOST_WIDTH: f32 = 46.;
+    const BOOST_GAP: f32 = 10.;
+    let slider_width = PAD_LEFT + track_width + BOOST_GAP + BOOST_WIDTH + PAD_RIGHT;
     let primary = cx.theme().primary;
     let icon = if self.muted || self.volume == 0.0 {
       Icon::Muted
@@ -2227,7 +2267,59 @@ impl PlayerView {
     } else {
       Icon::Volume
     };
-    let level = if self.muted { 0.0 } else { self.volume / 100.0 } as f32;
+    let level = if self.muted {
+      0.0
+    } else {
+      self.volume / self.volume_max()
+    } as f32;
+    // The boosted part of the fill, past 100 %, in the warning color.
+    let unity = 1. / boost;
+    let over = (level - unity).max(0.);
+    let (warning, on_warning) = (cx.theme().warning, cx.theme().warning_foreground);
+    let boost_on = self.boosted;
+    let boost_button = div()
+      .id("volume-boost")
+      .flex_none()
+      .ml(px(BOOST_GAP))
+      .w(px(BOOST_WIDTH))
+      .h(px(20.))
+      .flex()
+      .items_center()
+      .justify_center()
+      .rounded_full()
+      .border_1()
+      .text_xs()
+      .font_weight(FontWeight::SEMIBOLD)
+      .map(|el| {
+        if boost_on {
+          el.bg(warning).border_color(warning).text_color(on_warning)
+        } else {
+          el.border_color(gpui::white().opacity(0.4))
+            .text_color(gpui::white().opacity(0.8))
+            .hover(|el| el.bg(gpui::white().opacity(0.15)))
+        }
+      })
+      .child("Boost")
+      // Pressed here, not on the slider: neither a volume change nor a drag.
+      .on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|this, _, _, cx| {
+          cx.stop_propagation();
+          this.toggle_boost(cx);
+        }),
+      )
+      .tooltip(move |window, cx| {
+        Tooltip::new(if boost_on {
+          t("Back to 100% at most", "Revenir à 100 % au plus").to_owned()
+        } else {
+          tf!(
+            "Let the volume go up to {:.0}%",
+            "Pousser le volume jusqu'à {:.0} %",
+            player::VOLUME_MAX
+          )
+        })
+        .build(window, cx)
+      });
     let bounds_cell = self.volume_bounds.clone();
     let (dragging, view) = (self.volume_dragging, cx.weak_entity());
     // The slider follows the button in the row and widens from it, so the mouse goes from one
@@ -2271,7 +2363,7 @@ impl PlayerView {
         div()
           .relative()
           .flex_none()
-          .w(px(TRACK_WIDTH))
+          .w(px(track_width))
           .h(px(4.))
           .rounded_full()
           .bg(gpui::white().opacity(0.25))
@@ -2286,6 +2378,32 @@ impl PlayerView {
               .rounded_full()
               .bg(primary),
           )
+          .when(boost > 1., |el| {
+            el.when(over > 0., |el| {
+              el.child(
+                div()
+                  .absolute()
+                  .top_0()
+                  .bottom_0()
+                  .left(relative(unity))
+                  .w(relative(over))
+                  .rounded_r_full()
+                  .bg(warning),
+              )
+            })
+            // The mark of 100 %, where the boost starts.
+            .child(
+              div()
+                .absolute()
+                .top(px(-3.))
+                .left(relative(unity))
+                .ml(px(-1.))
+                .w(px(2.))
+                .h(px(10.))
+                .rounded_full()
+                .bg(gpui::white().opacity(0.6)),
+            )
+          })
           .child(
             div()
               .absolute()
@@ -2294,7 +2412,7 @@ impl PlayerView {
               .ml(px(-7.))
               .size(px(14.))
               .rounded_full()
-              .bg(primary)
+              .bg(if over > 0. { warning } else { primary })
               .border_2()
               .border_color(gpui::white()),
           )
@@ -2315,7 +2433,8 @@ impl PlayerView {
             .absolute()
             .inset_0(),
           ),
-      );
+      )
+      .child(boost_button);
     div()
       .id("volume")
       .flex()
@@ -2339,7 +2458,7 @@ impl PlayerView {
           // Eased by hand so that closing replays the opening curve backwards.
           move |el, t| {
             let p = ease(if opening { t } else { 1. - t });
-            el.opacity(p).w(px(SLIDER_WIDTH * p))
+            el.opacity(p).w(px(slider_width * p))
           },
         ))
       })

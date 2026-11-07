@@ -31,6 +31,8 @@ const RING: usize = 3;
 const RESIZE_SETTLE: Duration = Duration::from_millis(60);
 /// Position events are sent at most this often (seconds of media time).
 const POSITION_STEP: f64 = 0.25;
+/// Highest volume, percent (mpv's `volume-max`, 130 by default): 100 is the source's level.
+pub const VOLUME_MAX: f64 = 200.0;
 
 /// Which track to select.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -503,9 +505,9 @@ impl Player {
     self.set("mute", if muted { "yes" } else { "no" });
   }
 
-  /// Volume, 0–100.
+  /// Volume, 0–[`VOLUME_MAX`]: above 100 mpv amplifies (cubic, 200 is about +18 dB).
   pub fn set_volume(&self, percent: f64) {
-    self.set("volume", &format!("{:.0}", percent.clamp(0.0, 100.0)));
+    self.set("volume", &format!("{:.0}", percent.clamp(0.0, VOLUME_MAX)));
   }
 
   /// Plays to another audio output ([`AudioDevice::name`]; `None`: Windows' default). mpv
@@ -616,6 +618,7 @@ fn mpv_options(options: &StartOptions, backend: Backend) -> Vec<(&'static str, S
     ("sub-ass-override", "no".into()),
     ("audio-channels", "auto-safe".into()),
     ("input-default-bindings", "no".into()),
+    ("volume-max", format!("{VOLUME_MAX:.0}")),
   ];
   if let Some(secs) = options.readahead_secs {
     opts.push(("cache-secs", secs.to_string()));
