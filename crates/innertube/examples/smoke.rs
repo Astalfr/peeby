@@ -134,6 +134,22 @@ async fn main() {
         );
       }
     }
+    let mixes = client.mixes().await;
+    let first_mix = mixes
+      .as_ref()
+      .ok()
+      .and_then(|m| m.get(1).or(m.first()))
+      .map(|m| m.id.clone());
+    check("mixes", mixes.map(|m| format!("{} mixes", m.len())));
+    if let Some(id) = first_mix {
+      check(
+        "mix",
+        client
+          .playlist(&id)
+          .await
+          .map(|p| format!("{} videos", p.videos.len())),
+      );
+    }
   }
   let channel = client.channel_videos(CHANNEL).await;
   let next = channel.as_ref().ok().and_then(|f| f.continuation.clone());

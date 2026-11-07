@@ -68,6 +68,7 @@ icons! {
   Grid => "layout-grid",
   List => "list",
   Playlists => "list-video",
+  Mix => "list-music",
   Shuffle => "shuffle",
   Repeat => "repeat",
   Previous => "skip-back",

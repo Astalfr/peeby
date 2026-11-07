@@ -6,6 +6,9 @@
 //! - watch metadata: `videoPrimaryInfoRenderer` and `videoSecondaryInfoRenderer`, the rating
 //!   in its `segmentedLikeDislikeButtonViewModel`;
 //! - the playlists library: playlist `lockupViewModel`s with a `collectionThumbnailViewModel`;
+//!   mixes (`RD…`) are such lockups too, in the home feed (badge "Mix");
+//! - a mix's videos (`next` with its `playlistId` alone): `playlistPanelVideoRenderer`s in
+//!   `twoColumnWatchNextResults.playlist.playlist`;
 //! - a playlist's videos: video `lockupViewModel`s, or `playlistVideoRenderer`s for "Watch
 //!   later", next to a `continuationItemViewModel`; its header is a `playlistHeaderRenderer`
 //!   ("Watch later", "Liked videos") or a `pageHeaderViewModel` (other playlists);
@@ -646,8 +649,8 @@ pub fn parse_search(response: &Value) -> SearchPage {
   }
 }
 
-/// Collects the videos, channels and playlists under `value` in document order, skipping
-/// malformed ones and mixes.
+/// Collects the videos, channels and playlists (mixes included) under `value` in document
+/// order, skipping malformed ones.
 fn collect_search_results(value: &Value, out: &mut Vec<SearchResult>) {
   match value {
     Value::Object(map) => {
@@ -824,8 +827,8 @@ pub fn parse_unseen_count(response: &Value) -> Option<u32> {
     .map(|n| u32::try_from(n).unwrap_or(u32::MAX))
 }
 
-/// Parses the user's playlists (`FEplaylist_aggregation`, all of them in one response). Mixes
-/// (`RD…`) are left out: they have no playlist page.
+/// Parses the user's playlists (`FEplaylist_aggregation`, all of them in one response), saved
+/// mixes included.
 pub fn parse_playlists(response: &Value) -> Vec<PlaylistSummary> {
   let mut lockups = Vec::new();
   find_all(response, "lockupViewModel", &mut lockups);
@@ -835,10 +838,62 @@ pub fn parse_playlists(response: &Value) -> Vec<PlaylistSummary> {
     .collect()
 }
 
-/// One playlist lockup: of the library, a search (where courses are playlists too) or the
-/// related videos. Its rows hold plain details ("Privée", "Playlist"), the byline's channel
-/// link, links to its first videos and to its page, and a description: only the first two are
-/// kept.
+/// Whether `id` is a mix's: a playlist YouTube makes and keeps endless (`RD…`, "My Mix" is
+/// `RDMM`). It has no playlist page (`VL…`): [`parse_mix`] reads it from `next`.
+pub fn is_mix(id: &str) -> bool {
+  id.starts_with("RD")
+}
+
+/// The mixes among the cards of a response (a page of the home feed, the playlists library),
+/// in order.
+pub fn parse_mixes(response: &Value) -> Vec<PlaylistSummary> {
+  let mut lockups = Vec::new();
+  find_all(response, "lockupViewModel", &mut lockups);
+  lockups
+    .into_iter()
+    .filter_map(parse_playlist_lockup)
+    .filter(|p| is_mix(&p.id))
+    .collect()
+}
+
+/// Parses a mix (`next` with its `playlistId` alone): its title and the videos of its panel
+/// (`playlistPanelVideoRenderer`s, about 25). A mix is endless: YouTube adds to it as it
+/// plays, so it has no next page here.
+pub fn parse_mix(id: &str, response: &Value) -> Playlist {
+  let panel = &response["contents"]["twoColumnWatchNextResults"]["playlist"]["playlist"];
+  let videos: Vec<VideoItem> = panel["contents"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|c| parse_playlist_video(&c["playlistPanelVideoRenderer"]))
+    // Its menu edits the queue being played on youtube.com, not a playlist.
+    .map(|v| VideoItem {
+      set_video_id: None,
+      ..v
+    })
+    .collect();
+  Playlist {
+    id: id.to_owned(),
+    title: panel["title"]
+      .as_str()
+      .filter(|t| !t.is_empty())
+      .unwrap_or(id)
+      .to_owned(),
+    owner: non_empty(text(&panel["ownerName"])),
+    count: None,
+    thumbnails: videos
+      .first()
+      .map(|v| v.thumbnails.clone())
+      .unwrap_or_default(),
+    videos,
+    continuation: None,
+  }
+}
+
+/// One playlist lockup (a mix too): of the library, the home feed, a search (where courses are
+/// playlists too) or the related videos. Its rows hold plain details ("Privée", "Playlist"),
+/// the byline's channel link, links to its first videos and to its page, and a description:
+/// only the first two are kept.
 fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
   if !matches!(
     lockup["contentType"].as_str(),
@@ -846,9 +901,7 @@ fn parse_playlist_lockup(lockup: &Value) -> Option<PlaylistSummary> {
   ) {
     return None;
   }
-  let id = lockup["contentId"]
-    .as_str()
-    .filter(|id| !id.starts_with("RD"))?;
+  let id = lockup["contentId"].as_str()?;
   let meta = &lockup["metadata"]["lockupMetadataViewModel"];
   let image = &lockup["contentImage"]["collectionThumbnailViewModel"]["primaryThumbnail"]["thumbnailViewModel"];
   let count = image["overlays"]
@@ -1417,7 +1470,7 @@ fn thumbnails(sources: &Value) -> Vec<Thumbnail> {
 }
 
 /// Token of the first `continuationItemRenderer` under `value`.
-fn find_continuation(value: &Value) -> Option<String> {
+pub(crate) fn find_continuation(value: &Value) -> Option<String> {
   let item = find_key(value, "continuationItemRenderer")?;
   find_key(&item, "continuationCommand")?["token"]
     .as_str()

@@ -119,7 +119,7 @@ pub struct WatchPage {
   pub description: String,
   /// The description's links (URLs, timestamps, channels, hashtags), by position.
   pub description_links: Vec<TextLink>,
-  /// Related videos and playlists, in display order (mixes are left out).
+  /// Related videos and playlists (mixes included), in display order.
   pub related: Vec<Related>,
   /// Token of the next page of related videos.
   pub related_continuation: Option<String>,
@@ -615,7 +615,8 @@ pub enum SearchResult {
 /// A page of search results and the token of the next page.
 #[derive(Clone, Debug, Default)]
 pub struct SearchPage {
-  /// Videos, channels and playlists in display order; Shorts shelves and mixes are left out.
+  /// Videos, channels and playlists (mixes included) in display order; Shorts shelves are left
+  /// out.
   pub results: Vec<SearchResult>,
   /// Token for [`crate::Client::search_more`], when there is more.
   pub continuation: Option<String>,

@@ -16,12 +16,18 @@ use crate::models::{
   VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
-  parse_captions, parse_channel_search, parse_channels, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_live_formats, parse_members_only, parse_notifications, parse_oembed_title,
-  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
-  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
+  find_continuation, is_mix, parse_captions, parse_channel_search, parse_channels, parse_comments,
+  parse_feed, parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix,
+  parse_mixes, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
+  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
+  parse_watch, tracking_param,
 };
+
+/// "My Mix": the account's own mix, in no feed.
+const MY_MIX: &str = "RDMM";
+/// Pages of the home feed [`Client::mixes`] reads: about one mix each.
+const MIX_PAGES: usize = 5;
 
 /// WEB client version used until [`Client::refresh_client_version`] reads the current one from
 /// the page's ytcfg. YouTube ships a new one every week; old ones keep working for months.
@@ -201,9 +207,59 @@ impl Client {
     }
   }
 
-  /// A playlist's header and first videos (100 at most). Private playlists, "Watch later" and
-  /// "Liked videos" need cookies.
+  /// The user's mixes: "My Mix" (`RDMM`), then those of the first pages of the home feed and of
+  /// the playlists library, each once. YouTube has no page of them: it shows about one mix per
+  /// home page. Needs cookies.
+  pub async fn mixes(&self) -> Result<Vec<PlaylistSummary>> {
+    self.require_session()?;
+    let mut mixes = Vec::new();
+    // "My Mix" is in no feed: its card is its first video.
+    let my_mix = self.playlist(MY_MIX).await?;
+    mixes.push(PlaylistSummary {
+      id: my_mix.id,
+      title: my_mix.title,
+      count: None,
+      channel: None,
+      channel_id: None,
+      metadata: Vec::new(),
+      thumbnails: my_mix.thumbnails,
+    });
+    let mut response = self
+      .web("browse", json!({ "browseId": "FEwhat_to_watch" }), true)
+      .await?;
+    self.check_session(&response)?;
+    for page in 0..MIX_PAGES {
+      mixes.extend(parse_mixes(&response));
+      let Some(token) = find_continuation(&response).filter(|_| page + 1 < MIX_PAGES) else {
+        break;
+      };
+      response = self
+        .web("browse", json!({ "continuation": token }), true)
+        .await?;
+    }
+    let library = self
+      .web(
+        "browse",
+        json!({ "browseId": "FEplaylist_aggregation" }),
+        true,
+      )
+      .await?;
+    mixes.extend(parse_mixes(&library));
+    let mut seen = std::collections::HashSet::new();
+    mixes.retain(|m| seen.insert(m.id.clone()));
+    Ok(mixes)
+  }
+
+  /// A playlist's header and first videos (100 at most), or a mix's videos ([`is_mix`]).
+  /// Private playlists, "Watch later", "Liked videos" and "My Mix" need cookies.
   pub async fn playlist(&self, id: &str) -> Result<Playlist> {
+    if is_mix(id) {
+      let response = self.web("next", json!({ "playlistId": id }), true).await?;
+      self.check_session(&response)?;
+      let mut mix = parse_mix(id, &response);
+      self.untranslate(mix.videos.iter_mut()).await;
+      return Ok(mix);
+    }
     let response = self
       .web("browse", json!({ "browseId": format!("VL{id}") }), true)
       .await?;

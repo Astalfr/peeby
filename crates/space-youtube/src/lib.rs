@@ -45,7 +45,7 @@ use feed::{FeedView, Source};
 use peeby_core::settings;
 use peeby_core::settings::{Settings, StartPage};
 use peeby_core::shell::space::{Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs};
-use playlists::{PlaylistView, PlaylistsView};
+use playlists::{Kind, PlaylistView, PlaylistsView};
 use queue::Queue;
 use search::SearchView;
 use shorts::ShortsView;
@@ -73,6 +73,8 @@ pub enum Route {
   },
   /// The user's playlists.
   Playlists,
+  /// The user's mixes.
+  Mixes,
   /// A playlist's videos.
   Playlist {
     /// The playlist's id.
@@ -126,6 +128,7 @@ impl Route {
       | Self::Shorts
       | Self::History
       | Self::Playlists
+      | Self::Mixes
       | Self::Search => true,
       Self::Playlist { id, .. } => id == save::WATCH_LATER,
       _ => false,
@@ -141,7 +144,8 @@ impl Route {
       Self::History => t("History", "Historique").into(),
       Self::Channels => t("Channels", "Chaînes").into(),
       Self::Channel { name, .. } => name.clone().into(),
-      Self::Playlists => t("Playlists", "Playlists").into(),
+      Self::Playlists => Kind::Playlists.title().into(),
+      Self::Mixes => Kind::Mixes.title().into(),
       Self::Playlist { title, .. } => title.clone().into(),
       Self::Search => t("Search", "Recherche").into(),
       Self::Watch(_) => t("Video", "Vidéo").into(),
@@ -384,7 +388,12 @@ impl YouTubeSpace {
         cx.new(|cx| FeedView::new(client, source, nav, window, cx))
           .into()
       }
-      Route::Playlists => cx.new(|cx| PlaylistsView::new(client, nav, cx)).into(),
+      Route::Playlists => cx
+        .new(|cx| PlaylistsView::new(client, Kind::Playlists, nav, cx))
+        .into(),
+      Route::Mixes => cx
+        .new(|cx| PlaylistsView::new(client, Kind::Mixes, nav, cx))
+        .into(),
       Route::Playlist { id, title } => cx
         .new(|cx| PlaylistView::new(client, id.clone(), title.clone(), nav, cx))
         .into(),
@@ -531,6 +540,7 @@ impl YouTubeSpace {
       "history" => Route::History,
       "watch-later" => Route::watch_later(),
       "playlists" => Route::Playlists,
+      "mixes" => Route::Mixes,
       _ => return None,
     })
   }
@@ -610,12 +620,8 @@ impl Space for YouTubeSpace {
         Icon::WatchLater,
         false,
       ),
-      (
-        "playlists",
-        t("Playlists", "Playlists"),
-        Icon::Playlists,
-        false,
-      ),
+      ("playlists", Kind::Playlists.title(), Icon::Playlists, false),
+      ("mixes", Kind::Mixes.title(), Icon::Mix, false),
     ]
     .into_iter()
     .map(|(id, label, icon, bottom)| MenuEntry {

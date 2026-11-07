@@ -1,4 +1,5 @@
-//! The user's playlists (a grid, from the sidebar) and a playlist's page: its header, "Play
+//! The user's playlists or mixes (a grid, from the sidebar) and a playlist's page (a mix's
+//! too): its header, "Play
 //! all" and "Shuffle", and its videos, loading the next ones as the end comes into view.
 //! Playing starts a [`Queue`] on a watch page. In playlists the user can edit, an "x" on each
 //! video removes it.
@@ -55,14 +56,20 @@ impl<T> State<T> {
 }
 
 /// The notice of a page that needs a session, with a link to the account page.
-fn signed_out(nav: &Nav) -> AnyElement {
+fn signed_out(nav: &Nav, kind: Kind) -> AnyElement {
   let nav = nav.clone();
   notice(
     Icon::Account,
-    t(
-      "Sign in to see your playlists",
-      "Connectez-vous pour voir vos playlists",
-    ),
+    match kind {
+      Kind::Playlists => t(
+        "Sign in to see your playlists",
+        "Connectez-vous pour voir vos playlists",
+      ),
+      Kind::Mixes => t(
+        "Sign in to see your mixes",
+        "Connectez-vous pour voir vos mix",
+      ),
+    },
     t(
       "Peeby needs your YouTube account to show them.",
       "Peeby a besoin de votre compte YouTube pour les afficher.",
@@ -102,20 +109,41 @@ fn gathering_text(count: usize) -> String {
 
 // --- The playlists ---------------------------------------------------------------------------
 
+/// What a grid of playlists shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+  /// The playlists library.
+  Playlists,
+  /// The user's mixes ([`Client::mixes`]).
+  Mixes,
+}
+
+impl Kind {
+  /// The page's title, and the sidebar entry's label.
+  pub fn title(self) -> &'static str {
+    match self {
+      Self::Playlists => t("Playlists", "Playlists"),
+      Self::Mixes => t("Mixes", "Mix"),
+    }
+  }
+}
+
 pub struct PlaylistsView {
   client: Client,
   nav: Nav,
+  kind: Kind,
   state: State<Vec<PlaylistSummary>>,
 }
 
 impl PlaylistsView {
-  pub fn new(client: Client, nav: Nav, cx: &mut Context<Self>) -> Self {
+  pub fn new(client: Client, kind: Kind, nav: Nav, cx: &mut Context<Self>) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
     let mut view = Self {
       client,
       nav,
+      kind,
       state: State::Loading,
     };
     view.load(cx);
@@ -128,19 +156,24 @@ impl PlaylistsView {
       return;
     }
     self.state = State::Loading;
-    let client = self.client.clone();
-    let fetch = runtime::spawn(cx, async move { client.playlists().await });
+    let (client, kind) = (self.client.clone(), self.kind);
+    let fetch = runtime::spawn(cx, async move {
+      match kind {
+        Kind::Playlists => client.playlists().await,
+        Kind::Mixes => client.mixes().await,
+      }
+    });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this
         .update(cx, |this, cx| {
           match result {
             Some(Ok(playlists)) => {
-              tracing::info!("{} playlists", playlists.len());
+              tracing::info!("{:?}: {}", this.kind, playlists.len());
               this.state = State::Loaded(playlists);
             }
             Some(Err(e)) => {
-              tracing::warn!("playlists: {e}");
+              tracing::warn!("{:?}: {e}", this.kind);
               this.state = State::from_error(&e);
             }
             None => {}
@@ -294,12 +327,15 @@ impl Render for PlaylistsView {
     let content = match &self.state {
       // Replaced by the skeleton below.
       State::Loading => div().into_any_element(),
-      State::SignedOut => signed_out(&self.nav),
+      State::SignedOut => signed_out(&self.nav, self.kind),
       State::Failed(e) => failed(
-        t(
-          "Cannot load the playlists",
-          "Impossible de charger les playlists",
-        ),
+        match self.kind {
+          Kind::Playlists => t(
+            "Cannot load the playlists",
+            "Impossible de charger les playlists",
+          ),
+          Kind::Mixes => t("Cannot load the mixes", "Impossible de charger les mix"),
+        },
         e.clone(),
       )
       .child(
@@ -316,7 +352,10 @@ impl Render for PlaylistsView {
       .into_any_element(),
       State::Loaded(playlists) if playlists.is_empty() => div()
         .text_color(theme::muted())
-        .child(t("No playlists.", "Aucune playlist."))
+        .child(match self.kind {
+          Kind::Playlists => t("No playlists.", "Aucune playlist."),
+          Kind::Mixes => t("No mixes.", "Aucun mix."),
+        })
         .into_any_element(),
       State::Loaded(playlists) => {
         let cards: Vec<_> = playlists
@@ -347,7 +386,10 @@ impl Render for PlaylistsView {
       cx,
     );
     v_flex()
-      .id("playlists")
+      .id(match self.kind {
+        Kind::Playlists => "playlists",
+        Kind::Mixes => "mixes",
+      })
       .size_full()
       .overflow_y_scrollbar()
       .child(
@@ -355,7 +397,7 @@ impl Render for PlaylistsView {
           .px_8()
           .py_6()
           .gap_6()
-          .child(page_title(t("Playlists", "Playlists")))
+          .child(page_title(self.kind.title()))
           .child(body),
       )
   }
@@ -648,7 +690,7 @@ impl Render for PlaylistView {
     let content = match &self.state {
       // Replaced by the skeleton below.
       State::Loading => div().into_any_element(),
-      State::SignedOut => signed_out(&self.nav),
+      State::SignedOut => signed_out(&self.nav, Kind::Playlists),
       State::Failed(e) => failed(
         t(
           "Cannot load the playlist",

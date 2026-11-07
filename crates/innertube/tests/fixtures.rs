@@ -6,10 +6,10 @@
 
 use innertube::{
   ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
-  NotificationLevel, Progress, Related, SearchResult, Watchtime, hls, hls_manifest_url,
-  parse_channel_search, parse_feed, parse_members_only, parse_oembed_title, parse_playlist,
-  parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed,
-  parse_shorts_sequence, parse_tracking, parse_watch,
+  NotificationLevel, Progress, Related, SearchResult, Watchtime, hls, hls_manifest_url, is_mix,
+  parse_channel_search, parse_feed, parse_members_only, parse_mix, parse_mixes, parse_oembed_title,
+  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
+  parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
 };
 use serde_json::Value;
 
@@ -569,6 +569,58 @@ fn public_playlist_header_and_next_videos_token() {
   // Two continuation items on the page: the one after the videos is the next videos.
   let token = playlist.continuation.unwrap();
   assert!(token.starts_with("4qmFsgKBARIkVkxQTEZncXVM"), "{token}");
+}
+
+#[test]
+fn home_mixes() {
+  // A signed-in home page, captured 2026-11-07, trimmed to a video, a mix and the
+  // continuation.
+  let response = fixture("home_signed_in_mix.json");
+  let mixes = parse_mixes(&response);
+  assert_eq!(mixes.len(), 1);
+  let mix = &mixes[0];
+  assert_eq!(mix.id, "RDVUmovBRfVQI");
+  assert!(is_mix(&mix.id));
+  assert!(mix.title.starts_with("Mix\u{a0}- "));
+  // Its badge reads "Mix" instead of a count; its first row lists artists.
+  assert_eq!(mix.count.as_deref(), Some("Mix"));
+  assert_eq!(mix.metadata.last().map(String::as_str), Some("Playlist"));
+  assert!(!mix.thumbnails.is_empty());
+  // The video stays the feed's, and only it.
+  let feed = parse_feed(&response);
+  assert_eq!(feed.items.len(), 1);
+  assert!(feed.continuation.is_some());
+}
+
+#[test]
+fn mix_videos() {
+  // `next` with a mix's `playlistId` alone, anonymous, captured 2026-11-07, trimmed to three
+  // videos.
+  let mix = parse_mix("RDkJQP7kiw5Fk", &fixture("next_mix.json"));
+  assert_eq!(
+    mix.title,
+    "Mix\u{a0}- Luis Fonsi - Despacito ft. Daddy Yankee"
+  );
+  assert_eq!(mix.owner.as_deref(), Some("YouTube"));
+  assert!(mix.continuation.is_none());
+  let ids: Vec<&str> = mix.videos.iter().map(|v| v.id.as_str()).collect();
+  assert_eq!(ids, ["NUsoVlDFqZg", "TyHvyGVs42U", "6Of73C7vH54"]);
+  let first = &mix.videos[0];
+  assert_eq!(
+    first.title,
+    "Enrique Iglesias - Bailando ft. Descemer Bueno, Gente De Zona"
+  );
+  assert_eq!(first.channel.as_deref(), Some("Enrique Iglesias"));
+  assert!(
+    first
+      .channel_id
+      .as_deref()
+      .is_some_and(|id| id.starts_with("UC"))
+  );
+  assert_eq!(first.duration.as_deref(), Some("4:47"));
+  assert!(first.set_video_id.is_none());
+  // Its cover is its first video's picture.
+  assert_eq!(mix.thumbnails, first.thumbnails);
 }
 
 #[test]
