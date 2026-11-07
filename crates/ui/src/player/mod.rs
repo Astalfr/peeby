@@ -82,6 +82,8 @@ const RELOAD_RETRY: Duration = Duration::from_secs(60);
 const STALL_AFTER: Duration = Duration::from_secs(10);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
+/// The wheel's step over the volume slider, finer than the picture's.
+const VOLUME_SLIDER_STEP: f64 = 2.0;
 /// Width of the storyboard frame shown over the seek bar.
 const PREVIEW_WIDTH: f32 = 176.;
 /// Width of a chapter's picture in the seek bar's hover preview.
@@ -2175,6 +2177,20 @@ impl PlayerView {
           this.set_volume_at(event.position.x, cx);
         }),
       )
+      // Over the slider, in any layout: the wheel never reaches the picture or the page.
+      .on_scroll(cx.listener(|this, event: &ScrollEvent, window, cx| {
+        cx.stop_propagation();
+        let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
+        if dy.abs() > 0.5 {
+          let step = if dy > 0.0 {
+            VOLUME_SLIDER_STEP
+          } else {
+            -VOLUME_SLIDER_STEP
+          };
+          this.set_volume(this.volume + step, cx);
+          this.show_controls(cx);
+        }
+      }))
       .child(
         div()
           .relative()

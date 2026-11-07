@@ -9,6 +9,7 @@
 
 pub mod lives;
 mod mini_player;
+mod output_volume;
 mod settings_page;
 pub mod space;
 mod tab_drag;
@@ -111,6 +112,8 @@ pub struct Shell {
   /// `None` before the first list.
   audio_devices: Option<Vec<AudioDevice>>,
   audio_listing: Task<()>,
+  /// The menu's slider of the selected output's volume.
+  volume_slider: output_volume::VolumeSlider,
   /// The tab held down with the mouse, moved along the bar once past a few pixels (ADR 0028).
   tab_drag: Option<TabDrag>,
   /// Where the tabs were drawn, shared with the canvases that measure them.
@@ -234,6 +237,7 @@ impl Shell {
       card_delay: Task::ready(()),
       audio_devices: None,
       audio_listing: Task::ready(()),
+      volume_slider: Default::default(),
       tab_drag: None,
       tab_layout: Rc::default(),
       tab_slides: HashMap::new(),
@@ -1215,8 +1219,8 @@ impl Shell {
       .children(badge)
   }
 
-  /// The audio output menu: Windows' default, then each output; the pick moves every player
-  /// and is kept for the next runs.
+  /// The audio output menu: the selected output's volume (Windows' own), then Windows'
+  /// default and each output; the pick moves every player and is kept for the next runs.
   fn audio_output(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let shell = cx.weak_entity();
     let trigger = Button::new("audio-output-button")
@@ -1231,7 +1235,10 @@ impl Shell {
         move |open, _, cx| {
           if *open {
             shell
-              .update(cx, |shell, cx| shell.list_audio_devices(cx))
+              .update(cx, |shell, cx| {
+                shell.list_audio_devices(cx);
+                shell.read_output_volume(cx);
+              })
               .ok();
           }
         }
@@ -1241,6 +1248,7 @@ impl Shell {
           .upgrade()
           .and_then(|shell| shell.read(cx).audio_devices.clone());
         let current = Settings::get(cx).player.audio_device.clone();
+        let volume = output_volume::slider_row(&shell, cx);
         let row = |id: SharedString,
                    device: Option<String>,
                    label: SharedString,
@@ -1302,6 +1310,10 @@ impl Shell {
               .font_weight(FontWeight::SEMIBOLD)
               .child(t("Audio output", "Sortie audio")),
           )
+          .when_some(volume, |el, volume| {
+            el.child(volume)
+              .child(div().my_1().mx_2().h(px(1.)).bg(theme::border()))
+          })
           .child(default)
           .children(rows)
           .when(devices.is_none(), |el| {

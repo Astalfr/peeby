@@ -1,6 +1,7 @@
 //! Win32 calls of the desktop integration (ADR 0020): the main window's visibility, the
 //! single instance's pipe, and the double click and screen of the notification area's icon;
-//! DPAPI, which encrypts the cookie jar (ADR 0022); and Windows' display language (ADR 0014). The only `unsafe` of the `peeby` crate,
+//! DPAPI, which encrypts the cookie jar (ADR 0022); Windows' display language (ADR 0014); and
+//! the volume of an audio output (Core Audio). The only `unsafe` of the `peeby` crate,
 //! each block with its `// SAFETY:`.
 
 use std::fs::File;
@@ -14,10 +15,15 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use windows::Win32::Graphics::Gdi::{ClientToScreen, MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator, eMultimedia, eRender};
 use windows::Win32::Security::Cryptography::{
   CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
 use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
+use windows::Win32::System::Com::{
+  CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+};
 use windows::Win32::System::Pipes::{
   ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
   PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
@@ -354,6 +360,71 @@ unsafe fn take(blob: CRYPT_INTEGER_BLOB) -> Vec<u8> {
     let _ = LocalFree(Some(HLOCAL(blob.pbData.cast())));
   }
   bytes
+}
+
+/// The volume of an audio output, as Windows' own slider shows it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OutputVolume {
+  /// From 0 to 1 (Windows' percentage over 100).
+  pub level: f32,
+  pub muted: bool,
+}
+
+/// The volume of the output `device` (mpv's name, `wasapi/<endpoint id>`; `None`: Windows'
+/// default output). A few COM calls to the audio service: call it off the UI thread.
+pub fn output_volume(device: Option<&str>) -> windows::core::Result<OutputVolume> {
+  with_endpoint_volume(device, |volume| {
+    // SAFETY: `volume` is a live interface; both calls only read.
+    unsafe {
+      Ok(OutputVolume {
+        level: volume.GetMasterVolumeLevelScalar()?,
+        muted: volume.GetMute()?.as_bool(),
+      })
+    }
+  })
+}
+
+/// Sets the volume of the output `device` (as in [`output_volume`]) for every app, as Windows'
+/// slider does; off the UI thread.
+pub fn set_output_volume(device: Option<&str>, to: OutputVolume) -> windows::core::Result<()> {
+  with_endpoint_volume(device, |volume| {
+    // SAFETY: `volume` is a live interface; a null event context is allowed (no caller GUID).
+    unsafe {
+      volume.SetMasterVolumeLevelScalar(to.level.clamp(0.0, 1.0), std::ptr::null())?;
+      volume.SetMute(to.muted, std::ptr::null())
+    }
+  })
+}
+
+/// Runs `f` on the volume control of the output `device`, COM initialized on this thread for
+/// the time of the call.
+fn with_endpoint_volume<T>(
+  device: Option<&str>,
+  f: impl FnOnce(&IAudioEndpointVolume) -> windows::core::Result<T>,
+) -> windows::core::Result<T> {
+  // SAFETY: no reserved argument. A thread already in another apartment answers
+  // `RPC_E_CHANGED_MODE`: COM works there too, but that call must not be balanced.
+  let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+  let result = (|| {
+    // SAFETY: plain COM activation and calls; every interface is dropped (released) before
+    // `CoUninitialize` below, as the closure returns.
+    unsafe {
+      let enumerator: IMMDeviceEnumerator =
+        CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+      let endpoint = match device.map(|name| name.strip_prefix("wasapi/").unwrap_or(name)) {
+        Some(id) => enumerator.GetDevice(&HSTRING::from(id))?,
+        // mpv's own default (ao_wasapi).
+        None => enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia)?,
+      };
+      let volume: IAudioEndpointVolume = endpoint.Activate(CLSCTX_ALL, None)?;
+      f(&volume)
+    }
+  })();
+  if initialized {
+    // SAFETY: balances the successful `CoInitializeEx` above, on the same thread.
+    unsafe { CoUninitialize() };
+  }
+  result
 }
 
 #[cfg(test)]

@@ -42,9 +42,9 @@ uuid = { version = "1", features = ["v4"] }
 # Its default features are Linux only (WebKitGTK, X11).
 wry = { version = "0.57", default-features = false }
 # Toasts (WinRT), the window's visibility, the single instance and the place of the list of
-# lives (ADR 0020), DPAPI for the cookie jar (ADR 0022) and Windows' display language (ADR
-# 0014): the version GPUI's Windows
-# platform uses, and features the dependencies already build, so nothing more is built.
+# lives (ADR 0020), DPAPI for the cookie jar (ADR 0022), Windows' display language (ADR
+# 0014) and the audio output's volume (Core Audio): the version GPUI's Windows platform uses,
+# and features the dependencies already build but `Win32_Media_Audio*`, small bindings.
 windows = { version = "0.62", features = [
   "Data_Xml_Dom",
   "Foundation",
@@ -52,9 +52,12 @@ windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_Globalization",
   "Win32_Graphics_Gdi",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
   "Win32_Security",
   "Win32_Security_Cryptography",
   "Win32_Storage_FileSystem",
+  "Win32_System_Com",
   "Win32_System_IO",
   "Win32_System_Pipes",
   "Win32_UI_HiDpi",
