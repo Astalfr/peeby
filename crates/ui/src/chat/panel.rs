@@ -19,7 +19,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
 use gpui_component::{Sizable, h_flex, v_flex};
 
-pub use composer::{ChatPanelEvent, Composing, EmoteGroup};
+pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
   Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind, name_color,

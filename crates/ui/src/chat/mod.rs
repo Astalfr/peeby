@@ -17,7 +17,7 @@ use gpui::{Hsla, SharedString, hsla};
 use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
-pub use panel::{ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
+pub use panel::{ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
 pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
 
 /// One line of the chat.

@@ -94,6 +94,8 @@ pub struct WatchView {
   points: Option<Entity<PointsView>>,
   /// Sends what the viewer writes in a live's chat (with the auth-token).
   _chat_send: Option<Subscription>,
+  /// Does what the viewer chooses under a live's chat gear (reloading the 7TV emotes).
+  _chat_options: Option<Subscription>,
   /// The codec and height of each quality of a live or a VOD, for the decoding check.
   qualities: play::QualityCodecs,
   /// The quality whose last check read `hwdec-current` as `no`: a second reading in a row acts.
@@ -185,6 +187,7 @@ impl WatchView {
       chat: None,
       points: None,
       _chat_send: None,
+      _chat_options: None,
       qualities: Vec::new(),
       cpu_reading: None,
       header: None,
@@ -200,8 +203,16 @@ impl WatchView {
     match view.kind.clone() {
       Kind::Live(login) => {
         let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
-        view._tasks.push(chat::start(
+        let (reader, extras) = chat::start(
           &login,
+          view.client.clone(),
+          view.catalog.clone(),
+          &panel,
+          cx,
+        );
+        view._tasks.push(reader);
+        view._chat_options = Some(chat::start_options(
+          extras,
           view.client.clone(),
           view.catalog.clone(),
           &panel,

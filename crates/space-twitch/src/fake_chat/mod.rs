@@ -164,10 +164,12 @@ impl FakeChatView {
     panel.update(cx, |p, cx| {
       p.set_footer(footer.into(), cx);
       p.set_pinned(points_view.clone().into(), cx);
+      // The same gear as a live's, so that the option can be tried without one.
+      p.set_options(chat::options(false), cx);
     });
-    let send = cx.subscribe(&panel, |this, _, event: &ChatPanelEvent, cx| {
-      let ChatPanelEvent::Send(text) = event;
-      this.send(text, cx);
+    let send = cx.subscribe(&panel, |this, _, event: &ChatPanelEvent, cx| match event {
+      ChatPanelEvent::Send(text) => this.send(text, cx),
+      ChatPanelEvent::Option(id) => this.chose(id, cx),
     });
     let now = Instant::now();
     let mut view = Self {
@@ -385,6 +387,32 @@ impl FakeChatView {
       .filter(|(key, _)| *key == tag)
       .collect();
     self.deliver_lines(&[feed::room_state(&tags)], cx);
+  }
+
+  /// An option chosen under the chat's gear. The 7TV reload asks 7TV for the global set again
+  /// (the fake chat is in no channel), which only shows while the real emotes are on.
+  fn chose(&mut self, id: &SharedString, cx: &mut Context<Self>) {
+    if id.as_ref() != chat::RELOAD_SEVENTV {
+      return;
+    }
+    if !self.real_emotes {
+      let line = chat::notice_line(
+        "fake-reload-7tv",
+        t(
+          "Fake chat: turn \"Real 7TV / BTTV\" on for the reload to show.",
+          "Faux chat : activez « Vraies 7TV / BTTV » pour voir le rechargement.",
+        )
+        .into(),
+      );
+      self.push(line, cx);
+      return;
+    }
+    if self.loading_real {
+      return;
+    }
+    chat::forget_seventv(cx);
+    self.real = None;
+    self.set_real_emotes(true, cx);
   }
 
   /// Uses the real global 7TV and BTTV sets (`on`) or the fake ones; loads them the first time.

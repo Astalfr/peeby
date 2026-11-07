@@ -1,11 +1,13 @@
 //! 7TV emotes for the chat (docs/twitch-plan.md, step 9): the global set and a channel's set,
 //! keyed by the broadcaster's Twitch user id, matched by word in messages. A channel's alias of an
 //! emote is the set entry's `name`, not the emote's own. Tested on saved responses
-//! (`tests/fixtures/seventv_*.json`).
+//! (`tests/fixtures/seventv_*.json`). Changes to a set are pushed by the EventAPI ([`events`]).
 
 use serde_json::Value;
 
 use crate::error::{Error, Result};
+
+pub mod events;
 
 const API: &str = "https://7tv.io/v3";
 
@@ -106,34 +108,85 @@ fn emote(entry: &Value) -> Option<Emote> {
   })
 }
 
-/// A Twitch user's 7TV response: their set's emotes. A user without 7TV answers 404
-/// (`Client::seventv_channel` gives no emotes then).
-pub fn parse_user(text: &str) -> Result<Vec<Emote>> {
+/// A 7TV emote set as Peeby keeps it: its ids, for the EventAPI's subscriptions
+/// ([`events`](crate::seventv::events)), and its emotes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Set {
+  /// The set's 7TV id (`emote_set.id`); `None` for a Twitch user without 7TV.
+  pub id: Option<String>,
+  /// The 7TV id of the user whose active set it is (`user.id`): a channel that switches to
+  /// another set says so in that user's `user.update`. `None` for the global set.
+  pub owner: Option<String>,
+  /// Its emotes, by the word each replaces in it.
+  pub emotes: Vec<Emote>,
+}
+
+impl Set {
+  /// Applies an EventAPI set change ([`events::Change`]): an added emote takes the place of one
+  /// with the same id, a removed or renamed one is found by its id.
+  pub fn apply(&mut self, change: &events::Change) {
+    use events::Change;
+    match change {
+      Change::Added(emote) => {
+        self.emotes.retain(|e| e.id != emote.id);
+        self.emotes.push(emote.clone());
+      }
+      Change::Removed { id, name } => self.emotes.retain(|e| e.id != *id || e.name != *name),
+      Change::Renamed { id, from, to } => {
+        for emote in &mut self.emotes {
+          if emote.id == *id && emote.name == *from {
+            emote.name.clone_from(to);
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A Twitch user's 7TV response: their active set. A user without 7TV answers 404
+/// (`Client::seventv_channel` gives an empty set then).
+pub fn parse_user(text: &str) -> Result<Set> {
   let value: Value = serde_json::from_str(text).map_err(|e| Error::Parse {
     endpoint: "7tv",
     detail: e.to_string(),
   })?;
-  Ok(value.get("emote_set").map(parse_set).unwrap_or_default())
+  let set = value.get("emote_set");
+  Ok(Set {
+    id: set
+      .and_then(|s| s.get("id"))
+      .or_else(|| value.get("emote_set_id"))
+      .and_then(Value::as_str)
+      .map(str::to_owned),
+    owner: value
+      .pointer("/user/id")
+      .and_then(Value::as_str)
+      .map(str::to_owned),
+    emotes: set.map(parse_set).unwrap_or_default(),
+  })
 }
 
 /// The global set's response.
-pub fn parse_global(text: &str) -> Result<Vec<Emote>> {
+pub fn parse_global(text: &str) -> Result<Set> {
   let value: Value = serde_json::from_str(text).map_err(|e| Error::Parse {
     endpoint: "7tv",
     detail: e.to_string(),
   })?;
-  Ok(parse_set(&value))
+  Ok(Set {
+    id: value.get("id").and_then(Value::as_str).map(str::to_owned),
+    owner: None,
+    emotes: parse_set(&value),
+  })
 }
 
-/// The 7TV emotes of the channel whose Twitch user id is `user_id`; empty when it has no 7TV account.
-pub(crate) async fn channel(http: &reqwest::Client, user_id: &str) -> Result<Vec<Emote>> {
+/// The 7TV set of the channel whose Twitch user id is `user_id`; empty when it has no 7TV account.
+pub(crate) async fn channel(http: &reqwest::Client, user_id: &str) -> Result<Set> {
   let response = http
     .get(format!("{API}/users/twitch/{user_id}"))
     .send()
     .await?;
   match response.status().as_u16() {
     200 => parse_user(&response.text().await?),
-    404 => Ok(Vec::new()),
+    404 => Ok(Set::default()),
     status => Err(Error::Status {
       status,
       endpoint: "7tv",
@@ -142,8 +195,8 @@ pub(crate) async fn channel(http: &reqwest::Client, user_id: &str) -> Result<Vec
   }
 }
 
-/// 7TV's global emotes.
-pub(crate) async fn global(http: &reqwest::Client) -> Result<Vec<Emote>> {
+/// 7TV's global set.
+pub(crate) async fn global(http: &reqwest::Client) -> Result<Set> {
   let response = http.get(format!("{API}/emote-sets/global")).send().await?;
   match response.status().as_u16() {
     200 => parse_global(&response.text().await?),

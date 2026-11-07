@@ -12,7 +12,9 @@ fn by_name<'a>(emotes: &'a [Emote], name: &str) -> &'a Emote {
 
 #[test]
 fn a_channel_set_uses_its_aliases_and_keeps_case() {
-  let emotes = parse_user(include_str!("fixtures/seventv_user.json")).expect("a set");
+  let emotes = parse_user(include_str!("fixtures/seventv_user.json"))
+    .expect("a set")
+    .emotes;
   assert_eq!(emotes.len(), 8);
   // "Bob" is the channel's name for the emote "ReallyNow".
   let bob = by_name(&emotes, "Bob");
@@ -23,8 +25,20 @@ fn a_channel_set_uses_its_aliases_and_keeps_case() {
 }
 
 #[test]
+fn a_channel_set_keeps_its_id_for_the_event_api() {
+  let set = parse_user(include_str!("fixtures/seventv_user.json")).expect("a set");
+  assert_eq!(set.id.as_deref(), Some("01HT044CVG0008NBPM0BA6DFYN"));
+  // The fixture is stripped of the 7TV account.
+  assert_eq!(set.owner, None);
+  let global = parse_global(include_str!("fixtures/seventv_global.json")).expect("a set");
+  assert_eq!(global.id.as_deref(), Some("01GD17VE2R000E0RPNH2V9Z16G"));
+}
+
+#[test]
 fn files_are_picked_by_width_and_animated_ones_have_a_still_frame() {
-  let emotes = parse_user(include_str!("fixtures/seventv_user.json")).expect("a set");
+  let emotes = parse_user(include_str!("fixtures/seventv_user.json"))
+    .expect("a set")
+    .emotes;
   let what = by_name(&emotes, "WHAT");
   assert!(what.animated);
   assert_eq!((what.width, what.height), (47, 32));
@@ -37,7 +51,9 @@ fn files_are_picked_by_width_and_animated_ones_have_a_still_frame() {
 
 #[test]
 fn the_global_set_marks_zero_width_emotes() {
-  let emotes = parse_global(include_str!("fixtures/seventv_global.json")).expect("a set");
+  let emotes = parse_global(include_str!("fixtures/seventv_global.json"))
+    .expect("a set")
+    .emotes;
   assert_eq!(emotes.len(), 5);
   assert!(by_name(&emotes, "RainTime").zero_width);
   assert!(by_name(&emotes, "PETPET").zero_width);
@@ -50,6 +66,7 @@ fn a_user_without_7tv_has_no_emotes() {
   assert!(
     parse_user(include_str!("fixtures/seventv_user_not_found.json"))
       .expect("JSON")
+      .emotes
       .is_empty()
   );
 }
