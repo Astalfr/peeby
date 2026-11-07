@@ -581,8 +581,11 @@ impl ChatPanel {
           );
         }
         Fragment::Link(url) => {
+          // Opened in the browser by a click; a deleted message's link stays inert.
+          let target = url.clone();
           line = line.child(
             div()
+              .id(ElementId::NamedInteger(message.id.clone(), index as u64))
               .max_w_full()
               .text_color(if message.deleted {
                 theme::subtle()
@@ -590,6 +593,11 @@ impl ChatPanel {
                 theme::accent_hover()
               })
               .underline()
+              .when(!message.deleted, |el| {
+                el.cursor_pointer()
+                  .hover(|s| s.text_color(theme::accent()))
+                  .on_click(move |_, _, cx| cx.open_url(&target))
+              })
               .child(url.clone()),
           );
         }

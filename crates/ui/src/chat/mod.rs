@@ -68,7 +68,7 @@ pub enum Fragment {
   Emote(Emote),
   /// `@name`.
   Mention(SharedString),
-  /// A URL, shown as such (not opened by a click yet).
+  /// An `http(s)` URL, shown as such and opened in the browser by a click.
   Link(SharedString),
 }
 
