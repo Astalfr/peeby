@@ -1,0 +1,852 @@
+{
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "contents": {
+    "twoColumnSearchResultsRenderer": {
+      "primaryContents": {
+        "sectionListRenderer": {
+          "contents": [
+            {
+              "itemSectionRenderer": {
+                "contents": [
+                  {
+                    "videoRenderer": {
+                      "videoId": "kJQP7kiw5Fk",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hq720.jpg?sqp=-oaymwEjCOgCEMoBSFryq4qpAxUIARUAAAAAGAElAADIQj0AgKJDeAE=&rs=AOn4CLCj96Jh8NkTqgJqkcXFQKo7MnO30g",
+                            "width": 360,
+                            "height": 202
+                          },
+                          {
+                            "url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hq720.jpg?sqp=-oaymwEXCNAFEJQDSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLBH3EhyCr_aZDODXzXVDL-taforQw",
+                            "width": 720,
+                            "height": 404
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Luis Fonsi - Despacito ft. Daddy Yankee"
+                          }
+                        ],
+                        "accessibility": {
+                          "accessibilityData": {
+                            "label": "Luis Fonsi - Despacito ft. Daddy Yankee 4 minutes et 42 secondes"
+                          }
+                        }
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Luis Fonsi",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCxoq-PAQeAdk_zyg8YS0JqA",
+                                "canonicalBaseUrl": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "il y a 9 ans"
+                      },
+                      "lengthText": {
+                        "accessibility": {
+                          "accessibilityData": {
+                            "label": "4 minutes et 42 secondes"
+                          }
+                        },
+                        "simpleText": "4:42"
+                      },
+                      "viewCountText": {
+                        "simpleText": "9 166 846 584 vues"
+                      },
+                      "navigationEndpoint": {
+                        "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9wyBnNlYXJjaFIJZGVzcGFjaXRvmgEDEPQkygEEs0hdhA==",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1&pp=ygUJZGVzcGFjaXRvoAcB",
+                            "webPageType": "WEB_PAGE_TYPE_WATCH",
+                            "rootVe": 3832
+                          }
+                        },
+                        "watchEndpoint": {
+                          "videoId": "kJQP7kiw5Fk",
+                          "playlistId": "RDkJQP7kiw5Fk",
+                          "params": "wAEBqgMJZGVzcGFjaXRvugMPEg1SRGtKUVA3a2l3NUZrugMLCOOqlYS20_-2ggG6AwoIvq7Pt-78w_xNugMKCKeI_5efgaX_NboDCwjb453m1r61gLUBugMLCKe7k_2sqvDY2QG6AwsIsYPwpoDKjLm3AboDCwi20eKA9YmDt5gBugMLCKWJmvT0ppznugG6AwoImaDU78CDnaERugMKCOq84quwt6_DQ7oDCgi4iP-lnqrPqBi6AwsIypKR8q_aw7LvAboDCgih74qIxdjO8FG6AwsIgK3t_OGMh-3IAboDCgiKwbPgw_je_iu6AwoInZK-s4nA8d92ugMLCOGG17vSqKnS8gG6AwsImvrV8_Kim9nOAfIDBQ2_eJA9uAUB",
+                          "playerParams": "ygUJZGVzcGFjaXRvoAcB"
+                        }
+                      },
+                      "badges": [
+                        {
+                          "metadataBadgeRenderer": {
+                            "style": "BADGE_STYLE_TYPE_SIMPLE",
+                            "label": "Sous-titres",
+                            "trackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9w=",
+                            "accessibilityData": {
+                              "label": "Sous-titres"
+                            }
+                          }
+                        }
+                      ],
+                      "ownerBadges": [
+                        {
+                          "metadataBadgeRenderer": {
+                            "icon": {
+                              "iconType": "AUDIO_BADGE"
+                            },
+                            "style": "BADGE_STYLE_TYPE_VERIFIED_ARTIST",
+                            "tooltip": "Chaîne d'artiste officielle",
+                            "trackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9w=",
+                            "accessibilityData": {
+                              "label": "Chaîne d'artiste officielle"
+                            }
+                          }
+                        }
+                      ],
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Luis Fonsi",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCxoq-PAQeAdk_zyg8YS0JqA",
+                                "canonicalBaseUrl": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Luis Fonsi",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCxoq-PAQeAdk_zyg8YS0JqA",
+                                "canonicalBaseUrl": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "trackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9xA2cjDxeT9g8qQAQ==",
+                      "showActionMenu": false,
+                      "shortViewCountText": {
+                        "accessibility": {
+                          "accessibilityData": {
+                            "label": "9,1 milliards de vues"
+                          }
+                        },
+                        "simpleText": "9,1 Md de vues"
+                      },
+                      "menu": {
+                        "menuRenderer": {
+                          "items": [
+                            {
+                              "menuServiceItemRenderer": {
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Ajouter à la file d'attente"
+                                    }
+                                  ]
+                                },
+                                "icon": {
+                                  "iconType": "ADD_TO_QUEUE_TAIL"
+                                },
+                                "serviceEndpoint": {
+                                  "clickTrackingParams": "CPcBEP6YBBgPIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                  "commandMetadata": {
+                                    "webCommandMetadata": {
+                                      "sendPost": true
+                                    }
+                                  },
+                                  "signalServiceEndpoint": {
+                                    "signal": "CLIENT_SIGNAL",
+                                    "actions": [
+                                      {
+                                        "clickTrackingParams": "CPcBEP6YBBgPIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                        "addToPlaylistCommand": {
+                                          "openMiniplayer": true,
+                                          "videoId": "kJQP7kiw5Fk",
+                                          "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                          "onCreateListCommand": {
+                                            "clickTrackingParams": "CPcBEP6YBBgPIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                            "commandMetadata": {
+                                              "webCommandMetadata": {
+                                                "sendPost": true,
+                                                "apiUrl": "/youtubei/v1/playlist/create"
+                                              }
+                                            },
+                                            "createPlaylistServiceEndpoint": {
+                                              "videoIds": [
+                                                "kJQP7kiw5Fk"
+                                              ],
+                                              "params": "CAQ%3D"
+                                            }
+                                          },
+                                          "videoIds": [
+                                            "kJQP7kiw5Fk"
+                                          ],
+                                          "videoCommand": {
+                                            "clickTrackingParams": "CPcBEP6YBBgPIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                            "commandMetadata": {
+                                              "webCommandMetadata": {
+                                                "url": "/watch?v=kJQP7kiw5Fk",
+                                                "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                "rootVe": 3832
+                                              }
+                                            },
+                                            "watchEndpoint": {
+                                              "videoId": "kJQP7kiw5Fk"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                "trackingParams": "CPcBEP6YBBgPIhMIks-v8aj2lwMVjjrxBR0wlRfc"
+                              }
+                            },
+                            {
+                              "menuServiceItemRenderer": {
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Partager"
+                                    }
+                                  ]
+                                },
+                                "icon": {
+                                  "iconType": "SHARE"
+                                },
+                                "serviceEndpoint": {
+                                  "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                                  "commandMetadata": {
+                                    "webCommandMetadata": {
+                                      "sendPost": true,
+                                      "apiUrl": "/youtubei/v1/share/get_share_panel"
+                                    }
+                                  },
+                                  "shareEntityServiceEndpoint": {
+                                    "serializedShareEntity": "CgtrSlFQN2tpdzVGaw%3D%3D",
+                                    "commands": [
+                                      {
+                                        "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                                        "openPopupAction": {
+                                          "popup": {
+                                            "unifiedSharePanelRenderer": {
+                                              "trackingParams": "CPYBEI5iIhMIks-v8aj2lwMVjjrxBR0wlRfc",
+                                              "showLoadingSpinner": true
+                                            }
+                                          },
+                                          "popupType": "DIALOG",
+                                          "beReused": true
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                "trackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9w=",
+                                "hasSeparator": true
+                              }
+                            }
+                          ],
+                          "trackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9w=",
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Menu d'actions"
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/ia2BN5pgqtFZ79o-HmDrTZAZ3tATeNeUwx74ys7w4HMm7NLKX_tMFtLhOCPAiyOWTMrDoSapuQ=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "url": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA",
+                                "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                "rootVe": 3611,
+                                "apiUrl": "/youtubei/v1/browse"
+                              }
+                            },
+                            "browseEndpoint": {
+                              "browseId": "UCxoq-PAQeAdk_zyg8YS0JqA"
+                            }
+                          },
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Accéder à la chaîne LuisFonsiVEVO"
+                            }
+                          }
+                        }
+                      },
+                      "thumbnailOverlays": [
+                        {
+                          "thumbnailOverlayTimeStatusRenderer": {
+                            "text": {
+                              "accessibility": {
+                                "accessibilityData": {
+                                  "label": "4 minutes et 42 secondes"
+                                }
+                              },
+                              "simpleText": "4:42"
+                            },
+                            "style": "DEFAULT",
+                            "icon": {
+                              "iconType": "MUSIC"
+                            }
+                          }
+                        },
+                        {
+                          "thumbnailOverlayToggleButtonRenderer": {
+                            "isToggled": false,
+                            "untoggledIcon": {
+                              "iconType": "WATCH_LATER"
+                            },
+                            "toggledIcon": {
+                              "iconType": "CHECK"
+                            },
+                            "untoggledTooltip": "À regarder plus tard",
+                            "toggledTooltip": "Ajoutée",
+                            "untoggledServiceEndpoint": {
+                              "clickTrackingParams": "CPUBEPnnAxgDIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "sendPost": true,
+                                  "apiUrl": "/youtubei/v1/browse/edit_playlist"
+                                }
+                              },
+                              "playlistEditEndpoint": {
+                                "playlistId": "WL",
+                                "actions": [
+                                  {
+                                    "addedVideoId": "kJQP7kiw5Fk",
+                                    "action": "ACTION_ADD_VIDEO"
+                                  }
+                                ]
+                              }
+                            },
+                            "toggledServiceEndpoint": {
+                              "clickTrackingParams": "CPUBEPnnAxgDIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "sendPost": true,
+                                  "apiUrl": "/youtubei/v1/browse/edit_playlist"
+                                }
+                              },
+                              "playlistEditEndpoint": {
+                                "playlistId": "WL",
+                                "actions": [
+                                  {
+                                    "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID",
+                                    "removedVideoId": "kJQP7kiw5Fk"
+                                  }
+                                ]
+                              }
+                            },
+                            "untoggledAccessibility": {
+                              "accessibilityData": {
+                                "label": "À regarder plus tard"
+                              }
+                            },
+                            "toggledAccessibility": {
+                              "accessibilityData": {
+                                "label": "Ajoutée"
+                              }
+                            },
+                            "trackingParams": "CPUBEPnnAxgDIhMIks-v8aj2lwMVjjrxBR0wlRfc"
+                          }
+                        },
+                        {
+                          "thumbnailOverlayToggleButtonRenderer": {
+                            "untoggledIcon": {
+                              "iconType": "ADD_TO_QUEUE_TAIL"
+                            },
+                            "toggledIcon": {
+                              "iconType": "PLAYLIST_ADD_CHECK"
+                            },
+                            "untoggledTooltip": "Ajouter à la file d'attente",
+                            "toggledTooltip": "Ajoutée",
+                            "untoggledServiceEndpoint": {
+                              "clickTrackingParams": "CPQBEMfsBBgEIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "sendPost": true
+                                }
+                              },
+                              "signalServiceEndpoint": {
+                                "signal": "CLIENT_SIGNAL",
+                                "actions": [
+                                  {
+                                    "clickTrackingParams": "CPQBEMfsBBgEIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                    "addToPlaylistCommand": {
+                                      "openMiniplayer": true,
+                                      "videoId": "kJQP7kiw5Fk",
+                                      "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                      "onCreateListCommand": {
+                                        "clickTrackingParams": "CPQBEMfsBBgEIhMIks-v8aj2lwMVjjrxBR0wlRfcygEEs0hdhA==",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "sendPost": true,
+                                            "apiUrl": "/youtubei/v1/playlist/create"
+                                          }
+                                        },
+                                        "createPlaylistServiceEndpoint": {
+                                          "videoIds": [
+                                            "kJQP7kiw5Fk"
+                                          ],
+                                          "params": "CAQ%3D"
+                                        }
+                                      },
+                                      "videoIds": [
+                                        "kJQP7kiw5Fk"
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "untoggledAccessibility": {
+                              "accessibilityData": {
+                                "label": "Ajouter à la file d'attente"
+                              }
+                            },
+                            "toggledAccessibility": {
+                              "accessibilityData": {
+                                "label": "Ajoutée"
+                              }
+                            },
+                            "trackingParams": "CPQBEMfsBBgEIhMIks-v8aj2lwMVjjrxBR0wlRfc"
+                          }
+                        },
+                        {
+                          "thumbnailOverlayNowPlayingRenderer": {
+                            "text": {
+                              "runs": [
+                                {
+                                  "text": "En cours de lecture"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "thumbnailOverlayLoadingPreviewRenderer": {
+                            "text": {
+                              "runs": [
+                                {
+                                  "text": "Maintenez la souris sur la vidéo pour lancer la lecture"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      "detailedMetadataSnippets": [
+                        {
+                          "snippetText": {
+                            "runs": [
+                              {
+                                "text": "Despacito",
+                                "bold": true
+                              },
+                              {
+                                "text": "” disponible ya en todas las plataformas digitales: https://UMLE.lnk.to/DOoUzFp “Imposible” disponible ya en todas las ..."
+                              }
+                            ]
+                          },
+                          "snippetHoverText": {
+                            "runs": [
+                              {
+                                "text": "Issu de la description de la vidéo"
+                              }
+                            ]
+                          },
+                          "maxOneLine": false
+                        }
+                      ],
+                      "inlinePlaybackEndpoint": {
+                        "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9wyBnNlYXJjaFIJZGVzcGFjaXRvmgEDEPQkygEEs0hdhA==",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "url": "/watch?v=kJQP7kiw5Fk&pp=YAHIAQGiBhUBqHapM_LIGC9WIiOuym7VUxZeEk8%3D",
+                            "webPageType": "WEB_PAGE_TYPE_WATCH",
+                            "rootVe": 3832
+                          }
+                        },
+                        "watchEndpoint": {
+                          "videoId": "kJQP7kiw5Fk",
+                          "params": "qgMJZGVzcGFjaXRvugMPEg1SRGtKUVA3a2l3NUZrugMLCOOqlYS20_-2ggG6AwoIvq7Pt-78w_xNugMKCKeI_5efgaX_NboDCwjb453m1r61gLUBugMLCKe7k_2sqvDY2QG6AwsIsYPwpoDKjLm3AboDCwi20eKA9YmDt5gBugMLCKWJmvT0ppznugG6AwoImaDU78CDnaERugMKCOq84quwt6_DQ7oDCgi4iP-lnqrPqBi6AwsIypKR8q_aw7LvAboDCgih74qIxdjO8FG6AwsIgK3t_OGMh-3IAboDCgiKwbPgw_je_iu6AwoInZK-s4nA8d92ugMLCOGG17vSqKnS8gG6AwsImvrV8_Kim9nOAfIDBQ2_eJA9",
+                          "playerParams": "YAHIAQGiBhUBqHapM_LIGC9WIiOuym7VUxZeEk8%3D",
+                          "playerExtraUrlParams": [
+                            {
+                              "key": "inline",
+                              "value": "1"
+                            }
+                          ]
+                        }
+                      },
+                      "searchVideoResultEntityKey": "EgtrSlFQN2tpdzVGayDnAigB",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/ia2BN5pgqtFZ79o-HmDrTZAZ3tATeNeUwx74ys7w4HMm7NLKX_tMFtLhOCPAiyOWTMrDoSapuQ=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              },
+                              "avatarImageSize": "AVATAR_SIZE_M"
+                            }
+                          },
+                          "a11yLabel": "Accéder à la chaîne LuisFonsiVEVO",
+                          "rendererContext": {
+                            "commandContext": {
+                              "onTap": {
+                                "innertubeCommand": {
+                                  "clickTrackingParams": "CPMBENwwGAAiEwiSz6_xqPaXAxWOOvEFHTCVF9zKAQSzSF2E",
+                                  "commandMetadata": {
+                                    "webCommandMetadata": {
+                                      "url": "/channel/UCxoq-PAQeAdk_zyg8YS0JqA",
+                                      "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                      "rootVe": 3611,
+                                      "apiUrl": "/youtubei/v1/browse"
+                                    }
+                                  },
+                                  "browseEndpoint": {
+                                    "browseId": "UCxoq-PAQeAdk_zyg8YS0JqA"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "lockupViewModel": {
+                      "contentImage": {
+                        "collectionThumbnailViewModel": {
+                          "primaryThumbnail": {
+                            "thumbnailViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDlcs33c1_oy0WcHCReBgquq0fJbg",
+                                    "width": 480,
+                                    "height": 270
+                                  }
+                                ]
+                              },
+                              "overlays": [
+                                {
+                                  "thumbnailOverlayBadgeViewModel": {
+                                    "thumbnailBadges": [
+                                      {
+                                        "thumbnailBadgeViewModel": {
+                                          "icon": {
+                                            "sources": [
+                                              {
+                                                "clientResource": {
+                                                  "imageName": "MIX"
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          "text": "Mix",
+                                          "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                                          "backgroundColor": {
+                                            "lightTheme": 3355443,
+                                            "darkTheme": 3355443
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                                  }
+                                },
+                                {
+                                  "thumbnailHoverOverlayViewModel": {
+                                    "icon": {
+                                      "sources": [
+                                        {
+                                          "clientResource": {
+                                            "imageName": "PLAY_ALL"
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    "text": {
+                                      "content": "Tout lire",
+                                      "styleRuns": [
+                                        {
+                                          "startIndex": 0,
+                                          "length": 9
+                                        }
+                                      ]
+                                    },
+                                    "style": "THUMBNAIL_HOVER_OVERLAY_STYLE_COVER"
+                                  }
+                                }
+                              ],
+                              "backgroundColor": {
+                                "lightTheme": 4144959,
+                                "darkTheme": 4144959
+                              }
+                            }
+                          },
+                          "stackColor": {
+                            "lightTheme": 10066329,
+                            "darkTheme": 9211020
+                          }
+                        }
+                      },
+                      "metadata": {
+                        "lockupMetadataViewModel": {
+                          "title": {
+                            "content": "Mix - Luis Fonsi - Despacito ft. Daddy Yankee"
+                          },
+                          "metadata": {
+                            "contentMetadataViewModel": {
+                              "metadataRows": [
+                                {
+                                  "metadataParts": [
+                                    {
+                                      "text": {
+                                        "content": "Daddy Yankee, David Bisbal, Ed Sheeran et bien plus encore"
+                                      }
+                                    },
+                                    {
+                                      "text": {
+                                        "content": "Playlist"
+                                      }
+                                    }
+                                  ],
+                                  "lockupContentMetadataRowExtension": {
+                                    "contentType": "METADATA_ROW_CONTENT_TYPE_BYLINE"
+                                  }
+                                },
+                                {
+                                  "isSpacerRow": true
+                                },
+                                {
+                                  "metadataParts": [
+                                    {
+                                      "text": {
+                                        "content": "Luis Fonsi - Despacito ft. Daddy Yankee · 4:42",
+                                        "commandRuns": [
+                                          {
+                                            "startIndex": 0,
+                                            "length": 47,
+                                            "onTap": {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CPIBEIrSDRgBIhMIks-v8aj2lwMVjjrxBR0wlRfcMgZzZWFyY2jKAQSzSF2E",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1",
+                                                    "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                    "rootVe": 3832
+                                                  }
+                                                },
+                                                "watchEndpoint": {
+                                                  "videoId": "kJQP7kiw5Fk",
+                                                  "playlistId": "RDkJQP7kiw5Fk",
+                                                  "params": "wAEB"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "metadataParts": [
+                                    {
+                                      "text": {
+                                        "content": "Ed Sheeran - Shape of You (Official Music Video) · 4:24",
+                                        "commandRuns": [
+                                          {
+                                            "startIndex": 0,
+                                            "length": 56,
+                                            "onTap": {
+                                              "innertubeCommand": {
+                                                "clickTrackingParams": "CPIBEIrSDRgBIhMIks-v8aj2lwMVjjrxBR0wlRfcMgZzZWFyY2jKAQSzSF2E",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "url": "/watch?v=JGwWNGJdvx8&list=RDkJQP7kiw5Fk&start_radio=1",
+                                                    "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                    "rootVe": 3832
+                                                  }
+                                                },
+                                                "watchEndpoint": {
+                                                  "videoId": "JGwWNGJdvx8",
+                                                  "playlistId": "RDkJQP7kiw5Fk",
+                                                  "params": "wAEB"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "metadataParts": [
+                                    {
+                                      "text": {
+                                        "content": "Daddy Yankee, David Bisbal, Ed Sheeran et bien plus encore"
+                                      },
+                                      "maxLines": 2
+                                    }
+                                  ],
+                                  "lockupContentMetadataRowExtension": {
+                                    "contentType": "METADATA_ROW_CONTENT_TYPE_DESCRIPTION"
+                                  }
+                                }
+                              ],
+                              "delimiter": " • "
+                            }
+                          }
+                        }
+                      },
+                      "contentId": "RDkJQP7kiw5Fk",
+                      "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+                      "itemPlayback": {
+                        "inlinePlayerData": {
+                          "onSelect": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CPIBEIrSDRgBIhMIks-v8aj2lwMVjjrxBR0wlRfcMgZzZWFyY2jKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1",
+                                  "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                  "rootVe": 3832
+                                }
+                              },
+                              "watchEndpoint": {
+                                "videoId": "kJQP7kiw5Fk",
+                                "playlistId": "RDkJQP7kiw5Fk",
+                                "params": "OALAAQE%3D",
+                                "continuePlayback": true
+                              }
+                            }
+                          },
+                          "onVisible": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CPIBEIrSDRgBIhMIks-v8aj2lwMVjjrxBR0wlRfcMgZzZWFyY2jKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1&pp=YAHIAQHwBAD4BACiBhUBqHapM_LIGC9WIiOuym7VUxZeEk8%3D",
+                                  "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                  "rootVe": 3832
+                                }
+                              },
+                              "watchEndpoint": {
+                                "videoId": "kJQP7kiw5Fk",
+                                "playlistId": "RDkJQP7kiw5Fk",
+                                "params": "OALAAQE%3D",
+                                "continuePlayback": true,
+                                "playerParams": "YAHIAQHwBAD4BACiBhUBqHapM_LIGC9WIiOuym7VUxZeEk8%3D"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "rendererContext": {
+                        "commandContext": {
+                          "onTap": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CPIBEIrSDRgBIhMIks-v8aj2lwMVjjrxBR0wlRfcMgZzZWFyY2jKAQSzSF2E",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1",
+                                  "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                  "rootVe": 3832
+                                }
+                              },
+                              "watchEndpoint": {
+                                "videoId": "kJQP7kiw5Fk",
+                                "playlistId": "RDkJQP7kiw5Fk",
+                                "params": "OALAAQE%3D",
+                                "continuePlayback": true
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ],
+                "trackingParams": "CEMQuy8YACITCJLPr_Go9pcDFY468QUdMJUX3A=="
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

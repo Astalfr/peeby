@@ -145,6 +145,19 @@ fn playlist_media_card(id: &str, playlist: &PlaylistSummary, nav: &Nav, hover: H
   .on_middle_click(open_in_new_tab)
 }
 
+/// Grid playlist card, `width` wide (a mix on Home).
+pub fn playlist_grid_card(
+  playlist: &PlaylistSummary,
+  width: f32,
+  nav: &Nav,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let id = format!("card-playlist-{}", playlist.id);
+  let hover = Hover::new(&id, window, cx);
+  playlist_media_card(&id, playlist, nav, hover).grid(width, window, cx)
+}
+
 /// Compact playlist card (related list).
 pub fn playlist_compact_card(
   playlist: &PlaylistSummary,

@@ -17,9 +17,9 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Selectable, h_flex, v_flex};
-use innertube::{Client, Error, Feed, FeedChip, VideoItem};
+use innertube::{Client, Error, Feed, FeedChip, PlaylistSummary, Related, VideoItem};
 
-use crate::cards::{video_card, video_row};
+use crate::cards::{playlist_grid_card, playlist_result_row, video_card, video_row};
 use crate::convert::error_text;
 use crate::{Nav, Route};
 use peeby_core::settings::{FeedLayout, Settings};
@@ -85,7 +85,8 @@ pub struct FeedView {
   source: Source,
   nav: Nav,
   state: State,
-  videos: Vec<VideoItem>,
+  /// The videos, and the playlists between them (mixes on Home).
+  cards: Vec<Related>,
   continuation: Option<String>,
   loading_more: bool,
   /// The last next-page request failed: no automatic retry, the button retries.
@@ -150,7 +151,7 @@ impl FeedView {
       source,
       nav,
       state: State::Loading,
-      videos: Vec::new(),
+      cards: Vec::new(),
       continuation: None,
       loading_more: false,
       more_failed: false,
@@ -277,7 +278,7 @@ impl FeedView {
       feed.continuation.is_some()
     );
     if !more {
-      self.videos.clear();
+      self.cards.clear();
       self.logged_in = feed.logged_in;
       self.message = feed.message;
       // A search's results have no chips: the sort orders stay for when it ends.
@@ -286,16 +287,17 @@ impl FeedView {
       }
     }
     // YouTube repeats some videos (twice on a page, or again in the next one). A card's id is
-    // its video id, and two elements with one id share GPUI's hover state, which then flips on
-    // every frame: keep the first.
-    let (received, before) = (feed.items.len(), self.videos.len());
+    // its video (or playlist) id, and two elements with one id share GPUI's hover state, which
+    // then flips on every frame: keep the first.
+    let received = feed.items.len() + feed.playlists.len();
+    let before = self.cards.len();
     let old_count = self.shape.map(|shape| self.item_count(shape));
-    for video in feed.items {
-      if !self.videos.iter().any(|v| v.id == video.id) {
-        self.videos.push(video);
+    for card in merge(feed.items, feed.playlists) {
+      if !self.cards.iter().any(|c| key(c) == key(&card)) {
+        self.cards.push(card);
       }
     }
-    let repeated = received - (self.videos.len() - before);
+    let repeated = received - (self.cards.len() - before);
     if repeated > 0 {
       tracing::debug!("{:?}: {repeated} repeated videos skipped", self.source);
     }
@@ -316,7 +318,7 @@ impl FeedView {
 
   /// List items for `shape`: the rows, then the end of the list.
   fn item_count(&self, shape: Shape) -> usize {
-    self.videos.len().div_ceil(shape.per_item()) + 1
+    self.cards.len().div_ceil(shape.per_item()) + 1
   }
 
   /// Rebuilds the list items when the layout or the number of cards per row changed, keeping
@@ -343,7 +345,7 @@ impl FeedView {
       return div().into_any_element();
     };
     let start = ix * shape.per_item();
-    if start >= self.videos.len() {
+    if start >= self.cards.len() {
       self.load_more(cx);
       return div()
         .px_8()
@@ -352,19 +354,25 @@ impl FeedView {
         .children(self.end_of_list(cx))
         .into_any_element();
     }
-    let videos = &self.videos[start..(start + shape.per_item()).min(self.videos.len())];
+    let cards = &self.cards[start..(start + shape.per_item()).min(self.cards.len())];
     let row = if shape.list {
-      div()
-        .pb_2()
-        .child(video_row(&videos[0], &self.nav, window, cx))
+      div().pb_2().child(match &cards[0] {
+        Related::Video(video) => video_row(video, &self.nav, window, cx),
+        Related::Playlist(playlist) => playlist_result_row(playlist, &self.nav, window, cx),
+      })
     } else {
       // `h_flex` centers its children vertically: cards whose title takes one line would sit
       // lower than their neighbors.
-      h_flex().pb_8().items_start().gap_x_4().children(
-        videos
-          .iter()
-          .map(|v| video_card(v, self.card_width, &self.nav, window, cx)),
-      )
+      h_flex()
+        .pb_8()
+        .items_start()
+        .gap_x_4()
+        .children(cards.iter().map(|card| match card {
+          Related::Video(video) => video_card(video, self.card_width, &self.nav, window, cx),
+          Related::Playlist(playlist) => {
+            playlist_grid_card(playlist, self.card_width, &self.nav, window, cx)
+          }
+        }))
     };
     // Room above the first row: a hovered card rises over its box, and the list clips it.
     div()
@@ -540,6 +548,28 @@ fn sort_switch(chips: &[FeedChip], cx: &mut Context<FeedView>) -> impl IntoEleme
 
 /// Cards per row of the grid and their width, from the window: the content panel is the window
 /// less the sidebar and the page margins, and the cards share it.
+/// A page's videos with its playlists put back in their places ([`Feed::playlists`]).
+fn merge(videos: Vec<VideoItem>, playlists: Vec<(usize, PlaylistSummary)>) -> Vec<Related> {
+  let mut playlists = playlists.into_iter().peekable();
+  let mut cards = Vec::new();
+  for (i, video) in videos.into_iter().enumerate() {
+    while let Some((_, playlist)) = playlists.next_if(|(before, _)| *before <= i) {
+      cards.push(Related::Playlist(playlist));
+    }
+    cards.push(Related::Video(video));
+  }
+  cards.extend(playlists.map(|(_, playlist)| Related::Playlist(playlist)));
+  cards
+}
+
+/// What tells two cards apart: the video or playlist id.
+fn key(card: &Related) -> &str {
+  match card {
+    Related::Video(video) => &video.id,
+    Related::Playlist(playlist) => &playlist.id,
+  }
+}
+
 fn grid(window: &Window, cx: &gpui::App) -> (usize, f32) {
   let sidebar = theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
   let width = f32::from(window.viewport_size().width - sidebar) - 2. * PAGE_MARGIN;
@@ -590,7 +620,7 @@ impl Render for FeedView {
         .children((0..12).map(|_| skeleton_card(card_width)))
         .into_any_element()
     };
-    let body = if matches!(self.state, State::Loaded) && !self.videos.is_empty() {
+    let body = if matches!(self.state, State::Loaded) && !self.cards.is_empty() {
       self.set_shape(Shape {
         list: list_mode,
         columns: if list_mode { 1 } else { columns },
@@ -693,5 +723,53 @@ impl Render for FeedView {
       .pt_6()
       .children(header)
       .child(div().flex_1().min_h_0().child(body))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{key, merge};
+  use innertube::{PlaylistSummary, VideoItem};
+
+  fn video(id: &str) -> VideoItem {
+    VideoItem {
+      id: id.into(),
+      title: String::new(),
+      channel: None,
+      channel_id: None,
+      metadata: Vec::new(),
+      duration: None,
+      live: false,
+      members_only: false,
+      thumbnails: Vec::new(),
+      avatar: Vec::new(),
+      set_video_id: None,
+      progress: None,
+    }
+  }
+
+  fn playlist(id: &str) -> PlaylistSummary {
+    PlaylistSummary {
+      id: id.into(),
+      title: String::new(),
+      count: None,
+      channel: None,
+      channel_id: None,
+      metadata: Vec::new(),
+      thumbnails: Vec::new(),
+    }
+  }
+
+  #[test]
+  fn playlists_go_back_in_their_places() {
+    let videos = vec![video("a"), video("b"), video("c")];
+    let playlists = vec![
+      (0, playlist("RD0")),
+      (2, playlist("RD2")),
+      (3, playlist("RD3")),
+    ];
+    let cards = merge(videos, playlists);
+    let keys: Vec<&str> = cards.iter().map(key).collect();
+    assert_eq!(keys, ["RD0", "a", "b", "RD2", "c", "RD3"]);
   }
 }

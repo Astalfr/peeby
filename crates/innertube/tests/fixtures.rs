@@ -586,10 +586,41 @@ fn home_mixes() {
   assert_eq!(mix.count.as_deref(), Some("Mix"));
   assert_eq!(mix.metadata.last().map(String::as_str), Some("Playlist"));
   assert!(!mix.thumbnails.is_empty());
-  // The video stays the feed's, and only it.
+  // The feed keeps the video, and the mix after it.
   let feed = parse_feed(&response);
   assert_eq!(feed.items.len(), 1);
+  assert_eq!(feed.playlists.len(), 1);
+  assert_eq!(feed.playlists[0].0, 1);
+  assert_eq!(feed.playlists[0].1.id, "RDVUmovBRfVQI");
   assert!(feed.continuation.is_some());
+}
+
+#[test]
+fn related_mix() {
+  // Despacito's related list, anonymous, captured 2026-11-07, trimmed to a video and its mix.
+  let page = parse_watch("kJQP7kiw5Fk", &fixture("next_related_mix.json"));
+  assert_eq!(page.related.len(), 2);
+  assert!(matches!(page.related[0], Related::Video(_)));
+  let Related::Playlist(mix) = &page.related[1] else {
+    panic!("the mix after the video");
+  };
+  assert_eq!(mix.id, "RDkJQP7kiw5Fk");
+  assert!(mix.title.starts_with("Mix\u{a0}- "));
+  assert!(!mix.thumbnails.is_empty());
+}
+
+#[test]
+fn search_mix() {
+  // A search for "despacito", anonymous, captured 2026-11-07, trimmed to the first video and
+  // the mix.
+  let page = parse_search(&fixture("search_mix.json"));
+  assert_eq!(page.results.len(), 2);
+  assert!(matches!(page.results[0], SearchResult::Video(_)));
+  let SearchResult::Playlist(mix) = &page.results[1] else {
+    panic!("the mix after the video");
+  };
+  assert_eq!(mix.id, "RDkJQP7kiw5Fk");
+  assert!(mix.title.starts_with("Mix\u{a0}- "));
 }
 
 #[test]

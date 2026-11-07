@@ -54,10 +54,18 @@ pub fn parse_subscriptions(response: &Value) -> Feed {
 }
 
 fn feed(response: &Value, shelves: bool) -> Feed {
-  let mut items = Vec::new();
-  collect_lockups(response, shelves, &mut items);
+  let mut cards = Vec::new();
+  collect_lockups(response, shelves, &mut cards);
+  let (mut items, mut playlists) = (Vec::new(), Vec::new());
+  for card in cards {
+    match card {
+      Related::Video(video) => items.push(video),
+      Related::Playlist(playlist) => playlists.push((items.len(), playlist)),
+    }
+  }
   Feed {
     items,
+    playlists,
     continuation: find_continuation(response),
     logged_in: tracking_param(response, "logged_in").as_deref() == Some("1"),
     message: find_key(response, "feedNudgeRenderer").map(|nudge| text(&nudge["title"])),
@@ -1331,15 +1339,17 @@ fn unredirect(url: &str) -> String {
     .unwrap_or_else(|| url.to_owned())
 }
 
-/// Collects every video lockup under `value`, skipping malformed ones, and those of the grid's
-/// shelves (`richSectionRenderer`) unless `shelves`.
-fn collect_lockups(value: &Value, shelves: bool, out: &mut Vec<VideoItem>) {
+/// Collects every video and playlist lockup (mixes included) under `value` in order, skipping
+/// malformed ones, and those of the grid's shelves (`richSectionRenderer`) unless `shelves`.
+fn collect_lockups(value: &Value, shelves: bool, out: &mut Vec<Related>) {
   match value {
     Value::Object(map) => {
       if let Some(lockup) = map.get("lockupViewModel") {
-        if let Some(item) = parse_lockup(lockup) {
-          out.push(item);
-        }
+        out.extend(
+          parse_lockup(lockup)
+            .map(Related::Video)
+            .or_else(|| parse_playlist_lockup(lockup).map(Related::Playlist)),
+        );
         return;
       }
       if !shelves && map.contains_key("richSectionRenderer") {

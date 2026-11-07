@@ -1,0 +1,688 @@
+{
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "secondaryResults": {
+        "secondaryResults": {
+          "results": [
+            {
+              "lockupViewModel": {
+                "contentImage": {
+                  "thumbnailViewModel": {
+                    "image": {
+                      "sources": [
+                        {
+                          "url": "https://i.ytimg.com/vi/TyhIVDh-dVo/hqdefault.jpg?sqp=-oaymwEiCKgBEF5IWvKriqkDFQgBFQAAAAAYASUAAMhCPQCAokN4AQ==&rs=AOn4CLC56ekpyMUuhSbwpv7_6UCv7A3Djw",
+                          "width": 168,
+                          "height": 94
+                        },
+                        {
+                          "url": "https://i.ytimg.com/vi/TyhIVDh-dVo/hqdefault.jpg?sqp=-oaymwEjCNACELwBSFryq4qpAxUIARUAAAAAGAElAADIQj0AgKJDeAE=&rs=AOn4CLD_4_JxcQxFVPFOr8bbd6voGRGHNQ",
+                          "width": 336,
+                          "height": 188
+                        }
+                      ]
+                    },
+                    "overlays": [
+                      {
+                        "thumbnailBottomOverlayViewModel": {
+                          "badges": [
+                            {
+                              "thumbnailBadgeViewModel": {
+                                "icon": {
+                                  "sources": [
+                                    {
+                                      "clientResource": {
+                                        "imageName": "MUSIC"
+                                      }
+                                    }
+                                  ]
+                                },
+                                "text": "3:29:19",
+                                "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                                "animationActivationTargetId": "TyhIVDh-dVo",
+                                "animationActivationEntityKey": "Eh8veW91dHViZS9hcHAvd2F0Y2gvcGxheWVyX3N0YXRlIMMCKAE%3D",
+                                "lottieData": {
+                                  "url": "https://www.gstatic.com/youtube/img/lottie/audio_indicator/audio_indicator_v2.json",
+                                  "settings": {
+                                    "loop": true,
+                                    "autoplay": true
+                                  }
+                                },
+                                "animatedText": "En cours de lecture",
+                                "animationActivationEntitySelectorType": "THUMBNAIL_BADGE_ANIMATION_ENTITY_SELECTOR_TYPE_PLAYER_STATE",
+                                "inlinePlaybackBadgeData": {
+                                  "replicateAsTimestamp": true
+                                },
+                                "rendererContext": {
+                                  "accessibilityContext": {
+                                    "label": "3 heures, 29 minutes et 19 secondes"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "metadata": {
+                  "lockupMetadataViewModel": {
+                    "title": {
+                      "content": "Best Latin Music 2026 Playlist Billboard de musica Latina –Shakira, J Balvin, Luis Fonsi music Style"
+                    },
+                    "image": {
+                      "decoratedAvatarViewModel": {
+                        "avatar": {
+                          "avatarViewModel": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://yt3.ggpht.com/phACxHo9lc-LJLCNjp0RpjMWD35bok18M26MOBET0ik_UhxxIvhM0xCg_H8_hyUMfdzXRA9F=s88-c-k-c0x00ffffff-no-rj",
+                                  "width": 68,
+                                  "height": 68
+                                }
+                              ]
+                            },
+                            "avatarImageSize": "AVATAR_SIZE_M"
+                          }
+                        },
+                        "a11yLabel": "Accéder à la chaîne Latino Mix",
+                        "rendererContext": {
+                          "commandContext": {
+                            "onTap": {
+                              "innertubeCommand": {
+                                "clickTrackingParams": "CL8BENTEDBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "url": "/channel/UCvSsR51VjMQlXzoPFCv9Mmw",
+                                    "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                    "rootVe": 3611,
+                                    "apiUrl": "/youtubei/v1/browse"
+                                  }
+                                },
+                                "browseEndpoint": {
+                                  "browseId": "UCvSsR51VjMQlXzoPFCv9Mmw"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "metadata": {
+                      "contentMetadataViewModel": {
+                        "metadataRows": [
+                          {
+                            "metadataParts": [
+                              {
+                                "text": {
+                                  "content": "Latino Mix",
+                                  "styleRuns": [
+                                    {
+                                      "startIndex": 10,
+                                      "styleRunExtensions": {
+                                        "styleRunColorMapExtension": {
+                                          "colorMap": [
+                                            {
+                                              "key": "USER_INTERFACE_THEME_DARK",
+                                              "value": 4289374890
+                                            },
+                                            {
+                                              "key": "USER_INTERFACE_THEME_LIGHT",
+                                              "value": 4284506208
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "attachmentRuns": [
+                                    {
+                                      "startIndex": 10,
+                                      "length": 0,
+                                      "element": {
+                                        "type": {
+                                          "imageType": {
+                                            "image": {
+                                              "sources": [
+                                                {
+                                                  "clientResource": {
+                                                    "imageName": "AUDIO_BADGE"
+                                                  },
+                                                  "width": 14,
+                                                  "height": 14
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        },
+                                        "properties": {
+                                          "layoutProperties": {
+                                            "height": {
+                                              "value": 14,
+                                              "unit": "DIMENSION_UNIT_POINT"
+                                            },
+                                            "width": {
+                                              "value": 14,
+                                              "unit": "DIMENSION_UNIT_POINT"
+                                            },
+                                            "margin": {
+                                              "left": {
+                                                "value": 4,
+                                                "unit": "DIMENSION_UNIT_POINT"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "alignment": "ALIGNMENT_VERTICAL_CENTER"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "metadataParts": [
+                              {
+                                "text": {
+                                  "content": "1 M"
+                                },
+                                "accessibilityLabel": "1 million de vues",
+                                "leadingIcon": {
+                                  "name": "PLAY_ARROW_OUTLINED",
+                                  "height": 12,
+                                  "width": 12,
+                                  "marginEndToken": {
+                                    "spacing": 2
+                                  }
+                                }
+                              },
+                              {
+                                "text": {
+                                  "content": "Diffusé il y a 10 m."
+                                },
+                                "accessibilityLabel": "Diffusé il y a 10 mois"
+                              }
+                            ]
+                          }
+                        ],
+                        "delimiter": " "
+                      }
+                    },
+                    "menuButton": {
+                      "buttonViewModel": {
+                        "iconName": "MORE_VERT",
+                        "onTap": {
+                          "innertubeCommand": {
+                            "clickTrackingParams": "CMABEPBbIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                            "showSheetCommand": {
+                              "panelLoadingStrategy": {
+                                "inlineContent": {
+                                  "sheetViewModel": {
+                                    "content": {
+                                      "listViewModel": {
+                                        "listItems": [
+                                          {
+                                            "listItemViewModel": {
+                                              "title": {
+                                                "content": "Ajouter à la file d'attente"
+                                              },
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "ADD_TO_QUEUE_TAIL"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CMIBEP6YBBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "sendPost": true
+                                                        }
+                                                      },
+                                                      "signalServiceEndpoint": {
+                                                        "signal": "CLIENT_SIGNAL",
+                                                        "actions": [
+                                                          {
+                                                            "clickTrackingParams": "CMIBEP6YBBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                            "addToPlaylistCommand": {
+                                                              "openMiniplayer": true,
+                                                              "videoId": "TyhIVDh-dVo",
+                                                              "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                                              "onCreateListCommand": {
+                                                                "clickTrackingParams": "CMIBEP6YBBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                                "commandMetadata": {
+                                                                  "webCommandMetadata": {
+                                                                    "sendPost": true,
+                                                                    "apiUrl": "/youtubei/v1/playlist/create"
+                                                                  }
+                                                                },
+                                                                "createPlaylistServiceEndpoint": {
+                                                                  "videoIds": [
+                                                                    "TyhIVDh-dVo"
+                                                                  ],
+                                                                  "params": "CAQ%3D"
+                                                                }
+                                                              },
+                                                              "videoIds": [
+                                                                "TyhIVDh-dVo"
+                                                              ],
+                                                              "videoCommand": {
+                                                                "clickTrackingParams": "CMIBEP6YBBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                                "commandMetadata": {
+                                                                  "webCommandMetadata": {
+                                                                    "url": "/watch?v=TyhIVDh-dVo",
+                                                                    "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                                    "rootVe": 3832
+                                                                  }
+                                                                },
+                                                                "watchEndpoint": {
+                                                                  "videoId": "TyhIVDh-dVo"
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "listItemViewModel": {
+                                              "title": {
+                                                "content": "Partager"
+                                              },
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "SHARE"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CMABEPBbIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "sendPost": true,
+                                                          "apiUrl": "/youtubei/v1/share/get_share_panel"
+                                                        }
+                                                      },
+                                                      "shareEntityServiceEndpoint": {
+                                                        "serializedShareEntity": "CgtUeWhJVkRoLWRWbw%3D%3D",
+                                                        "commands": [
+                                                          {
+                                                            "clickTrackingParams": "CMABEPBbIhMIq9WB8aj2lwMVDRh1AR2T1jeaygEENcsePA==",
+                                                            "openPopupAction": {
+                                                              "popup": {
+                                                                "unifiedSharePanelRenderer": {
+                                                                  "trackingParams": "CMEBEI5iIhMIq9WB8aj2lwMVDRh1AR2T1jea",
+                                                                  "showLoadingSpinner": true
+                                                                }
+                                                              },
+                                                              "popupType": "DIALOG",
+                                                              "beReused": true
+                                                            }
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "accessibilityText": "Autres actions",
+                        "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                        "trackingParams": "CMABEPBbIhMIq9WB8aj2lwMVDRh1AR2T1jea",
+                        "type": "BUTTON_VIEW_MODEL_TYPE_TEXT",
+                        "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                        "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE"
+                      }
+                    }
+                  }
+                },
+                "contentId": "TyhIVDh-dVo",
+                "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                "themedPalette": {
+                  "lightThemePalette": {
+                    "baseBackground": 4294965232,
+                    "raisedBackground": 4294965232,
+                    "additiveBackground": 566854213,
+                    "textPrimary": 4281736714,
+                    "textSecondary": 4285420090,
+                    "outline": 860565014,
+                    "keyLight": 4292723372,
+                    "collectionStack": 4290814859,
+                    "invertedBackground": 4287581977,
+                    "textPrimaryInverse": 4294965232,
+                    "textDisabled": 2135633430,
+                    "dropShadow": 432636485,
+                    "cardOutline": 180978245,
+                    "overlayBackground": 3426098698,
+                    "overlayTextPrimary": 4294965232,
+                    "solidWash": 4283117078,
+                    "solidRim": 4281736714,
+                    "overlaySolidWash": 4294634720,
+                    "overlaySolidRim": 4294965232,
+                    "tonalWash": 2583689200,
+                    "tonalRim": 202311424,
+                    "overlayTonalWash": 436205552,
+                    "overlayTonalRim": 436205552,
+                    "outlineRim": 1279995414,
+                    "overlayOutlineRim": 871554250,
+                    "solidWashInverse": 4294106314,
+                    "solidRimInverse": 2147151072,
+                    "tonalWashInverse": 654309360,
+                    "tonalRimInverse": 653978848,
+                    "outlineRimInverse": 654309360,
+                    "solidBackground": 4283117078,
+                    "solidBackgroundInverse": 4290814859,
+                    "tonalBackground": 868262795,
+                    "tonalBackgroundInverse": 435346634,
+                    "outlineInverse": 872082656,
+                    "directionalLightStopPrimary": 4294634720,
+                    "directionalLightStopSecondary": 4294965232,
+                    "primary": 4279174912,
+                    "filledStateLayer": 4281736714,
+                    "tonalTouchLight": 4294965232,
+                    "tonalHoverLight": 3438996704,
+                    "tonalStateLayer": 420415232,
+                    "overlayDisabledContainer": 871554250,
+                    "overlayTonalTouchLight": 1291513056,
+                    "overlayTonalHoverLight": 1291513056,
+                    "overlayTonalStateLayer": 436205552,
+                    "disabledContainer": 420415232,
+                    "filledTouchLight": 4285420090,
+                    "filledHoverLight": 4284301352,
+                    "onOverlayDisabledContainer": 2583689200,
+                    "overlayTonalContainer": 2583358688,
+                    "overlayOutline": 872413168,
+                    "onFilledContainer": 4294965232,
+                    "filledContainer": 4280028674,
+                    "tonalContainer": 641080842,
+                    "overlayPrimary": 4294965232,
+                    "onOverlayFilledContainer": 4279174912,
+                    "overlayFilledTouchLight": 4294965232,
+                    "overlayFilledHoverLight": 4294634720,
+                    "overlayFilledStateLayer": 4292723372,
+                    "overlayFilledContainer": 4294106314,
+                    "onDisabledContainer": 1712260864,
+                    "temporaryOutline": 860565014
+                  },
+                  "darkThemePalette": {
+                    "baseBackground": 4280028674,
+                    "raisedBackground": 4281736714,
+                    "additiveBackground": 734626373,
+                    "textPrimary": 4294634720,
+                    "textSecondary": 4292723372,
+                    "outline": 1072880842,
+                    "keyLight": 4284301352,
+                    "collectionStack": 4285420090,
+                    "invertedBackground": 4293110652,
+                    "textPrimaryInverse": 4280028674,
+                    "textDisabled": 2146622666,
+                    "dropShadow": 432636485,
+                    "cardOutline": 180978245,
+                    "overlayBackground": 3426098698,
+                    "overlayTextPrimary": 4294965232,
+                    "solidWash": 4294634720,
+                    "solidRim": 4294965232,
+                    "overlaySolidWash": 4294634720,
+                    "overlaySolidRim": 4294965232,
+                    "tonalWash": 217242826,
+                    "tonalRim": 218101744,
+                    "overlayTonalWash": 436205552,
+                    "overlayTonalRim": 436205552,
+                    "outlineRim": 871554250,
+                    "overlayOutlineRim": 871554250,
+                    "solidWashInverse": 4285420090,
+                    "solidRimInverse": 871554250,
+                    "tonalWashInverse": 872413168,
+                    "tonalRimInverse": 870171308,
+                    "outlineRimInverse": 1291843568,
+                    "solidBackground": 4290814859,
+                    "solidBackgroundInverse": 4283117078,
+                    "tonalBackground": 435346634,
+                    "tonalBackgroundInverse": 868262795,
+                    "outlineInverse": 860565014,
+                    "directionalLightStopPrimary": 4281736714,
+                    "directionalLightStopSecondary": 4280028674,
+                    "primary": 4294965232,
+                    "filledStateLayer": 4292723372,
+                    "tonalTouchLight": 1073409248,
+                    "tonalHoverLight": 653978848,
+                    "tonalStateLayer": 436205552,
+                    "overlayDisabledContainer": 871554250,
+                    "overlayTonalTouchLight": 1291513056,
+                    "overlayTonalHoverLight": 1291513056,
+                    "overlayTonalStateLayer": 436205552,
+                    "disabledContainer": 436205552,
+                    "filledTouchLight": 4294965232,
+                    "filledHoverLight": 4294634720,
+                    "onOverlayDisabledContainer": 2583689200,
+                    "overlayTonalContainer": 2583358688,
+                    "overlayOutline": 872413168,
+                    "onFilledContainer": 4279174912,
+                    "filledContainer": 4294106314,
+                    "tonalContainer": 435346634,
+                    "overlayPrimary": 4294965232,
+                    "onOverlayFilledContainer": 4279174912,
+                    "overlayFilledTouchLight": 4294965232,
+                    "overlayFilledHoverLight": 4294634720,
+                    "overlayFilledStateLayer": 4292723372,
+                    "overlayFilledContainer": 4294106314,
+                    "onDisabledContainer": 1728051184,
+                    "temporaryOutline": 871554250
+                  }
+                },
+                "rendererContext": {
+                  "accessibilityContext": {
+                    "label": "Best Latin Music 2026 Playlist Billboard de musica Latina –Shakira, J Balvin, Luis Fonsi music Style 3 heures et 29 minutes"
+                  },
+                  "commandContext": {
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CL8BENTEDBgAIhMIq9WB8aj2lwMVDRh1AR2T1jeaMgdyZWxhdGVkSNnIw8Xk_YPKkAGaAQUIARD4HcoBBDXLHjw=",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "url": "/watch?v=TyhIVDh-dVo&list=RDTyhIVDh-dVo&start_radio=1&pp=oAcB",
+                            "webPageType": "WEB_PAGE_TYPE_WATCH",
+                            "rootVe": 3832
+                          }
+                        },
+                        "watchEndpoint": {
+                          "videoId": "TyhIVDh-dVo",
+                          "playlistId": "RDTyhIVDh-dVo",
+                          "params": "wAEBuAUB",
+                          "playerParams": "oAcB",
+                          "nofollow": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "lockupViewModel": {
+                "contentImage": {
+                  "collectionThumbnailViewModel": {
+                    "primaryThumbnail": {
+                      "thumbnailViewModel": {
+                        "image": {
+                          "sources": [
+                            {
+                              "url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg?sqp=-oaymwExCKgBEF5IWvKriqkDJAgBFQAAiEIYAfABAfgB_g6AArgIigINCAAQARiMASBRKBUwDw==&rs=AOn4CLDZ-ZS0WE5ZUmz4xJmXLhovWcwdzg",
+                              "width": 168,
+                              "height": 94
+                            },
+                            {
+                              "url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg?sqp=-oaymwEyCNACELwBSFryq4qpAyQIARUAAIhCGAHwAQH4Af4OgAK4CIoCDQgAEAEYjAEgUSgVMA8=&rs=AOn4CLBxla_SVEasqMKhQrXraZEKdvIG1w",
+                              "width": 336,
+                              "height": 188
+                            }
+                          ]
+                        },
+                        "overlays": [
+                          {
+                            "thumbnailOverlayBadgeViewModel": {
+                              "thumbnailBadges": [
+                                {
+                                  "thumbnailBadgeViewModel": {
+                                    "icon": {
+                                      "sources": [
+                                        {
+                                          "clientResource": {
+                                            "imageName": "MIX"
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    "text": "Mix",
+                                    "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                                    "backgroundColor": {
+                                      "lightTheme": 2627334,
+                                      "darkTheme": 2627334
+                                    }
+                                  }
+                                }
+                              ],
+                              "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                            }
+                          },
+                          {
+                            "thumbnailHoverOverlayViewModel": {
+                              "icon": {
+                                "sources": [
+                                  {
+                                    "clientResource": {
+                                      "imageName": "PLAY_ALL"
+                                    }
+                                  }
+                                ]
+                              },
+                              "text": {
+                                "content": "Tout lire",
+                                "styleRuns": [
+                                  {
+                                    "startIndex": 0,
+                                    "length": 9
+                                  }
+                                ]
+                              },
+                              "style": "THUMBNAIL_HOVER_OVERLAY_STYLE_COVER"
+                            }
+                          }
+                        ],
+                        "backgroundColor": {
+                          "lightTheme": 6634255,
+                          "darkTheme": 6634255
+                        }
+                      }
+                    },
+                    "stackColor": {
+                      "lightTheme": 12559237,
+                      "darkTheme": 9667958
+                    }
+                  }
+                },
+                "metadata": {
+                  "lockupMetadataViewModel": {
+                    "title": {
+                      "content": "Mix - Luis Fonsi - Despacito ft. Daddy Yankee"
+                    },
+                    "metadata": {
+                      "contentMetadataViewModel": {
+                        "metadataRows": [
+                          {
+                            "metadataParts": [
+                              {
+                                "text": {
+                                  "content": "Daddy Yankee, David Bisbal, Ed Sheeran et bien plus encore"
+                                }
+                              },
+                              {
+                                "text": {
+                                  "content": "Playlist"
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "delimiter": " • "
+                      }
+                    }
+                  }
+                },
+                "contentId": "RDkJQP7kiw5Fk",
+                "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+                "rendererContext": {
+                  "commandContext": {
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CJQBEIrSDRgLIhMIq9WB8aj2lwMVDRh1AR2T1jeaMgpsaXN0X290aGVySNnIw8Xk_YPKkAGaAQUIDBD4HcoBBDXLHjw=",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "url": "/watch?v=kJQP7kiw5Fk&list=RDkJQP7kiw5Fk&start_radio=1&rv=kJQP7kiw5Fk",
+                            "webPageType": "WEB_PAGE_TYPE_WATCH",
+                            "rootVe": 3832
+                          }
+                        },
+                        "watchEndpoint": {
+                          "videoId": "kJQP7kiw5Fk",
+                          "playlistId": "RDkJQP7kiw5Fk",
+                          "params": "OALAAQHCAwtrSlFQN2tpdzVGaw%3D%3D",
+                          "continuePlayback": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "trackingParams": "CHIQqTAiEwir1YHxqPaXAxUNGHUBHZPWN5o=",
+          "targetId": "watch-next-feed"
+        }
+      }
+    }
+  }
+}

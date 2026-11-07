@@ -50,7 +50,7 @@ pub struct VideoItem {
   pub progress: Option<Progress>,
 }
 
-/// An entry of a watch page's related list.
+/// A card of a list: a video or a playlist (a watch page's related list, a feed's grid).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Related {
   /// A video.
@@ -74,6 +74,9 @@ pub struct Progress {
 pub struct Feed {
   /// Videos in display order.
   pub items: Vec<VideoItem>,
+  /// The grid's playlist cards (mixes on the home feed), each after the number of [`Self::items`]
+  /// that come before it. Pages that list only videos leave them out.
+  pub playlists: Vec<(usize, PlaylistSummary)>,
   /// Token for [`crate::Client::continuation`], when there is more.
   pub continuation: Option<String>,
   /// Whether YouTube served the request as signed in (`logged_in=1`).

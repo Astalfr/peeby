@@ -184,7 +184,7 @@ impl MediaCard {
   }
 
   /// Whether the picture stands on a stack, two thin layers peeking out above it (a
-  /// playlist). The picture box is then [`STACK`] taller, the picture at its bottom.
+  /// playlist). The picture then has a [`STACK`] margin above it, where the layers show.
   pub fn stacked(mut self, stacked: bool) -> Self {
     self.stacked = stacked;
     self
@@ -343,12 +343,35 @@ impl MediaCard {
   ) -> gpui::Div {
     let t = self.hover.t;
     let play = play.filter(|_| self.play);
-    let picture = div()
+    // A stack's layers: narrower, peeking out above the picture, as on the playlists page.
+    // They hang out of the box (a margin makes room for them), so that what the layouts put on
+    // the box (a hover ring, a shadow) stays on the picture. Painted first, the picture covers
+    // their lower part.
+    let inset = (width * 0.05).round().max(8.);
+    let layer = |inset: f32, top: f32, opacity: f32| {
+      div()
+        .absolute()
+        .top(px(top))
+        .left(px(inset))
+        .right(px(inset))
+        .h(px(12.))
+        .rounded_t(theme::RADIUS)
+        .bg(theme::muted().opacity(opacity))
+    };
+    let layers = self.stacked.then(|| {
+      [
+        layer(inset, -STACK, 0.25),
+        layer(inset / 2., -STACK / 2., 0.45),
+      ]
+    });
+    div()
       .relative()
       .w(px(width))
       .h(px(width / aspect))
       .flex_none()
+      .when(self.stacked, |el| el.mt(px(STACK)))
       .rounded(radius)
+      .children(layers.into_iter().flatten())
       .child(image_fill(&self.picture, width, aspect, radius, window, cx))
       .children(play.map(|size| play_overlay(t, size, radius)))
       .children(self.progress.map(progress_bar))
@@ -369,30 +392,7 @@ impl MediaCard {
           .filter(|_| icon.is_none() || width >= BADGE_LABEL_WIDTH);
         (icon.is_some() || text.is_some()).then(|| badge(text, None, icon).left(px(8.)))
       })
-      .children(self.overlays.drain(..));
-    if !self.stacked {
-      return picture;
-    }
-    // Layers behind the picture: narrower, peeking out above it, as on the playlists page.
-    let inset = (width * 0.05).round().max(8.);
-    let layer = |inset: f32, top: f32, opacity: f32| {
-      div()
-        .absolute()
-        .top(px(top))
-        .left(px(inset))
-        .right(px(inset))
-        .h(px(12.))
-        .rounded_t(theme::RADIUS)
-        .bg(theme::muted().opacity(opacity))
-    };
-    div()
-      .relative()
-      .w(px(width))
-      .h(px(width / aspect + STACK))
-      .flex_none()
-      .child(layer(inset, 0., 0.25))
-      .child(layer(inset / 2., STACK / 2., 0.45))
-      .child(div().absolute().top(px(STACK)).left_0().child(picture))
+      .children(self.overlays.drain(..))
   }
 
   /// Grid card, `width` wide: the 16:9 picture, then the avatar, title and lines. On hover it
