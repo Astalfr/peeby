@@ -6,7 +6,9 @@
 mod card;
 mod composer;
 
+use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -18,6 +20,7 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
+use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Sizable, h_flex, v_flex};
 
 pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
@@ -345,6 +348,9 @@ pub struct ChatPanel {
   lookup: Option<UserLookup>,
   /// The user card open over the messages ([`card`]).
   card: Option<card::UserCard>,
+  /// Where the messages are in the window, from the last paint: the card is placed in there,
+  /// by the name clicked.
+  messages_area: Rc<Cell<Bounds<Pixels>>>,
 }
 
 impl gpui::EventEmitter<ChatPanelEvent> for ChatPanel {}
@@ -380,6 +386,7 @@ impl ChatPanel {
       pinned: None,
       lookup: None,
       card: None,
+      messages_area: Rc::default(),
     }
   }
 
@@ -696,7 +703,9 @@ impl ChatPanel {
           .text_color(color)
           .cursor_pointer()
           .hover(|s| s.underline())
-          .on_click(cx.listener(move |this, _, _, cx| this.toggle_card(query.clone(), cx)))
+          .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+            this.toggle_card(query.clone(), event.position(), cx)
+          }))
           .child(match painted {
             Some(painted) => h_flex().child(painted).child(after).into_any_element(),
             None => format!("{name}{after}").into_any_element(),
@@ -811,9 +820,10 @@ fn push_fragments(
             })
             .cursor_pointer()
             .hover(|s| s.underline())
-            .on_click(move |_, _, cx| {
+            .on_click(move |event, _, cx| {
+              let at = event.position();
               panel
-                .update(cx, |panel, cx| panel.toggle_card(query.clone(), cx))
+                .update(cx, |panel, cx| panel.toggle_card(query.clone(), at, cx))
                 .ok();
             })
             .child(name.clone()),
@@ -983,6 +993,12 @@ impl Render for ChatPanel {
           // Around the list rather than on it: the glide aims at the end from its items' height,
           // which leaves out the list's own padding.
           .py_1()
+          .child({
+            let area = self.messages_area.clone();
+            canvas(move |bounds, _, _| area.set(bounds), |_, _, _, _| {})
+              .absolute()
+              .inset_0()
+          })
           .child(
             list(
               self.list.clone(),
@@ -990,6 +1006,8 @@ impl Render for ChatPanel {
             )
             .size_full(),
           )
+          // After the messages, before what is drawn over them (the card, the pins).
+          .vertical_scrollbar(&self.list)
           .when(centered, |el| {
             el.children(self.status.clone().map(|status| {
               v_flex()

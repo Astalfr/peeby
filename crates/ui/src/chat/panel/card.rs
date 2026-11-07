@@ -9,9 +9,11 @@ use std::time::SystemTime;
 use chrono::{DateTime, Local, NaiveDate};
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, FontWeight, ScrollHandle, SharedString, Task, WeakEntity, Window, div, px,
+  AnyElement, Bounds, Context, FontWeight, Pixels, Point, ScrollHandle, SharedString, Task,
+  WeakEntity, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Sizable, h_flex, v_flex};
 
 use super::{ChatPanel, ChatPanelEvent, push_fragments, store_image};
@@ -27,6 +29,31 @@ const CARD_MESSAGES: usize = 50;
 const CARD_AVATAR: f32 = 48.;
 /// The card's height at most, logical pixels: the messages scroll under its head.
 const CARD_MAX_HEIGHT: f32 = 420.;
+/// From the point clicked to the card's edge, logical pixels: past the rest of the name's line
+/// (20 px lines).
+const CARD_GAP: f32 = 14.;
+/// Between the card and the messages' edges, logical pixels.
+const CARD_MARGIN: f32 = 8.;
+
+/// Where the card goes in `area` (the messages, in window coordinates) for a click at `at`:
+/// under the name when it is in the upper half, over it otherwise, so that it has the larger
+/// part. `(top, bottom, max height)`: `top` from the area's top when under the name, else
+/// `bottom` from its bottom.
+fn card_place(area: Bounds<Pixels>, at: Point<Pixels>) -> (Option<Pixels>, Option<Pixels>, Pixels) {
+  let y = (at.y - area.top()).clamp(px(0.), area.size.height);
+  let room = |space: Pixels| {
+    (space - px(CARD_MARGIN))
+      .max(px(0.))
+      .min(px(CARD_MAX_HEIGHT))
+  };
+  if y < area.size.height / 2. {
+    let top = (y + px(CARD_GAP)).max(px(CARD_MARGIN));
+    (Some(top), None, room(area.size.height - top))
+  } else {
+    let bottom = (area.size.height - y + px(CARD_GAP)).max(px(CARD_MARGIN));
+    (None, Some(bottom), room(area.size.height - bottom))
+  }
+}
 
 /// When a message was sent, in local time: `14:32` today, its day before it otherwise (`07/11
 /// 14:32` in French, `11/07 14:32` in English).
@@ -46,6 +73,8 @@ fn sent_at(time: SystemTime, today: NaiveDate) -> SharedString {
 pub(super) struct UserCard {
   /// Who it is about, as asked (a click on a name or a mention).
   asked: UserQuery,
+  /// Where the click was, in window coordinates: the card shows by it.
+  at: Point<Pixels>,
   /// Their user id, once known: their messages are picked by it, else by name.
   id: Option<SharedString>,
   name: SharedString,
@@ -60,8 +89,14 @@ pub(super) struct UserCard {
 }
 
 impl ChatPanel {
-  /// Opens the card of `query`, or closes it when it is already the one open.
-  pub(super) fn toggle_card(&mut self, query: UserQuery, cx: &mut Context<Self>) {
+  /// Opens the card of `query` by the name clicked at `at` (window coordinates), or closes it
+  /// when it is already the one open.
+  pub(super) fn toggle_card(
+    &mut self,
+    query: UserQuery,
+    at: Point<Pixels>,
+    cx: &mut Context<Self>,
+  ) {
     if self.card.as_ref().is_some_and(|card| card.asked == query) {
       self.close_card(cx);
       return;
@@ -112,6 +147,7 @@ impl ChatPanel {
       });
     self.card = Some(UserCard {
       asked: query,
+      at,
       id,
       name,
       avatar,
@@ -313,14 +349,16 @@ impl ChatPanel {
         ))
     });
     let scroll = card.scroll.clone();
+    let (top, bottom, max_height) = card_place(self.messages_area.get(), card.at);
     Some(
       v_flex()
         .id("chat-card")
         .absolute()
-        .top_2()
+        .when_some(top, |el, top| el.top(top))
+        .when_some(bottom, |el, bottom| el.bottom(bottom))
         .left_2()
         .right_2()
-        .max_h(px(CARD_MAX_HEIGHT))
+        .max_h(max_height)
         .p_3()
         .gap_3()
         .rounded(theme::RADIUS_LG)
@@ -342,15 +380,23 @@ impl ChatPanel {
         .when(!messages.is_empty(), |el| {
           el.child(
             v_flex()
-              .id("chat-card-messages")
+              .relative()
               .flex_1()
               .min_h_0()
               .pt_2()
               .border_t_1()
               .border_color(theme::border())
-              .overflow_y_scroll()
-              .track_scroll(&scroll)
-              .children(lines),
+              .child(
+                v_flex()
+                  .id("chat-card-messages")
+                  .flex_1()
+                  .min_h_0()
+                  .overflow_y_scroll()
+                  .track_scroll(&scroll)
+                  .children(lines),
+              )
+              // After the messages: children paint in order.
+              .vertical_scrollbar(&scroll),
           )
         })
         .into_any_element(),
@@ -363,6 +409,27 @@ mod tests {
   use std::time::Duration;
 
   use super::*;
+
+  #[test]
+  fn cards_open_on_the_larger_side_of_the_name() {
+    let area = Bounds::new(
+      gpui::point(px(0.), px(100.)),
+      gpui::size(px(340.), px(800.)),
+    );
+    // Near the top: under the name, as tall as it may be.
+    let (top, bottom, max) = card_place(area, gpui::point(px(50.), px(200.)));
+    assert_eq!(
+      (top, bottom, max),
+      (Some(px(114.)), None, px(CARD_MAX_HEIGHT))
+    );
+    // Near the bottom: over it.
+    let (top, bottom, _) = card_place(area, gpui::point(px(50.), px(850.)));
+    assert_eq!((top, bottom), (None, Some(px(64.))));
+    // A short chat: the card fits in what is left.
+    let small = Bounds::new(gpui::point(px(0.), px(0.)), gpui::size(px(340.), px(300.)));
+    let (top, _, max) = card_place(small, gpui::point(px(50.), px(100.)));
+    assert_eq!((top, max), (Some(px(114.)), px(178.)));
+  }
 
   #[test]
   fn times_show_their_day_unless_today() {
