@@ -434,15 +434,24 @@ impl WatchView {
     });
     // A user card's "Open channel": their channel in a new tab, the live going on.
     let nav = self.nav.clone();
-    cx.subscribe(&panel, move |_, _, event: &ChatPanelEvent, cx| {
-      if let ChatPanelEvent::OpenChannel { channel, name } = event {
-        let route = Route::Channel {
-          id: channel.to_string(),
-          name: name.to_string(),
-        };
-        nav.open_in_new_tab(route, Some(name.clone()), cx);
-      }
-    })
+    cx.subscribe(
+      &panel,
+      move |_, _, event: &ChatPanelEvent, cx| match event {
+        ChatPanelEvent::OpenChannel { channel, name } => {
+          let route = Route::Channel {
+            id: channel.to_string(),
+            name: name.to_string(),
+          };
+          nav.open_in_new_tab(route, Some(name.clone()), cx);
+        }
+        // Closed from its header in theater mode: kept in the settings, as theater mode.
+        ChatPanelEvent::Hide => {
+          Settings::update(cx, |s| s.chat_hidden = true);
+          cx.notify();
+        }
+        _ => {}
+      },
+    )
     .detach();
     let task = chat::start(self.client.clone(), continuation, &panel, cx);
     self.chat = Some((panel, task));
@@ -1121,8 +1130,22 @@ impl Render for WatchView {
     let details = self.details(window, cx);
     let comments = self.comments.clone();
     let queue = self.queue_panel(window, cx);
-    let theater = Settings::get(cx).theater;
+    let (theater, chat_hidden) = {
+      let settings = Settings::get(cx);
+      (settings.theater, settings.chat_hidden)
+    };
+    let page = cx.weak_entity();
+    ui::chat::chat_reopen_button(
+      &self.player,
+      theater && chat_hidden && self.chat.is_some(),
+      move |_, cx| {
+        Settings::update(cx, |s| s.chat_hidden = false);
+        page.update(cx, |_, cx| cx.notify()).ok();
+      },
+      cx,
+    );
     if let Some((panel, _)) = &self.chat {
+      panel.update(cx, |panel, cx| panel.set_collapsible(theater, cx));
       let below = v_flex()
         .gap_5()
         .child(details)
@@ -1139,6 +1162,7 @@ impl Render for WatchView {
         below.into_any_element(),
         Some(panel.clone().into_any_element()),
         theater,
+        chat_hidden,
       );
     }
     let player = if theater {

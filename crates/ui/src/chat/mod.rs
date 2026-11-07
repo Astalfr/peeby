@@ -18,7 +18,7 @@ use gpui::{Hsla, SharedString, hsla};
 
 use crate::picture::Picture;
 
-pub use layout::{CHAT_WIDTH, watch_layout};
+pub use layout::{CHAT_WIDTH, chat_reopen_button, watch_layout};
 pub use paint::{Paint, PaintFill, image_colors};
 pub use panel::{
   ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES, Viewer,

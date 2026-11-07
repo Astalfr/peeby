@@ -103,6 +103,8 @@ icons! {
   Poll => "chart-column",
   Download => "download",
   Link => "link",
+  PanelRightClose => "panel-right-close",
+  PanelRightOpen => "panel-right-open",
 }
 
 macro_rules! files {

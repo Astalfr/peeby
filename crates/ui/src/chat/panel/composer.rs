@@ -65,6 +65,9 @@ pub enum ChatPanelEvent {
     /// The user's name.
     name: SharedString,
   },
+  /// The viewer closed the chat from its header (theater mode, [`ChatPanel::set_collapsible`]);
+  /// the page reopens it with [`crate::chat::watch_layout`]'s button.
+  Hide,
 }
 
 /// An entry of the composer's options menu (the gear left of "Send"), in the menu's order.

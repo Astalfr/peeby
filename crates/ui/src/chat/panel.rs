@@ -356,6 +356,8 @@ pub struct ChatPanel {
   /// The viewer's name, read at each render (they may sign in or out): messages mentioning
   /// them are on a red tint, as on Twitch.
   viewer: Option<Viewer>,
+  /// Its header has a button that closes it ([`ChatPanelEvent::Hide`]): in theater mode.
+  collapsible: bool,
 }
 
 /// Gives the viewer's name, `None` when signed out ([`ChatPanel::set_viewer`]).
@@ -397,6 +399,16 @@ impl ChatPanel {
       messages_area: Rc::default(),
       streamer: None,
       viewer: None,
+      collapsible: false,
+    }
+  }
+
+  /// Whether the header offers to close the chat ([`ChatPanelEvent::Hide`]): the page sets it
+  /// in theater mode.
+  pub fn set_collapsible(&mut self, collapsible: bool, cx: &mut Context<Self>) {
+    if self.collapsible != collapsible {
+      self.collapsible = collapsible;
+      cx.notify();
     }
   }
 
@@ -962,6 +974,22 @@ impl Render for ChatPanel {
       .items_center()
       .border_b_1()
       .border_color(theme::border())
+      .when(self.collapsible, |el| {
+        el.child(
+          div()
+            .id("chat-hide")
+            .flex_none()
+            .cursor_pointer()
+            .text_color(theme::muted())
+            .hover(|s| s.text_color(theme::foreground()))
+            .tooltip(|window, cx| {
+              gpui_component::tooltip::Tooltip::new(t("Close chat", "Fermer le chat"))
+                .build(window, cx)
+            })
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(ChatPanelEvent::Hide)))
+            .child(gpui_component::Icon::new(Icon::PanelRightClose).size(px(16.))),
+        )
+      })
       .child(
         div()
           .flex_1()

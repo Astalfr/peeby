@@ -94,6 +94,17 @@ fn user_cards(panel: &Entity<ChatPanel>, catalog: &Catalog, nav: &Nav, cx: &mut 
   .detach();
 }
 
+/// The chat's header closes it in theater mode: kept in the settings, as theater mode.
+fn hide_on_request(panel: &Entity<ChatPanel>, cx: &mut Context<WatchView>) {
+  cx.subscribe(panel, |_, _, event: &ChatPanelEvent, cx| {
+    if let ChatPanelEvent::Hide = event {
+      Settings::update(cx, |s| s.chat_hidden = true);
+      cx.notify();
+    }
+  })
+  .detach();
+}
+
 pub struct WatchView {
   kind: Kind,
   client: twitch::Client,
@@ -275,6 +286,7 @@ impl WatchView {
           p.set_footer(footer.into(), cx);
           p.set_pinned(points.clone().into(), cx);
         });
+        hide_on_request(&panel, cx);
         view.chat = Some(panel);
         view.points = Some(points);
         view.start_live(login, cx)
@@ -290,6 +302,7 @@ impl WatchView {
           view.player.downgrade(),
           cx,
         ));
+        hide_on_request(&panel, cx);
         view.chat = Some(panel);
         view.start_vod(id, start, cx)
       }
@@ -987,13 +1000,30 @@ impl Render for WatchView {
         .child(self.player.clone())
         .into_any_element();
     }
-    let theater = Settings::get(cx).theater;
+    let (theater, chat_hidden) = {
+      let settings = Settings::get(cx);
+      (settings.theater, settings.chat_hidden)
+    };
+    if let Some(chat) = &self.chat {
+      chat.update(cx, |chat, cx| chat.set_collapsible(theater, cx));
+    }
+    let page = cx.weak_entity();
+    ui::chat::chat_reopen_button(
+      &self.player,
+      theater && chat_hidden && self.chat.is_some(),
+      move |_, cx| {
+        Settings::update(cx, |s| s.chat_hidden = false);
+        page.update(cx, |_, cx| cx.notify()).ok();
+      },
+      cx,
+    );
     let header = self.header(window, cx).into_any_element();
     watch_layout(
       self.player.clone().into_any_element(),
       header,
       self.chat.clone().map(|chat| chat.into_any_element()),
       theater,
+      chat_hidden,
     )
   }
 }

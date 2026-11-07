@@ -94,6 +94,21 @@ const CHAPTER_GAP: f32 = 2.;
 const CONTROL_SIZE: f32 = 40.;
 const CONTROL_ICON: f32 = 20.;
 
+/// A button the page adds at the embedded player's top right, among the controls: it shows and
+/// fades with them, and keeps them up while hovered (the theater mode's "Open chat").
+#[derive(Clone)]
+pub struct CornerAction {
+  /// Its icon.
+  pub icon: Icon,
+  /// Its tooltip, in the viewer's language.
+  pub tooltip: SharedString,
+  /// What a click does.
+  pub on_click: Rc<CornerClick>,
+}
+
+/// What a [`CornerAction`]'s click runs.
+pub type CornerClick = dyn Fn(&mut Window, &mut App);
+
 /// What the player tells its page.
 pub enum PlayerEvent {
   /// The video played to its end.
@@ -269,6 +284,8 @@ pub struct PlayerView {
   theater: bool,
   /// The page offers theater mode (button and T); not a page whose player is vertical.
   theater_offered: bool,
+  /// The page's button at the top right ([`PlayerView::set_corner_action`]).
+  corner_action: Option<CornerAction>,
   /// The page offers picture-in-picture (button and I); not a page of short looping videos.
   pip_page_offered: bool,
   /// The bar shows the seek buttons (back and forward a step); the keys seek either way.
@@ -446,6 +463,7 @@ impl PlayerView {
       focus: cx.focus_handle(),
       theater,
       theater_offered: true,
+      corner_action: None,
       speed_offered: true,
       pip_page_offered: true,
       seek_buttons: true,
@@ -924,6 +942,18 @@ impl PlayerView {
   pub fn show_time(&mut self, shown: bool, cx: &mut Context<Self>) {
     self.time_shown = shown;
     cx.notify();
+  }
+
+  /// Adds a button at the top right of the embedded player, shown with the controls; `None`
+  /// removes it.
+  pub fn set_corner_action(&mut self, action: Option<CornerAction>, cx: &mut Context<Self>) {
+    self.corner_action = action;
+    cx.notify();
+  }
+
+  /// Whether the page's button is there ([`PlayerView::set_corner_action`]).
+  pub fn has_corner_action(&self) -> bool {
+    self.corner_action.is_some()
   }
 
   /// Whether the page offers theater mode (its button and T); it does by default.
@@ -2556,6 +2586,9 @@ impl PlayerView {
         .right_0()
         .when(fullscreen, |el| el.px_6().pt_4())
         .when(!fullscreen, |el| el.px_4().pt_3())
+        .when(!fullscreen && self.corner_action.is_some(), |el| {
+          el.pr(px(CONTROL_SIZE + 24.))
+        })
         .pb_10()
         .gap_3()
         .items_center()
@@ -2614,6 +2647,30 @@ impl PlayerView {
       layers.push(self.render_top_bar(window, cx));
     } else if let Some(bar) = self.render_title_bar(window, cx) {
       layers.push(bar);
+    }
+    if embedded
+      && !fullscreen
+      && let Some(action) = self.corner_action.clone()
+    {
+      let on_click = action.on_click.clone();
+      layers.push(
+        div()
+          .id("corner-action")
+          .absolute()
+          .top_3()
+          .right_4()
+          .block_mouse_except_scroll()
+          .on_hover(cx.listener(|this, hovered: &bool, _, _| this.over_controls = *hovered))
+          .on_mouse_move(cx.listener(|this, _, _, cx| this.show_controls(cx)))
+          .child(
+            self
+              .control_button("corner-action-button", cx)
+              .icon(action.icon)
+              .tooltip(action.tooltip)
+              .on_click(move |_, window, cx| on_click(window, cx)),
+          )
+          .into_any_element(),
+      );
     }
 
     let buttons = h_flex()

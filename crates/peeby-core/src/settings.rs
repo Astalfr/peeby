@@ -114,6 +114,8 @@ pub struct Settings {
   pub reversed_playlists: Vec<String>,
   /// Watch page in theater mode: the player across the whole width, above the details.
   pub theater: bool,
+  /// In theater mode, a live's chat closed from its header: the player takes the whole page.
+  pub chat_hidden: bool,
   /// Sidebar reduced to its icons.
   pub sidebar_collapsed: bool,
   /// The Jellyfin space.
@@ -400,6 +402,7 @@ impl Default for Settings {
       start_page: StartPage::Home,
       reversed_playlists: Vec::new(),
       theater: false,
+      chat_hidden: false,
       sidebar_collapsed: false,
       player: Player::default(),
       jellyfin: Jellyfin::default(),
