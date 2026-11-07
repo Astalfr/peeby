@@ -136,6 +136,7 @@ impl FakeChatView {
     let panel = cx.new(|cx| {
       let mut panel = ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS);
       panel.set_emotes(extras.picker.clone(), cx);
+      panel.push(seventv_looks(), cx);
       panel
     });
     let points = Rc::new(RefCell::new(FakePoints::default()));
@@ -507,6 +508,50 @@ impl FakeChatView {
 }
 
 /// The fake channel's 7TV and BTTV emotes, a picker set big enough to scroll, and the badges.
+/// 7TV's cosmetics on some chatters, as `chat::watch_seventv` would give them: a linear paint, a
+/// repeating radial one, an image paint's plain color, and a 7TV badge.
+fn seventv_looks() -> Vec<ChatEvent> {
+  use ui::chat::{AuthorStyle, Badge, Paint, PaintFill};
+  let paint = |fill, stops: &[(f32, u32)], repeat| Paint {
+    fill,
+    stops: stops.iter().map(|&(at, c)| (at, gpui::rgba(c))).collect(),
+    repeat,
+  };
+  let style = |user: &str, paint: Option<Paint>, badge: Option<Badge>| {
+    ChatEvent::AuthorStyle(user.to_owned().into(), Some(AuthorStyle { paint, badge }))
+  };
+  let badge = Badge {
+    title: "7TV Subscriber".into(),
+    picture: Picture::sized(|w, _| format!("{SCHEME}badge/7tv/1?s={w}")),
+  };
+  vec![
+    // Viewer1: left to right, red to violet.
+    style(
+      "1001",
+      Some(paint(
+        PaintFill::Linear(90.),
+        &[(0., 0xFF40_40FF), (0.5, 0xFFD0_40FF), (1., 0xA040_FFFF)],
+        false,
+      )),
+      Some(badge.clone()),
+    ),
+    // Huit_Huit: white rings, repeating.
+    style(
+      "1008",
+      Some(paint(
+        PaintFill::Radial { circle: true },
+        &[(0., 0xFFFF_FFFF), (0.2, 0x40C0_FFFF), (0.4, 0xFFFF_FFFF)],
+        true,
+      )),
+      None,
+    ),
+    // Vip4: an image paint, drawn in its plain color.
+    style("1004", Some(Paint::solid(gpui::rgba(0x7FFF_D4FF))), None),
+    // Modo_Trois: only the badge.
+    style("1003", None, Some(badge)),
+  ]
+}
+
 fn extras() -> Extras {
   let mut extras = Extras::default();
   let emote = |name: &str, look: Look| {

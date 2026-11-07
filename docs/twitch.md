@@ -230,6 +230,28 @@ Two credentials, for different things. Both are secrets, under the same rules as
     connection after the first ask for the sets again, as the gear's reload does; the connection
     does not resume. A channel that switched sets is watched under its new id. The gear's reload
     stays, for a connection that is down. The fake chat has no live updates (it is in no channel).
+- **7TV cosmetics** ([ADR 0031](decisions/0031-seventv-cosmetics.md)), checked on 2026-11-07,
+  anonymous, with `seventv_events --cosmetics` (fixture `seventv_cosmetics.jsonl`):
+  - The same connection subscribes to `cosmetic.*` and `entitlement.*` with the condition
+    `{ctx: "channel", platform: "TWITCH", id}` (`Topic::Channel`). `cosmetic.create` defines a
+    paint (`function` `LINEAR_GRADIENT`, `RADIAL_GRADIENT` or `URL`; `angle` in CSS degrees,
+    `shape` `circle`/`ellipse`, `repeat`, `stops[{at, color}]`, `image_url`, `shadows`, `color`) or
+    a badge (`tooltip`, `host` files 18 px at 1x). It comes before the `entitlement.create` that
+    names it (`object.kind` `PAINT`/`BADGE`/`EMOTE_SET`, `ref_id`, the 7TV `user` with `style`
+    and its `connections`, the Twitch one's `id` being the chat's user id).
+  - Colors are `0xRRGGBBAA` sent as signed 32-bit integers (`-1` is opaque white).
+  - Entitlements come for 7TV users who announce their presence in that chat (7TV's extension
+    does so often). Peeby announces nothing. `entitlement.delete` takes one off. An
+    entitlement other than the paint or badge in the user's `style` is ignored.
+  - Peeby (`twitch::seventv::cosmetics`, `chat::watch_seventv`, `ui::chat::Paint`): each letter of
+    the name in the gradient's color at its middle (letters as equal cells), the colon in the
+    author's color. Image paints show their `color` when they have one, else nothing (none of the 29 seen
+    had one). No
+    shadows. The 7TV badge comes after Twitch's. The panel applies a look (`ChatEvent::AuthorStyle`)
+    to every line of that user, the ones already shown included.
+  - `EMOTE_SET` entitlements are personal emotes (flags 4, "Personal Emote Set") and event sets
+    (flags 11, "NNYS 2024"…). They and their `emote_set.update`s are ignored for now.
+  - The fake chat gives four chatters 7TV looks (`fake_chat::seventv_looks`).
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
   `contentOffsetSeconds` is a whole second: the app spreads each second's messages evenly over it, and estimates the playhead between the player's quarter-second position reports, so that a busy chat scrolls one message at a time instead of by blocks.
 - **VOD game chapters**, checked on 2026-11-03, anonymous: the raw query `video(id) { moments(first: 100,

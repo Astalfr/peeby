@@ -1,12 +1,14 @@
 //! 7TV emotes for the chat (docs/twitch-plan.md, step 9): the global set and a channel's set,
 //! keyed by the broadcaster's Twitch user id, matched by word in messages. A channel's alias of an
 //! emote is the set entry's `name`, not the emote's own. Tested on saved responses
-//! (`tests/fixtures/seventv_*.json`). Changes to a set are pushed by the EventAPI ([`events`]).
+//! (`tests/fixtures/seventv_*.json`). Changes to a set are pushed by the EventAPI ([`events`]), as
+//! are the chatters' paints and badges ([`cosmetics`]).
 
 use serde_json::Value;
 
 use crate::error::{Error, Result};
 
+pub mod cosmetics;
 pub mod events;
 
 const API: &str = "https://7tv.io/v3";

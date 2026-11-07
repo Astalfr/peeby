@@ -5,15 +5,15 @@
 
 mod composer;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
   Anchor, AnyElement, AnyView, App, Bounds, Context, Corners, ElementId, FollowMode, FontWeight,
-  ImageSource, ListAlignment, ListState, ObjectFit, Pixels, RenderImage, SharedString,
-  StyleRefinement, Window, canvas, div, img, list, px,
+  HighlightStyle, ImageSource, ListAlignment, ListState, ObjectFit, Pixels, RenderImage,
+  SharedString, StyleRefinement, StyledText, Window, canvas, div, img, list, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::hover_card::HoverCard;
@@ -22,7 +22,8 @@ use gpui_component::{Sizable, h_flex, v_flex};
 pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
-  Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind, name_color,
+  AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
+  name_color,
 };
 use crate::assets::Icon;
 use crate::i18n::t;
@@ -295,6 +296,8 @@ pub struct ChatPanel {
   status: Option<SharedString>,
   /// `status` waits for something ([`ChatEvent::Loading`]).
   loading: bool,
+  /// Authors' looks by user id ([`ChatEvent::AuthorStyle`]).
+  styles: HashMap<SharedString, AuthorStyle>,
   title: SharedString,
   /// The writing area, for a space that sends to its chat.
   composer: Option<composer::Composer>,
@@ -328,6 +331,7 @@ impl ChatPanel {
       modes: Vec::new(),
       status: Some(t("Connecting to chat…", "Connexion au chat…").into()),
       loading: true,
+      styles: HashMap::new(),
       title: t("Live chat", "Chat du live").into(),
       composer: None,
       pinned: None,
@@ -390,6 +394,13 @@ impl ChatPanel {
         ChatEvent::Loading(status) => {
           self.status = Some(status);
           self.loading = true;
+        }
+        ChatEvent::AuthorStyle(user, style) => {
+          match style {
+            Some(style) => self.styles.insert(user, style),
+            None => self.styles.remove(&user),
+          };
+          cx.notify();
         }
       }
     }
@@ -537,7 +548,9 @@ impl ChatPanel {
     let action = message.kind == MessageKind::Action;
     let mut text_color = theme::foreground();
     if let Some(author) = &message.author {
-      for Badge { picture, .. } in &author.badges {
+      let style = self.styles.get(&author.id);
+      let extra = style.and_then(|s| s.badge.as_ref());
+      for Badge { picture, .. } in author.badges.iter().chain(extra) {
         line = line.child(
           div().size(px(BADGE_SIZE)).flex_none().mr_1().children(
             image(picture, Effects::default(), BADGE_SIZE, BADGE_SIZE)
@@ -549,16 +562,33 @@ impl ChatPanel {
       if action {
         text_color = color;
       }
-      line = line.child(
-        div()
-          .font_weight(FontWeight::BOLD)
-          .text_color(color)
-          .child(if action {
-            format!("{} ", author.name)
-          } else {
-            tf!("{}: ", "{} : ", author.name)
-          }),
-      );
+      let name: SharedString = author.name.clone();
+      let paint = style.and_then(|s| s.paint.as_ref());
+      // Each letter in its paint's color; the colon after it in the author's own.
+      let painted = paint.map(|paint| {
+        let colors = paint.colors(name.chars().count());
+        let highlights: Vec<_> = name
+          .char_indices()
+          .zip(colors)
+          .map(|((at, c), color)| {
+            (
+              at..at + c.len_utf8(),
+              HighlightStyle {
+                color: Some(color),
+                ..HighlightStyle::default()
+              },
+            )
+          })
+          .collect();
+        StyledText::new(name.clone()).with_highlights(highlights)
+      });
+      let after = if action { " " } else { t(": ", " : ") };
+      line = line.child(div().font_weight(FontWeight::BOLD).text_color(color).child(
+        match painted {
+          Some(painted) => h_flex().child(painted).child(after).into_any_element(),
+          None => format!("{name}{after}").into_any_element(),
+        },
+      ));
     }
     if message.deleted {
       text_color = theme::subtle();

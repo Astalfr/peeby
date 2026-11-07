@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 
+use super::cosmetics::{self, Cosmetic, Entitlement};
 use super::{Emote, emote};
 
 const URL: &str = "wss://events.7tv.io/v3";
@@ -38,16 +39,30 @@ pub enum Topic {
   EmoteSet(String),
   /// A 7TV user's changes (`user.update`), by their 7TV id: a channel switching to another set.
   User(String),
+  /// The cosmetics of the 7TV users in a chat (`cosmetic.*`, `entitlement.*` in the `channel`
+  /// context), by the channel's Twitch id: two subscriptions.
+  Channel(String),
 }
 
 impl Topic {
-  /// The subscribe message (op 35).
-  fn subscribe(&self) -> String {
-    let (kind, id) = match self {
-      Topic::EmoteSet(id) => ("emote_set.update", id),
-      Topic::User(id) => ("user.update", id),
+  /// The subscribe messages (op 35).
+  fn subscriptions(&self) -> Vec<String> {
+    let one = |kind: &str, condition: Value| {
+      json!({"op": 35, "d": {"type": kind, "condition": condition}}).to_string()
     };
-    json!({"op": 35, "d": {"type": kind, "condition": {"object_id": id}}}).to_string()
+    match self {
+      Topic::EmoteSet(id) => vec![one("emote_set.update", json!({"object_id": id}))],
+      Topic::User(id) => vec![one("user.update", json!({"object_id": id}))],
+      Topic::Channel(id) => ["cosmetic.*", "entitlement.*"]
+        .into_iter()
+        .map(|kind| {
+          one(
+            kind,
+            json!({"ctx": "channel", "platform": "TWITCH", "id": id}),
+          )
+        })
+        .collect(),
+    }
   }
 }
 
@@ -65,6 +80,12 @@ pub enum Update {
   /// known), a change that could not be read, or a user whose active set may have switched. Ask
   /// 7TV for the sets again.
   Resync,
+  /// A paint or a badge's definition, before anyone wears it ([`Topic::Channel`]).
+  Cosmetic(Cosmetic),
+  /// A user of the chat wears this paint or badge (they announced their presence in it).
+  Entitled(Entitlement),
+  /// A user no longer wears this paint or badge.
+  Unentitled(Entitlement),
 }
 
 /// A change to a set's emotes.
@@ -202,11 +223,15 @@ async fn session(
           .and_then(Value::as_i64)
           .and_then(|l| usize::try_from(l).ok())
           .unwrap_or(usize::MAX);
-        if topics.len() > limit {
-          tracing::info!("7TV events: {} topics, 7TV takes {limit}", topics.len());
+        let subscriptions: Vec<String> = topics.iter().flat_map(Topic::subscriptions).collect();
+        if subscriptions.len() > limit {
+          tracing::info!(
+            "7TV events: {} subscriptions, 7TV takes {limit}",
+            subscriptions.len()
+          );
         }
-        for topic in topics.iter().take(limit) {
-          if let Err(e) = socket.send(Message::text(topic.subscribe())).await {
+        for subscription in subscriptions.into_iter().take(limit) {
+          if let Err(e) = socket.send(Message::text(subscription)).await {
             return Ended::Retry(format!("cannot send: {e}"));
           }
         }
@@ -258,13 +283,16 @@ fn closed(code: Option<u16>, how: &str) -> Ended {
 }
 
 /// A dispatch's update: an emote set's changes, or [`Update::Resync`] for a user's (their active
-/// set may have switched) and for a set change that cannot be read. `None` for what Peeby does not
-/// use.
+/// set may have switched) and for a set change that cannot be read; a cosmetic, or who wears one.
+/// `None` for what Peeby does not use (a cosmetic's deletion: it stays until nobody wears it).
 pub fn dispatch(data: &Value) -> Option<Update> {
   let kind = data.get("type").and_then(Value::as_str)?;
   let body = data.get("body")?;
   match kind {
     "user.update" => Some(Update::Resync),
+    "cosmetic.create" | "cosmetic.update" => cosmetics::cosmetic(body).map(Update::Cosmetic),
+    "entitlement.create" => cosmetics::entitlement(body).map(Update::Entitled),
+    "entitlement.delete" => cosmetics::entitlement(body).map(Update::Unentitled),
     "emote_set.update" => {
       let id = body.get("id").and_then(Value::as_str)?.to_owned();
       let field = |list: &str| -> Vec<&Value> {
@@ -340,11 +368,28 @@ mod tests {
 
   #[test]
   fn a_topic_subscribes_by_object_id() {
-    let message: Value =
-      serde_json::from_str(&Topic::EmoteSet("01SET".into()).subscribe()).expect("JSON");
+    let messages = Topic::EmoteSet("01SET".into()).subscriptions();
+    let message: Value = serde_json::from_str(&messages[0]).expect("JSON");
     assert_eq!(
       message,
       json!({"op": 35, "d": {"type": "emote_set.update", "condition": {"object_id": "01SET"}}})
+    );
+  }
+
+  #[test]
+  fn a_channel_subscribes_to_its_cosmetics_and_entitlements() {
+    let messages: Vec<Value> = Topic::Channel("123".into())
+      .subscriptions()
+      .iter()
+      .map(|m| serde_json::from_str(m).expect("JSON"))
+      .collect();
+    let condition = json!({"ctx": "channel", "platform": "TWITCH", "id": "123"});
+    assert_eq!(
+      messages,
+      [
+        json!({"op": 35, "d": {"type": "cosmetic.*", "condition": condition}}),
+        json!({"op": 35, "d": {"type": "entitlement.*", "condition": condition}}),
+      ]
     );
   }
 }

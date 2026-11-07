@@ -10,7 +10,8 @@
 //! that it opens with its emotes; past [`EXTRAS_WAIT`] they show without, and only the next ones get
 //! them. The VOD chat (`super::replay`) does not wait.
 //! The 7TV and BTTV sets also fill the panel's picker, and 7TV's EventAPI keeps its sets current
-//! while the chat is open ([`watch_seventv`], ADR 0030).
+//! while the chat is open ([`watch_seventv`], ADR 0030). The same connection brings the paints and
+//! badges of the chat's 7TV users, which the panel puts on all their lines (ADR 0031).
 //!
 //! With the auth-token, [`start_writer`] signs in a second connection that sends what the viewer
 //! writes (ADR 0023); the reader shows those messages when Twitch relays them to it.
@@ -32,11 +33,12 @@ use twitch::chat::{
   ChatLine, Event, Piece, RoomState, Status, Update, Writer, WriterStatus, WriterUpdate, emote_url,
 };
 use twitch::helix;
+use twitch::seventv::cosmetics::{self, Cosmetic, Entitlement, Fill};
 use twitch::seventv::events::{self, Topic};
 use twitch::{bttv, seventv};
 use ui::chat::{
-  Author, Badge, ChatEvent, ChatMessage, ChatOption, ChatPanel, ChatPanelEvent, Composing,
-  EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, MessageKind, split_text,
+  Author, AuthorStyle, Badge, ChatEvent, ChatMessage, ChatOption, ChatPanel, ChatPanelEvent,
+  Composing, EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, MessageKind, split_text,
 };
 use ui::i18n::t;
 use ui::picture::Picture;
@@ -73,6 +75,8 @@ struct ChatSets {
   seventv: HashMap<String, Rc<seventv::Set>>,
   bttv: HashMap<String, Rc<Vec<bttv::Emote>>>,
   badges: HashMap<String, Rc<Vec<helix::Badge>>>,
+  /// 7TV's paints and badges by id, as the EventAPI defined them ([`watch_seventv`]).
+  cosmetics: HashMap<String, Rc<Cosmetic>>,
 }
 
 impl Global for ChatSets {}
@@ -346,12 +350,119 @@ pub fn reload_seventv(
 /// set, the channel's, and the channel's 7TV user (a switch to another set).
 fn seventv_topics(room_id: &str, cx: &mut App) -> Vec<Topic> {
   let sets = &cx.default_global::<ChatSets>().seventv;
-  let mut topics = Vec::new();
+  // The chatters' paints and badges, whether or not the channel has 7TV emotes.
+  let mut topics = vec![Topic::Channel(room_id.to_owned())];
   for set in [sets.get(""), sets.get(room_id)].into_iter().flatten() {
     topics.extend(set.id.clone().map(Topic::EmoteSet));
     topics.extend(set.owner.clone().map(Topic::User));
   }
   topics
+}
+
+/// The paint and the badge a chatter has on, by 7TV id.
+#[derive(Clone, Default, PartialEq, Eq)]
+struct Worn {
+  paint: Option<String>,
+  badge: Option<String>,
+}
+
+impl Worn {
+  /// Puts on (`on`) or takes off what `entitlement` names; `true` when that changed something.
+  fn wear(&mut self, entitlement: &Entitlement, on: bool) -> bool {
+    let slot = match entitlement.kind {
+      cosmetics::Kind::Paint => &mut self.paint,
+      cosmetics::Kind::Badge => &mut self.badge,
+    };
+    let before = slot.clone();
+    if on {
+      *slot = Some(entitlement.id.clone());
+    } else if slot.as_ref() == Some(&entitlement.id) {
+      *slot = None;
+    }
+    *slot != before
+  }
+
+  /// How the panel draws it, from the session's definitions; `None` when nothing shows.
+  fn style(&self, cx: &mut App) -> Option<AuthorStyle> {
+    let defined = &cx.default_global::<ChatSets>().cosmetics;
+    let paint = self
+      .paint
+      .as_ref()
+      .and_then(|id| defined.get(id))
+      .and_then(|c| match c.as_ref() {
+        Cosmetic::Paint(paint) => name_paint(paint),
+        Cosmetic::Badge(_) => None,
+      });
+    let badge = self
+      .badge
+      .as_ref()
+      .and_then(|id| defined.get(id))
+      .and_then(|c| match c.as_ref() {
+        Cosmetic::Badge(badge) => Some(seventv_badge(badge)),
+        Cosmetic::Paint(_) => None,
+      });
+    (paint.is_some() || badge.is_some()).then_some(AuthorStyle { paint, badge })
+  }
+}
+
+/// Puts on (`on`) or takes off what `entitlement` names for its user, and redraws them when that
+/// changed something; `false` once the panel is gone.
+fn wear(
+  worn: &mut HashMap<String, Worn>,
+  entitlement: Entitlement,
+  on: bool,
+  panel: &WeakEntity<ChatPanel>,
+  cx: &mut gpui::AsyncApp,
+) -> bool {
+  let user = worn.entry(entitlement.user.clone()).or_default();
+  if !user.wear(&entitlement, on) {
+    return true;
+  }
+  let style = cx.update(|cx| user.style(cx));
+  push_styles(panel, vec![(entitlement.user, style)], cx).is_ok()
+}
+
+/// Gives the panel these users' looks.
+fn push_styles(
+  panel: &WeakEntity<ChatPanel>,
+  styles: Vec<(String, Option<AuthorStyle>)>,
+  cx: &mut gpui::AsyncApp,
+) -> gpui::Result<()> {
+  let events = styles
+    .into_iter()
+    .map(|(user, style)| ChatEvent::AuthorStyle(user.into(), style));
+  panel.update(cx, |p, cx| p.push(events, cx))
+}
+
+/// A 7TV paint as the panel draws it: its gradient, or for an image (which a name cannot show
+/// through its letters here) its plain color when it gives one.
+fn name_paint(paint: &cosmetics::Paint) -> Option<ui::chat::Paint> {
+  let fill = match &paint.fill {
+    Fill::Linear(angle) => ui::chat::PaintFill::Linear(*angle),
+    Fill::Radial { circle } => ui::chat::PaintFill::Radial { circle: *circle },
+    Fill::Image(_) => return paint.color.map(|c| ui::chat::Paint::solid(gpui::rgba(c))),
+  };
+  Some(ui::chat::Paint {
+    fill,
+    stops: paint
+      .stops
+      .iter()
+      .map(|&(at, color)| (at, gpui::rgba(color)))
+      .collect(),
+    repeat: paint.repeat,
+  })
+}
+
+fn seventv_badge(badge: &cosmetics::Badge) -> Badge {
+  let urls = badge.clone();
+  Badge {
+    title: if badge.tooltip.is_empty() {
+      "7TV".into()
+    } else {
+      badge.tooltip.clone().into()
+    },
+    picture: Picture::sized(move |width, _| urls.url(width).unwrap_or_default()),
+  }
 }
 
 /// The 7TV id of `room_id`'s set in the session's copies.
@@ -380,6 +491,8 @@ fn watch_seventv(
   };
   cx.spawn(async move |cx| {
     let mut topics = cx.update(|cx| seventv_topics(&room_id, cx));
+    // What this chat's 7TV users have on, by Twitch user id: entitlements come per channel.
+    let mut worn: HashMap<String, Worn> = HashMap::new();
     while !topics.is_empty() {
       let (mut updates, run) = events::connect(topics.clone());
       // The connection runs on the network runtime and ends when `updates` is dropped.
@@ -387,8 +500,44 @@ fn watch_seventv(
       let mut switched = false;
       while let Some(update) = updates.recv().await {
         match update {
+          events::Update::Cosmetic(cosmetic) => {
+            let id = match &cosmetic {
+              Cosmetic::Paint(paint) => paint.id.clone(),
+              Cosmetic::Badge(badge) => badge.id.clone(),
+            };
+            cx.update(|cx| {
+              let defined = &mut cx.default_global::<ChatSets>().cosmetics;
+              defined.insert(id.clone(), Rc::new(cosmetic));
+            });
+            // A redefinition (`cosmetic.update`) redraws those who have it on.
+            let wearing: Vec<(String, Option<AuthorStyle>)> = cx.update(|cx| {
+              worn
+                .iter()
+                .filter(|(_, w)| w.paint.as_ref() == Some(&id) || w.badge.as_ref() == Some(&id))
+                .map(|(user, w)| (user.clone(), w.style(cx)))
+                .collect()
+            });
+            if !wearing.is_empty() && push_styles(&panel, wearing, cx).is_err() {
+              return;
+            }
+          }
+          events::Update::Entitled(entitlement) => {
+            if !wear(&mut worn, entitlement, true, &panel, cx) {
+              return;
+            }
+          }
+          events::Update::Unentitled(entitlement) => {
+            if !wear(&mut worn, entitlement, false, &panel, cx) {
+              return;
+            }
+          }
           events::Update::Set { id, changes } => {
             let scope = cx.update(|cx| apply_seventv(&room_id, &id, &changes, cx));
+            // A set no chat of the session shows (a chatter's personal emotes, which the
+            // channel's cosmetics bring along): nothing to redraw.
+            if scope.is_none() {
+              continue;
+            }
             let load = cx.update(|cx| {
               load_extras(
                 room_id.clone(),

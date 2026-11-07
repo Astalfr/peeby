@@ -5,7 +5,10 @@
 //! given with `--save` (7TV's public data: emote sets and the editor who changed them; trim the
 //! `actor` before committing one as a fixture). No token is read or sent.
 //!
-//! `cargo run -p twitch --example seventv_events -- <minutes> (<login>… | top) [--save <file>]`
+//! With `--cosmetics`, it subscribes instead to the channels' `cosmetic.*` and `entitlement.*`
+//! (condition `ctx: channel`): the paints and badges of the 7TV users seen in those chats.
+//!
+//! `cargo run -p twitch --example seventv_events -- <minutes> (<login>… | top) [--save <file>] [--cosmetics]`
 
 // A command-line probe reports on the console.
 #![allow(clippy::print_stdout)]
@@ -27,15 +30,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     args.drain(i..(i + 2).min(args.len()));
     path
   });
+  let cosmetics = args
+    .iter()
+    .position(|a| a == "--cosmetics")
+    .map(|i| args.remove(i))
+    .is_some();
   let minutes: u64 = args.first().and_then(|m| m.parse().ok()).unwrap_or(5);
   let logins: Vec<String> = args.into_iter().skip(1).collect();
-  twitch::block_on(probe(minutes, logins, save))?
+  twitch::block_on(probe(minutes, logins, save, cosmetics))?
 }
 
 async fn probe(
   minutes: u64,
   logins: Vec<String>,
   save: Option<String>,
+  cosmetics: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let client = twitch::Client::new(None, None)?;
   let mut ids = Vec::new();
@@ -147,7 +156,20 @@ async fn probe(
         .unwrap_or(-1);
       let limit = usize::try_from(limit).unwrap_or(usize::MAX);
       let mut count = 0;
-      for (_, set, user) in &sets {
+      if cosmetics {
+        for id in &ids {
+          for kind in ["cosmetic.*", "entitlement.*"] {
+            if count >= limit {
+              break;
+            }
+            let line = json!({"op": 35, "d": {"type": kind,
+              "condition": {"ctx": "channel", "platform": "TWITCH", "id": id}}});
+            socket.send(Message::text(line.to_string())).await?;
+            count += 1;
+          }
+        }
+      }
+      for (_, set, user) in sets.iter().filter(|_| !cosmetics) {
         let mut subs = vec![("emote_set.update", set.clone())];
         if let Some(user) = user {
           subs.push(("user.update", user.clone()));

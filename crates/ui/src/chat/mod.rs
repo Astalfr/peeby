@@ -7,6 +7,7 @@
 mod emoji;
 pub mod fake;
 mod layout;
+mod paint;
 mod panel;
 mod pinned;
 
@@ -17,6 +18,7 @@ use gpui::{Hsla, SharedString, hsla};
 use crate::picture::Picture;
 
 pub use layout::{CHAT_WIDTH, watch_layout};
+pub use paint::{Paint, PaintFill};
 pub use panel::{ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES};
 pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
 
@@ -48,6 +50,16 @@ pub struct Author {
   pub color: Option<Hsla>,
   /// Shown before the name.
   pub badges: Vec<Badge>,
+}
+
+/// What a third party adds to an author's look, apart from the message (7TV's cosmetics): it
+/// applies to every line of theirs, the ones already shown included.
+#[derive(Clone, Default)]
+pub struct AuthorStyle {
+  /// Colors the name, over [`Author::color`].
+  pub paint: Option<Paint>,
+  /// Shown after the author's own badges.
+  pub badge: Option<Badge>,
 }
 
 /// A badge before an author's name (moderator, subscriber…).
@@ -135,6 +147,8 @@ pub enum ChatEvent {
   /// A [`ChatEvent::Status`] that waits for something ("Connecting to chat…", "Loading
   /// emotes…"): while the chat is empty it is drawn in its middle, under the app's loader.
   Loading(SharedString),
+  /// The look of the author with this user id (`None`: their own again), on all their lines.
+  AuthorStyle(SharedString, Option<AuthorStyle>),
 }
 
 impl ChatMessage {

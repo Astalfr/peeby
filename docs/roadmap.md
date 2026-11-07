@@ -123,6 +123,13 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- 7TV paints and badges (2026-11-07, the user's request, [ADR 0031](decisions/0031-seventv-cosmetics.md)):
+  the chat's EventAPI connection also follows the channel's `cosmetic.*` and `entitlement.*`. A
+  chatter's gradient paint colors each letter of their name (image paints: their plain color),
+  their 7TV badge follows the Twitch ones, on their lines already shown too. The fake chat shows
+  four of them. `twitch::seventv::cosmetics`, `ui::chat::Paint`, the probe's `--cosmetics`. 11 new
+  tests, 1 fixture (`seventv_cosmetics.jsonl`). Personal emotes are left for later.
+  **Not verified:** in the app.
 - 7TV live updates (2026-11-07, the user's request, [ADR 0030](decisions/0030-seventv-event-api.md)): a live's
   chat follows 7TV's EventAPI (`wss://events.7tv.io/v3`, anonymous) for the global set, the channel's set and
   the channel's 7TV user, so an emote the streamer adds, removes or renames shows in the words and the picker
