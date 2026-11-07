@@ -412,7 +412,7 @@ fn with_endpoint_volume<T>(
     unsafe {
       let enumerator: IMMDeviceEnumerator =
         CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-      let endpoint = match device.map(|name| name.strip_prefix("wasapi/").unwrap_or(name)) {
+      let endpoint = match device.map(endpoint_id) {
         Some(id) => enumerator.GetDevice(&HSTRING::from(id))?,
         // mpv's own default (ao_wasapi).
         None => enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia)?,
@@ -428,9 +428,30 @@ fn with_endpoint_volume<T>(
   result
 }
 
+/// The endpoint id Core Audio knows an mpv output by. mpv names an output `wasapi/{GUID}`, the
+/// endpoint's GUID alone, which `IMMDeviceEnumerator::GetDevice` refuses (`E_INVALIDARG`): it
+/// wants the whole id, `{0.0.0.00000000}.{GUID}` for an output (`{0.0.1.…}` is a capture).
+fn endpoint_id(device: &str) -> String {
+  let id = device.strip_prefix("wasapi/").unwrap_or(device);
+  if id.starts_with('{') && !id.contains('.') {
+    format!("{{0.0.0.00000000}}.{id}")
+  } else {
+    id.to_owned()
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::{protect, unprotect};
+  use super::{endpoint_id, protect, unprotect};
+
+  #[test]
+  fn endpoint_ids_from_mpv_names() {
+    let guid = "{68e7591f-3cf0-428c-9c2a-109abc7aa7a1}";
+    let full = format!("{{0.0.0.00000000}}.{guid}");
+    assert_eq!(endpoint_id(&format!("wasapi/{guid}")), full);
+    assert_eq!(endpoint_id(&format!("wasapi/{full}")), full);
+    assert_eq!(endpoint_id(&full), full);
+  }
 
   #[test]
   fn dpapi_round_trip() {
