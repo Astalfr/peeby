@@ -1411,10 +1411,22 @@ impl PlayerView {
           cx.emit(PlayerEvent::Ended);
         }
       }
-      Event::Ended(Some(error)) => self.fail(
-        tf!("Playback stopped: {error}", "Lecture interrompue : {error}").into(),
-        cx,
-      ),
+      Event::Ended(Some(error)) => {
+        let message: SharedString =
+          tf!("Playback stopped: {error}", "Lecture interrompue : {error}").into();
+        // mpv could not open the source: the space may know another way, tried once.
+        let fallback = (!self.started)
+          .then(|| self.source.as_mut()?.fallback.take())
+          .flatten();
+        match fallback {
+          Some(fallback) => {
+            tracing::info!("{error} before loading: trying the source's fallback");
+            self.buffering = true;
+            cx.defer(move |cx| fallback(message, cx));
+          }
+          None => self.fail(message, cx),
+        }
+      }
       Event::Ended(None) => {
         if self.layout.is_page() {
           self.close(cx);

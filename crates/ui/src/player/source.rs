@@ -47,7 +47,15 @@ pub struct Source {
   /// its edge, the player runs a little faster above it and a little slower under it
   /// (`catch_up.rs`). `None`: the live plays at 1× from wherever mpv started it.
   pub catch_up: Option<f64>,
+  /// Another way to play the video when mpv cannot open `options` (it ends with an error before
+  /// loading the file): called at most once, on the UI thread, with the message to show if that
+  /// way fails too. It starts the player again ([`super::PlayerView::start_with`]) or calls
+  /// [`super::PlayerView::fail`]. `None`: the error shows at once.
+  pub fallback: Option<Fallback>,
 }
+
+/// See [`Source::fallback`].
+pub type Fallback = Rc<dyn Fn(SharedString, &mut gpui::App)>;
 
 /// A live whose past plays from another source: its recording, made as it goes (Twitch's VOD
 /// of a live in progress), given once the space has it ([`super::PlayerView::set_rewind`]). The

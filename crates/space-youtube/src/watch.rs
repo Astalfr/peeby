@@ -14,12 +14,13 @@
 //! (`ui::chat::watch_layout`); the related videos then go under the details.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
   AnyElement, App, Context, Entity, FontWeight, Global, ScrollHandle, SharedString, Subscription,
-  Task, Window, div, px, relative,
+  Task, WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -835,7 +836,8 @@ impl WatchView {
 }
 
 /// Starts `video_id` in `player` at `start`: from the hover prefetch when it has the stream, else
-/// from VISIONOS (~0.2 s), else through the bundled yt-dlp.
+/// from VISIONOS (~0.2 s), else through the bundled yt-dlp. yt-dlp also takes over when mpv
+/// cannot open VISIONOS's playlists (some videos list media playlists that answer 404).
 pub(super) fn load_stream(
   client: &Client,
   video_id: &str,
@@ -853,6 +855,7 @@ pub(super) fn load_stream(
     let proxy = stream.live.as_ref().and_then(|l| l.proxy.clone());
     let mut source = convert::source(stream, &Settings::get(cx).player);
     resume(&mut source, start);
+    ytdl_fallback(&mut source, video_id, start, player.downgrade());
     player.update(cx, |player, cx| player.start(source, clicked, cx));
     settle_window(proxy, player, cx);
     return;
@@ -878,6 +881,7 @@ pub(super) fn load_stream(
         let proxy = stream.live.as_ref().and_then(|l| l.proxy.clone());
         let mut source = convert::source(stream, &player_settings);
         resume(&mut source, start);
+        ytdl_fallback(&mut source, &video_id, start, player.clone());
         if let Some(player) = player.upgrade() {
           cx.update(|cx| {
             player.update(cx, |player, cx| player.start(source, clicked, cx));
@@ -907,19 +911,74 @@ pub(super) fn load_stream(
     // Network down: yt-dlp would fail too, and a members-only video the account cannot watch
     // stays refused. Anything else (age restriction, a member's video, client blocked,
     // unexpected response): let the bundled yt-dlp try (ADR 0005).
-    let fallback = if matches!(
+    if matches!(
       error,
       innertube::Error::Http(_) | innertube::Error::MembersOnly { .. }
     ) {
-      None
-    } else {
-      tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
-      cx.background_executor()
-        .spawn(async move { tools::ytdl_options(&video_id) })
-        .await
-    };
+      tracing::warn!("stream: {error}");
+      player
+        .update(cx, |player, cx| player.fail(error_text(&error).into(), cx))
+        .ok();
+      return;
+    }
+    tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
+    cx.update(|cx| {
+      start_ytdl(
+        video_id,
+        start,
+        player,
+        clicked,
+        error_text(&error).into(),
+        cx,
+      )
+    });
+  })
+  .detach();
+}
+
+/// Lets yt-dlp take over when mpv cannot open a VISIONOS video's playlists. Not for lives:
+/// they start at their edge, which yt-dlp's options do not.
+fn ytdl_fallback(
+  source: &mut ui::player::Source,
+  video_id: &str,
+  start: Option<f64>,
+  player: WeakEntity<PlayerView>,
+) {
+  if source.live {
+    return;
+  }
+  let video_id = video_id.to_owned();
+  source.fallback = Some(Rc::new(move |failed, cx| {
+    tracing::info!("mpv could not open VISIONOS's playlists, trying yt-dlp");
+    start_ytdl(
+      video_id.clone(),
+      start,
+      player.clone(),
+      Instant::now(),
+      failed,
+      cx,
+    );
+  }));
+}
+
+/// Plays `video_id` in `player` through the bundled yt-dlp (ADR 0005), from `start`, or shows
+/// `failed` when yt-dlp is not bundled.
+fn start_ytdl(
+  video_id: String,
+  start: Option<f64>,
+  player: WeakEntity<PlayerView>,
+  clicked: Instant,
+  failed: SharedString,
+  cx: &mut App,
+) {
+  let player_settings = Settings::get(cx).player.clone();
+  let options = cx
+    .background_executor()
+    .spawn(async move { tools::ytdl_options(&video_id) });
+  cx.spawn(async move |cx| {
+    let options = options.await;
     player
-      .update(cx, |player, cx| match fallback {
+      .update(cx, |player, cx| match options {
         Some(mut options) => {
           player_settings.apply(&mut options);
           // A card's resume is never a live's.
@@ -929,8 +988,8 @@ pub(super) fn load_stream(
           player.start_with(options, clicked, cx)
         }
         None => {
-          tracing::warn!("stream: {error}");
-          player.fail(error_text(&error).into(), cx);
+          tracing::warn!("yt-dlp is not bundled");
+          player.fail(failed, cx);
         }
       })
       .ok();

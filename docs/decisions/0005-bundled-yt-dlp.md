@@ -18,6 +18,8 @@ VISIONOS ([0003](0003-visionos-hls-streams.md)) can fail: client blocked, age or
 
 In the app (`tools.rs`, `watch.rs`): when `Client::stream` fails with anything but a network error, mpv's `ytdl_hook` runs the bundled yt-dlp with those options and a copy of the session cookies. Members-only videos (VISIONOS answers `UNPLAYABLE` to anyone, being an anonymous visitor) get one check first: a WEB `player` request with the session (`Client::check_members_only`). When it offers the channel's membership (`errorScreen.playerLegacyDesktopYpcOfferRenderer.offerId == "sponsors_only_video"`, not translated, unlike `reason`), the player says the video is for members (`Error::MembersOnly`, its text asking a signed-out user to sign in with a member's account) without running yt-dlp; when it would play (the account is a member), yt-dlp plays it with the cookies. Measured on an age-restricted video: playback after 8.1 s, 1080p, hardware decoding. yt-dlp found no HLS for it, so mpv waited for `available_at` (4 s).
 
+yt-dlp also takes over when `Client::stream` succeeds but mpv cannot open what it got: some videos (E-Q2tEgJ1ZI, 2026-11-07) have a master playlist whose media playlists all answer 404, and mpv ends with `MPV_ERROR_LOADING_FAILED` (-13). The source carries a `fallback` (`ui::player::Source::fallback`), which the player calls at most once, only when mpv fails before loading the file; the yt-dlp start carries none, so a second failure shows its error. Lives keep the error: they start at their edge, which yt-dlp's options do not.
+
 ## Consequences
 
 - About 110 MB more in the bundle (Deno). QuickJS-NG (2 MB) was measured and rejected: 5.6 s per JS challenge.
