@@ -12,6 +12,7 @@ use ui::form::{chips, row, section, toggle};
 use ui::i18n::t;
 use ui::{tf, theme};
 
+use super::bell::Change;
 use super::sign_in::SignIn;
 use super::{TwitchSpace, play};
 use peeby_core::settings::Settings;
@@ -308,7 +309,15 @@ impl SettingsView {
 }
 
 /// Where the followed channels' lives and category changes show.
-fn notifications_section(cx: &gpui::App) -> AnyElement {
+fn notifications_section(nav: WeakEntity<TwitchSpace>, cx: &gpui::App) -> AnyElement {
+  let test = move |change: Change| {
+    let nav = nav.clone();
+    move |cx: &mut gpui::App| {
+      if let Some(space) = nav.upgrade() {
+        TwitchSpace::test_toast(&space, change, cx);
+      }
+    }
+  };
   section(
     t("Notifications", "Notifications"),
     vec![
@@ -320,6 +329,7 @@ fn notifications_section(cx: &gpui::App) -> AnyElement {
           "Dans la cloche de Peeby, et en notification Windows avec l'image de la chaîne. Demande la connexion des chaînes suivies.",
         ),
         |n| &mut n.twitch_live,
+        test(Change::Live),
         cx,
       ),
       delivery_row(
@@ -333,6 +343,7 @@ fn notifications_section(cx: &gpui::App) -> AnyElement {
           "Un autre jeu ou une autre catégorie qu'au dernier relevé (toutes les deux minutes).",
         ),
         |n| &mut n.twitch_category,
+        test(Change::Category),
         cx,
       ),
     ],
@@ -437,7 +448,7 @@ impl Render for SettingsView {
     let sections = vec![
       flash.wrap("twitch-account-flash", self.account_section(cx), cx),
       self.followed_section(cx),
-      notifications_section(cx),
+      notifications_section(self.nav.clone(), cx),
       playback_section(max_height, low_latency, catch_up),
       points_section(auto_claim),
     ];

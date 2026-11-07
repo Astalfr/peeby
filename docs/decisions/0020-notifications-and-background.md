@@ -55,9 +55,16 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
 - **Floods**: beyond 3 Windows notifications from one reading (after a sleep, an outage), one
   sums them up.
 - **Toasts** (`desktop::toast`): built with WinRT (`windows` 0.62, the version GPUI's Windows
-  platform already builds) with the image as `appLogoOverride`, cropped round. Windows reads
-  neither URLs nor WebP for an unpackaged app: `ui::images::local_png` writes a 96 px PNG into
-  the image cache. The last 32 toasts are kept so that their click arrives; it goes through a
+  platform already builds) with the image as `appLogoOverride`, cropped round, and an optional
+  preview as an inline image under the text (a YouTube upload's or live's thumbnail). Windows
+  reads neither URLs nor WebP for an unpackaged app: `ui::images::local_png` writes PNGs into
+  the image cache (96 px avatars, 640×360 previews). Each kind's row in the settings has a
+  "Test" button: a sample of the kind shown through the same code as a real one, whatever its
+  switches say, made as indistinguishable as can be. YouTube's announces a real video (YouTube's
+  first, "Me at the zoo") in YouTube's wording, with its channel's name and avatar from its
+  watch page (`next`, which writes nothing to the account). Twitch's announces a followed channel
+  on air now, with its avatar, title and category; without one, the user's own account. Its
+  click only shows Peeby, and opens no video, which would write the account's history. The last 32 toasts are kept so that their click arrives; it goes through a
   channel to the UI thread, shows the main window and runs the toast's action there. The app id
   `Peeby.Peeby` is registered under `HKCU\Software\Classes\AppUserModelId` with the name and
   the icon (written to `%LOCALAPPDATA%\peeby\peeby.ico`). The `ToastNotifier` made at startup

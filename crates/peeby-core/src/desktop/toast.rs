@@ -27,8 +27,8 @@ const APP_ID: &str = if cfg!(debug_assertions) {
 /// Toasts kept for their click: Windows' Action Center holds about twenty per app.
 const KEPT: usize = 32;
 
-/// A toast: its first line, up to two more, and an image file (a PNG: Windows reads neither a
-/// URL nor WebP for an unpackaged app) shown round on the left.
+/// A toast: its first line, up to two more, an image file shown round on the left and a
+/// preview under the text (PNGs: Windows reads neither a URL nor WebP for an unpackaged app).
 pub struct Toast {
   /// The first line, in bold.
   pub title: String,
@@ -36,6 +36,8 @@ pub struct Toast {
   pub body: String,
   /// The local PNG shown on the left, if any.
   pub image: Option<PathBuf>,
+  /// The local PNG shown under the text, the toast's width (a video's thumbnail), if any.
+  pub preview: Option<PathBuf>,
 }
 
 struct Shown {
@@ -161,6 +163,12 @@ fn build(
     element.SetAttribute(h!("placement"), h!("appLogoOverride"))?;
     element.SetAttribute(h!("hint-crop"), h!("circle"))?;
     element.SetAttribute(h!("src"), &HSTRING::from(image.as_os_str()))?;
+    binding.AppendChild(&element)?;
+  }
+  if let Some(preview) = &toast.preview {
+    // Without a placement, an image is inline: under the text, as wide as the toast.
+    let element = document.CreateElement(h!("image"))?;
+    element.SetAttribute(h!("src"), &HSTRING::from(preview.as_os_str()))?;
     binding.AppendChild(&element)?;
   }
   let notification = ToastNotification::CreateToastNotification(&document)?;

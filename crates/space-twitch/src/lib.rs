@@ -802,6 +802,93 @@ impl TwitchSpace {
     }
   }
 
+  /// What the settings' test notification of `change` announces, with its avatar (a Helix
+  /// template URL): a followed channel on air, as a real one would be; else the user's own
+  /// account; else neither.
+  fn test_notification(&self, change: bell::Change) -> Option<(bell::Event, Option<String>)> {
+    let signed = match &self.state {
+      State::SignedIn(signed) => Some(signed),
+      _ => None,
+    };
+    let event = |user_id: &str, login: &str, name: &str, title: &str, category: &str| bell::Event {
+      user_id: user_id.to_owned(),
+      login: login.to_owned(),
+      name: name.to_owned(),
+      title: title.to_owned(),
+      category: category.to_owned(),
+      change,
+      at: SystemTime::now(),
+    };
+    if let Some(stream) = signed.and_then(|s| s.live.as_deref()?.first()) {
+      let avatar = signed.and_then(|s| s.avatars.get(&stream.user_id).cloned());
+      let sample = event(
+        &stream.user_id,
+        &stream.user_login,
+        &stream.user_name,
+        &stream.title,
+        &stream.game_name,
+      );
+      return Some((sample, avatar));
+    }
+    let title = t(
+      "This is a test notification",
+      "Ceci est une notification de test",
+    );
+    if let Some(account) = &self.account {
+      // A 70 px picture (`…-profile_image-70x70.png`): its template, for the toast's size.
+      let avatar = account
+        .avatar_url
+        .as_deref()
+        .map(|url| url.replace("-70x70.", "-{width}x{height}."));
+      let sample = event(
+        &account.id,
+        &account.login,
+        &account.display_name,
+        title,
+        "Just Chatting",
+      );
+      return Some((sample, avatar));
+    }
+    signed.map(|signed| {
+      let avatar = signed.avatars.get(&signed.user_id).cloned();
+      let sample = event(
+        &signed.user_id,
+        &signed.login,
+        &signed.login,
+        title,
+        "Just Chatting",
+      );
+      (sample, avatar)
+    })
+  }
+
+  /// The settings' test notification of `change` ([`Self::test_notification`], else Peeby
+  /// itself), with its avatar.
+  fn test_sample(&self, change: bell::Change) -> (bell::Event, Option<String>) {
+    self.test_notification(change).unwrap_or_else(|| {
+      let sample = bell::Event {
+        user_id: String::new(),
+        login: String::new(),
+        name: "Peeby".into(),
+        title: t(
+          "This is a test notification",
+          "Ceci est une notification de test",
+        )
+        .into(),
+        category: "Just Chatting".into(),
+        change,
+        at: SystemTime::now(),
+      };
+      (sample, None)
+    })
+  }
+
+  /// Shows the settings' test notification of `change`.
+  pub fn test_toast(space: &Entity<Self>, change: bell::Change, cx: &mut App) {
+    let (sample, avatar) = space.read(cx).test_sample(change);
+    bell::test_toast(&sample, avatar.as_deref(), cx);
+  }
+
   /// The auth-token's account, once Twitch answered.
   pub fn account(&self) -> Option<&gql::Account> {
     self.account.as_ref()

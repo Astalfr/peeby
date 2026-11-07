@@ -560,12 +560,12 @@ pub fn bgra_image(width: u32, height: u32, mut pixels: Vec<u8>) -> Option<Arc<Re
   Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
 }
 
-/// A PNG copy of the image at `url` on disk, `size`×`size` pixels (cropped to fill), for what
-/// reads a file rather than bytes (Windows' notifications take neither a URL nor WebP). Kept in
-/// the disk cache, so "Clear" removes it too; `None` when the image cannot be had.
+/// A PNG copy of the image at `url` on disk, `width`×`height` pixels (cropped to fill), for
+/// what reads a file rather than bytes (Windows' notifications take neither a URL nor WebP).
+/// Kept in the disk cache, so "Clear" removes it too; `None` when the image cannot be had.
 pub fn local_png(
   url: &str,
-  size: u32,
+  (width, height): (u32, u32),
   cx: &gpui::App,
 ) -> impl Future<Output = Option<PathBuf>> + use<> {
   let store = cx.try_global::<Images>().map(|images| images.0.read(cx));
@@ -574,6 +574,12 @@ pub fn local_png(
   let url = url.to_owned();
   let task = fetcher.zip(dir).map(|(fetcher, dir)| {
     runtime::spawn(cx, async move {
+      // A square keeps its former name, so the avatars already written stay found.
+      let size = if width == height {
+        width.to_string()
+      } else {
+        format!("{width}x{height}")
+      };
       let png = dir.join(format!(
         "{}-{size}.png",
         cache_name(&url).trim_end_matches(".img")
@@ -601,7 +607,7 @@ pub fn local_png(
         let image = image::load_from_memory(&bytes)
           .map_err(|e| tracing::debug!("image: {e}"))
           .ok()?
-          .resize_to_fill(size, size, image::imageops::FilterType::Lanczos3);
+          .resize_to_fill(width, height, image::imageops::FilterType::Lanczos3);
         std::fs::create_dir_all(&dir).ok()?;
         image
           .save_with_format(&png, image::ImageFormat::Png)

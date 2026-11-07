@@ -6,8 +6,9 @@ use gpui::prelude::*;
 use gpui::{AnyElement, App, Entity, Window};
 use gpui_component::v_flex;
 
-use crate::YouTubeSpace;
 use crate::account::AccountView;
+use crate::{YouTubeSpace, inbox};
+use innertube::NotificationKind;
 use peeby_core::settings::{LANGUAGES, QUALITIES, Settings, StartPage};
 use peeby_core::shell::delivery_row;
 use ui::form::{OnClick, choices, row, section, toggle};
@@ -118,6 +119,7 @@ pub fn part(
             "Ce qu'envoie YouTube pour les chaînes dont la cloche est activée (Toutes ou Personnalisées), Shorts compris. Connecté ; relevé toutes les trois minutes.",
           ),
           |n| &mut n.youtube_video,
+          |cx| inbox::test_toast(NotificationKind::Upload, cx),
           cx,
         ),
         delivery_row(
@@ -128,6 +130,7 @@ pub fn part(
             "Une chaîne dont la cloche est activée passe en direct, comme YouTube l'annonce.",
           ),
           |n| &mut n.youtube_live,
+          |cx| inbox::test_toast(NotificationKind::Live, cx),
           cx,
         ),
       ],

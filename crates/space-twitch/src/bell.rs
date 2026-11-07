@@ -161,32 +161,65 @@ pub fn toasts(events: Vec<Event>, avatars: &Avatars, nav: WeakEntity<TwitchSpace
       ),
       body: names,
       image: None,
+      preview: None,
     };
     toast::show(toast, move |_, cx| open(&nav, Route::Following, cx), cx);
     return;
   }
   for event in events {
-    let image = avatars
-      .get(&event.user_id)
-      .map(|url| images::local_png(&helix::sized(url, 150, 150), TOAST_AVATAR, cx));
+    let avatar = avatars.get(&event.user_id).map(String::as_str);
     let nav = nav.clone();
-    cx.spawn(async move |cx| {
-      let image = match image {
-        Some(image) => image.await,
-        None => None,
-      };
-      let (title, body) = toast_text(&event);
-      let login = event.login;
-      cx.update(|cx| {
-        toast::show(
-          Toast { title, body, image },
-          move |_, cx| open(&nav, Route::Watch(login), cx),
-          cx,
-        )
-      });
-    })
-    .detach();
+    let login = event.login.clone();
+    show_toast(
+      &event,
+      avatar,
+      move |_, cx| open(&nav, Route::Watch(login), cx),
+      cx,
+    );
   }
+}
+
+/// Shows `event` as a Windows notification, with the channel's `avatar` (a Helix template URL)
+/// once it is on disk; a click runs `on_click`.
+fn show_toast(
+  event: &Event,
+  avatar: Option<&str>,
+  on_click: impl FnOnce(&mut Window, &mut App) + 'static,
+  cx: &mut App,
+) {
+  let image = avatar.map(|url| {
+    images::local_png(
+      &helix::sized(url, 150, 150),
+      (TOAST_AVATAR, TOAST_AVATAR),
+      cx,
+    )
+  });
+  let (title, body) = toast_text(event);
+  cx.spawn(async move |cx| {
+    let image = match image {
+      Some(image) => image.await,
+      None => None,
+    };
+    cx.update(|cx| {
+      toast::show(
+        Toast {
+          title,
+          body,
+          image,
+          preview: None,
+        },
+        on_click,
+        cx,
+      )
+    });
+  })
+  .detach();
+}
+
+/// The settings' test: `sample` shown as a real notification, with `avatar` (a Helix template
+/// URL), whatever the settings say; a click only shows Peeby.
+pub fn test_toast(sample: &Event, avatar: Option<&str>, cx: &mut App) {
+  show_toast(sample, avatar, |_, _| {}, cx);
 }
 
 /// A Windows notification's title and lines.

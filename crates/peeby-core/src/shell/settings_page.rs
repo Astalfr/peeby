@@ -256,12 +256,14 @@ fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
 }
 
 /// The row of a kind of notification, for a space's part: two switches, Peeby's bell and
-/// Windows' notifications; `kind` picks the kind's setting.
+/// Windows' notifications, and a button that shows a sample of the kind as a Windows
+/// notification (`test`, whatever the switches say); `kind` picks the kind's setting.
 pub fn delivery_row(
   id: &str,
   title: &str,
   description: &str,
   kind: fn(&mut Notifications) -> &mut Delivery,
+  test: impl Fn(&mut gpui::App) + 'static,
   cx: &gpui::App,
 ) -> AnyElement {
   let delivery = *kind(&mut Settings::get(cx).notifications.clone());
@@ -282,7 +284,13 @@ pub fn delivery_row(
       .child(switch("app", "Peeby", delivery.in_app, |d, v| d.in_app = v))
       .child(switch("windows", "Windows", delivery.windows, |d, v| {
         d.windows = v
-      })),
+      }))
+      .child(
+        Button::new(gpui::SharedString::from(format!("{id}-test")))
+          .small()
+          .label(t("Test", "Tester"))
+          .on_click(move |_, _, cx| test(cx)),
+      ),
   )
   .into_any_element()
 }

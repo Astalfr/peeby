@@ -50,6 +50,9 @@ const SLACK: Duration = Duration::from_secs(60);
 const MAX_TOASTS: usize = 3;
 /// The avatar's size in a Windows notification, pixels.
 const TOAST_AVATAR: u32 = 96;
+/// The video's preview under a Windows notification's text, pixels (16:9). A toast is about
+/// 364 logical pixels wide: this stays sharp up to 175 % and well under Windows' 3 MB.
+const TOAST_PREVIEW: (u32, u32) = (640, 360);
 const AVATAR: f32 = 40.;
 const THUMB_WIDTH: f32 = 86.;
 
@@ -178,49 +181,130 @@ fn toasts(fresh: &[Notification], nav: &WeakEntity<YouTubeSpace>, cx: &mut App) 
         .collect::<Vec<_>>()
         .join("\n"),
       image: None,
+      preview: None,
     };
     // The window shows: the bell has them.
     toast::show(toast, |_, _| {}, cx);
     return;
   }
   for n in fresh {
-    let image = largest(&n.avatar).map(|url| images::local_png(url, TOAST_AVATAR, cx));
-    let title = match n.kind {
-      NotificationKind::Live => t("Live now", "En direct"),
-      _ => t("New video", "Nouvelle vidéo"),
-    };
-    let (body, video_id, token) = (n.message.clone(), n.video_id.clone(), n.read_token.clone());
+    let (video_id, token) = (n.video_id.clone(), n.read_token.clone());
     let nav = nav.clone();
-    cx.spawn(async move |cx| {
-      let image = match image {
-        Some(image) => image.await,
-        None => None,
-      };
-      cx.update(|cx| {
-        let toast = Toast {
-          title: title.to_owned(),
-          body,
-          image,
-        };
-        toast::show(
-          toast,
-          move |window, cx| {
-            mark_read(token.into_iter().collect(), cx);
-            if let Some(id) = video_id {
-              nav
-                .update(cx, |space, cx| {
-                  space.open_from_notification(Route::Watch(id), window, cx)
-                })
-                .ok();
-            }
-          },
-          cx,
-        )
-      });
-    })
-    .detach();
+    show_toast(
+      n,
+      move |window, cx| {
+        mark_read(token.into_iter().collect(), cx);
+        if let Some(id) = video_id {
+          nav
+            .update(cx, |space, cx| {
+              space.open_from_notification(Route::Watch(id), window, cx)
+            })
+            .ok();
+        }
+      },
+      cx,
+    );
   }
 }
+
+/// Shows `n` as a Windows notification, with the channel's avatar and the video's preview once
+/// they are on disk; a click runs `on_click`.
+fn show_toast(
+  n: &Notification,
+  on_click: impl FnOnce(&mut Window, &mut App) + 'static,
+  cx: &mut App,
+) {
+  let image =
+    largest(&n.avatar).map(|url| images::local_png(url, (TOAST_AVATAR, TOAST_AVATAR), cx));
+  let preview = largest(&n.thumbnails).map(|url| images::local_png(url, TOAST_PREVIEW, cx));
+  let title = match n.kind {
+    NotificationKind::Live => t("Live now", "En direct"),
+    _ => t("New video", "Nouvelle vidéo"),
+  };
+  let body = n.message.clone();
+  cx.spawn(async move |cx| {
+    // Both are already running (`local_png` spawns them): waiting in turn costs nothing.
+    let image = match image {
+      Some(image) => image.await,
+      None => None,
+    };
+    let preview = match preview {
+      Some(preview) => preview.await,
+      None => None,
+    };
+    cx.update(|cx| {
+      let toast = Toast {
+        title: title.to_owned(),
+        body,
+        image,
+        preview,
+      };
+      toast::show(toast, on_click, cx)
+    });
+  })
+  .detach();
+}
+
+/// The settings' test of `kind`: a real video ([`TEST_VIDEO`]) announced as YouTube would, with
+/// its channel's avatar and name from its watch page (`next`, which writes nothing to the
+/// account), whatever the settings say. Its click only shows Peeby: it opens no video, which
+/// signed in would write the account's history.
+pub fn test_toast(kind: NotificationKind, cx: &mut App) {
+  let client = cx.try_global::<Session>().map(|s| s.0.clone());
+  let page = client.map(|client| runtime::spawn(cx, async move { client.watch(TEST_VIDEO).await }));
+  cx.spawn(async move |cx| {
+    // Without the page (offline), the sample keeps the title and the thumbnail.
+    let page = match page {
+      Some(page) => page.await.and_then(|page| {
+        page
+          .map_err(|e| tracing::debug!("test notification: {e}"))
+          .ok()
+      }),
+      None => None,
+    };
+    let channel = page
+      .as_ref()
+      .and_then(|p| p.channel.clone())
+      .unwrap_or_else(|| "jawed".to_owned());
+    let title = page
+      .as_ref()
+      .map(|p| p.title.clone())
+      .filter(|title| !title.is_empty())
+      .unwrap_or_else(|| "Me at the zoo".to_owned());
+    // YouTube's own wording, as the inbox writes it.
+    let message = match kind {
+      NotificationKind::Live => tf!(
+        "{channel} is live: {title}",
+        "{channel} est en direct : {title}"
+      ),
+      _ => tf!(
+        "{channel} uploaded: {title}",
+        "{channel} a mis en ligne {title}"
+      ),
+    };
+    let sample = Notification {
+      id: String::new(),
+      message,
+      sent: String::new(),
+      read: false,
+      video_id: None,
+      short: false,
+      kind,
+      avatar: page.map(|p| p.channel_avatar).unwrap_or_default(),
+      thumbnails: vec![Thumbnail {
+        url: format!("https://i.ytimg.com/vi/{TEST_VIDEO}/hqdefault.jpg"),
+        width: 480,
+        height: 360,
+      }],
+      read_token: None,
+    };
+    cx.update(|cx| show_toast(&sample, |_, _| {}, cx));
+  })
+  .detach();
+}
+
+/// The video of the test notifications: YouTube's first ("Me at the zoo"), there for good.
+const TEST_VIDEO: &str = "jNQXAC9IVRw";
 
 /// The URL of the largest of `sizes`.
 fn largest(sizes: &[Thumbnail]) -> Option<&str> {
