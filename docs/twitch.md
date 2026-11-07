@@ -180,6 +180,32 @@ Two credentials, for different things. Both are secrets, under the same rules as
       Peeby (`twitch::bttv::Modifier`, `chat::with_words`): turns and colors are done to the pixels when
       decoding (`ui::images::Effects`), wide and shake when drawing (`ui::chat::Modifiers`).
     - FFZ `https://api.frankerfacez.com/v1/room/id/{id}` and `/v1/set/global` **[mem]**.
+- **Chat options** (the gear left of "Send"): the panel offers what the space names
+  (`ui::chat::ChatOption`, `ChatPanel::set_options`) and tells it which was chosen
+  (`ChatPanelEvent::Option`), so the `ui` crate still knows no service. For now one option,
+  **"Reload 7TV emotes"** (`chat::start_options`, `chat::reload_seventv`): it asks 7TV for the
+  global and the channel's sets again, and only once **both** have answered does it replace the
+  ones kept for the session and build the channel's extras from them (the words and the picker).
+  A half that fails changes nothing, so a 7TV outage cannot take the chat's emotes away; the
+  option is greyed while it runs, and a reload that brought nothing says so as a notice line. The
+  messages already on screen keep the emotes they were drawn with — only the next ones take the
+  new words. BTTV and the badges are not asked again (they come from the session's copies).
+- **Can the 7TV sets update on their own?** Checked on 2026-11-07. The sets Peeby reads are plain
+  REST and answer with **no cache header at all** (`https://7tv.io/v3/users/twitch/{id}`: `Vary`,
+  `x-ratelimit-global-limit: 5000` a minute and nothing else), so asking again always gets the
+  current set — the reload needs no cache-busting. 7TV does push changes, over its **EventAPI**
+  (`wss://events.7tv.io/v3`, or SSE at `https://events.7tv.io/v3@{type}<conditions>`) **[src]**:
+  op 1 Hello gives `heartbeat_interval`, `session_id` and `subscription_limit`, op 35 subscribes
+  (`{"op":35,"d":{"type":"emote_set.update","condition":{"object_id":"<set id>"}}}`), op 0
+  dispatches a ChangeMap (`pushed`/`pulled`/`updated` lists of `{key, index, old_value, value}`),
+  op 2 is the heartbeat (three missed: reconnect) and op 34 resumes a `session_id` with the
+  missed dispatches. Close 4009 is "already subscribed", 4007 asks for a 5-minute wait. So an
+  automatic update is possible, and would need: keeping `emote_set.id` from the user answer
+  (`seventv::parse_user` drops it today), a WebSocket connection per watched channel with the
+  heartbeat, resume and reconnect handling, and applying a ChangeMap to the loaded set instead of
+  refetching. That is a feature of its own, not done here — the gear's reload covers the case the
+  user hits (a streamer adding an emote while they watch). The EventAPI repository is archived
+  and read-only, so its opcodes are **[?]** until tried against the live service.
 - **VOD chat (replay)**, checked on 2026-11-02, anonymous: the raw query `video(id) { comments(contentOffsetSeconds: N) { edges { node { id contentOffsetSeconds createdAt commenter { id login displayName } message { fragments { text emote { emoteID } } userBadges { setID version } userColor } } } pageInfo { hasNextPage } } }` answers with the web Client-ID, no integrity token. A page holds about 50–60 messages, starting a little before `N` (a few seconds on a busy chat, up to ~20 s on a quiet one); asking `N`, `N+1`, `N+2` can return the same page. **Paging with `after: <cursor>` answers `failed integrity check`** (`IntegrityCheckFailed`): never sent. Past the end, `comments` is null. Subscriptions come as plain messages ("X subscribed at Tier 1…"); `userBadges` often starts with an empty `{setID: ""}`. Emote ids are the IRC ones.
   `contentOffsetSeconds` is a whole second: the app spreads each second's messages evenly over it, and estimates the playhead between the player's quarter-second position reports, so that a busy chat scrolls one message at a time instead of by blocks.
 - **VOD game chapters**, checked on 2026-11-03, anonymous: the raw query `video(id) { moments(first: 100,
@@ -211,6 +237,9 @@ Two credentials, for different things. Both are secrets, under the same rules as
     load from Twitch's CDN. "Vraies 7TV / BTTV", off by default too, loads the real global sets
     (anonymous, the live chat's session cache) and writes their words, zero-width ones stacked
     by one or two on an emote, in place of the squares; they also lead the picker.
+  - The same gear as a live's, with "Reload 7TV emotes": it forgets the session's 7TV copies and
+    loads the global set again (the fake chat is in no channel), and says what to turn on when
+    the real emotes are off.
   - Controls on the left:
     - Feed: the interval (one message every 10, 5 or 2 s, up to 300 a second), bursts sent `BATCH` at a
       time, the connection state.
@@ -556,5 +585,6 @@ A probe run by the user, anonymously, on a live channel:
   https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2 (`constants.py`, `classes/Twitch.py`,
   `classes/WebSocketsPool.py`, `classes/entities/Stream.py`)
 - 7TV endpoints (third-party README): https://lobehub.com/fr/mcp/daugustin-7tv-mcp
+- 7TV EventAPI (opcodes, conditions, close codes; archived): https://github.com/SevenTV/EventAPI
 - HLS ad discontinuities: https://github.com/video-dev/hls.js/issues/4416,
   https://github.com/xbmc/inputstream.adaptive/issues/1071

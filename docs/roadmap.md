@@ -123,6 +123,18 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Chat options and the 7TV reload (2026-11-07, the user's request): a gear left of "Send" opens a menu with
+  "Reload 7TV emotes", which asks 7TV for the global and the channel's sets again and replaces the ones kept
+  for the session only once both have answered (a failed half leaves the chat's emotes alone), then rebuilds
+  the words and the picker; the option is greyed while it runs and says so when it brought nothing. Generic in
+  `ui::chat` (`ChatOption`, `ChatPanel::set_options`, `ChatPanelEvent::Option`): the panel still knows no
+  service. The fake chat has the same gear. 2 new tests. Verified in the app (debug build, fake chat): the gear
+  draws left of "Send", its menu opens upward, the option fires, and a reload with the real global sets on
+  keeps the emotes drawn. **Not verified:** a live's channel reload (needs a real live).
+  Researched: 7TV's REST answers carry no cache header, so asking again is enough; automatic updates would
+  need its EventAPI WebSocket (`wss://events.7tv.io/v3`, op 35 `emote_set.update` on the set's id, heartbeat
+  and resume) and keeping `emote_set.id`, a feature of its own — see [twitch.md](twitch.md).
+
 - Clickable chat links (2026-11-07, the user's request): a link in a chat message (live, VOD replay, fake chat; any `ui::chat` panel) opens in the browser on a click, with a pointer cursor and the plain accent on hover; a deleted message's link stays inert. Only `http(s)://` words become links (`split_text`), so no other scheme's handler runs. Checked: clippy. **Not verified:** in the app.
 
 - Live catch-up (2026-11-06, the user's report: about 4 s behind the streamer, 2–3 s behind the browser): with low latency on, a live at its edge plays at 1.05× while mpv's buffer stays above 0.6 s and 0.97× under it (`Source::catch_up`), so it no longer keeps the ~2 s it started with and catches up after a stall. Measured with the spike on a live of 1 s segments: 4.2 s to 3.3 s on average, no stall in 3 min; the statistics show the speed ("Low-latency speed"); "Catch up" in the Twitch settings (under "Low latency", on by default) turns it off. 3 new tests. **Not verified:** in the app, and against the browser side by side.

@@ -208,7 +208,9 @@ fn main() {
           panel
         });
         cx.subscribe(&panel, |panel, event: &ChatPanelEvent, cx| {
-          let ChatPanelEvent::Send(text) = event;
+          let ChatPanelEvent::Send(text) = event else {
+            return;
+          };
           let me = Author {
             id: "me".into(),
             name: "me".into(),

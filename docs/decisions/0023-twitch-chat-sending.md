@@ -45,7 +45,11 @@ Options considered:
   - `Composing` (`Ready`, `Waiting(why)`, `Off(why)`) says whether the viewer can write;
   - the picker has an "Emotes" tab, the space's `EmoteGroup`s with a search, and an "Emoji" tab, a
     short built-in list drawn with Segoe UI Emoji (a whole Unicode list is not worth a dependency);
-  - the space's own element sits on the left under the field, "Send" on the right.
+  - the space's own element sits on the left under the field, the options' gear then "Send" on the
+    right;
+  - the gear's menu is the space's own (`ChatOption`, `ChatPanel::set_options`), and the option
+    chosen comes back as `ChatPanelEvent::Option(id)`: the panel knows no service here either. No
+    option, no gear. Added on 2026-11-07 for "Reload 7TV emotes" (docs/twitch.md).
 
   The VOD replay and YouTube lives have no composer.
 - **In the Twitch space**:

@@ -1,7 +1,11 @@
 //! The panel's writing area, for a space that can send to its chat ([`ChatPanel::with_composer`]):
 //! the message field with its emote and emoji picker, and under it the space's own element on the
-//! left (a service's points) and "Send" on the right. A message leaves as
+//! left (a service's points), the chat's options and "Send" on the right. A message leaves as
 //! [`ChatPanelEvent::Send`]: the space sends it, the panel knows no protocol.
+//!
+//! The options are the gear left of "Send": the space names them ([`ChatPanel::set_options`]) and
+//! the one chosen comes back as [`ChatPanelEvent::Option`], so that the panel knows no service.
+//! Without any option the gear is not drawn.
 //!
 //! In the field, a known emote's code followed by a space (picked or typed) shows as its image: an
 //! atomic token whose text stays the code, so that what is sent is unchanged. Emoji are text.
@@ -19,6 +23,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{
   InlineToken, InlineTokenContext, Input, InputEvent, InputState, Textarea, TextareaState,
 };
+use gpui_component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_component::popover::Popover;
 use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 
@@ -42,12 +47,44 @@ const PICKER_BUTTON_SIZE: f32 = 31.;
 const PICKER_BUTTON: f32 = PICKER_BUTTON_SIZE + 8.;
 /// The length counter shows from this share of the limit on.
 const COUNTER_FROM: f32 = 0.8;
+/// Side of the options' gear button.
+const GEAR_SIZE: f32 = 26.;
 
 /// What the panel tells its page.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatPanelEvent {
   /// The viewer sent this text (trimmed, not empty).
   Send(String),
+  /// The viewer chose this option of the gear's menu, by its [`ChatOption::id`].
+  Option(SharedString),
+}
+
+/// An entry of the composer's options menu (the gear left of "Send"), in the menu's order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatOption {
+  /// Told back in [`ChatPanelEvent::Option`] when it is chosen; the space's own name for it.
+  pub id: SharedString,
+  /// What the menu shows, in the viewer's language.
+  pub label: SharedString,
+  /// Shown greyed and not choosable (the work it starts is already running).
+  pub disabled: bool,
+}
+
+impl ChatOption {
+  /// An option choosable now.
+  pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Self {
+    Self {
+      id: id.into(),
+      label: label.into(),
+      disabled: false,
+    }
+  }
+
+  /// The same option, greyed and not choosable.
+  pub fn disabled(mut self, disabled: bool) -> Self {
+    self.disabled = disabled;
+    self
+  }
 }
 
 /// A titled set of emotes in the picker (a channel's, a service's global ones…).
@@ -94,6 +131,8 @@ pub(super) struct Composer {
   /// The groups' emotes by code, the first group's winning: what the field draws as images.
   known: Rc<HashMap<SharedString, Emote>>,
   footer: Option<AnyView>,
+  /// The gear's menu, in its order; empty: no gear.
+  options: Vec<ChatOption>,
   state: Composing,
   tab: Tab,
   /// The picker's rows for the tab and the search, made again when either changes.
@@ -114,6 +153,7 @@ impl Composer {
       groups: Vec::new(),
       known: Rc::default(),
       footer: None,
+      options: Vec::new(),
       state: Composing::Waiting(t("Connecting to chat…", "Connexion au chat…").into()),
       tab: Tab::default(),
       rows: Vec::new(),
@@ -248,6 +288,18 @@ impl ChatPanel {
   pub fn set_footer(&mut self, footer: AnyView, cx: &mut Context<Self>) {
     if let Some(composer) = &mut self.composer {
       composer.footer = Some(footer);
+      cx.notify();
+    }
+  }
+
+  /// What the gear's menu offers, left of "Send"; empty (the default) draws no gear. Choosing one
+  /// emits [`ChatPanelEvent::Option`] with its id. Call it again to change a label or grey an
+  /// option out while its work runs.
+  pub fn set_options(&mut self, options: Vec<ChatOption>, cx: &mut Context<Self>) {
+    if let Some(composer) = &mut self.composer
+      && composer.options != options
+    {
+      composer.options = options;
       cx.notify();
     }
   }
@@ -453,6 +505,36 @@ impl ChatPanel {
           .update(cx, |this, cx| this.render_picker(cx))
           .unwrap_or_else(|_| div().into_any_element())
       });
+    // The options' gear. Its menu is built again at every opening, so a label or a greyed entry
+    // set meanwhile shows. The button is not disabled with the field: its options are about the
+    // chat (reloading emotes), not about writing, and the popover opens its trigger whatever the
+    // button's own state.
+    let options = composer.options.clone();
+    let chosen = cx.entity().downgrade();
+    let gear = (!options.is_empty()).then(|| {
+      Button::new("chat-options")
+        .ghost()
+        .with_size(px(GEAR_SIZE))
+        .size(px(GEAR_SIZE))
+        .child(gpui_component::Icon::new(Icon::Settings).size(px(16.)))
+        .tooltip(t("Chat options", "Options du chat"))
+        .dropdown_menu_with_anchor(Anchor::BottomRight, move |mut menu, _, _| {
+          for option in &options {
+            let (chosen, id) = (chosen.clone(), option.id.clone());
+            menu = menu.item(
+              PopupMenuItem::new(option.label.clone())
+                .disabled(option.disabled)
+                .on_click(move |_, _, cx| {
+                  let id = id.clone();
+                  chosen
+                    .update(cx, |_, cx| cx.emit(ChatPanelEvent::Option(id)))
+                    .ok();
+                }),
+            );
+          }
+          menu
+        })
+    });
     let counter = (length as f32 >= max as f32 * COUNTER_FROM).then(|| {
       div()
         .text_xs()
@@ -492,6 +574,7 @@ impl ChatPanel {
             .items_center()
             .child(div().flex_1().min_w_0().children(footer))
             .children(counter)
+            .children(gear)
             .child(
               Button::new("chat-send")
                 .primary()
@@ -718,6 +801,15 @@ mod tests {
     assert_eq!((found.len(), found.first()), (1, Some(&(3..6))));
     assert_eq!(emote_words("Pog  Pog ", &[], known), [0..3, 5..8]);
     assert!(emote_words("", &[], known).is_empty());
+  }
+
+  #[test]
+  fn an_option_greyed_out_differs_from_the_same_one_ready() {
+    // `set_options` only notifies when the list changed: an option greyed out must not compare
+    // equal to the one it replaces, or the gear's menu would keep offering it.
+    let ready = ChatOption::new("reload", "Reload");
+    assert!(!ready.disabled);
+    assert_ne!(vec![ready.clone().disabled(true)], vec![ready]);
   }
 
   #[test]
