@@ -2,15 +2,16 @@
 //! (Windows 11), applied to gpui-component's theme so its widgets follow. See docs/design.md.
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::panic::Location;
 use std::time::{Duration, Instant};
 
 use gpui::{
   AnyElement, App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId,
-  IntoElement, LayoutId, Pixels, Rgba, Task, Window, WindowAppearance, WindowBackgroundAppearance,
-  px, rgb,
+  IntoElement, LayoutId, Pixels, Rgba, Styled, Task, Window, WindowAppearance,
+  WindowBackgroundAppearance, WindowId, px, rgb,
 };
-use gpui_component::{Theme, ThemeMode, ThemeTokens};
+use gpui_component::{Root, Theme, ThemeMode, ThemeTokens};
 
 /// Fast transitions: hover, fades of small elements.
 pub const FAST: Duration = Duration::from_millis(150);
@@ -58,9 +59,14 @@ const BACKGROUND_TINT: f32 = 0.050;
 
 /// `hex` with a touch of the accent of the open space.
 fn accent_tinted(hex: u32, alpha: f32) -> Hsla {
+  tinted_by(ACCENT.get(), hex, alpha)
+}
+
+/// `hex` with a touch of `accent`.
+fn tinted_by(accent: Accent, hex: u32, alpha: f32) -> Hsla {
   let mut c = rgb(hex).blend(Rgba {
     a: BACKGROUND_TINT,
-    ..accent().into()
+    ..accent.base.into()
   });
   c.a = alpha;
   c.into()
@@ -147,9 +153,10 @@ impl Accent {
 }
 
 thread_local! {
-  // The accent of the open space, or the color it is at while it changes. Kept per thread
-  // rather than as a GPUI global so the palette functions below need no `cx`: they are called
-  // from every render, and GPUI renders on the UI thread only.
+  // The accent of the window being drawn (its space's), or the color it is at while it
+  // changes. Kept per thread rather than as a GPUI global so the palette functions below need
+  // no `cx`: they are called from every render, and GPUI renders on the UI thread only, one
+  // window at a time. Each window's render starts with [`enter_window`], which sets it.
   static ACCENT: Cell<Accent> = Cell::new(Accent::red());
 }
 
@@ -158,50 +165,125 @@ pub const ACCENT_TRANSITION: Duration = Duration::from_secs(1);
 /// Time between two steps of the accent's transition.
 const ACCENT_FRAME: Duration = Duration::from_millis(16);
 
-/// The transition of the accent under way: dropping it (a new transition) stops it.
-struct AccentTransition {
-  _task: Task<()>,
+/// Each window's accent: windows show different spaces, each in its own colors.
+#[derive(Default)]
+struct WindowAccents(HashMap<WindowId, WindowAccent>);
+
+impl gpui::Global for WindowAccents {}
+
+struct WindowAccent {
+  from: Accent,
+  to: Accent,
+  /// When the change from `from` to `to` started; `None` once done.
+  started: Option<Instant>,
+  /// Redraws the window while it changes; dropping it (a new change) stops it.
+  _task: Option<Task<()>>,
 }
 
-impl gpui::Global for AccentTransition {}
-
-/// Makes `accent` the app's accent at once and re-applies the theme so gpui-component's widgets
-/// follow. Windows must be refreshed afterwards (`cx.refresh_windows()`).
-pub fn set_accent(accent: Accent, cx: &mut App) {
-  if cx.has_global::<AccentTransition>() {
-    cx.remove_global::<AccentTransition>();
+impl WindowAccent {
+  /// The accent now, part way while it changes.
+  fn now(&self) -> Accent {
+    match self.started {
+      Some(started) if progress(started) < 1. => {
+        self.from.mix(self.to, ease_in_out_cubic(progress(started)))
+      }
+      _ => self.to,
+    }
   }
-  ACCENT.set(accent);
-  apply(cx);
 }
 
-/// Moves the accent to `accent` over [`ACCENT_TRANSITION`], and with it every color it tints
-/// (backgrounds, surfaces, gpui-component's theme); at once when motion is reduced. Each step
-/// refreshes every window.
-pub fn transition_accent(accent: Accent, cx: &mut App) {
-  let from = ACCENT.get();
-  if from == accent || cx.reduce_motion() {
-    set_accent(accent, cx);
+/// How far a change of accent started at `started` has gone, 0 to 1.
+fn progress(started: Instant) -> f32 {
+  (started.elapsed().as_secs_f32() / ACCENT_TRANSITION.as_secs_f32()).min(1.)
+}
+
+/// `window`'s accent now, `None` until it has one.
+pub fn window_accent(window: WindowId, cx: &App) -> Option<Accent> {
+  Some(cx.try_global::<WindowAccents>()?.0.get(&window)?.now())
+}
+
+/// Makes `accent` `window`'s accent at once. The window redraws after the current event (it may
+/// come from that window, which cannot be updated from inside it).
+pub fn set_accent(window: WindowId, accent: Accent, cx: &mut App) {
+  cx.default_global::<WindowAccents>().0.insert(
+    window,
+    WindowAccent {
+      from: accent,
+      to: accent,
+      started: None,
+      _task: None,
+    },
+  );
+  cx.defer(move |cx| repaint(window, cx));
+}
+
+/// Moves `window`'s accent to `accent` over [`ACCENT_TRANSITION`], and with it every color it
+/// tints (backgrounds, surfaces, gpui-component's theme); at once when motion is reduced. Other
+/// windows keep theirs.
+pub fn transition_accent(window: WindowId, accent: Accent, cx: &mut App) {
+  let from = window_accent(window, cx).filter(|from| *from != accent && !cx.reduce_motion());
+  let Some(from) = from else {
+    set_accent(window, accent, cx);
     return;
-  }
+  };
   let started = Instant::now();
   let task = cx.spawn(async move |cx| {
     loop {
       cx.background_executor().timer(ACCENT_FRAME).await;
-      let t = (started.elapsed().as_secs_f32() / ACCENT_TRANSITION.as_secs_f32()).min(1.);
-      ACCENT.set(if t < 1. {
-        from.mix(accent, ease_in_out_cubic(t))
-      } else {
-        accent
-      });
-      // `Theme::update` refreshes every window.
-      cx.update(|cx| Theme::update(cx, accent_colors));
-      if t >= 1. {
+      cx.update(|cx| repaint(window, cx));
+      if progress(started) >= 1. {
         break;
       }
     }
   });
-  cx.set_global(AccentTransition { _task: task });
+  cx.default_global::<WindowAccents>().0.insert(
+    window,
+    WindowAccent {
+      from,
+      to: accent,
+      started: Some(started),
+      _task: Some(task),
+    },
+  );
+}
+
+/// Redraws `window` in its accent now: its views, cached ones included, and the background of
+/// its `Root`, which gpui-component paints from the theme before the window's content renders
+/// (and so before [`enter_window`]).
+fn repaint(window: WindowId, cx: &mut App) {
+  let Some(accent) = window_accent(window, cx) else {
+    return;
+  };
+  let Some(handle) = cx.windows().into_iter().find(|w| w.window_id() == window) else {
+    return;
+  };
+  handle
+    .update(cx, |_, window, cx| {
+      if let Some(Some(root)) = window.root::<Root>() {
+        root.update(cx, |root, _| {
+          root.style().background = Some(tinted_by(accent, 0x121214, 1.).into());
+        });
+      }
+      window.refresh();
+    })
+    .ok();
+}
+
+/// Makes `window`'s accent the one the palette and gpui-component's theme give, for the window
+/// being drawn: the first thing each window's render does (a window of its own, or the window a
+/// mini-player belongs to). The theme is changed in place, without refreshing any window
+/// (nothing observes it); a window without an accent leaves things as they are.
+pub fn enter_window(window: WindowId, cx: &mut App) {
+  let Some(accent) = window_accent(window, cx) else {
+    return;
+  };
+  if ACCENT.replace(accent) == accent {
+    return;
+  }
+  let theme = Theme::global_mut(cx);
+  accent_colors(theme);
+  // Solid colors, as Peeby's theme sets them (see `with_accent`).
+  theme.tokens = ThemeTokens::from(&theme.colors);
 }
 
 fn ease_in_out_cubic(t: f32) -> f32 {

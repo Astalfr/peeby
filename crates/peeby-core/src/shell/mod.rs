@@ -169,14 +169,11 @@ impl Shell {
         }),
       ));
     }
-    // The window used last takes what has no window of its own; the accent is the whole app's,
-    // so it follows the window in front.
+    // The window used last takes what has no window of its own. The accent is each window's
+    // own (its tab's space), whichever is in front.
     subscriptions.push(cx.observe_window_activation(window, |shell, window, cx| {
       if window.is_window_active() {
         windows::used(shell.window, cx);
-        if let Some(tab) = shell.active {
-          theme::transition_accent(shell.spaces[tab.space].info(cx).accent, cx);
-        }
       }
     }));
     // Another player started in this window: the mini-player shows only the one that plays.
@@ -274,7 +271,7 @@ impl Shell {
       shell.active = Some(first);
       let space = &shell.spaces[first.space];
       space.show_tab(first.id, shell.window, cx);
-      theme::set_accent(space.info(cx).accent, cx);
+      theme::set_accent(shell.window, space.info(cx).accent, cx);
     }
     shell
   }
@@ -440,7 +437,7 @@ impl Shell {
     let space = self.spaces[tab.space].clone();
     space.show_tab(tab.id, self.window, cx);
     self.enter_page(cx);
-    theme::transition_accent(space.info(cx).accent, cx);
+    theme::transition_accent(self.window, space.info(cx).accent, cx);
     cx.notify();
   }
 
@@ -1883,6 +1880,8 @@ fn mark(window: &Window, cx: &mut App) -> impl IntoElement {
 
 impl Render for Shell {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // This window's accent, whatever another window drew in before.
+    theme::enter_window(self.window, cx);
     // Over everything while it plays; a click skips it.
     let splash = self.splash.as_mut().and_then(|s| s.render(window));
     if splash.is_none() {

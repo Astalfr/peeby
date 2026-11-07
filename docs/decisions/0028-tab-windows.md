@@ -72,8 +72,11 @@ five steps, each one shippable:
    - The last window in use behaves as the single one did: closed, it hides in the
      notification area (setting "Stay in the background"), else Peeby quits. Peeby quits when
      any of its windows really closes, since only the last one does.
-   - Each shell has its own mini-player, for its own tabs. The accent is the app's (a global
-     theme): it follows the window brought to the front.
+   - Each shell has its own mini-player, for its own tabs. Each window has its own accent,
+     its tab's space's (2026-11-07; it was the app's, following the window brought to the front,
+     so a click in a YouTube window turned a Twitch one red): gpui-component's theme is one
+     global, so each window's render starts by putting its accent in it (`theme::enter_window`,
+     in place, no refresh), and its `Root`'s background, painted before, is set per window.
    - A tab's right-click menu has (first in place of the drag-out, kept since) "Move to a new window" ("Déplacer dans une
      nouvelle fenêtre", disabled on a window's only tab): the tab leaves with its pages and its
      video (not to the mini-player), into a window of the same size 32 px right and down, or a

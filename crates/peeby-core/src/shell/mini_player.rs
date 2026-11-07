@@ -334,6 +334,8 @@ fn button(
 
 impl Render for MiniPlayer {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // The accent of the window it belongs to.
+    ui::theme::enter_window(self.main.window_id(), cx);
     let player = self.player(cx);
     if let Some(player) = &player
       && self.observed.as_ref().map(|(id, _)| *id) != Some(player.entity_id())
