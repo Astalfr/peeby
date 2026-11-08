@@ -63,6 +63,11 @@ has to come from somewhere else. Measured on 2026-11-05, anonymous (`archive_pro
 - While the recording plays, it is VOD playback (user's choice, 2026-11-05): its position is saved to
   the account like any VOD's (`progress::Saver`, ADR 0013), including where it was left on going back
   to the live. `minute-watched` is not sent: that is not the live on screen (ADR 0012).
+- While the live plays, its position is saved to the recording as well (user's report, 2026-11-08:
+  a live watched to the end left nothing on its VOD): the live's playhead is on the recording's
+  timeline (`now − started_at`, less how far it is behind the edge), so opening the VOD later
+  resumes where the viewer left the live, as on twitch.tv. Same saver, same moments (every 30 s
+  while playing, on pause, at the end, when the page goes).
 - The chat stays the live's.
 - No recording (VODs off, or none yet), or one Twitch refuses (subscribers only): the live still
   has its last 2 minutes.

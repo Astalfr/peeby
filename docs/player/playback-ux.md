@@ -172,7 +172,8 @@ recording uses the DVR controls, except that going back to the live, and a seek 
 the edge, restart mpv at its edge (a seek would lose the low latency); a quality change goes to the edge (the
 new quality's window starts then); a pause longer than the window resumes at the edge.
 - **Events.** Each switch emits `PlayerEvent::Rewound { rewound, at }` (the recording's position); the page
-  reads `PlayerView::rewound()`.
+  reads `PlayerView::rewound()`. On the live, `PlayerView::position()` is on the recording's timeline too
+  (Twitch saves it as the recording's position).
 
 `PlayerView::set_notice(Option<SharedString>)` puts the page's message over the picture, in place of
 "Chargement…". It is generic: Twitch uses it while an ad is removed and no backup stream covers it, with

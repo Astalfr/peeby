@@ -139,8 +139,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   never destroy a window while Peeby runs, its pages may live on in another). Reading YouTube's inbox clears its unseen count on youtube.com: read it only when
   the count grows.
 - Watch progress lives on the account (ADR 0013): playing a YouTube video signed in writes its history and resume
-  position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`, and so does going back in a Twitch
-  live (its recording is a VOD, ADR 0026). Ask the user before a playback test.
+  position (stats pings), a Twitch VOD with the auth-token its `viewingHistory`, and so does watching a Twitch live
+  that has a recording, at its edge or back in it (the recording is a VOD, ADR 0026). Ask the user before a playback test.
 
 ## Twitch (docs/twitch-plan.md, ADR 0010)
 - The space needs no sign-in: its catalog is anonymous GQL (`twitch::catalog`, ADR 0016). The web `auth-token`

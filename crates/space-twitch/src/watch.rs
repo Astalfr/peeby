@@ -162,7 +162,8 @@ pub struct WatchView {
   rewind_asked: bool,
   /// Serves the recording's playlists.
   archive_proxy: Option<Proxy>,
-  /// Saves the position in the recording while it plays, as for any VOD (ADR 0013).
+  /// Saves the position in the recording, as for any VOD (ADR 0013): while it plays, and while
+  /// the live does (its playhead is on the recording's timeline).
   archive_saver: Option<progress::Saver>,
   focused: bool,
   /// A multistream's tile: its multistream lays it out and follows its raids.
@@ -221,8 +222,8 @@ impl WatchView {
         match *event {
           // Leaving the recording for the live: where it was left.
           PlayerEvent::Rewound { rewound: false, at } => saver.save_at(at, cx),
-          _ if player.read(cx).rewound() => saver.on_event(event, &player, cx),
-          _ => {}
+          // The live too: its playhead is on the recording's timeline.
+          _ => saver.on_event(event, &player, cx),
         }
       }
       match *event {
@@ -251,9 +252,7 @@ impl WatchView {
       if let Some(saver) = &mut this.saver {
         saver.save(&player, cx);
       }
-      if let Some(saver) = &mut this.archive_saver
-        && player.read(cx).rewound()
-      {
+      if let Some(saver) = &mut this.archive_saver {
         saver.save(&player, cx);
       }
     })
@@ -862,9 +861,7 @@ impl WatchView {
           if let Some(saver) = &mut this.saver {
             saver.tick(&player, cx);
           }
-          if let Some(saver) = &mut this.archive_saver
-            && player.read(cx).rewound()
-          {
+          if let Some(saver) = &mut this.archive_saver {
             saver.tick(&player, cx);
           }
         });

@@ -299,7 +299,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
     first seek, found by the user in the app on 2026-11-05.
   - **Twitch** ([ADR 0026](decisions/0026-twitch-live-rewind-from-its-recording.md)): a live whose
     channel keeps its VODs gets the shared player's `Rewind`, its recording through a second proxy, with
-    the recording's position saved to the account as a VOD's; `minute-watched` pauses meanwhile.
+    the recording's position saved to the account as a VOD's (from the live too); `minute-watched` pauses meanwhile.
   - Tests: 8 new (formats on the live fixture; the proxy's paths, ladder, segment length, playlist, edge
     and search for the first segment kept; a live's recording on 2 new fixtures).
   - Verified anonymously:
