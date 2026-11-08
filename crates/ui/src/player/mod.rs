@@ -26,10 +26,10 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, ClickEvent, Context, Corners, DispatchPhase,
-  Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent, KeyUpEvent,
-  MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point, ScrollEvent,
-  SharedString, Task, WeakEntity, Window, WindowId, canvas, div, ease_out_quint, img,
-  linear_color_stop, linear_gradient, px, relative,
+  Div, Entity, EventEmitter, FocusHandle, FontWeight, Global, ImageSource, KeyDownEvent,
+  KeyUpEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Point,
+  ScrollEvent, SharedString, Stateful, Task, WeakEntity, Window, WindowId, canvas, div,
+  ease_out_quint, img, linear_color_stop, linear_gradient, px, relative,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::tooltip::Tooltip;
@@ -370,6 +370,9 @@ pub struct PlayerView {
   muted: bool,
   /// Another page is on top: the player stays paused, even if it starts after being covered.
   covered: bool,
+  /// A multistream's secondary picture ([`PlayerView::set_secondary`]): always muted, it never
+  /// takes over its window and draws only its picture.
+  secondary: bool,
   osd: Option<SharedString>,
   osd_task: Option<Task<()>>,
   controls_visible: bool,
@@ -512,6 +515,7 @@ impl PlayerView {
       boosted: false,
       muted: prefs.muted,
       covered: false,
+      secondary: false,
       osd: None,
       osd_task: None,
       controls_visible: true,
@@ -1107,7 +1111,7 @@ impl PlayerView {
   /// The page now shows in another window (its tab was dragged there): playing, it takes over
   /// that window; paused, it only leaves the previous one's place.
   fn moved_window(&mut self, cx: &mut Context<Self>) {
-    if !self.started {
+    if !self.started || self.secondary {
       return;
     }
     if !self.paused {
@@ -1149,6 +1153,45 @@ impl PlayerView {
       tracing::info!("watch page covered: player paused");
       player.set_paused(true);
     }
+  }
+
+  /// Makes the player a multistream's secondary picture, or its main one again. A secondary
+  /// player is always muted (the viewer's own mute stays for when it is main again), never
+  /// becomes the one playing in its window ([`NowPlaying`]: its sound, the mini-player, a
+  /// service's watch time), and draws only its picture, its spinner and its notice: its page
+  /// draws what goes over it and takes its clicks. One playing its live's recording goes back to
+  /// the live. Made main again, a playing one takes over its window.
+  pub fn set_secondary(&mut self, secondary: bool, cx: &mut Context<Self>) {
+    if self.secondary == secondary {
+      return;
+    }
+    self.secondary = secondary;
+    let muted = secondary || self.muted;
+    self.with_player(|p| p.set_muted(muted));
+    if secondary {
+      self.menu = None;
+      self.help = false;
+      self.stats = false;
+      self.context_menu = None;
+      if self.rewound {
+        self.play_live(cx);
+      }
+      let me = cx.entity().downgrade();
+      if let Some(playing) = cx.try_global::<NowPlaying>() {
+        let mut playing = playing.0.clone();
+        playing.retain(|(_, p)| *p != me);
+        // At once: the player made main next (a swap) must not find this one there.
+        cx.set_global(NowPlaying(playing));
+      }
+    } else if self.started && !self.paused {
+      self.take_over(cx);
+    }
+    cx.notify();
+  }
+
+  /// Whether the player is a multistream's secondary picture ([`Self::set_secondary`]).
+  pub fn is_secondary(&self) -> bool {
+    self.secondary
   }
 
   /// Switches theater mode on or off (the corners follow).
@@ -1374,7 +1417,7 @@ impl PlayerView {
     // A new mpv starts with an empty cache.
     self.cached = 0.0;
     player.set_volume(self.volume);
-    if self.muted {
+    if self.muted || self.secondary {
       player.set_muted(true);
     }
     if self.speed != 1.0 && !self.is_live() {
@@ -1402,7 +1445,9 @@ impl PlayerView {
         self.buffering = false;
         if !self.started {
           self.started = true;
-          self.take_over(cx);
+          if !self.secondary {
+            self.take_over(cx);
+          }
           cx.emit(PlayerEvent::Started);
         }
       }
@@ -1471,6 +1516,8 @@ impl PlayerView {
         self.buffering = buffering;
         self.watch_stall(cx);
       }
+      // A secondary player is muted by its page, not by the viewer.
+      Event::Muted(_) if self.secondary => {}
       Event::Muted(muted) => self.muted = muted,
       Event::Tracks(tracks) => self.on_tracks(tracks, cx),
       Event::Chapters(chapters) => self.on_chapters(chapters),
@@ -3121,6 +3168,61 @@ pub fn format_time(seconds: f64) -> String {
   }
 }
 
+impl PlayerView {
+  /// A secondary player ([`Self::set_secondary`]): its picture, with its page's notice, a
+  /// spinner while it loads, or why it cannot play; no controls, no handlers.
+  fn render_secondary(&self, radii: Corners<Pixels>) -> Stateful<Div> {
+    let message = if self.failed {
+      self.status.clone()
+    } else {
+      self.notice.clone()
+    };
+    let overlay = div()
+      .absolute()
+      .inset_0()
+      .flex()
+      .items_center()
+      .justify_center()
+      .p_2();
+    let overlay = match message {
+      Some(message) => Some(
+        overlay.child(
+          div()
+            .px_2()
+            .py_1()
+            .rounded_md()
+            .bg(gpui::black().opacity(0.6))
+            .text_xs()
+            .text_color(gpui::white())
+            .line_clamp(3)
+            .child(message),
+        ),
+      ),
+      None if self.player.is_none() || self.buffering => {
+        Some(overlay.child(crate::widgets::loader(28., gpui::white())))
+      }
+      None => None,
+    };
+    div()
+      .id("player")
+      .size_full()
+      .relative()
+      .rounded_tl(radii.top_left)
+      .rounded_tr(radii.top_right)
+      .rounded_br(radii.bottom_right)
+      .rounded_bl(radii.bottom_left)
+      .bg(gpui::black())
+      .children(
+        self
+          .video
+          .clone()
+          .filter(|_| !self.in_pip && !self.failed)
+          .map(|video| div().absolute().inset_0().child(video)),
+      )
+      .children(overlay)
+  }
+}
+
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let id = window.window_handle().window_id();
@@ -3140,6 +3242,9 @@ impl Render for PlayerView {
     let radii = corner_radii(window, self.theater || self.layout == Layout::Page);
     if let Some(video) = &self.video {
       video.update(cx, |video, _| video.set_corner_radii(radii));
+    }
+    if self.secondary {
+      return self.render_secondary(radii);
     }
 
     let mut root = div()

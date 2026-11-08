@@ -3,6 +3,10 @@
 //! [`ChatPanel`] that shows them, what a channel pins over it ([`pinned_stack`]: predictions,
 //! polls), and the watch layout with a chat column. Nothing here knows
 //! IRC or InnerTube: a space owns the connection and feeds the panel.
+//!
+//! Several chats can also show as one (a multistream's merged chat): each source's panel
+//! mirrors what it gets to the merged one ([`ChatPanel::set_mirror`]), every line marked with
+//! its [`ChatSource`].
 
 mod emoji;
 pub mod fake;
@@ -21,7 +25,8 @@ use crate::picture::Picture;
 pub use layout::{CHAT_WIDTH, chat_reopen_button, watch_layout};
 pub use paint::{Paint, PaintFill, image_colors};
 pub use panel::{
-  ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES, Viewer,
+  ChatOption, ChatPanel, ChatPanelEvent, Composing, EmoteGroup, MAX_MESSAGES, Mirror, Viewer,
+  Writing,
 };
 pub use pinned::{LEAD, OnToggle, Pinned, Unfolded, pinned_stack};
 pub use user::{UserLookup, UserProfile, UserQuery, same_user};
@@ -41,6 +46,22 @@ pub struct ChatMessage {
   pub kind: MessageKind,
   /// Removed by a moderator: shown greyed.
   pub deleted: bool,
+  /// The chat it comes from, in a merged chat: shown before the line; `None` elsewhere.
+  pub source: Option<std::rc::Rc<ChatSource>>,
+}
+
+/// One of the chats a merged chat shows (a multistream's channel), marking its lines.
+#[derive(Clone)]
+pub struct ChatSource {
+  /// The channel's key in its service (a Twitch login): the streamer its chatters mention, and
+  /// what scopes its moderation ([`ChatEvent::ClearUserIn`], [`ChatEvent::ClearSource`]).
+  pub key: SharedString,
+  /// The channel's name, on hover.
+  pub name: SharedString,
+  /// Its color, along its lines.
+  pub color: Hsla,
+  /// Its picture, before its lines.
+  pub avatar: Option<Picture>,
 }
 
 /// The author of a message.
@@ -165,8 +186,13 @@ pub enum ChatEvent {
   Delete(SharedString),
   /// Every message of a user removed (a ban or a timeout), by user id.
   ClearUser(SharedString),
+  /// In a merged chat, the messages of a user (by id) from one source (by
+  /// [`ChatSource::key`]) removed: a ban in one channel.
+  ClearUserIn(SharedString, SharedString),
   /// The whole chat cleared.
   Clear,
+  /// In a merged chat, one source's messages removed (by [`ChatSource::key`]).
+  ClearSource(SharedString),
   /// The room's modes, as the labels to show ("Mode lent : 30 s"…), replacing the previous ones.
   State(Vec<SharedString>),
   /// The connection's state when it is not simply connected ("Connexion…", "Reconnexion…").
@@ -192,6 +218,7 @@ impl ChatMessage {
       time: SystemTime::now(),
       kind: MessageKind::Normal,
       deleted: false,
+      source: None,
     }
   }
 }

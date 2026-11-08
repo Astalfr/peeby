@@ -12,11 +12,18 @@
 //!
 //! The layout is `ui::chat::watch_layout`: theater mode gives the whole page to the player and the
 //! chat, flush (`Settings::theater`, shared). The channel's name opens its page.
+//!
+//! A multistream (`super::multistream`) holds one page per live as a tile ([`WatchView::tile`]):
+//! it lays out their players and chats itself, and makes one of them the main live
+//! ([`WatchView::set_main`]); the others play muted, in a small quality, without earning points.
+//! A tile's raid is the multistream's to follow ([`WatchEvent::Raid`]).
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
-use gpui::{Context, Entity, FontWeight, SharedString, Subscription, Task, Window, div, px};
+use gpui::{
+  Context, Entity, EventEmitter, FontWeight, SharedString, Subscription, Task, Window, div, px,
+};
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use twitch::catalog::Catalog;
 use twitch::gql::Channel;
@@ -38,6 +45,25 @@ use peeby_core::shell::space::middle_click;
 const DECODING_EVERY: Duration = Duration::from_secs(4);
 /// How often a live's viewers and category are read again.
 const INFO_EVERY: Duration = Duration::from_secs(60);
+/// Highest quality of a multistream's secondary live: its tile is a fifth of the page wide.
+pub const SECONDARY_HEIGHT: u32 = 480;
+
+/// What a multistream's tile tells its multistream.
+pub enum WatchEvent {
+  /// The raid the viewer follows has gone to this channel (a login): the tile should play it.
+  Raid(String),
+}
+
+/// A live's name, picture and line, for a multistream's tiles and chat tabs.
+#[derive(Clone, Default)]
+pub struct Summary {
+  /// The channel's shown name (its login until its header is read).
+  pub name: String,
+  /// Its picture's URL.
+  pub avatar: Option<String>,
+  /// Category and viewers.
+  pub line: Option<String>,
+}
 
 /// What the page plays.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,8 +165,14 @@ pub struct WatchView {
   /// Saves the position in the recording while it plays, as for any VOD (ADR 0013).
   archive_saver: Option<progress::Saver>,
   focused: bool,
+  /// A multistream's tile: its multistream lays it out and follows its raids.
+  tile: bool,
+  /// The highest quality while a multistream's secondary live ([`SECONDARY_HEIGHT`]).
+  height_cap: Option<u32>,
   _tasks: Vec<Task<()>>,
 }
+
+impl EventEmitter<WatchEvent> for WatchView {}
 
 impl WatchView {
   pub fn new(
@@ -148,6 +180,30 @@ impl WatchView {
     client: twitch::Client,
     catalog: Catalog,
     nav: Nav,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    Self::make(kind, client, catalog, nav, None, cx)
+  }
+
+  /// A multistream's tile playing `login`'s live, its `main` one or a secondary one.
+  pub fn tile(
+    login: String,
+    client: twitch::Client,
+    catalog: Catalog,
+    nav: Nav,
+    main: bool,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    Self::make(Kind::Live(login), client, catalog, nav, Some(main), cx)
+  }
+
+  /// The page, or a multistream's tile when `tile` says whether it is the main live.
+  fn make(
+    kind: Kind,
+    client: twitch::Client,
+    catalog: Catalog,
+    nav: Nav,
+    tile: Option<bool>,
     cx: &mut Context<Self>,
   ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
@@ -223,8 +279,15 @@ impl WatchView {
       archive_proxy: None,
       archive_saver: None,
       focused: false,
+      tile: tile.is_some(),
+      height_cap: (tile == Some(false)).then_some(SECONDARY_HEIGHT),
       _tasks: Vec::new(),
     };
+    if tile == Some(false) {
+      view
+        .player
+        .update(cx, |player, cx| player.set_secondary(true, cx));
+    }
     match view.kind.clone() {
       Kind::Live(login) => {
         let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
@@ -277,16 +340,25 @@ impl WatchView {
         // The raid the viewer follows opens the raided channel's live, after this event.
         cx.subscribe(&points, |this, _, event: &PointsEvent, cx| {
           let PointsEvent::Raid(login) = event;
+          if this.tile {
+            cx.emit(WatchEvent::Raid(login.clone()));
+            return;
+          }
           let (nav, route) = (this.nav.clone(), Route::Watch(login.clone()));
           cx.defer(move |cx| nav.open(route, cx));
         })
         .detach();
+        if tile == Some(false) {
+          points.update(cx, |points, cx| points.set_earning(false, cx));
+        }
         let footer = cx.new(|cx| PointsFooter::new(points.clone(), cx));
         panel.update(cx, |p, cx| {
           p.set_footer(footer.into(), cx);
           p.set_pinned(points.clone().into(), cx);
         });
-        hide_on_request(&panel, cx);
+        if !view.tile {
+          hide_on_request(&panel, cx);
+        }
         view.chat = Some(panel);
         view.points = Some(points);
         view.start_live(login, cx)
@@ -316,11 +388,62 @@ impl WatchView {
     self.player.clone()
   }
 
-  fn max_height(cx: &Context<Self>) -> u32 {
-    Settings::get(cx)
+  /// A live's chat, or a VOD's replayed.
+  pub fn chat(&self) -> Option<Entity<ChatPanel>> {
+    self.chat.clone()
+  }
+
+  /// The channel's login (a live's).
+  pub fn login(&self) -> String {
+    self.login_hint()
+  }
+
+  /// The live's name, picture and line, as far as they are known.
+  pub fn summary(&self) -> Summary {
+    match &self.header {
+      Some(header) => Summary {
+        name: header.name.clone(),
+        avatar: header.avatar.clone(),
+        line: header.line.clone(),
+      },
+      None => Summary {
+        name: self.login_hint(),
+        ..Summary::default()
+      },
+    }
+  }
+
+  /// Makes a multistream's tile its main live, or a secondary one: the main one plays with its
+  /// sound in the quality of the settings and earns points; a secondary one plays muted, at most
+  /// [`SECONDARY_HEIGHT`] high, without earning.
+  pub fn set_main(&mut self, main: bool, cx: &mut Context<Self>) {
+    self.height_cap = (!main).then_some(SECONDARY_HEIGHT);
+    self
+      .player
+      .update(cx, |player, cx| player.set_secondary(!main, cx));
+    if let Some(points) = &self.points {
+      points.update(cx, |points, cx| points.set_earning(main, cx));
+    }
+    let height = self.max_height(cx);
+    let wanted = self
+      .qualities
+      .iter()
+      .position(|(_, h)| h.is_some_and(|h| h <= height));
+    if let Some(index) = wanted
+      && self.player.read(cx).quality() != Some(index)
+    {
+      self
+        .player
+        .update(cx, |player, cx| player.set_quality(index, cx));
+    }
+  }
+
+  fn max_height(&self, cx: &Context<Self>) -> u32 {
+    let height = Settings::get(cx)
       .twitch
       .max_height
-      .unwrap_or(play::DEFAULT_HEIGHT)
+      .unwrap_or(play::DEFAULT_HEIGHT);
+    self.height_cap.map_or(height, |cap| cap.min(height))
   }
 
   fn fail(&mut self, error: &twitch::Error, cx: &mut Context<Self>) {
@@ -386,12 +509,8 @@ impl WatchView {
           this.keep_archive(archive);
           match play {
             Some(Ok(proxy)) => {
-              let (mut source, qualities) = play::proxied(
-                &proxy,
-                true,
-                Self::max_height(cx),
-                &Settings::get(cx).player,
-              );
+              let (mut source, qualities) =
+                play::proxied(&proxy, true, this.max_height(cx), &Settings::get(cx).player);
               // Low latency: closer to the edge than where mpv starts, and back there after a stall.
               source.catch_up = catch_up.then_some(play::CATCH_UP_BUFFER);
               this.proxy = Some(proxy);
@@ -466,7 +585,7 @@ impl WatchView {
           let (recording, _) = play::proxied(
             &proxy,
             false,
-            Self::max_height(cx),
+            this.max_height(cx),
             &Settings::get(cx).player,
           );
           match viewing {
@@ -670,7 +789,7 @@ impl WatchView {
               let (mut source, qualities) = play::proxied(
                 &proxy,
                 false,
-                Self::max_height(cx),
+                this.max_height(cx),
                 &Settings::get(cx).player,
               );
               source.previews = storyboard.and_then(Result::ok).and_then(play::previews);
@@ -796,7 +915,7 @@ impl WatchView {
           }
           match play {
             Some(Ok(clip)) => {
-              let source = play::clip(&clip, Self::max_height(cx), &Settings::get(cx).player);
+              let source = play::clip(&clip, this.max_height(cx), &Settings::get(cx).player);
               this.start_source(source, clicked, cx);
             }
             Some(Err(e)) => this.fail(&e, cx),

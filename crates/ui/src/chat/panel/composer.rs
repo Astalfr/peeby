@@ -107,6 +107,20 @@ pub struct EmoteGroup {
   pub emotes: Vec<Emote>,
 }
 
+/// How a panel writes ([`ChatPanel::writing`]), for another to write the same way.
+pub struct Writing {
+  composer: Option<Composed>,
+  pinned: Option<AnyView>,
+}
+
+/// What a composer writes with, shared.
+struct Composed {
+  state: Composing,
+  known: Rc<HashMap<SharedString, Emote>>,
+  groups: Rc<Vec<EmoteGroup>>,
+  footer: Option<AnyView>,
+}
+
 /// Whether the viewer can write now.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Composing {
@@ -138,7 +152,7 @@ pub(super) struct Composer {
   /// Made at the first render (it needs the window), as the search field.
   input: Option<Entity<TextareaState>>,
   search: Option<Entity<InputState>>,
-  groups: Vec<EmoteGroup>,
+  groups: Rc<Vec<EmoteGroup>>,
   /// The groups' emotes by code, the first group's winning: what the field draws as images.
   known: Rc<HashMap<SharedString, Emote>>,
   footer: Option<AnyView>,
@@ -161,7 +175,7 @@ impl Composer {
       max_chars,
       input: None,
       search: None,
-      groups: Vec::new(),
+      groups: Rc::default(),
       known: Rc::default(),
       footer: None,
       options: Vec::new(),
@@ -289,7 +303,7 @@ impl ChatPanel {
           .or_insert_with(|| emote.clone());
       }
       composer.known = Rc::new(known);
-      composer.groups = groups;
+      composer.groups = Rc::new(groups);
       composer.make_rows(cx);
       cx.notify();
     }
@@ -311,6 +325,61 @@ impl ChatPanel {
       && composer.options != options
     {
       composer.options = options;
+      cx.notify();
+    }
+  }
+
+  /// How the panel writes: its state, its emotes, its footer and what it pins, for another
+  /// panel to write the same way ([`Self::write_like`]). Cheap: shared, not copied.
+  pub fn writing(&self) -> Writing {
+    Writing {
+      composer: self.composer.as_ref().map(|c| Composed {
+        state: c.state.clone(),
+        known: c.known.clone(),
+        groups: c.groups.clone(),
+        footer: c.footer.clone(),
+      }),
+      pinned: self.pinned.clone(),
+    }
+  }
+
+  /// Writes as another panel does ([`Self::writing`]): a merged chat writing to one of its
+  /// channels. Cheap when nothing changed: call it each time that panel changes. What is sent
+  /// still leaves as this panel's [`ChatPanelEvent::Send`], which its page hands to the other's.
+  pub fn write_like(&mut self, writing: Writing, cx: &mut Context<Self>) {
+    let mut changed = false;
+    if let (
+      Some(mine),
+      Some(Composed {
+        state,
+        known,
+        groups,
+        footer,
+      }),
+    ) = (&mut self.composer, writing.composer)
+    {
+      if mine.state != state {
+        mine.state = state;
+        changed = true;
+      }
+      if !Rc::ptr_eq(&mine.known, &known) {
+        mine.known = known;
+        mine.groups = groups;
+        mine.make_rows(cx);
+        changed = true;
+      }
+      let id = |f: &Option<AnyView>| f.as_ref().map(AnyView::entity_id);
+      if id(&mine.footer) != id(&footer) {
+        mine.footer = footer;
+        changed = true;
+      }
+    }
+    let id = |p: &Option<AnyView>| p.as_ref().map(AnyView::entity_id);
+    if id(&self.pinned) != id(&writing.pinned) {
+      self.pinned = writing.pinned;
+      changed = true;
+    }
+    if changed {
       cx.notify();
     }
   }

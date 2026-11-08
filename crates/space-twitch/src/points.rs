@@ -11,6 +11,8 @@
 //!
 //! Every minute the live really plays (mpv neither paused nor buffering), Peeby reports it to
 //! Twitch as its web player does (`twitch::spade`): without it, watching earns no points.
+//! In a multistream, only the main live earns ([`PointsView::set_earning`]): the others neither
+//! report minutes nor claim their bonus on their own; their points can still be spent.
 //!
 //! The bonus chest is not claimed by Peeby's own calls: Twitch's integrity check refuses its
 //! mutation outside the browser (docs/twitch.md, "Channel points"). It is clicked in twitch.tv's
@@ -264,6 +266,9 @@ pub struct PointsView {
   backend: Backend,
   /// The page's player: minutes are reported only while it plays.
   player: WeakEntity<PlayerView>,
+  /// The live earns points: its minutes are reported and its bonus claimed on its own. Off for
+  /// a multistream's secondary lives.
+  earning: bool,
   /// The last watch-time report failed (the next failures log at debug).
   report_failing: bool,
   points: Option<Points>,
@@ -344,6 +349,7 @@ impl PointsView {
       login,
       backend,
       player,
+      earning: true,
       report_failing: false,
       points: None,
       bonus_hidden: false,
@@ -466,6 +472,23 @@ impl PointsView {
       }
     }));
     view
+  }
+
+  /// Whether the live earns points (a multistream's main live): its minutes watched are
+  /// reported and its bonus claimed on its own. Made to earn again, a waiting bonus is claimed.
+  pub fn set_earning(&mut self, earning: bool, cx: &mut Context<Self>) {
+    if self.earning == earning {
+      return;
+    }
+    self.earning = earning;
+    if earning {
+      self.auto_claim(cx);
+    } else {
+      // An automatic claim waiting for its delay; one on its way goes through.
+      if !self.claiming {
+        self.claim_task = None;
+      }
+    }
   }
 
   /// Reads the balance and the predictions again now (the fake chat, after a change), even when
@@ -869,6 +892,7 @@ impl PointsView {
   /// [`AUTO_CLAIM_TRIES`] times per bonus. Never for the fake channel (it would open the browser).
   fn auto_claim(&mut self, cx: &mut Context<Self>) {
     if !Settings::get(cx).twitch.auto_claim_bonus.unwrap_or(true)
+      || !self.earning
       || self.claiming
       || self.claim_task.is_some()
       || self.auth_token().is_none()
@@ -888,8 +912,10 @@ impl PointsView {
       this
         .update(cx, |this, cx| {
           this.claim_task = None;
-          // Still the same bonus, still waiting.
-          if this.points.as_ref().and_then(|p| p.claim.as_deref()) == Some(id.as_str()) {
+          // Still the same bonus, still waiting, still the main live.
+          if this.earning
+            && this.points.as_ref().and_then(|p| p.claim.as_deref()) == Some(id.as_str())
+          {
             this.claim_bonus(cx);
           }
         })
@@ -1006,7 +1032,7 @@ impl PointsView {
   ) -> Option<impl Future<Output = Option<twitch::Result<()>>> + use<>> {
     // Never for the fake channel: nobody watches a live there.
     let client = self.backend.twitch()?;
-    let points = self.points.as_ref().filter(|_| !self.off)?;
+    let points = self.points.as_ref().filter(|_| !self.off && self.earning)?;
     // Only the player that started last in its window (the one on screen there or in its
     // mini-player): one live at a time per window, as one per browser tab on twitch.tv.
     let playing = self.player.upgrade().is_some_and(|player| {

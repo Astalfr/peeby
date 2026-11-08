@@ -106,6 +106,8 @@ icons! {
   Link => "link",
   PanelRightClose => "panel-right-close",
   PanelRightOpen => "panel-right-open",
+  Multistream => "layout-panel-top",
+  Close => "close",
 }
 
 macro_rules! files {

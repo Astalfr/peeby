@@ -7,7 +7,8 @@
 //! A history of pages per tab (ADR 0015, ADR 0019): "Suivies" (the account's sign-in card, then
 //! the Helix card until connected), "Parcourir" or the search, then categories and lives. With Helix, the
 //! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
-//! the meantime show in the bell ([`bell`]).
+//! the meantime show in the bell ([`bell`]). The sidebar's "Multistream" plays up to four lives at
+//! once ([`multistream`], ADR 0033).
 //! Debug builds add a fake chat to the sidebar ([`fake_chat`]): the live chat's features without
 //! a channel nor the network.
 
@@ -22,6 +23,7 @@ mod follow;
 mod following;
 mod hype_train;
 mod login;
+mod multistream;
 mod play;
 mod points;
 mod polls;
@@ -58,6 +60,7 @@ use cards::Avatars;
 use channel::ChannelView;
 use following::FollowingView;
 use login::{AccountCard, LoginView, SignedIn};
+use multistream::MultistreamView;
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::{
   Avatar, HoverCard, LiveEntry, Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
@@ -93,6 +96,8 @@ pub enum Route {
   },
   /// The search page.
   Search,
+  /// "Multistream": several lives at once.
+  Multistream,
   /// A channel's page (its VODs and clips), by login.
   Channel(String),
   /// A channel's live, by login.
@@ -149,12 +154,19 @@ impl Route {
     if *self == Self::FakeChat {
       return true;
     }
-    matches!(self, Self::Following | Self::Browse | Self::Search)
+    matches!(
+      self,
+      Self::Following | Self::Browse | Self::Search | Self::Multistream
+    )
   }
 
-  /// Pages with a player: a sidebar page opened after them drops their view.
+  /// Pages with a player: a sidebar page opened after them drops their view (the multistream's
+  /// lineup stays with the space).
   fn plays(&self) -> bool {
-    matches!(self, Self::Watch(_) | Self::Vod { .. } | Self::Clip(_))
+    matches!(
+      self,
+      Self::Watch(_) | Self::Vod { .. } | Self::Clip(_) | Self::Multistream
+    )
   }
 
   /// The tab's label on this page, before a page sets its own (a VOD's title).
@@ -164,6 +176,7 @@ impl Route {
       Self::Browse => t("Browse", "Parcourir").into(),
       Self::Category { name, .. } => name.clone().into(),
       Self::Search => t("Search", "Recherche").into(),
+      Self::Multistream => "Multistream".into(),
       Self::Channel(login) | Self::Watch(login) => login.clone().into(),
       Self::Vod { .. } => t("Video", "Vidéo").into(),
       Self::Clip(_) => "Clip".into(),
@@ -293,6 +306,9 @@ pub struct TwitchSpace {
   settings: Option<Entity<SettingsView>>,
   /// The account's flash in the settings, after the sidebar's "Sign in".
   account_flash: Flash,
+  /// The multistream's lives (the main one first), kept while Peeby runs: its page finds them
+  /// again when it is built again.
+  multistream: Vec<String>,
   _login_subscription: Option<Subscription>,
 }
 
@@ -326,6 +342,7 @@ impl TwitchSpace {
       login_message: None,
       settings: None,
       account_flash: Flash::default(),
+      multistream: Vec::new(),
       _login_subscription: None,
     };
     space.set_auth_token(secrets.auth_token, cx);
@@ -678,6 +695,11 @@ impl TwitchSpace {
       Route::Search => cx
         .new(|cx| SearchView::new(nav, catalog, window, cx))
         .into(),
+      Route::Multistream => {
+        let lineup = self.multistream.clone();
+        cx.new(|cx| MultistreamView::new(nav, client, catalog, lineup, cx))
+          .into()
+      }
       Route::Channel(login) => {
         let login = login.clone();
         cx.new(|cx| ChannelView::new(nav, catalog, client, login, cx))
@@ -759,17 +781,25 @@ impl TwitchSpace {
     }
   }
 
-  /// The player of the page `tab` shows, or shows the settings over.
+  /// The player of the page `tab` shows, or shows the settings over: a multistream's main one.
   fn top_player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
-    let watch = self
+    let view = self.tabs.get(tab)?.page()?.view.clone()?;
+    match view.downcast::<WatchView>() {
+      Ok(watch) => Some(watch.read(cx).player()),
+      Err(view) => view.downcast::<MultistreamView>().ok()?.read(cx).player(cx),
+    }
+  }
+
+  /// The multistream the page `tab` shows, if it does.
+  fn top_multistream(&self, tab: TabId) -> Option<Entity<MultistreamView>> {
+    self
       .tabs
       .get(tab)?
       .page()?
       .view
       .clone()?
-      .downcast::<WatchView>()
-      .ok()?;
-    Some(watch.read(cx).player())
+      .downcast::<MultistreamView>()
+      .ok()
   }
 
   /// The route of a sidebar entry.
@@ -777,6 +807,7 @@ impl TwitchSpace {
     match id {
       "following" => Some(Route::Following),
       "browse" => Some(Route::Browse),
+      "multistream" => Some(Route::Multistream),
       #[cfg(debug_assertions)]
       "fake-chat" => Some(Route::FakeChat),
       _ => id
@@ -1038,9 +1069,11 @@ impl Space for TwitchSpace {
     &mut self.tabs
   }
 
-  /// A covered player pauses.
+  /// A covered player pauses; a multistream's every one, its row's playing on once shown again.
   fn cover(&self, tab: TabId, covered: bool, cx: &mut Context<Self>) {
-    if let Some(player) = self.top_player(tab, cx) {
+    if let Some(multistream) = self.top_multistream(tab) {
+      multistream.update(cx, |view, cx| view.set_covered(covered, cx));
+    } else if let Some(player) = self.top_player(tab, cx) {
       player.update(cx, |player, _| player.set_covered(covered));
     }
   }
@@ -1084,6 +1117,10 @@ impl Space for TwitchSpace {
       MenuEntry {
         active: root == Some(&Route::Browse),
         ..MenuEntry::new("browse", t("Browse", "Parcourir"), Icon::Grid)
+      },
+      MenuEntry {
+        active: root == Some(&Route::Multistream),
+        ..MenuEntry::new("multistream", "Multistream", Icon::Multistream)
       },
     ];
     let live = signed.and_then(|s| s.live.as_deref()).unwrap_or_default();

@@ -566,6 +566,37 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
   `pubsub_raid.jsonl` (one raid's PubSub frames), `gql_redeem_not_found.json`, `gql_predict_not_found.json`.
   Request ids are redacted. Rewards and predictions are the channels' public data.
 
+## Multistream
+
+ADR 0033. The sidebar's "Multistream" opens a page that plays up to four lives at once; nothing
+about it shows on the other pages.
+
+- **Adding**: the big "+" of the empty page, then the "+" at the end of the row, open "Add a
+  live": the followed channels on air (the sidebar's list, with Helix), or, once something is
+  typed, the lives on Twitch whose channel matches (`searchUsers`, on air only, 350 ms after the
+  last key or on Enter). Lives already there are greyed. Escape, the cross or a click outside
+  closes it.
+- **The main live** fills the page with the whole player (keyboard, qualities, its past from its
+  recording, the mini-player); the cross at its top right removes it, the first of the row taking
+  its place. **The row's lives** play muted, at most 480p; hovered, a tile shows its channel, its
+  category and viewers, and its cross; a click makes it the main live, the two swapping places.
+  Theater mode works as on a live's page.
+- **Points**: only the main live reports its minutes watched and claims its bonus on its own
+  (they follow it through swaps); every chat can still spend its channel's points.
+- **Chat**: the column's header lists the channels. In tabs (the default), it shows the chosen
+  channel's chat; another tab with new lines shows a dot, red when one mentions the viewer; the
+  chat follows the main live on a swap (`[twitch] multistream_chat_follows = false` to keep it).
+  The button at the header's right merges the chats (`[twitch] multistream_merged`): each line is
+  marked with its channel's picture and color, its eye hides that channel's new lines, and the
+  chosen channel (outlined in its color) is the one written to, with its emotes, points and pinned
+  polls and predictions.
+- **Connections**: each live keeps its own anonymous chat connection and, signed in, its own
+  writer; the 20 messages per 30 s are counted for all writers together, as Twitch counts them for
+  the account.
+- **Raids** a tile's viewer follows replace that tile's live; a raid to a live already in the
+  multistream just removes the raiding one.
+- The lineup is kept while Peeby runs: back from another sidebar page, the same lives play again.
+
 ## Checked live on 2026-11-01
 
 A probe run by the user, anonymously, on a live channel:

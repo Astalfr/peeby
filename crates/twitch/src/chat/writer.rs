@@ -7,9 +7,13 @@
 //! Lines are cleaned before they leave ([`outgoing`]): no line break (it would start another IRC
 //! command), at most [`MAX_CHARS`]. At most [`RATE_COUNT`] messages per [`RATE_WINDOW`] leave,
 //! Twitch's limit for a viewer, beyond which it locks the account out of chat for 30 minutes.
+//! The limit is the account's, whatever the channel: every writer of the process counts in the
+//! same window ([`SENT`]), so that two lives open at once (a multistream, two tabs) cannot pass it
+//! together.
 //! The token never reaches a log or an error message.
 
 use std::collections::VecDeque;
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
@@ -31,6 +35,25 @@ pub const RATE_COUNT: usize = 20;
 pub const RATE_WINDOW: Duration = Duration::from_secs(30);
 /// Messages waiting to leave.
 const QUEUE: usize = 8;
+
+/// When the last messages left, from any writer: Twitch's rate limit is the account's.
+static SENT: Mutex<VecDeque<Instant>> = Mutex::new(VecDeque::new());
+
+/// Whether a message may leave at `now` given when the last ones did (`sent`, oldest first),
+/// counting it in when it may.
+fn admit(sent: &mut VecDeque<Instant>, now: Instant) -> bool {
+  while sent
+    .front()
+    .is_some_and(|at| now.duration_since(*at) >= RATE_WINDOW)
+  {
+    sent.pop_front();
+  }
+  if sent.len() >= RATE_COUNT {
+    return false;
+  }
+  sent.push_back(now);
+  true
+}
 
 /// What the writer tells its page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -129,7 +152,6 @@ async fn run(
   updates: mpsc::Sender<WriterUpdate>,
 ) {
   let mut delay = Duration::from_secs(1);
-  let mut sent = VecDeque::new();
   loop {
     if updates
       .send(WriterUpdate::Status(WriterStatus::Connecting))
@@ -145,7 +167,6 @@ async fn run(
       token: &token,
       outgoing: &mut outgoing,
       updates: &updates,
-      sent: &mut sent,
     };
     match session.run(&mut joined).await {
       Ok(Ended::Closed) => return,
@@ -196,8 +217,6 @@ struct Session<'a> {
   token: &'a str,
   outgoing: &'a mut mpsc::Receiver<String>,
   updates: &'a mpsc::Sender<WriterUpdate>,
-  /// When the last messages left, for the rate limit.
-  sent: &'a mut VecDeque<Instant>,
 }
 
 impl Session<'_> {
@@ -208,7 +227,6 @@ impl Session<'_> {
       token,
       outgoing,
       updates,
-      sent,
     } = self;
     let (mut socket, _) = tokio_tungstenite::connect_async(URL)
       .await
@@ -235,17 +253,16 @@ impl Session<'_> {
           if !*joined {
             continue;
           }
-          let now = Instant::now();
-          while sent.front().is_some_and(|at| now.duration_since(*at) >= RATE_WINDOW) {
-            sent.pop_front();
-          }
-          if sent.len() >= RATE_COUNT {
+          let admitted = admit(
+            &mut SENT.lock().unwrap_or_else(PoisonError::into_inner),
+            Instant::now(),
+          );
+          if !admitted {
             if updates.send(WriterUpdate::RateLimited).await.is_err() {
               return Ok(Ended::Closed);
             }
             continue;
           }
-          sent.push_back(now);
           socket
             .send(Message::text(self::outgoing(channel, &text)))
             .await
@@ -330,6 +347,19 @@ fn reply(line: &str) -> Reply {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn the_rate_limit_counts_the_last_window() {
+    let mut sent = VecDeque::new();
+    let start = Instant::now();
+    for i in 0..RATE_COUNT {
+      assert!(admit(&mut sent, start + Duration::from_millis(i as u64)));
+    }
+    assert!(!admit(&mut sent, start + Duration::from_secs(1)));
+    // The first one leaves the window: one more may go.
+    assert!(admit(&mut sent, start + RATE_WINDOW));
+    assert!(!admit(&mut sent, start + RATE_WINDOW));
+  }
 
   #[test]
   fn texts_are_cleaned_before_they_leave() {

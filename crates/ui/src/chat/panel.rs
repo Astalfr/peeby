@@ -2,12 +2,16 @@
 //! newest, with emotes drawn inline. Scrolled up, it stops following and holds the new messages
 //! until "Resume scrolling", so that what is read does not move. With a composer, the viewer
 //! writes under it ([`composer`]).
+//!
+//! A panel can copy what it gets to another, marked with its source ([`ChatPanel::set_mirror`]):
+//! a multistream's merged chat is fed by its channels' panels, and leaves out the lines of the
+//! sources it hides ([`ChatPanel::set_hidden`]).
 
 mod card;
 mod composer;
 
 use std::cell::Cell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -23,11 +27,11 @@ use gpui_component::hover_card::HoverCard;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{Sizable, h_flex, v_flex};
 
-pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
+pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup, Writing};
 
 use super::{
-  AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, GIF_HEIGHT, Gif,
-  MessageKind, PaintFill, UserLookup, UserQuery, image_colors, name_color,
+  AuthorStyle, Badge, ChatEvent, ChatMessage, ChatSource, EMOTE_HEIGHT, Emote, Fragment,
+  GIF_HEIGHT, Gif, MessageKind, PaintFill, UserLookup, UserQuery, image_colors, name_color,
 };
 use crate::assets::Icon;
 use crate::i18n::t;
@@ -448,6 +452,47 @@ pub struct ChatPanel {
   viewer: Option<Viewer>,
   /// Its header has a button that closes it ([`ChatPanelEvent::Hide`]): in theater mode.
   collapsible: bool,
+  /// Where it copies what it gets (a merged chat), marked with its source.
+  mirror: Option<Mirror>,
+  /// The sources whose new lines are left out (a merged chat's filter), by key.
+  hidden: HashSet<SharedString>,
+  /// Messages received since the panel opened, and among them those mentioning the viewer: a
+  /// tab's unread lines, counted by its page.
+  received: u64,
+  mentioned: u64,
+}
+
+/// Where a panel copies what it gets ([`ChatPanel::set_mirror`]): another panel, its lines
+/// marked with `source`.
+#[derive(Clone)]
+pub struct Mirror {
+  /// The merged panel.
+  pub panel: WeakEntity<ChatPanel>,
+  /// This panel's chat, as the merged one shows it.
+  pub source: Rc<ChatSource>,
+}
+
+impl Mirror {
+  /// `event` as the merged panel takes it: lines marked, moderation scoped to the source; the
+  /// connection's and the room's state stay with the source's own panel.
+  fn copy(&self, event: &ChatEvent) -> Option<ChatEvent> {
+    let key = self.source.key.clone();
+    Some(match event {
+      ChatEvent::Message(message) => ChatEvent::Message(ChatMessage {
+        source: Some(self.source.clone()),
+        ..message.clone()
+      }),
+      ChatEvent::Delete(id) => ChatEvent::Delete(id.clone()),
+      ChatEvent::ClearUser(user) => ChatEvent::ClearUserIn(key, user.clone()),
+      ChatEvent::Clear => ChatEvent::ClearSource(key),
+      ChatEvent::AuthorStyle(user, style) => ChatEvent::AuthorStyle(user.clone(), style.clone()),
+      ChatEvent::ClearUserIn(..)
+      | ChatEvent::ClearSource(_)
+      | ChatEvent::State(_)
+      | ChatEvent::Status(_)
+      | ChatEvent::Loading(_) => return None,
+    })
+  }
 }
 
 /// Gives the viewer's name, `None` when signed out ([`ChatPanel::set_viewer`]).
@@ -490,6 +535,10 @@ impl ChatPanel {
       streamer: None,
       viewer: None,
       collapsible: false,
+      mirror: None,
+      hidden: HashSet::new(),
+      received: 0,
+      mentioned: 0,
     }
   }
 
@@ -527,6 +576,34 @@ impl ChatPanel {
     cx.notify();
   }
 
+  /// Copies what the panel gets from now on to `mirror`'s panel, marked with its source
+  /// (a multistream's merged chat); `None` stops.
+  pub fn set_mirror(&mut self, mirror: Option<Mirror>) {
+    self.mirror = mirror;
+  }
+
+  /// Leaves out (or shows again) the new lines of the source `key` (a merged chat's filter):
+  /// the lines already shown stay.
+  pub fn set_hidden(&mut self, key: SharedString, hidden: bool, cx: &mut Context<Self>) {
+    if hidden {
+      self.hidden.insert(key);
+    } else {
+      self.hidden.remove(&key);
+    }
+    cx.notify();
+  }
+
+  /// Whether the new lines of the source `key` are left out ([`Self::set_hidden`]).
+  pub fn is_hidden(&self, key: &str) -> bool {
+    self.hidden.contains(key)
+  }
+
+  /// Messages received since the panel opened, and those mentioning the viewer: a page counts
+  /// a tab's unread lines from them.
+  pub fn received(&self) -> (u64, u64) {
+    (self.received, self.mentioned)
+  }
+
   /// The panel with another title than "Live chat" (a replay).
   pub fn titled(mut self, title: impl Into<SharedString>) -> Self {
     self.title = title.into();
@@ -536,14 +613,35 @@ impl ChatPanel {
   /// Applies a batch of events: give it everything that arrived since the last frame, so that
   /// the list is spliced once.
   pub fn push(&mut self, events: impl IntoIterator<Item = ChatEvent>, cx: &mut Context<Self>) {
+    let events: Vec<ChatEvent> = events.into_iter().collect();
+    if let Some(mirror) = self.mirror.clone() {
+      let copied: Vec<ChatEvent> = events.iter().filter_map(|e| mirror.copy(e)).collect();
+      if !copied.is_empty() {
+        mirror.panel.update(cx, |p, cx| p.push(copied, cx)).ok();
+      }
+    }
     let following = self.following();
     if following {
       self.resume_held();
     }
+    let me = self.viewer.as_ref().and_then(|viewer| viewer(cx));
     let mut changed = false;
     let mut added = 0;
     for event in events {
       changed = true;
+      if let ChatEvent::Message(message) = &event {
+        if message
+          .source
+          .as_ref()
+          .is_some_and(|s| self.hidden.contains(&s.key))
+        {
+          continue;
+        }
+        self.received += 1;
+        if me.as_ref().is_some_and(|me| mentions_viewer(message, me)) {
+          self.mentioned += 1;
+        }
+      }
       match event {
         ChatEvent::Message(message) if following => {
           self.messages.push_back(message);
@@ -558,6 +656,13 @@ impl ChatPanel {
         ChatEvent::Delete(id) => self.mark_deleted(|m| m.id == id),
         ChatEvent::ClearUser(user) => {
           self.mark_deleted(|m| m.author.as_ref().is_some_and(|a| a.id == user))
+        }
+        ChatEvent::ClearUserIn(key, user) => self.mark_deleted(|m| {
+          m.source.as_ref().is_some_and(|s| s.key == key)
+            && m.author.as_ref().is_some_and(|a| a.id == user)
+        }),
+        ChatEvent::ClearSource(key) => {
+          self.mark_deleted(|m| m.source.as_ref().is_some_and(|s| s.key == key))
         }
         ChatEvent::Clear => {
           self.messages.clear();
@@ -766,6 +871,45 @@ impl ChatPanel {
     };
 
     let mut line = h_flex().flex_wrap().items_center().text_sm().min_w_0();
+    // A merged chat's line starts with its channel's picture, its name on hover.
+    if let Some(source) = &message.source {
+      let picture = source
+        .avatar
+        .as_ref()
+        .and_then(|avatar| image(avatar, Effects::default(), BADGE_SIZE, BADGE_SIZE));
+      let name = source.name.clone();
+      let initial: SharedString = name
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_default()
+        .into();
+      line = line.child(
+        div()
+          .id(SharedString::from(format!("{}:source", message.id)))
+          .flex_none()
+          .mr_1()
+          .size(px(BADGE_SIZE))
+          .rounded_full()
+          .overflow_hidden()
+          .flex()
+          .items_center()
+          .justify_center()
+          .bg(source.color)
+          .text_xs()
+          .font_weight(FontWeight::BOLD)
+          .text_color(gpui::white())
+          .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(name.clone()).build(window, cx)
+          })
+          .child(match picture {
+            Some(render) => img(ImageSource::Render(render))
+              .size(px(BADGE_SIZE))
+              .into_any_element(),
+            None => initial.into_any_element(),
+          }),
+      );
+    }
     let action = message.kind == MessageKind::Action;
     let mut text_color = theme::foreground();
     if let Some(author) = &message.author {
@@ -850,7 +994,11 @@ impl ChatPanel {
         cx,
       )
     };
-    let streamer = self.streamer.clone();
+    // A merged chat's line: its own channel's streamer.
+    let streamer = match &message.source {
+      Some(source) => Some(source.key.clone()),
+      None => self.streamer.clone(),
+    };
     let line = push_fragments(
       line,
       message,
@@ -862,20 +1010,17 @@ impl ChatPanel {
     );
     // A message naming the viewer, from someone else.
     let me = self.viewer.as_ref().and_then(|viewer| viewer(cx));
-    let mentions_me = me.is_some_and(|me| {
-      !message.deleted
-        && !message.author.as_ref().is_some_and(|a| {
-          super::same_user(&a.name, &me)
-            || a.channel.as_ref().is_some_and(|c| super::same_user(c, &me))
-        })
-        && super::mentions(message, &me)
-    });
+    let mentions_me = me.is_some_and(|me| !message.deleted && mentions_viewer(message, &me));
 
+    let source_color = message.source.as_ref().map(|s| s.color);
     let item = div()
       .w_full()
       .px_3()
       .py(px(3.))
       .hover(|s| s.bg(theme::foreground().opacity(0.04)))
+      .when_some(source_color, |el, color| {
+        el.border_l_2().border_color(color)
+      })
       .when(enter < 1., |el| {
         el.relative()
           .left(px(ENTER_SLIDE * (1. - enter)))
@@ -925,6 +1070,13 @@ impl ChatPanel {
       MessageKind::Normal | MessageKind::Action => item.child(line).into_any_element(),
     }
   }
+}
+
+/// `message` names `me` (the viewer), and someone else wrote it.
+fn mentions_viewer(message: &ChatMessage, me: &str) -> bool {
+  !message.author.as_ref().is_some_and(|a| {
+    super::same_user(&a.name, me) || a.channel.as_ref().is_some_and(|c| super::same_user(c, me))
+  }) && super::mentions(message, me)
 }
 
 /// `line` with the fragments of `message` after it, in `text_color` (italic for an `action`):
@@ -1226,6 +1378,40 @@ impl Render for ChatPanel {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_merged_chat_scopes_a_source_s_moderation_to_it() {
+    let mirror = Mirror {
+      panel: WeakEntity::new_invalid(),
+      source: Rc::new(ChatSource {
+        key: "streamer".into(),
+        name: "Streamer".into(),
+        color: gpui::black(),
+        avatar: None,
+      }),
+    };
+    let line = ChatMessage::new("1", None, super::super::split_text("hello"));
+    match mirror.copy(&ChatEvent::Message(line)) {
+      Some(ChatEvent::Message(copied)) => {
+        assert_eq!(
+          copied.source.map(|s| s.key.clone()),
+          Some("streamer".into())
+        );
+      }
+      _ => panic!("a marked line"),
+    }
+    assert!(matches!(
+      mirror.copy(&ChatEvent::ClearUser("42".into())),
+      Some(ChatEvent::ClearUserIn(key, user)) if key == "streamer" && user == "42"
+    ));
+    assert!(matches!(
+      mirror.copy(&ChatEvent::Clear),
+      Some(ChatEvent::ClearSource(key)) if key == "streamer"
+    ));
+    // The room's state and the connection stay with the source's own panel.
+    assert!(mirror.copy(&ChatEvent::State(Vec::new())).is_none());
+    assert!(mirror.copy(&ChatEvent::Status(None)).is_none());
+  }
 
   fn animation(delays_ms: &[u32]) -> RenderImage {
     let frames: Vec<image::Frame> = delays_ms

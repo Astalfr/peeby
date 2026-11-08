@@ -123,6 +123,16 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Multistream (2026-11-08, the user's request, [ADR 0033](decisions/0033-twitch-multistream.md),
+  docs/twitch.md "Multistream"): the sidebar's "Multistream" plays up to four lives, the main one
+  with the whole player, three muted in a row under it (480p, `PlayerView::set_secondary`); a click
+  swaps a tile with the main live; "Add a live" offers the followed channels on air or a search of
+  Twitch's lives. Only the main live earns points (`PointsView::set_earning`). Chat as a tab per
+  channel (unread dots) or merged (`ChatPanel::set_mirror`: lines marked with their channel,
+  moderation scoped to it, an eye per channel, writing to the chosen one through its writer). Every
+  chat writer now shares Twitch's 20-per-30 s window. Measured first: four 1080p60 lives at once
+  cost about 0.4 core and 2 % of the GPU each, decoded on the GPU. Lint and tests pass (2 new
+  tests). **Not verified:** in the app (the dev profile is signed in: a run writes watch time).
 - Chat user cards (2026-11-07, the user's request), YouTube and Twitch: a click on an author's name or
   on a mention opens their card over the chat, with their picture, their name, their last messages in
   this chat and a button opening their channel in a new tab (docs/design.md, `Chat panel`). Lint and tests

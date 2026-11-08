@@ -192,6 +192,11 @@ pub struct Twitch {
   pub auto_claim_bonus: Option<bool>,
   /// Codecs this PC was found to decode on the CPU only (`h265`, `av1`): no longer asked for.
   pub software_codecs: Vec<String>,
+  /// The multistream's chat shows its channels' chats merged into one; a tab per channel when
+  /// unset.
+  pub multistream_merged: Option<bool>,
+  /// The multistream's chat tab follows the main live; on when unset.
+  pub multistream_chat_follows: Option<bool>,
 }
 
 /// `[player]`: how the player behaves, in every space.
