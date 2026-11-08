@@ -107,6 +107,7 @@ icons! {
   PanelRightClose => "panel-right-close",
   PanelRightOpen => "panel-right-open",
   Multistream => "layout-panel-top",
+  Merge => "merge",
   Close => "close",
 }
 

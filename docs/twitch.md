@@ -585,10 +585,12 @@ about it shows on the other pages.
   Theater mode works as on a live's page.
 - **Points**: only the main live reports its minutes watched and claims its bonus on its own
   (they follow it through swaps); every chat can still spend its channel's points.
-- **Chat**: the column's header lists the channels. In tabs (the default), it shows the chosen
+- **Chat**: the column's header lists the channels, on one line scrolled sideways when they do
+  not fit (a side fades out while there is more beyond it). In tabs (the default), it shows the chosen
   channel's chat; another tab with new lines shows a dot, red when one mentions the viewer; the
   chat follows the main live on a swap (`[twitch] multistream_chat_follows = false` to keep it).
-  The button at the header's right merges the chats (`[twitch] multistream_merged`): each line is
+  The merge button at the header's right (in the accent while on) merges the chats
+  (`[twitch] multistream_merged`): each line is
   marked with its channel's picture and color, its eye hides that channel's new lines, and the
   chosen channel (outlined in its color) is the one written to, with its emotes, points and pinned
   polls and predictions.

@@ -29,11 +29,12 @@ use std::time::{Duration, Instant};
 use gpui::prelude::*;
 use gpui::{
   AnyElement, App, Bounds, Context, ElementId, Entity, EntityId, EventEmitter, FontWeight, Hsla,
-  KeyDownEvent, MouseButton, Pixels, SharedString, Subscription, Task, Window, canvas, div, px,
-  relative, rgb,
+  KeyDownEvent, MouseButton, Pixels, ScrollHandle, SharedString, Subscription, Task, Window,
+  canvas, div, px, relative, rgb,
 };
 use gpui_component::IconName;
 use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::scroll::ScrollableElement;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{h_flex, v_flex};
 use peeby_core::settings::Settings;
@@ -62,6 +63,8 @@ const COLORS: [u32; MAX_LIVES] = [0x9146ff, 0x1dd1a1, 0xff9f43, 0x48dbfb];
 const SEARCH_DELAY: Duration = Duration::from_millis(350);
 /// Size of a chat tab's picture.
 const TAB_AVATAR: f32 = 18.;
+/// Width of the fade at a side of the chat tabs with more beyond it.
+const TABS_FADE: f32 = 28.;
 /// How long a swap's players take to change places.
 const SWAP_FOR: Duration = Duration::from_millis(420);
 
@@ -140,6 +143,8 @@ pub struct MultistreamView {
   adding: Option<Entity<AddLive>>,
   /// The main player last given the keyboard's focus.
   focused: Option<EntityId>,
+  /// The chat tabs' sideways scroll.
+  tabs_scroll: ScrollHandle,
   /// Where each place of the lineup was laid out (the main one first), and the page.
   places: [Rc<Cell<Bounds<Pixels>>>; MAX_LIVES],
   page: Rc<Cell<Bounds<Pixels>>>,
@@ -206,6 +211,7 @@ impl MultistreamView {
       _writing: None,
       adding: None,
       focused: None,
+      tabs_scroll: ScrollHandle::new(),
       places: Default::default(),
       page: Rc::default(),
       swap: None,
@@ -710,10 +716,44 @@ impl MultistreamView {
   /// The chat column: the channels' tabs (or the merged chat's channels), then the chat.
   fn render_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let merged_mode = Settings::get(cx).twitch.multistream_merged == Some(true);
-    let mut tabs = h_flex().flex_1().min_w_0().gap_1().flex_wrap();
+    // On one line, scrolled sideways when they do not fit; a side fades out while there is
+    // more beyond it.
+    let handle = self.tabs_scroll.clone();
+    let mut tabs = h_flex()
+      .id("multistream-chat-tabs")
+      .gap_1()
+      .pb_1p5()
+      .overflow_x_scroll()
+      .track_scroll(&handle);
     for index in 0..self.tiles.len() {
       tabs = tabs.child(self.render_chat_tab(index, merged_mode, window, cx));
     }
+    let offset = -f32::from(handle.offset().x);
+    let max = f32::from(handle.max_offset().x);
+    // No handlers: clicks go through to the tabs under it.
+    let fade = |left: bool| {
+      div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .w(px(TABS_FADE))
+        .when(left, |el| el.left_0())
+        .when(!left, |el| el.right_0())
+        .bg(gpui::linear_gradient(
+          if left { 90. } else { 270. },
+          gpui::linear_color_stop(theme::surface(), 0.),
+          gpui::linear_color_stop(theme::surface().opacity(0.), 1.),
+        ))
+    };
+    let tabs = div()
+      .id("multistream-chat-tabs-area")
+      .relative()
+      .flex_1()
+      .min_w_0()
+      .child(tabs)
+      .when(offset > 1., |el| el.child(fade(true)))
+      .when(offset < max - 1., |el| el.child(fade(false)))
+      .horizontal_scrollbar(&handle);
     let toggle = div()
       .id("multistream-chat-mode")
       .size(px(28.))
@@ -723,22 +763,28 @@ impl MultistreamView {
       .items_center()
       .justify_center()
       .cursor_pointer()
-      .text_color(theme::muted())
-      .hover(|el| {
-        el.bg(theme::surface_hover())
-          .text_color(theme::foreground())
+      // One icon: the accent while the chats are merged.
+      .when(merged_mode, |el| {
+        el.bg(theme::accent_soft())
+          .text_color(theme::accent())
+          .hover(|el| {
+            el.bg(theme::accent_soft())
+              .text_color(theme::accent_hover())
+          })
       })
-      .child(
-        gpui_component::Icon::new(if merged_mode {
-          Icon::List
-        } else {
-          Icon::Comments
+      .when(!merged_mode, |el| {
+        el.text_color(theme::muted()).hover(|el| {
+          el.bg(theme::surface_hover())
+            .text_color(theme::foreground())
         })
-        .size(px(16.)),
-      )
+      })
+      .child(gpui_component::Icon::new(Icon::Merge).size(px(16.)))
       .tooltip(move |window, cx| {
         Tooltip::new(if merged_mode {
-          t("One tab per chat", "Un onglet par chat")
+          t(
+            "Chats merged: one tab per chat",
+            "Chats fusionnés : un onglet par chat",
+          )
         } else {
           t("Merge the chats", "Fusionner les chats")
         })
@@ -752,8 +798,9 @@ impl MultistreamView {
       .flex_none()
       .gap_2()
       .px_2()
-      .py_2()
-      .items_start()
+      .pt_2()
+      .pb_0p5()
+      .items_center()
       .border_b_1()
       .border_color(theme::border())
       .child(tabs)
@@ -859,6 +906,7 @@ impl MultistreamView {
         "multistream-chat-tab".into(),
         index as u64,
       ))
+      .flex_none()
       .gap_1p5()
       .pl_1()
       .pr_2()
@@ -875,7 +923,7 @@ impl MultistreamView {
       .child(face)
       .child(
         div()
-          .max_w(px(72.))
+          .max_w(px(120.))
           .truncate()
           .text_xs()
           .font_weight(FontWeight::MEDIUM)
