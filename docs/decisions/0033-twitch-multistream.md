@@ -56,10 +56,18 @@ with the four starting together.
   writer of the process now counts in one window (`twitch::chat::writer`'s `SENT`), which also
   covers two live pages open in two tabs.
 
+- **The swap is animated** (2026-11-08, the user's request): the two players leave their places
+  for a layer over the page and glide to each other's (position, size and corners eased in and
+  out over 420 ms), their places left black meanwhile; the sound and the roles change at once,
+  the qualities at the end. Each player keeps the previous mpv's picture until the new one has a
+  frame (`PlayerView`'s held picture, `VideoView::has_frame`), so the quality change shows no
+  black either; this also holds for any quality change and restart at a live's edge. Not with
+  reduced motion.
+
 ## Consequences
 
-- Swapping lives is instant but for the quality change (a new mpv for the new main and the new
-  secondary, about a second each).
+- Swapping lives looks seamless: frames stretch while a player is resized each frame (mpv's
+  ring settles 60 ms after the last size), then the quality changes behind the held picture.
 - Four lives cost four times a live's network and memory; the row's 480p keeps their decoding
   small.
 - The merged chat holds its own copy of the lines (at most `MAX_MESSAGES`): two busy chats fill it

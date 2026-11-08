@@ -133,6 +133,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   chat writer now shares Twitch's 20-per-30 s window. Measured first: four 1080p60 lives at once
   cost about 0.4 core and 2 % of the GPU each, decoded on the GPU. Lint and tests pass (2 new
   tests). **Not verified:** in the app (the dev profile is signed in: a run writes watch time).
+  - 2026-11-08 (the user's request): the swap is animated, the two players gliding to each other's
+    place in a layer over the page; the qualities change at its end, and the player now keeps the
+    previous mpv's picture until a restarted one has a frame (any quality change, back to a live's
+    edge). **Not verified:** in the app.
 - Chat user cards (2026-11-07, the user's request), YouTube and Twitch: a click on an author's name or
   on a mention opens their card over the chat, with their picture, their name, their last messages in
   this chat and a button opening their channel in a new tab (docs/design.md, `Chat panel`). Lint and tests

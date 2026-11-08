@@ -17,13 +17,20 @@
 //!
 //! The lineup is kept by the space while Peeby runs ([`super::TwitchSpace`]'s `multistream`), so
 //! that coming back to the entry finds the same lives.
+//!
+//! A swap is animated ([`Swap`]): the two players leave their places for a layer over the page,
+//! each gliding from its place to the other's (eased, [`SWAP_FOR`]), and land there at its end;
+//! the qualities change only then, each player keeping its picture until its new mpv has one.
+//! Not with reduced motion.
 
-use std::time::Duration;
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Context, ElementId, Entity, EntityId, EventEmitter, FontWeight, Hsla,
-  KeyDownEvent, MouseButton, SharedString, Subscription, Task, Window, div, px, relative, rgb,
+  AnyElement, App, Bounds, Context, ElementId, Entity, EntityId, EventEmitter, FontWeight, Hsla,
+  KeyDownEvent, MouseButton, Pixels, SharedString, Subscription, Task, Window, canvas, div, px,
+  relative, rgb,
 };
 use gpui_component::IconName;
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -55,6 +62,55 @@ const COLORS: [u32; MAX_LIVES] = [0x9146ff, 0x1dd1a1, 0xff9f43, 0x48dbfb];
 const SEARCH_DELAY: Duration = Duration::from_millis(350);
 /// Size of a chat tab's picture.
 const TAB_AVATAR: f32 = 18.;
+/// How long a swap's players take to change places.
+const SWAP_FOR: Duration = Duration::from_millis(420);
+
+/// A swap under way: two players gliding between their places.
+struct Swap {
+  started: Instant,
+  /// The two places (lineup indexes) left empty meanwhile.
+  places: [usize; 2],
+  /// Each player, where it starts and where it lands, in the page's coordinates.
+  moves: [(
+    Entity<ui::player::PlayerView>,
+    Bounds<Pixels>,
+    Bounds<Pixels>,
+  ); 2],
+  /// The corner radii at the main place and at a row's place.
+  radii: (f32, f32),
+}
+
+/// Where the swap is at `elapsed`, eased in and out, from 0 to 1.
+fn swap_progress(elapsed: Duration) -> f32 {
+  let t = (elapsed.as_secs_f32() / SWAP_FOR.as_secs_f32()).clamp(0., 1.);
+  if t < 0.5 {
+    4. * t * t * t
+  } else {
+    1. - (-2. * t + 2.).powi(3) / 2.
+  }
+}
+
+/// `from` moved toward `to` by `t` (0 to 1).
+fn between(from: Bounds<Pixels>, to: Bounds<Pixels>, t: f32) -> Bounds<Pixels> {
+  let mix = |a: Pixels, b: Pixels| a + (b - a) * t;
+  Bounds {
+    origin: gpui::point(
+      mix(from.origin.x, to.origin.x),
+      mix(from.origin.y, to.origin.y),
+    ),
+    size: gpui::size(
+      mix(from.size.width, to.size.width),
+      mix(from.size.height, to.size.height),
+    ),
+  }
+}
+
+/// An element that records the bounds it is laid out at, filling its parent.
+fn measure(cell: Rc<Cell<Bounds<Pixels>>>) -> impl IntoElement {
+  canvas(move |bounds, _, _| cell.set(bounds), |_, _, _, _| {})
+    .absolute()
+    .inset_0()
+}
 
 /// One live of the multistream.
 struct Tile {
@@ -84,6 +140,12 @@ pub struct MultistreamView {
   adding: Option<Entity<AddLive>>,
   /// The main player last given the keyboard's focus.
   focused: Option<EntityId>,
+  /// Where each place of the lineup was laid out (the main one first), and the page.
+  places: [Rc<Cell<Bounds<Pixels>>>; MAX_LIVES],
+  page: Rc<Cell<Bounds<Pixels>>>,
+  /// The swap's animation, while it runs, and the task ending it.
+  swap: Option<Swap>,
+  _swap_end: Option<Task<()>>,
 }
 
 impl MultistreamView {
@@ -144,6 +206,10 @@ impl MultistreamView {
       _writing: None,
       adding: None,
       focused: None,
+      places: Default::default(),
+      page: Rc::default(),
+      swap: None,
+      _swap_end: None,
     };
     for login in lineup {
       view.add(login, cx);
@@ -273,7 +339,7 @@ impl MultistreamView {
 
   /// Makes the live at `index` of the row the main one: it and the main one swap their places.
   fn promote(&mut self, index: usize, cx: &mut Context<Self>) {
-    if index == 0 || index >= self.tiles.len() {
+    if index == 0 || index >= self.tiles.len() || self.swap.is_some() {
       return;
     }
     self.tiles.swap(0, index);
@@ -285,7 +351,50 @@ impl MultistreamView {
       let login = new.read(cx).login();
       self.choose_chat(login, cx);
     }
+    let (main, row) = (self.places[0].get(), self.places[index].get());
+    let laid_out = main.size.width > px(0.) && row.size.width > px(0.);
+    if laid_out && !cx.reduce_motion() {
+      let page = self.page.get().origin;
+      let local = |b: Bounds<Pixels>| Bounds {
+        origin: gpui::point(b.origin.x - page.x, b.origin.y - page.y),
+        size: b.size,
+      };
+      let theater = Settings::get(cx).theater;
+      let main_radius = if theater {
+        0.
+      } else {
+        f32::from(theme::RADIUS_LG)
+      };
+      self.swap = Some(Swap {
+        started: Instant::now(),
+        places: [0, index],
+        moves: [
+          (old.read(cx).player(), local(main), local(row)),
+          (new.read(cx).player(), local(row), local(main)),
+        ],
+        radii: (main_radius, f32::from(theme::RADIUS)),
+      });
+      self._swap_end = Some(cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(SWAP_FOR).await;
+        this
+          .update(cx, |this, cx| {
+            this.swap = None;
+            this.fit_qualities(cx);
+            cx.notify();
+          })
+          .ok();
+      }));
+    } else {
+      self.fit_qualities(cx);
+    }
     self.lineup_changed(cx);
+  }
+
+  /// Every live in the quality of its role (after a swap's animation: each change is a new mpv).
+  fn fit_qualities(&mut self, cx: &mut Context<Self>) {
+    for tile in &self.tiles {
+      tile.view.update(cx, |view, cx| view.fit_quality(cx));
+    }
   }
 
   /// Removes the live at `index`; the main one's place goes to the first of the row.
@@ -297,8 +406,14 @@ impl MultistreamView {
     if index == 0
       && let Some(first) = self.tiles.first()
     {
-      first.view.update(cx, |view, cx| view.set_main(true, cx));
+      first.view.update(cx, |view, cx| {
+        view.set_main(true, cx);
+        view.fit_quality(cx);
+      });
     }
+    // A swap's players are drawn by the swap: the lineup it knew is gone.
+    self.swap = None;
+    self._swap_end = None;
     if self.chat.as_deref() == Some(gone.as_str()) {
       self.chat = None;
       self._writing = None;
@@ -479,9 +594,56 @@ impl MultistreamView {
       .bg(gpui::black())
       .border_b_2()
       .border_color(tile.color)
-      .child(div().absolute().inset_0().child(player))
+      .child(measure(self.places[index].clone()))
+      .when(!self.moving(index), |el| {
+        el.child(div().absolute().inset_0().child(player))
+      })
       .child(overlay)
       .into_any_element()
+  }
+
+  /// Whether the place `index` of the lineup is left empty by a swap under way.
+  fn moving(&self, index: usize) -> bool {
+    self
+      .swap
+      .as_ref()
+      .is_some_and(|swap| swap.places.contains(&index))
+  }
+
+  /// The layer over the page where a swap's players glide, while it runs.
+  fn render_swap(&self, window: &mut Window) -> Option<AnyElement> {
+    let swap = self.swap.as_ref()?;
+    let t = swap_progress(swap.started.elapsed());
+    if t < 1. {
+      window.request_animation_frame();
+    }
+    let (main, row) = swap.radii;
+    // The old main live shrinks to a row's corners, the new one grows to the main place's.
+    let radii = [main + (row - main) * t, row + (main - row) * t];
+    let layer = swap
+      .moves
+      .iter()
+      .zip(radii)
+      .map(|((player, from, to), radius)| {
+        let at = between(*from, *to, t);
+        div()
+          .absolute()
+          .left(at.origin.x)
+          .top(at.origin.y)
+          .w(at.size.width)
+          .h(at.size.height)
+          .rounded(px(radius))
+          .overflow_hidden()
+          .bg(gpui::black())
+          .child(player.clone())
+      });
+    Some(
+      div()
+        .absolute()
+        .inset_0()
+        .children(layer)
+        .into_any_element(),
+    )
   }
 
   /// The row's "+": opens the "Add a live" dialog.
@@ -807,7 +969,10 @@ impl Render for MultistreamView {
               .when(theater, |el| el.rounded_tl(theme::PANEL_INNER_RADIUS))
               .overflow_hidden()
               .bg(gpui::black())
-              .child(div().absolute().inset_0().child(player)),
+              .child(measure(self.places[0].clone()))
+              .when(!self.moving(0), |el| {
+                el.child(div().absolute().inset_0().child(player))
+              }),
           )
           .child(div().w_full().when(theater, |el| el.px_3()).child(row))
           .into_any_element()
@@ -835,11 +1000,14 @@ impl Render for MultistreamView {
         )
       }
     });
+    let swap = self.render_swap(window);
     h_flex()
       .size_full()
       .relative()
+      .child(measure(self.page.clone()))
       .child(div().flex_1().min_w_0().h_full().child(content))
       .children(chat)
+      .children(swap)
       .children(self.adding.clone())
       .into_any_element()
   }

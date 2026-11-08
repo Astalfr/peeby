@@ -579,7 +579,9 @@ about it shows on the other pages.
 - **The main live** fills the page with the whole player (keyboard, qualities, its past from its
   recording, the mini-player); the cross at its top right removes it, the first of the row taking
   its place. **The row's lives** play muted, at most 480p; hovered, a tile shows its channel, its
-  category and viewers, and its cross; a click makes it the main live, the two swapping places.
+  category and viewers, and its cross; a click makes it the main live, the two gliding to each
+  other's place (420 ms, not with reduced motion), their qualities changing once they land behind
+  their last picture.
   Theater mode works as on a live's page.
 - **Points**: only the main live reports its minutes watched and claims its bonus on its own
   (they follow it through swaps); every chat can still spend its channel's points.

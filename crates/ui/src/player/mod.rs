@@ -336,6 +336,12 @@ pub struct PlayerView {
   author: Option<Author>,
   player: Option<Rc<Player>>,
   video: Option<Entity<VideoView>>,
+  /// The previous mpv's picture (a quality change, a restart at the live's edge), shown until
+  /// the new one has its first frame instead of black; it keeps that mpv alive, paused.
+  previous_video: Option<Entity<VideoView>>,
+  /// The next mpv restarts the same source (its old one paused): its picture waits behind the
+  /// old one's ([`Self::previous_video`]).
+  hold_picture: bool,
   /// Why the video cannot play, shown instead of the picture (a spinner while it loads).
   status: Option<SharedString>,
   failed: bool,
@@ -496,6 +502,8 @@ impl PlayerView {
       author: None,
       player: None,
       video: None,
+      previous_video: None,
+      hold_picture: false,
       status: None,
       failed: false,
       position: 0.0,
@@ -875,7 +883,12 @@ impl PlayerView {
 
   /// The picture, for a mini-player showing this player elsewhere.
   pub fn video(&self) -> Option<Entity<VideoView>> {
-    self.video.clone()
+    self.shown_video()
+  }
+
+  /// The picture on screen: the previous mpv's until the new one has a frame.
+  fn shown_video(&self) -> Option<Entity<VideoView>> {
+    self.previous_video.clone().or_else(|| self.video.clone())
   }
 
   /// An mpv property as text, for diagnostics (`hwdec-current`, `video-codec`…); `None` before
@@ -1076,6 +1089,7 @@ impl PlayerView {
       start_seconds: self.live_start(),
       ..options
     };
+    self.hold_picture = true;
     self.start_with(options, Instant::now(), cx);
   }
 
@@ -1140,6 +1154,7 @@ impl PlayerView {
   pub fn fail(&mut self, message: SharedString, cx: &mut Context<Self>) {
     self.status = Some(message);
     self.failed = true;
+    self.previous_video = None;
     self.buffering = false;
     self.controls_visible = true;
     cx.notify();
@@ -1254,6 +1269,7 @@ impl PlayerView {
           start_seconds: self.live_start(),
           ..quality.options
         };
+        self.hold_picture = true;
         self.start_with(options, Instant::now(), cx);
       }
       return;
@@ -1284,6 +1300,7 @@ impl PlayerView {
       old.set_paused(true);
     }
     self.captions_added.clear();
+    self.hold_picture = true;
     self.start_with(options, Instant::now(), cx);
   }
 
@@ -1407,13 +1424,29 @@ impl PlayerView {
   ) {
     running::register(&player, cx.weak_entity(), cx);
     let resize = player.clone();
-    self.video = Some(cx.new(|cx| {
+    let video = cx.new(|cx| {
       VideoView::new(
         frames,
         Rc::new(move |w, h| resize.set_target_size(w, h)),
         cx,
       )
-    }));
+    });
+    // Its first frame ends the previous picture's wait.
+    cx.observe(&video, |this, video, cx| {
+      if this.previous_video.is_some() && video.read(cx).has_frame() {
+        this.previous_video = None;
+        cx.notify();
+      }
+    })
+    .detach();
+    let previous = self.video.replace(video);
+    self.previous_video = if std::mem::take(&mut self.hold_picture) {
+      previous
+        .filter(|v| v.read(cx).has_frame())
+        .or(self.previous_video.take())
+    } else {
+      None
+    };
     // A new mpv starts with an empty cache.
     self.cached = 0.0;
     player.set_volume(self.volume);
@@ -3214,8 +3247,7 @@ impl PlayerView {
       .bg(gpui::black())
       .children(
         self
-          .video
-          .clone()
+          .shown_video()
           .filter(|_| !self.in_pip && !self.failed)
           .map(|video| div().absolute().inset_0().child(video)),
       )
@@ -3240,7 +3272,7 @@ impl Render for PlayerView {
     let show_ui = (self.controls_visible || self.failed) && self.player.is_some();
     // A page of its own fills the panel like theater mode.
     let radii = corner_radii(window, self.theater || self.layout == Layout::Page);
-    if let Some(video) = &self.video {
+    for video in self.video.iter().chain(&self.previous_video) {
       video.update(cx, |video, _| video.set_corner_radii(radii));
     }
     if self.secondary {
@@ -3276,8 +3308,7 @@ impl Render for PlayerView {
       })
       .children(
         self
-          .video
-          .clone()
+          .shown_video()
           .filter(|_| !self.in_pip)
           .map(|video| div().absolute().inset_0().child(video)),
       )

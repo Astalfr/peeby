@@ -414,8 +414,8 @@ impl WatchView {
   }
 
   /// Makes a multistream's tile its main live, or a secondary one: the main one plays with its
-  /// sound in the quality of the settings and earns points; a secondary one plays muted, at most
-  /// [`SECONDARY_HEIGHT`] high, without earning.
+  /// sound and earns points; a secondary one plays muted, without earning. Its quality follows
+  /// with [`Self::fit_quality`] (a new mpv: the multistream waits for its swap's animation).
   pub fn set_main(&mut self, main: bool, cx: &mut Context<Self>) {
     self.height_cap = (!main).then_some(SECONDARY_HEIGHT);
     self
@@ -424,6 +424,11 @@ impl WatchView {
     if let Some(points) = &self.points {
       points.update(cx, |points, cx| points.set_earning(main, cx));
     }
+  }
+
+  /// Plays the quality the tile's role allows: the settings' for the main live, at most
+  /// [`SECONDARY_HEIGHT`] for the others.
+  pub fn fit_quality(&mut self, cx: &mut Context<Self>) {
     let height = self.max_height(cx);
     let wanted = self
       .qualities

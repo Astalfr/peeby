@@ -86,6 +86,11 @@ impl VideoView {
     self.corner_radii = radii;
   }
 
+  /// Whether it has a frame to show (a new player's view has none until its first one).
+  pub fn has_frame(&self) -> bool {
+    self.current_slot.is_some() || self.held.is_some() || self.cpu_frame.is_some()
+  }
+
   /// Replaces the resize handler (e.g. once the player exists).
   pub fn set_resize_handler(&mut self, on_resize: ResizeHandler) {
     self.on_resize = on_resize;
