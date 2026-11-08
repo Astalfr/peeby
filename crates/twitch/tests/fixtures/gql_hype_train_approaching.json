@@ -1,0 +1,96 @@
+{
+  "data": {
+    "user": {
+      "channel": {
+        "hypeTrain": {
+          "approaching": {
+            "creatorColor": "E474CF",
+            "expiresAt": "2026-11-08T17:11:47.610632873Z",
+            "goal": 3,
+            "id": "cf498401-0274-4026-9aac-8436f3c23995",
+            "isGoldenKappaTrain": false,
+            "isTreasureTrain": false,
+            "levelOneRewards": [
+              {
+                "emote": {
+                  "id": "emotesv2_bbbf6d16d9964fcbba2d965a7eea942f",
+                  "token": "ConfettiHype"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_7fa0ba50748c418d956afa59c2e94883",
+                  "token": "ChillGirl"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_92d34a3642744c6bb540b091d3e9e9b0",
+                  "token": "ButtonMash"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_bc2ca1d0a58b4731a9fc3432cb175c86",
+                  "token": "BatterUp"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_692f743d3e7147068bb1ddf842f9b99d",
+                  "token": "GoodOne"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_aa8db3de21e1465dab81bedfa47e29f2",
+                  "token": "MegaConsume"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_71276b021c024affa2a4ffab59d32c56",
+                  "token": "ThatsAServe"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_13d5639099e1418585e9f875415f06c2",
+                  "token": "FrogWow"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_fdad2a52b6344d4ca34f56757de20ea0",
+                  "token": "EndlerLove"
+                },
+                "type": "EMOTE"
+              },
+              {
+                "emote": {
+                  "id": "emotesv2_90bda6a8775540ecb8ea349852d070c9",
+                  "token": "ZombiePup"
+                },
+                "type": "EMOTE"
+              }
+            ],
+            "participants": [
+              "100000001",
+              "100000002"
+            ]
+          },
+          "execution": null
+        }
+      },
+      "id": "171103531"
+    }
+  }
+}

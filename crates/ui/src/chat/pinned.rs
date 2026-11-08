@@ -21,6 +21,8 @@ const MAX_SHARE: f32 = 0.7;
 pub const LEAD: f32 = 24.;
 /// Height of the time-left line along an item's bottom edge, logical pixels.
 const TIME_LINE: f32 = 3.;
+/// Opacity of a bar's progress fill over the surface.
+const FILL_OPACITY: f32 = 0.22;
 
 /// One pinned item.
 pub struct Pinned {
@@ -43,6 +45,9 @@ pub struct Pinned {
   pub time_left: Option<f32>,
   /// Drawn in the icon's place, 24 px (a channel's avatar); the icon when `None`.
   pub lead: Option<AnyElement>,
+  /// A progress (0 to 1) filling the bar from the left in a tint of the accent, as Twitch's
+  /// Hype Train banner does; `None` for a plain bar.
+  pub fill: Option<f32>,
 }
 
 /// Which item is unfolded, by id: held by the space across its reloads.
@@ -106,6 +111,7 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
   let bar = h_flex()
     .id(ElementId::Name(format!("pinned-bar-{}", item.id).into()))
     .flex_none()
+    .relative()
     .px_3()
     .py_2()
     .gap_2()
@@ -113,6 +119,16 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
     .cursor_pointer()
     .hover(|s| s.bg(theme::surface_hover()))
     .on_click(move |_, window, cx| on_toggle(&id, window, cx))
+    // Under the bar's content: drawn first.
+    .children(item.fill.map(|share| {
+      div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .left_0()
+        .w(relative(share.clamp(0., 1.)))
+        .bg(item.accent.opacity(FILL_OPACITY))
+    }))
     .child(match item.lead {
       Some(lead) => div()
         .size(px(LEAD))

@@ -96,6 +96,7 @@ icons! {
   SignOut => "log-out",
   Points => "coins",
   Gift => "gift",
+  Train => "train-front",
   Speaker => "speaker",
   Plus => "plus",
   Shorts => "shorts",

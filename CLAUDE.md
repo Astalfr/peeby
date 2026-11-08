@@ -54,7 +54,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   subscribes to channels' 7TV sets and users and prints what comes (ADR 0030; trim the `actor` before a fixture);
   `--cosmetics` instead their paints, badges and who wears them (ADR 0031; rename the users before a fixture)
 - Twitch raids on PubSub (anonymous): `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>]`
-  listens to channels' raid topics (`top`: 500 lives, PubSub's limit) and prints what comes (ADR 0024)
+  listens to channels' raid topics (`top`: 500 lives, PubSub's limit) and prints what comes (ADR 0024);
+  `--topic hype-train-events-v1` their Hype Trains instead (ADR 0032; rename the contributors before a fixture)
+- Hype Trains now on the top lives (anonymous GQL): `cargo run -p twitch --example hype_probe -- [--save <file>] [--approaching] [login…]`
+  (`--save`: the app's answer for the first train found, its conductors renamed)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)
 - Fake Twitch chat with every chat feature, nothing sent to Twitch (debug builds): "Faux chat" in the Twitch
   sidebar, or `cargo run -p peeby -- --fake-chat` (docs/twitch.md, "Fake chat")

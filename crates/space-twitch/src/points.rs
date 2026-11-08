@@ -41,6 +41,8 @@ use gpui_component::{ActiveTheme as _, Disableable, Sizable, h_flex, v_flex};
 use twitch::points::{Points, Prediction, PredictionStatus, Reward};
 
 use peeby_core::settings::Settings;
+use twitch::hype_train::{self, HypeEvent};
+use twitch::pubsub;
 use twitch::raids::{Raid, RaidEvent};
 use ui::assets::Icon;
 use ui::chat::{LEAD, Pinned, Unfolded, pinned_stack};
@@ -51,6 +53,7 @@ use ui::player::PlayerView;
 use ui::{runtime, tf, theme};
 
 use super::cards;
+use super::hype_train as hype_train_view;
 use super::polls::{self, Poll};
 
 /// How often the balance and the rewards are read again.
@@ -173,7 +176,7 @@ fn share_label(share: u64) -> String {
 /// `share` (0 to 1) eased from the value `id` last showed, for a bar and its percentage: a new
 /// count slides there instead of jumping. Shown as is the first time (an unfolded card does
 /// not grow from nothing) and with reduced motion.
-fn eased_share(id: String, share: f64, window: &mut Window, cx: &mut App) -> f32 {
+pub(crate) fn eased_share(id: String, share: f64, window: &mut Window, cx: &mut App) -> f32 {
   let share = share as f32;
   let duration = if cx.reduce_motion() {
     Duration::ZERO
@@ -190,7 +193,7 @@ fn eased_share(id: String, share: f64, window: &mut Window, cx: &mut App) -> f32
   )
 }
 
-fn percent(n: impl std::fmt::Display) -> String {
+pub(crate) fn percent(n: impl std::fmt::Display) -> String {
   tf!("{n}%", "{n}\u{a0}%")
 }
 
@@ -301,8 +304,13 @@ pub struct PointsView {
   raid_stay: Option<String>,
   /// The raid already followed (by id): its next departures do nothing.
   raid_followed: Option<String>,
-  /// Hears the raid topic ([`Self::watch_raids`]); dropping it ends the connection.
-  raid_task: Option<Task<()>>,
+  /// Hears the channel's PubSub topics ([`Self::watch_channel`]); dropping it ends the
+  /// connection.
+  pubsub_task: Option<Task<()>>,
+  /// The channel's Hype Train ([`super::hype_train`]).
+  hype: hype_train::State,
+  /// The last Hype Train reading failed (the next failures log at debug).
+  hype_failing: bool,
   /// The choices the viewer voted for, by poll id: Twitch does not give them back.
   voted: HashMap<String, Vec<String>>,
   /// The last poll reading failed (the next failures log at debug).
@@ -354,7 +362,9 @@ impl PointsView {
       raid: None,
       raid_stay: None,
       raid_followed: None,
-      raid_task: None,
+      pubsub_task: None,
+      hype: hype_train::State::default(),
+      hype_failing: false,
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
@@ -436,6 +446,14 @@ impl PointsView {
           {
             cx.notify();
           }
+          // The train's countdown, and its end when its message was missed.
+          let now = polls::now_millis();
+          if this.hype.settle(now, hype_train_view::GRACE_MS) {
+            this.fold_gone();
+            cx.notify();
+          } else if hype_train_view::shown_id(&this.hype, now).is_some() {
+            cx.notify();
+          }
         });
         if counting.is_err() {
           return;
@@ -498,25 +516,71 @@ impl PointsView {
     })
   }
 
-  /// Listens to `channel_id`'s raids on Twitch's PubSub (anonymous, ADR 0024), once; the
-  /// connection ends with the view.
-  pub fn watch_raids(&mut self, channel_id: String, cx: &mut Context<Self>) {
-    if self.raid_task.is_some() || self.backend.twitch().is_none() {
+  /// Listens to `channel_id`'s raids and Hype Trains on Twitch's PubSub (anonymous, ADR 0024
+  /// and 0032), once; the connection ends with the view. Each (re)connection reads the train
+  /// from GQL: PubSub says only what changes.
+  pub fn watch_channel(&mut self, channel_id: String, cx: &mut Context<Self>) {
+    if self.pubsub_task.is_some() || self.backend.twitch().is_none() {
       return;
     }
-    let (mut events, run) = twitch::raids::listen(&channel_id);
+    let (mut events, run) = twitch::pubsub::listen(&channel_id);
     // The connection runs on the network runtime and ends when `events` is dropped.
     drop(runtime::spawn(cx, run));
-    self.raid_task = Some(cx.spawn(async move |this, cx| {
+    self.pubsub_task = Some(cx.spawn(async move |this, cx| {
       while let Some(event) = events.recv().await {
-        if this
-          .update(cx, |this, cx| this.raid_event(event, cx))
-          .is_err()
-        {
+        let alive = this.update(cx, |this, cx| match event {
+          pubsub::Event::Listening => this.load_hype(cx),
+          pubsub::Event::Raid(event) => this.raid_event(event, cx),
+          pubsub::Event::HypeTrain(event) => this.hype_event(event, cx),
+        });
+        if alive.is_err() {
           return;
         }
       }
     }));
+  }
+
+  /// The channel's Hype Train from GQL (anonymous; a failed reading keeps the state).
+  fn load_hype(&mut self, cx: &mut Context<Self>) {
+    let Some(client) = self.backend.twitch().cloned() else {
+      return;
+    };
+    let login = self.login.clone();
+    let fetch = runtime::spawn(cx, async move { client.hype_train(&login).await });
+    cx.spawn(async move |this, cx| {
+      let Some(result) = fetch.await else {
+        return;
+      };
+      this
+        .update(cx, |this, cx| match result {
+          Ok(read) => {
+            this.hype.merge(read);
+            this.hype_failing = false;
+            this.fold_gone();
+            cx.notify();
+          }
+          Err(e) if this.hype_failing => tracing::debug!("Twitch Hype Train: {e}"),
+          Err(e) => {
+            tracing::warn!("Twitch Hype Train: {e}");
+            this.hype_failing = true;
+          }
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// The channel's Hype Train as shown.
+  #[cfg(debug_assertions)]
+  pub fn hype_state(&self) -> &hype_train::State {
+    &self.hype
+  }
+
+  /// What the Hype Train topic says (or the fake chat).
+  pub fn hype_event(&mut self, event: HypeEvent, cx: &mut Context<Self>) {
+    self.hype.apply(event);
+    self.fold_gone();
+    cx.notify();
   }
 
   /// What the raid topic says: an announced raid is pinned; when it goes, the page follows it
@@ -673,6 +737,7 @@ impl PointsView {
       .map(|p| p.id.clone())
       .chain(self.polls.iter().map(|p| p.id.clone()))
       .chain(self.raid.iter().map(|r| r.id.clone()))
+      .chain(hype_train_view::shown_id(&self.hype, polls::now_millis()).map(str::to_owned))
       .collect();
     self.unfolded.keep_only(ids.iter().map(String::as_str));
   }
@@ -1631,8 +1696,17 @@ impl PointsView {
           .created_at
           .and_then(|start| polls::share_left(start, length, now)),
         lead: raid_avatar(raid, LEAD, window, cx),
+        fill: None,
       });
     }
+    // Then the Hype Train, at the top as on Twitch.
+    items.extend(hype_train_view::pinned(
+      &self.hype,
+      &self.unfolded,
+      now,
+      window,
+      cx,
+    ));
     if !self.off && self.points.is_some() {
       for p in self.predictions.iter().filter(|p| self.shown(p)) {
         let open = self.unfolded.is(&p.id);
@@ -1654,6 +1728,7 @@ impl PointsView {
             PredictionStatus::Locked => None,
             PredictionStatus::Resolved | PredictionStatus::Canceled => self.ended_left(&p.id),
           },
+          fill: None,
         });
       }
     }
@@ -1674,6 +1749,7 @@ impl PointsView {
         // The votes' time, then the result's.
         time_left: poll.time_left(now).or_else(|| self.ended_left(&poll.id)),
         lead: None,
+        fill: None,
       });
     }
     items

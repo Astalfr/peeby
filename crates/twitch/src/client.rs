@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::gql::{self, PlaybackToken, Target};
 use crate::proxy::Proxy;
 use crate::usher::{self, Codec, PLAYER_ORIGIN, Variant, Version};
-use crate::{points, polls, spade};
+use crate::{hype_train, points, polls, spade};
 
 /// VODs per [`Client::vod_positions`] or [`Client::vod_chapters_many`] request: GQL allows 15
 /// aliased root fields in a query (checked 2026-11-02).
@@ -331,6 +331,12 @@ impl Client {
   pub async fn poll(&self, login: &str) -> Result<Option<polls::Poll>> {
     let answer = self.gql(&polls::poll_request(login)).await?;
     polls::parse_poll(&answer)
+  }
+
+  /// `login`'s Hype Train, approaching, under way or just ended (anonymous).
+  pub async fn hype_train(&self, login: &str) -> Result<hype_train::State> {
+    let answer = self.gql(&hype_train::hype_train_request(login)).await?;
+    hype_train::parse_hype_train(&answer)
   }
 
   /// A free vote by `user_id` (the auth-token's account) for `choice_id` in `poll_id`.

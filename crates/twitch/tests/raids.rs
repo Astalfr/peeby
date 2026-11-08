@@ -6,6 +6,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use serde_json::{Value, json};
+use twitch::pubsub;
 use twitch::raids::{self, RaidEvent};
 
 fn frames() -> Vec<String> {
@@ -68,5 +69,28 @@ fn cancels_other_topics_and_broken_frames() {
   assert_eq!(raids::parse_message(&frame.to_string()), None);
   assert_eq!(raids::parse_message(r#"{ "type": "PONG" }"#), None);
   assert_eq!(raids::parse_message("not json"), None);
-  assert!(raids::listen_frame("42").contains(r#""topics":["raid.42"]"#));
+  // The connection asks for the raid topic and the Hype Train's, one `LISTEN` each.
+  let frames = pubsub::listen_frames("42");
+  assert!(frames[0].contains(r#""topics":["raid.42"]"#));
+  assert!(frames[1].contains(r#""topics":["hype-train-events-v1.42"]"#));
+}
+
+#[test]
+fn the_connection_tells_raids_from_hype_trains() {
+  let frames = frames();
+  assert!(matches!(
+    pubsub::parse_message(&frames[1]),
+    Some(pubsub::Event::Raid(RaidEvent::Update(_)))
+  ));
+  let path = format!(
+    "{}/tests/fixtures/pubsub_hype_train.jsonl",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let hype = std::fs::read_to_string(path).unwrap();
+  let mut lines = hype.lines();
+  assert_eq!(pubsub::parse_message(lines.next().unwrap()), None);
+  assert!(matches!(
+    pubsub::parse_message(lines.next().unwrap()),
+    Some(pubsub::Event::HypeTrain(_))
+  ));
 }

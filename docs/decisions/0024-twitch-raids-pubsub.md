@@ -34,6 +34,8 @@ takes its viewers to Y's live unless they leave. Peeby should do the same on a l
   target's live in its tab, unless the viewer clicked "Quitter le raid": the viewer is in the raid by default, as on Twitch, and its card's one button leaves it (then "Rejoindre le raid"). A cancel (`raid_cancel_v2`,
   unconfirmed) removes the bar.
 - Only raid topics are listened to: the other PubSub topics (points, predictions) stay on GQL.
+  (2026-11-08, ADR 0032: the connection is now `twitch::pubsub::listen`'s and also carries the
+  channel's Hype Train topic.)
 
 ## Consequences
 

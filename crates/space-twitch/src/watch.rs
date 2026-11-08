@@ -835,10 +835,11 @@ impl WatchView {
   }
 
   fn show_channel(&mut self, channel: Channel, cx: &mut Context<Self>) {
-    // Its raids, once its id is known (a live only: VODs and clips have no points view).
+    // Its raids and Hype Trains, once its id is known (a live only: VODs and clips have no
+    // points view).
     if let Some(points) = self.points.clone() {
       let id = channel.id.clone();
-      points.update(cx, |points, cx| points.watch_raids(id, cx));
+      points.update(cx, |points, cx| points.watch_channel(id, cx));
     }
     let started = channel.live.as_ref().and_then(|l| l.started_at);
     let info = channel.live.as_ref().map(|live| LiveInfo {

@@ -6,7 +6,8 @@
 //! what is sent comes back as Twitch relays it, or is refused as the controls choose
 //! (`chat::writer_event`). The channel points, predictions and polls are `points::PointsView` on
 //! a local state ([`points::FakePoints`]), the predictions and polls pinned over the messages as
-//! on a live: nothing is read, spent or reported on Twitch.
+//! on a live, with a raid and a Hype Train told as their PubSub topics would: nothing is read,
+//! spent or reported on Twitch.
 //!
 //! The controls on the left set the rate of messages (and bursts), what they hold, the
 //! moderation, the channel's events, the room's modes, the connection's state, the field's state,
@@ -45,6 +46,7 @@ use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
 use super::polls;
 use feed::{CHANNEL, Content, Feed, Look, ME, Notice, RealWords, THIRD_PARTY};
 pub use points::FakePoints;
+use twitch::hype_train::{Approaching, Conductor, HypeEvent, HypeTrain, Progress, Source};
 use twitch::raids::RaidEvent;
 
 /// The images' URLs: drawn by [`Squares`], never downloaded.
@@ -122,8 +124,10 @@ pub struct FakeChatView {
   slow: u32,
   /// The fake outgoing raid, while it counts down.
   raid: Option<twitch::raids::Raid>,
-  /// Fake raids announced so far, for their ids.
+  /// Fake raids announced and trains started so far, for their ids.
   made: u64,
+  /// The fake Hype Train, as its topic would have said it.
+  hype: Option<HypeTrain>,
   _send: Subscription,
   _tasks: Vec<Task<()>>,
 }
@@ -204,6 +208,7 @@ impl FakeChatView {
       slow: 0,
       raid: None,
       made: 0,
+      hype: None,
       _send: send,
       _tasks: Vec::new(),
     };
@@ -1363,6 +1368,182 @@ impl FakeChatView {
     )
   }
 
+  fn hype_card(&self, cx: &mut Context<Self>) -> AnyElement {
+    Self::card(
+      "Hype Train",
+      vec![
+        Self::line(
+          t("Start", "Départ"),
+          vec![
+            self.button(
+              "hype-approach",
+              t("Approaching", "En approche").into(),
+              |this, cx| this.hype_approach(cx),
+              cx,
+            ),
+            self.button(
+              "hype-start",
+              t("Start one", "En lancer un").into(),
+              |this, cx| this.hype_start(false, cx),
+              cx,
+            ),
+            self.button(
+              "hype-golden",
+              "Golden Kappa".into(),
+              |this, cx| this.hype_start(true, cx),
+              cx,
+            ),
+          ],
+        ),
+        Self::line(
+          t("Run", "Trajet"),
+          vec![
+            self.button(
+              "hype-sub",
+              t("A sub (+500)", "Un abo (+500)").into(),
+              |this, cx| this.hype_contribute(Source::Subs, 500, cx),
+              cx,
+            ),
+            self.button(
+              "hype-bits",
+              t("1,000 bits", "1 000 bits").into(),
+              |this, cx| this.hype_contribute(Source::Bits, 1000, cx),
+              cx,
+            ),
+            self.button(
+              "hype-end",
+              t("End it", "Le terminer").into(),
+              |this, cx| {
+                if let Some(train) = this.hype.take() {
+                  let unlocked = (1..train.progress.level)
+                    .flat_map(fake_hype_emotes)
+                    .collect();
+                  this.hype_event(
+                    HypeEvent::End {
+                      id: Some(train.id),
+                      ended_at: Some(polls::now_millis()),
+                      unlocked,
+                    },
+                    cx,
+                  );
+                }
+              },
+              cx,
+            ),
+          ],
+        ),
+        div()
+          .text_xs()
+          .text_color(theme::muted())
+          .child(t(
+            "As Twitch's topic says it: an approach (3 contributions in 5 minutes), a start, contributions that fill the level (each level 5 minutes), conductors, and the end. An ended train stays pinned 30 s.",
+            "Comme le dit le sujet de Twitch : une approche (3 contributions en 5 minutes), un départ, des contributions qui remplissent le niveau (5 minutes par niveau), les conducteurs et la fin. Un train terminé reste épinglé 30 s.",
+          ))
+          .into_any_element(),
+      ],
+    )
+  }
+
+  /// An approach, one more contribution at each click.
+  fn hype_approach(&mut self, cx: &mut Context<Self>) {
+    if self.hype.is_some() {
+      return;
+    }
+    let id = format!("fake-hype-{}", self.made + 1);
+    let count = self
+      .points_view
+      .read(cx)
+      .hype_state()
+      .approaching
+      .as_ref()
+      .filter(|a| a.id == id)
+      .map_or(1, |a| (a.count + 1).min(2));
+    self.hype_event(
+      HypeEvent::Approaching(Approaching {
+        id,
+        goal: 3,
+        count,
+        expires_at: Some(polls::now_millis() + 5 * 60 * 1000),
+        color: None,
+        golden_kappa: false,
+        treasure: false,
+        rewards: fake_hype_emotes(1),
+      }),
+      cx,
+    );
+  }
+
+  fn hype_start(&mut self, golden: bool, cx: &mut Context<Self>) {
+    self.made += 1;
+    let now = polls::now_millis();
+    let train = HypeTrain {
+      id: format!("fake-hype-{}", self.made),
+      progress: Progress {
+        level: 1,
+        value: 1500,
+        goal: 1600,
+        total: 1500,
+        rewards: fake_hype_emotes(1),
+      },
+      started_at: Some(now),
+      expires_at: Some(now + 300_000),
+      level_seconds: 300,
+      color: Some("E474CF".into()),
+      golden_kappa: golden,
+      treasure: false,
+      conductors: Vec::new(),
+      record: Some(3),
+      ended_at: None,
+      unlocked: Vec::new(),
+    };
+    self.hype = Some(train.clone());
+    self.hype_event(HypeEvent::Start(train), cx);
+  }
+
+  /// `points` from a viewer: the level fills, or the next one starts (5 more minutes); they
+  /// become the source's conductor.
+  fn hype_contribute(&mut self, source: Source, points: u64, cx: &mut Context<Self>) {
+    let Some(train) = self.hype.as_mut() else {
+      return;
+    };
+    let p = &mut train.progress;
+    p.value += points;
+    p.total += points;
+    let level_up = p.value >= p.goal;
+    if level_up {
+      p.value -= p.goal;
+      p.level += 1;
+      p.goal += 500;
+      p.rewards = fake_hype_emotes(p.level);
+      train.expires_at = Some(polls::now_millis() + 300_000);
+    }
+    let event = HypeEvent::Progress {
+      id: Some(train.id.clone()),
+      progress: train.progress.clone(),
+      expires_at: train.expires_at,
+      level_up,
+    };
+    let name = match source {
+      Source::Bits => "peeby_bits",
+      _ => "peeby_abo",
+    };
+    let conductor = HypeEvent::Conductor {
+      train: train.id.clone(),
+      conductor: Conductor {
+        source,
+        login: name.into(),
+        name: name.into(),
+        avatar: Some(format!("{SCHEME}avatar/{name}")),
+      },
+    };
+    self.hype_event(event, cx);
+    self.hype_event(conductor, cx);
+  }
+
+  fn hype_event(&mut self, event: HypeEvent, cx: &mut Context<Self>) {
+    self.points_view.update(cx, |p, cx| p.hype_event(event, cx));
+  }
+
   /// A fake raid event, as the raid topic would send it.
   fn raid_event(&mut self, event: RaidEvent, cx: &mut Context<Self>) {
     self.points_view.update(cx, |p, cx| p.raid_event(event, cx));
@@ -1470,7 +1651,8 @@ impl Render for FakeChatView {
           .child(self.points_card(cx))
           .child(self.predictions_card(cx))
           .child(self.polls_card(cx))
-          .child(self.raid_card(cx)),
+          .child(self.raid_card(cx))
+          .child(self.hype_card(cx)),
       )
       .child(
         div()
@@ -1491,4 +1673,15 @@ impl Render for FakeChatView {
           ),
       )
   }
+}
+
+/// A level's fake emotes, drawn in memory.
+fn fake_hype_emotes(level: u32) -> Vec<twitch::hype_train::Emote> {
+  ["Choo", "Hype", "Rail", "Steam"]
+    .iter()
+    .map(|name| twitch::hype_train::Emote {
+      id: format!("{SCHEME}emote/{name}{level}?w=56&h=56"),
+      token: format!("{name}{level}"),
+    })
+    .collect()
 }

@@ -20,6 +20,7 @@ mod chat;
 mod fake_chat;
 mod follow;
 mod following;
+mod hype_train;
 mod login;
 mod play;
 mod points;

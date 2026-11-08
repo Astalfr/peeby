@@ -9,26 +9,9 @@
 //! GQL's `user(login) { raid }` exists but stayed null for every viewer, anonymous or signed in
 //! (2026-11-04, about 2,600 lives scanned 50 times): it is the broadcaster's own.
 //!
-//! [`listen`] holds one connection for one channel: it answers PubSub's pings, follows its
-//! `RECONNECT`, reconnects after an error with a growing delay (1, 2, 4… 30 s), and stops when
-//! its receiver is dropped.
+//! The connection is [`crate::pubsub::listen`]'s, shared with the channel's Hype Train topic.
 
-use std::time::Duration;
-
-use futures_util::{SinkExt, StreamExt};
-use serde_json::{Value, json};
-use tokio::sync::mpsc;
-use tokio_tungstenite::tungstenite::Message;
-
-const URL: &str = "wss://pubsub-edge.twitch.tv/v1";
-/// PubSub drops a client that sends no `PING` for 5 minutes.
-const PING_EVERY: Duration = Duration::from_secs(4 * 60);
-/// No `PONG` this long after a `PING`: the connection is taken as dead.
-const PONG_WITHIN: Duration = Duration::from_secs(15);
-/// Longest delay before reconnecting.
-const MAX_DELAY: Duration = Duration::from_secs(30);
-/// Events kept for the page before the connection waits for it to catch up.
-const QUEUE: usize = 64;
+use serde_json::Value;
 
 /// A raid about to leave a channel.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -95,115 +78,5 @@ pub fn parse_message(frame: &str) -> Option<RaidEvent> {
     "raid_update_v2" | "raid_update" => Some(RaidEvent::Update(parsed)),
     "raid_go_v2" | "raid_go" => Some(RaidEvent::Go(parsed)),
     _ => None,
-  }
-}
-
-/// The frame asking for `channel_id`'s raid topic.
-pub fn listen_frame(channel_id: &str) -> String {
-  json!({
-    "type": "LISTEN",
-    "nonce": "peeby-raid",
-    "data": { "topics": [format!("raid.{channel_id}")] },
-  })
-  .to_string()
-}
-
-/// Starts listening to `channel_id`'s raids. Run the returned future on a tokio runtime; it ends
-/// when the receiver is dropped.
-pub fn listen(
-  channel_id: &str,
-) -> (
-  mpsc::Receiver<RaidEvent>,
-  impl Future<Output = ()> + Send + 'static,
-) {
-  let (tx, rx) = mpsc::channel(QUEUE);
-  (rx, run(channel_id.to_owned(), tx))
-}
-
-async fn run(channel_id: String, tx: mpsc::Sender<RaidEvent>) {
-  let mut delay = Duration::from_secs(1);
-  loop {
-    match session(&channel_id, &tx).await {
-      Ok(Ended::Closed) => return,
-      Ok(Ended::Reconnect) => {
-        delay = Duration::from_secs(1);
-        continue;
-      }
-      Err(e) => tracing::info!("Twitch raids of {channel_id}: {e}"),
-    }
-    tokio::select! {
-      () = tokio::time::sleep(delay) => {}
-      () = tx.closed() => return,
-    }
-    delay = (delay * 2).min(MAX_DELAY);
-  }
-}
-
-enum Ended {
-  Closed,
-  Reconnect,
-}
-
-async fn session(channel_id: &str, tx: &mpsc::Sender<RaidEvent>) -> Result<Ended, String> {
-  let (mut socket, _) = tokio_tungstenite::connect_async(URL)
-    .await
-    .map_err(|e| format!("cannot connect: {e}"))?;
-  let send = |text: String| Message::text(text);
-  socket
-    .send(send(listen_frame(channel_id)))
-    .await
-    .map_err(|e| format!("cannot send: {e}"))?;
-  let mut ping = tokio::time::interval(PING_EVERY);
-  // The first tick is at once: the next ones every PING_EVERY.
-  ping.tick().await;
-  let mut awaiting_pong: Option<tokio::time::Instant> = None;
-  loop {
-    let pong_deadline = awaiting_pong.map(|at| at + PONG_WITHIN);
-    let frame = tokio::select! {
-      frame = socket.next() => frame,
-      _ = ping.tick() => {
-        socket
-          .send(send(r#"{"type":"PING"}"#.to_owned()))
-          .await
-          .map_err(|e| format!("cannot send: {e}"))?;
-        awaiting_pong.get_or_insert_with(tokio::time::Instant::now);
-        continue;
-      }
-      () = async {
-        match pong_deadline {
-          Some(deadline) => tokio::time::sleep_until(deadline).await,
-          None => std::future::pending().await,
-        }
-      } => return Err("no PONG".into()),
-      () = tx.closed() => return Ok(Ended::Closed),
-    };
-    let text = match frame {
-      None => return Err("closed by the server".into()),
-      Some(Err(e)) => return Err(format!("read: {e}")),
-      Some(Ok(Message::Text(text))) => text,
-      Some(Ok(Message::Close(_))) => return Err("closed by the server".into()),
-      Some(Ok(_)) => continue,
-    };
-    let text = text.as_str();
-    if text.contains("\"PONG\"") {
-      awaiting_pong = None;
-    } else if text.contains("\"RECONNECT\"") {
-      return Ok(Ended::Reconnect);
-    } else if text.contains("\"RESPONSE\"") {
-      // An empty `error` is accepted; anything else will not change by retrying.
-      let refused = serde_json::from_str::<Value>(text)
-        .ok()
-        .and_then(|v| v["error"].as_str().map(str::to_owned))
-        .filter(|e| !e.is_empty());
-      if let Some(error) = refused {
-        tracing::warn!("Twitch raids of {channel_id}: refused ({error})");
-        tx.closed().await;
-        return Ok(Ended::Closed);
-      }
-    } else if let Some(event) = parse_message(text)
-      && tx.send(event).await.is_err()
-    {
-      return Ok(Ended::Closed);
-    }
   }
 }

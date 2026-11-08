@@ -318,6 +318,9 @@ Two credentials, for different things. Both are secrets, under the same rules as
     - Polls with 2 or 5 choices, fake voters, a free vote, ending (the result stays 20 s), removing.
     - An outgoing raid: announced (viewers join it, it goes by itself after 90 s), canceled, or
       gone at once (a followed one says what would open).
+    - A Hype Train: approaching (one more contribution per click), started (or a Golden Kappa
+      Train), a sub (+500) or 1,000 bits that fill the level and make their giver its
+      conductor, and its end (it stays pinned 30 s with the emotes it unlocked).
       They show with the points off too.
 
 ## Catalog through GQL instead of Helix
@@ -493,6 +496,20 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     `force_raid_now_seconds` (90). A connection takes 50 topics, an address 10 connections. No
     cancel was seen (`raid_cancel_v2` expected **[?]**). Fixture: `pubsub_raid.jsonl`. Incoming
     raids are `USERNOTICE msg-id=raid` lines, shown as chat notices.
+  - **Hype Trains** ([ADR 0032](decisions/0032-twitch-hype-trains.md), `twitch::hype_train`):
+    GQL's `user(login) { channel { hypeTrain { approaching execution } } }` answers anonymous
+    (2026-11-08): the last train (`isActive`, `progress { goal progression total remainingSeconds
+    level { value goal rewards } }`: `goal` and `progression` are the level's; `expiresAt`, the
+    level's end, 5 minutes after its last level-up; `config { primaryHexColor
+    willUseCreatorColor }`, `allTimeHigh { level }`, `conductors { source user }`,
+    `isGoldenKappaTrain`, `isTreasureTrain`), and an approach (`goal`, `participants`, `expiresAt`,
+    `levelOneRewards`). PubSub's `hype-train-events-v1.<channel id>` takes an anonymous listener
+    on the raid's connection (500 lives for 30 minutes with `raid_probe --topic
+    hype-train-events-v1`): `hype-train-approaching`, `-start`, `-progression`, `-level-up`,
+    `-conductor-update`, `-end` (`ending_reason` `COMPLETED`, or `EXPIRED` without level 1, and
+    every emote unlocked). A `LISTEN` of 50 such topics closes the connection (code 1009): a few
+    at a time. Fixtures: `gql_hype_train.json`, `gql_hype_train_approaching.json`
+    (`hype_probe --save`), `pubsub_hype_train.jsonl` (one train's frames, contributors renamed).
   - Twitch-Channel-Points-Miner's persisted `ChannelPointsContext` answers too, with more fields:
     automatic rewards, goals, earning rates (`passiveWatchPoints`, `claimPoints`…).
 - **Spends, raw mutations** (checked with made-up ids, so nothing was spent):

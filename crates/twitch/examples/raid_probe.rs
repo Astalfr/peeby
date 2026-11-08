@@ -2,9 +2,11 @@
 //! (`raid.<channel id>`), as its web player used: connects, asks for the topics of the given
 //! channels (or of 500 lives of the top categories with `top`), and prints every message for a
 //! while; raid messages are also written, one per line, to the file given with `--save` (they
-//! carry public channel data only). Anonymous: no token is read or sent.
+//! carry public channel data only). Anonymous: no token is read or sent. `--topic <prefix>`
+//! listens to another topic family instead (`hype-train-events-v1`, ADR 0032), asked for ten at
+//! a time: PubSub closes the connection on a large `LISTEN`.
 //!
-//! `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>]`
+//! `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>] [--topic <prefix>]`
 
 // A command-line probe reports on the console.
 #![allow(clippy::print_stdout)]
@@ -31,15 +33,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     args.drain(i..(i + 2).min(args.len()));
     path
   });
+  // Another topic family than `raid` (`hype-train-events-v1`, ...).
+  let topic = args
+    .iter()
+    .position(|a| a == "--topic")
+    .map_or("raid".to_owned(), |i| {
+      let topic = args.get(i + 1).cloned().unwrap_or_default();
+      args.drain(i..(i + 2).min(args.len()));
+      topic
+    });
   let minutes: u64 = args.first().and_then(|m| m.parse().ok()).unwrap_or(5);
   let logins: Vec<String> = args.into_iter().skip(1).collect();
-  twitch::block_on(probe(minutes, logins, save))?
+  twitch::block_on(probe(minutes, logins, save, topic))?
 }
 
 async fn probe(
   minutes: u64,
   logins: Vec<String>,
   save: Option<String>,
+  topic: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let client = twitch::Client::new(None, None)?;
   let mut ids = Vec::new();
@@ -78,7 +90,7 @@ async fn probe(
     .take(CONNECTIONS)
     .enumerate()
     .map(|(i, chunk)| {
-      let topics: Vec<String> = chunk.iter().map(|id| format!("raid.{id}")).collect();
+      let topics: Vec<String> = chunk.iter().map(|id| format!("{topic}.{id}")).collect();
       listen(i, topics, until, saved.clone())
     });
   for result in futures_util::future::join_all(listeners).await {
@@ -97,12 +109,16 @@ async fn listen(
   saved: Saved,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let (mut socket, _) = tokio_tungstenite::connect_async(PUBSUB).await?;
-  let listen = serde_json::json!({
-    "type": "LISTEN",
-    "nonce": format!("peeby-{n}"),
-    "data": { "topics": topics },
-  });
-  socket.send(Message::text(listen.to_string())).await?;
+  // PubSub closes the connection on a large frame (code 1009 with 50 hype train topics): ask
+  // for them a few at a time.
+  for (i, topics) in topics.chunks(10).enumerate() {
+    let listen = serde_json::json!({
+      "type": "LISTEN",
+      "nonce": format!("peeby-{n}-{i}"),
+      "data": { "topics": topics },
+    });
+    socket.send(Message::text(listen.to_string())).await?;
+  }
   let mut ping = Instant::now();
   while Instant::now() < until {
     let next = tokio::time::timeout(Duration::from_secs(30), socket.next()).await;

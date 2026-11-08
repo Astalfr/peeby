@@ -1,0 +1,104 @@
+{
+  "data": {
+    "user": {
+      "channel": {
+        "hypeTrain": {
+          "approaching": null,
+          "execution": {
+            "allTimeHigh": {
+              "level": {
+                "value": 20
+              }
+            },
+            "conductors": [
+              {
+                "source": "SUBS",
+                "user": {
+                  "displayName": "VIEWER1",
+                  "id": "100000001",
+                  "login": "viewer1",
+                  "profileImageURL": "https://static-cdn.jtvnw.net/user-default-pictures-uv/de130ab0-def7-11e9-b668-784f43822e80-profile_image-50x50.png"
+                }
+              }
+            ],
+            "config": {
+              "primaryHexColor": "EB0400",
+              "willUseCreatorColor": true
+            },
+            "endReason": null,
+            "endedAt": null,
+            "expiresAt": "2026-11-08T17:13:32.933322795Z",
+            "id": "aa6134ce-3203-4592-8fbd-7d7477665733",
+            "isActive": true,
+            "isGoldenKappaTrain": false,
+            "isTreasureTrain": false,
+            "progress": {
+              "goal": 3100,
+              "level": {
+                "goal": 7600,
+                "rewards": [
+                  {
+                    "emote": {
+                      "id": "emotesv2_91b3e913c6484fca894830ab953aa16b",
+                      "token": "RawkOut"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_a83f8ade02cd4b37b8ae079584407c66",
+                      "token": "RedCard"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_c3db311615df4ecb9e3be0c492fbfc8b",
+                      "token": "ApplauseBreak"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_871fb6fa55d54fae8e807198c59e082f",
+                      "token": "TouchOfSalt"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_d515e6c3d8064692a706bbdf4662b9a0",
+                      "token": "SoCinema"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_daa7dff7413c49fba8f5429da76d8e76",
+                      "token": "ServalBop"
+                    },
+                    "type": "EMOTE"
+                  },
+                  {
+                    "emote": {
+                      "id": "emotesv2_f19c2e92d86040d7b8af5a42e56fe12e",
+                      "token": "HereCATCH"
+                    },
+                    "type": "EMOTE"
+                  }
+                ],
+                "value": 3
+              },
+              "progression": 500,
+              "remainingSeconds": 230,
+              "total": 5000
+            },
+            "startedAt": "2026-11-08T17:05:50.37525012Z",
+            "updatedAt": "2026-11-08T17:08:32.933324798Z"
+          }
+        }
+      },
+      "id": "119981767"
+    }
+  }
+}
