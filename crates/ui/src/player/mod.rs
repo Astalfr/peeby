@@ -883,12 +883,18 @@ impl PlayerView {
 
   /// The picture, for a mini-player showing this player elsewhere.
   pub fn video(&self) -> Option<Entity<VideoView>> {
-    self.shown_video()
+    self.video.clone()
   }
 
-  /// The picture on screen: the previous mpv's until the new one has a frame.
-  fn shown_video(&self) -> Option<Entity<VideoView>> {
-    self.previous_video.clone().or_else(|| self.video.clone())
+  /// The pictures on screen, bottom first: the current mpv's, always drawn (it gives mpv its
+  /// size: undrawn, it would never render a frame), and the previous mpv's over it until the
+  /// current one has a frame.
+  fn shown_videos(&self) -> impl Iterator<Item = Entity<VideoView>> + use<> {
+    self
+      .video
+      .clone()
+      .into_iter()
+      .chain(self.previous_video.clone())
   }
 
   /// An mpv property as text, for diagnostics (`hwdec-current`, `video-codec`…); `None` before
@@ -3247,7 +3253,7 @@ impl PlayerView {
       .bg(gpui::black())
       .children(
         self
-          .shown_video()
+          .shown_videos()
           .filter(|_| !self.in_pip && !self.failed)
           .map(|video| div().absolute().inset_0().child(video)),
       )
@@ -3306,12 +3312,13 @@ impl Render for PlayerView {
         .absolute()
         .inset_0()
       })
-      .children(
+      .children({
+        let shown = !self.in_pip;
         self
-          .shown_video()
-          .filter(|_| !self.in_pip)
-          .map(|video| div().absolute().inset_0().child(video)),
-      )
+          .shown_videos()
+          .filter(move |_| shown)
+          .map(|video| div().absolute().inset_0().child(video))
+      })
       .when(self.in_pip, |root| {
         root.child(
           v_flex()
