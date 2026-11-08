@@ -31,8 +31,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyElement, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task, WeakEntity,
-  Window, div, px,
+  Anchor, AnyElement, App, Context, ElementId, Entity, FontWeight, Hsla, SharedString, Task,
+  WeakEntity, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputState};
@@ -79,6 +79,8 @@ const BONUS_HEIGHT: f32 = 24.;
 const BONUS_BUMP: Duration = Duration::from_millis(420);
 /// How long it takes to fade and shrink away.
 const BONUS_LEAVE: Duration = Duration::from_millis(220);
+/// How long a poll's or a prediction's bar takes to reach a new share of the votes or points.
+const SHARE_MOTION: Duration = Duration::from_millis(600);
 
 /// The bonus button's scale and opacity at a moment of its animation.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -168,6 +170,26 @@ fn share_label(share: u64) -> String {
 }
 
 /// `25%` (French: `25 %`, a no-break space).
+/// `share` (0 to 1) eased from the value `id` last showed, for a bar and its percentage: a new
+/// count slides there instead of jumping. Shown as is the first time (an unfolded card does
+/// not grow from nothing) and with reduced motion.
+fn eased_share(id: String, share: f64, window: &mut Window, cx: &mut App) -> f32 {
+  let share = share as f32;
+  let duration = if cx.reduce_motion() {
+    Duration::ZERO
+  } else {
+    SHARE_MOTION
+  };
+  ui::motion::tween(
+    ElementId::Name(id.into()),
+    share,
+    share,
+    duration,
+    window,
+    cx,
+  )
+}
+
 fn percent(n: impl std::fmt::Display) -> String {
   tf!("{n}%", "{n}\u{a0}%")
 }
@@ -1277,7 +1299,12 @@ impl PointsView {
   }
 
   /// A prediction's card, unfolded over the chat: its outcomes, the bet amounts, a bet's outcome.
-  fn prediction_body(&self, p: &Prediction, cx: &mut Context<Self>) -> AnyElement {
+  fn prediction_body(
+    &self,
+    p: &Prediction,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
     let total: u64 = p.outcomes.iter().map(|o| o.points).sum();
     let open = p.status == PredictionStatus::Active && p.bet.is_none();
     let canceled = p.status == PredictionStatus::Canceled;
@@ -1292,6 +1319,12 @@ impl PointsView {
       };
       // What a point bet on it returns, if it wins.
       let ratio = (outcome.points > 0).then(|| total as f64 / outcome.points as f64);
+      let share = eased_share(
+        format!("twitch-bet-bar-{}-{}", p.id, outcome.id),
+        share,
+        window,
+        cx,
+      );
       let spend = Spend::Bet {
         event: p.id.clone(),
         outcome: outcome.id.clone(),
@@ -1368,7 +1401,7 @@ impl PointsView {
                 div()
                   .h_full()
                   .rounded_full()
-                  .w(gpui::relative(share as f32))
+                  .w(gpui::relative(share))
                   .bg(outcome_color(&outcome.color)),
               ),
           )
@@ -1416,7 +1449,7 @@ impl PointsView {
 
   /// A poll's card: its choices with their share of the votes; while it takes votes and the
   /// viewer has not voted, a click on a choice (lit up under the pointer) votes for it.
-  fn poll_body(&self, poll: &Poll, cx: &mut Context<Self>) -> AnyElement {
+  fn poll_body(&self, poll: &Poll, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let total = poll.total();
     let can_vote = self.can_vote();
     let open = can_vote && poll.choices.iter().any(|c| poll.votable(&c.id));
@@ -1431,6 +1464,12 @@ impl PointsView {
       } else {
         0.0
       };
+      let share = eased_share(
+        format!("twitch-vote-bar-{}-{}", poll.id, choice.id),
+        share,
+        window,
+        cx,
+      );
       let mine = poll.voted.iter().any(|c| c == &choice.id);
       let won = winner.as_deref() == Some(choice.id.as_str());
       let (poll_id, choice_id) = (poll.id.clone(), choice.id.clone());
@@ -1492,7 +1531,7 @@ impl PointsView {
                   div()
                     .h_full()
                     .rounded_full()
-                    .w(gpui::relative(share as f32))
+                    .w(gpui::relative(share))
                     .bg(if won || mine {
                       theme::accent()
                     } else {
@@ -1604,7 +1643,7 @@ impl PointsView {
           kind: t("Prediction", "Prédiction").into(),
           title: p.title.clone().into(),
           status: prediction_status(p).into(),
-          body: open.then(|| self.prediction_body(p, cx)),
+          body: open.then(|| self.prediction_body(p, window, cx)),
           // The bets' time, then the result's.
           lead: None,
           time_left: match p.status {
@@ -1631,7 +1670,7 @@ impl PointsView {
         kind: t("Poll", "Sondage").into(),
         title: poll.title.clone().into(),
         status: poll.status(now).into(),
-        body: open.then(|| self.poll_body(poll, cx)),
+        body: open.then(|| self.poll_body(poll, window, cx)),
         // The votes' time, then the result's.
         time_left: poll.time_left(now).or_else(|| self.ended_left(&poll.id)),
         lead: None,
