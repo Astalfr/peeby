@@ -38,6 +38,7 @@ PeebTube additions to `gpui-video`:
 - `VideoView::set_corner_radii` (rounded picture on the watch page: a parent's `overflow_hidden` clips to a rectangle, not to its corners);
 - `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window;
 - re-exports `set_window_bounds` from the patched GPUI;
+- frames are painted fitted to the view (`ObjectFit::Contain`), not stretched: while it is resized, mpv renders at the old size until the new one settles, and the picture kept its old shape until then;
 - `VideoView::has_frame`, so that the shared player keeps the previous mpv's picture until a restarted one has its first frame (a quality change, a multistream's swap, ADR 0033).
 
 PeebTube additions to the GPUI patch (`vendor/gpui-pre-windows`):

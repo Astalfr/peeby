@@ -8,7 +8,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::prelude::*;
-use gpui::{App, Bounds, Context, Corners, Pixels, RenderImage, Task, Window, canvas, div};
+use gpui::{
+  App, Bounds, Context, Corners, ObjectFit, Pixels, RenderImage, Task, Window, canvas, div,
+};
 use player::Frame;
 
 /// Hides the mouse cursor until it moves, e.g. when the player's controls hide (patched GPUI).
@@ -32,7 +34,7 @@ pub struct VideoView {
   generation: u64,
   ring: Ring,
   current_slot: Option<usize>,
-  /// The ring replaced by a resize and its last frame, shown (stretched) until the new ring has
+  /// The ring replaced by a resize and its last frame, shown (fitted) until the new ring has
   /// a frame: else each step of a resize would show black for a frame.
   held: Option<(Ring, Arc<RenderImage>)>,
   cpu_frame: Option<Arc<RenderImage>>,
@@ -238,7 +240,10 @@ impl Render for VideoView {
           },
           move |bounds, (), window, _| {
             if let Some(frame) = frame {
-              let _ = window.paint_image(bounds, bounds, radii, frame, 0, false);
+              // Fitted, not stretched: while the view is resized, mpv still renders at the old
+              // size until the new one settles, and its letterboxed frame keeps its shape.
+              let fitted = ObjectFit::Contain.get_bounds(bounds, frame.size(0));
+              let _ = window.paint_image(bounds, fitted, radii, frame, 0, false);
             }
           },
         )

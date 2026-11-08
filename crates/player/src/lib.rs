@@ -27,7 +27,7 @@ use crate::sys::{Mpv, MpvEvent, RenderBackend};
 const RING: usize = 3;
 /// A size change after this long without one recreates the ring at once; closer ones (a resize by
 /// the mouse, one per move) wait until the size has not changed for this long, frames coming
-/// meanwhile (stretched) at the old size.
+/// meanwhile at the old size (the UI fits them to the view, keeping their shape).
 const RESIZE_SETTLE: Duration = Duration::from_millis(60);
 /// Position events are sent at most this often (seconds of media time).
 const POSITION_STEP: f64 = 0.25;
