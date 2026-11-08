@@ -7,7 +7,7 @@
 //! A history of pages per tab (ADR 0015, ADR 0019): "Suivies" (the account's sign-in card, then
 //! the Helix card until connected), "Parcourir" or the search, then categories and lives. With Helix, the
 //! sidebar lists the followed channels on air, refreshed every two minutes; those that go live in
-//! the meantime show in the bell ([`bell`]). The sidebar's "Multistream" plays up to four lives at
+//! the meantime show in the bell ([`bell`]). The sidebar's "Multistream" plays up to six lives at
 //! once ([`multistream`], ADR 0033).
 //! Debug builds add a fake chat to the sidebar ([`fake_chat`]): the live chat's features without
 //! a channel nor the network.

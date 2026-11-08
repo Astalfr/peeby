@@ -1,6 +1,8 @@
 //! The multistream (ADR 0033, docs/twitch.md "Multistream"): up to [`MAX_LIVES`] lives at once,
 //! from the sidebar's "Multistream" entry and nowhere else. The main live fills the page with its
-//! whole player; the others play in a row under it, muted and in a small quality. A click on one
+//! whole player; the others play in a row under it, muted and in a small quality: 16:9 tiles as
+//! wide as the row's height allows (the bar over the row drags it, `[twitch]
+//! multistream_row_height`), narrower when the row's width cannot hold them all. A click on one
 //! makes it the main live (the lives swap their places, no player restarts but for its quality);
 //! the row's "+" opens [`AddLive`]: the followed channels on air, or a search of the whole of
 //! Twitch.
@@ -28,9 +30,9 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, Bounds, Context, ElementId, Entity, EntityId, EventEmitter, FontWeight, Hsla,
-  KeyDownEvent, MouseButton, Pixels, ScrollHandle, SharedString, Subscription, Task, Window,
-  canvas, div, px, relative, rgb,
+  AnyElement, App, Bounds, Context, DispatchPhase, ElementId, Entity, EntityId, EventEmitter,
+  FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, ScrollHandle, SharedString, Subscription,
+  Task, Window, canvas, div, px, relative, rgb,
 };
 use gpui_component::IconName;
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -53,12 +55,22 @@ use super::browse::load;
 use super::watch::{WatchEvent, WatchView};
 use super::{Nav, Route, cards, chat};
 
-/// Lives played at once: the main one and three in the row.
-pub const MAX_LIVES: usize = 4;
+/// Lives played at once: the main one and five in the row.
+pub const MAX_LIVES: usize = 6;
 /// Height of the row of secondary lives.
 const ROW_HEIGHT: f32 = 140.;
+/// The row's height the bar between it and the main live allows, at least.
+const ROW_MIN: f32 = 72.;
+/// Height the main live keeps, at least, when the row grows.
+const MAIN_MIN: f32 = 180.;
+/// Space between the row's tiles (`gap_3`).
+const ROW_GAP: f32 = 12.;
+/// Height of the bar between the main live and the row, which resizes the row.
+const RESIZE_BAR: f32 = 12.;
+/// The "+" tile's width, in its heights, beside lives (alone, it is 16:9).
+const ADD_WIDTH: f32 = 0.75;
 /// Each channel's color in the merged chat, by the first one free.
-const COLORS: [u32; MAX_LIVES] = [0x9146ff, 0x1dd1a1, 0xff9f43, 0x48dbfb];
+const COLORS: [u32; MAX_LIVES] = [0x9146ff, 0x1dd1a1, 0xff9f43, 0x48dbfb, 0xff6b81, 0xfeca57];
 /// The search runs this long after the last key.
 const SEARCH_DELAY: Duration = Duration::from_millis(350);
 /// Size of a chat tab's picture.
@@ -145,6 +157,15 @@ pub struct MultistreamView {
   focused: Option<EntityId>,
   /// The chat tabs' sideways scroll.
   tabs_scroll: ScrollHandle,
+  /// The row's height the viewer chose (`[twitch] multistream_row_height`); its tiles may be
+  /// lower when the row is too narrow for them at 16:9.
+  row_height: f32,
+  /// The row's bar is being dragged: where the mouse went down, the row's height then, and the
+  /// height the main live and the row shared then (fixed for the drag: a measure taken during it
+  /// would lag a frame behind the height it sets).
+  resizing: Option<(Pixels, f32, f32)>,
+  /// Where the row was laid out, for its tiles' width.
+  row_area: Rc<Cell<Bounds<Pixels>>>,
   /// Where each place of the lineup was laid out (the main one first), and the page.
   places: [Rc<Cell<Bounds<Pixels>>>; MAX_LIVES],
   page: Rc<Cell<Bounds<Pixels>>>,
@@ -212,6 +233,12 @@ impl MultistreamView {
       adding: None,
       focused: None,
       tabs_scroll: ScrollHandle::new(),
+      row_height: Settings::get(cx)
+        .twitch
+        .multistream_row_height
+        .map_or(ROW_HEIGHT, |h| h as f32),
+      resizing: None,
+      row_area: Rc::default(),
       places: Default::default(),
       page: Rc::default(),
       swap: None,
@@ -512,7 +539,7 @@ impl MultistreamView {
   }
 
   /// A live's tile in the row, at `index` of the lineup.
-  fn render_tile(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+  fn render_tile(&self, index: usize, size: (f32, f32), cx: &mut Context<Self>) -> AnyElement {
     let tile = &self.tiles[index];
     let summary = tile.view.read(cx).summary();
     let player = tile.view.read(cx).player();
@@ -591,10 +618,9 @@ impl MultistreamView {
     div()
       .group(group)
       .relative()
-      .h_full()
-      .flex_1()
-      .min_w_0()
-      .max_w(px(ROW_HEIGHT * 16. / 9.))
+      .flex_none()
+      .w(px(size.0))
+      .h(px(size.1))
       .rounded(theme::RADIUS)
       .overflow_hidden()
       .bg(gpui::black())
@@ -606,6 +632,138 @@ impl MultistreamView {
       })
       .child(overlay)
       .into_any_element()
+  }
+
+  /// The size of the row's tiles and of its "+" (width, height): 16:9 tiles as wide as the
+  /// chosen height allows, narrower (and lower) when the row's width cannot hold them all.
+  fn row_sizes(&self) -> ((f32, f32), (f32, f32)) {
+    let lives = self.tiles.len().saturating_sub(1);
+    let height = self.row_height;
+    if lives == 0 {
+      return ((0., 0.), (height * 16. / 9., height));
+    }
+    let tile = (height * 16. / 9.).min(self.widest_tile().unwrap_or(f32::INFINITY));
+    let tile_height = tile * 9. / 16.;
+    ((tile, tile_height), (tile_height * ADD_WIDTH, tile_height))
+  }
+
+  /// The widest 16:9 tile the row's width holds for every live, with the "+" (as wide as
+  /// [`ADD_WIDTH`] of the tiles' height) beside them; `None` before the row is measured. It does
+  /// not depend on the height chosen: the row stops growing there.
+  fn widest_tile(&self) -> Option<f32> {
+    let lives = self.tiles.len().saturating_sub(1);
+    let width = f32::from(self.row_area.get().size.width);
+    if lives == 0 || width <= 0. {
+      return None;
+    }
+    let add = self.tiles.len() < MAX_LIVES;
+    let gaps = ROW_GAP * (lives + usize::from(add)).saturating_sub(1) as f32;
+    // `lives` tiles of width w, and a "+" of ADD_WIDTH × (w × 9/16).
+    let share = lives as f32 + if add { ADD_WIDTH * 9. / 16. } else { 0. };
+    Some(((width - gaps) / share).max(1.))
+  }
+
+  /// The bar between the main live and the row: dragged, it sets the row's height.
+  fn render_resize_bar(&self, cx: &mut Context<Self>) -> AnyElement {
+    let dragging = self.resizing.is_some();
+    let page = cx.weak_entity();
+    div()
+      .id("multistream-resize")
+      .group("multistream-resize")
+      .relative()
+      .w_full()
+      .h(px(RESIZE_BAR))
+      .flex_none()
+      .flex()
+      .items_center()
+      .justify_center()
+      .cursor_row_resize()
+      .on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+          // From the height shown (lower than the one chosen when the row's width holds it
+          // back), so that the bar follows the mouse at once.
+          let shown = f32::from(this.row_area.get().size.height);
+          let height = if shown > 0. { shown } else { this.row_height };
+          let room = f32::from(this.places[0].get().size.height) + height;
+          this.row_height = height;
+          this.resizing = Some((event.position.y, height, room));
+          cx.notify();
+        }),
+      )
+      .child(
+        div()
+          .w(px(40.))
+          .h(px(4.))
+          .rounded_full()
+          .bg(if dragging {
+            theme::accent()
+          } else {
+            theme::border()
+          })
+          .group_hover("multistream-resize", |el| el.bg(theme::accent())),
+      )
+      // The drag goes on wherever the mouse is: the window's mouse, while painting.
+      .when(dragging, |el| {
+        el.child(
+          canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+              let moved = page.clone();
+              window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, _, cx| {
+                if phase != DispatchPhase::Capture {
+                  return;
+                }
+                moved
+                  .update(cx, |this, cx| {
+                    if event.pressed_button == Some(MouseButton::Left) {
+                      this.resize_to(event.position.y, cx);
+                    } else {
+                      this.end_resize(cx);
+                    }
+                  })
+                  .ok();
+              });
+              let released = page.clone();
+              window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, _, cx| {
+                if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
+                  released.update(cx, |this, cx| this.end_resize(cx)).ok();
+                }
+              });
+            },
+          )
+          .absolute()
+          .inset_0(),
+        )
+      })
+      .into_any_element()
+  }
+
+  /// The row's bar dragged to `y`: up grows the row, down shrinks it; the main live keeps
+  /// [`MAIN_MIN`].
+  fn resize_to(&mut self, y: Pixels, cx: &mut Context<Self>) {
+    let Some((from, height, room)) = self.resizing else {
+      return;
+    };
+    // As high as the main live leaves, and no higher than the row's width lets the tiles be.
+    let mut most = room - MAIN_MIN;
+    if let Some(tile) = self.widest_tile() {
+      most = most.min(tile * 9. / 16.);
+    }
+    let wanted = (height + f32::from(from - y)).clamp(ROW_MIN, most.max(ROW_MIN));
+    if (wanted - self.row_height).abs() >= 0.5 {
+      self.row_height = wanted;
+      cx.notify();
+    }
+  }
+
+  /// The drag ends: the height is kept for the next times.
+  fn end_resize(&mut self, cx: &mut Context<Self>) {
+    if self.resizing.take().is_some() {
+      let height = self.row_height.round() as u32;
+      Settings::update(cx, |s| s.twitch.multistream_row_height = Some(height));
+      cx.notify();
+    }
   }
 
   /// Whether the place `index` of the lineup is left empty by a swap under way.
@@ -652,14 +810,14 @@ impl MultistreamView {
     )
   }
 
-  /// The row's "+": opens the "Add a live" dialog.
-  fn render_add_tile(&self, cx: &mut Context<Self>) -> AnyElement {
+  /// The row's "+", which opens the "Add a live" dialog: it takes what the lives leave of the
+  /// row (`size`: its least width, and its height).
+  fn render_add_tile(&self, size: (f32, f32), cx: &mut Context<Self>) -> AnyElement {
     v_flex()
       .id("multistream-add")
-      .h_full()
       .flex_1()
-      .min_w_0()
-      .max_w(px(ROW_HEIGHT * 16. / 9.))
+      .min_w(px(size.0))
+      .h(px(size.1))
       .rounded(theme::RADIUS)
       .border_1()
       .border_color(theme::border())
@@ -995,16 +1153,26 @@ impl Render for MultistreamView {
     let content = match main {
       None => self.render_empty(cx),
       Some(player) => {
-        let mut row = h_flex().w_full().flex_none().h(px(ROW_HEIGHT)).gap_3();
+        // The tiles' width needs the row's, measured at the first paint.
+        if self.tiles.len() > 1 && self.row_area.get().size.width <= px(0.) {
+          window.request_animation_frame();
+        }
+        let (tile, add) = self.row_sizes();
+        let mut row = h_flex()
+          .relative()
+          .w_full()
+          .flex_none()
+          .h(px(tile.1.max(add.1)))
+          .gap_3()
+          .child(measure(self.row_area.clone()));
         for index in 1..self.tiles.len() {
-          row = row.child(self.render_tile(index, cx));
+          row = row.child(self.render_tile(index, tile, cx));
         }
         if self.tiles.len() < MAX_LIVES {
-          row = row.child(self.render_add_tile(cx));
+          row = row.child(self.render_add_tile(add, cx));
         }
         v_flex()
           .size_full()
-          .gap_3()
           .when(!theater, |el| el.p_6())
           .when(theater, |el| el.pb_3())
           .child(
@@ -1022,6 +1190,7 @@ impl Render for MultistreamView {
                 el.child(div().absolute().inset_0().child(player))
               }),
           )
+          .child(self.render_resize_bar(cx))
           .child(div().w_full().when(theater, |el| el.px_3()).child(row))
           .into_any_element()
       }

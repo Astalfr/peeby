@@ -137,6 +137,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
     place in a layer over the page; the qualities change at its end, and the player now keeps the
     previous mpv's picture until a restarted one has a frame (any quality change, back to a live's
     edge). **Not verified:** in the app.
+  - 2026-11-08 (the user's request): up to six lives; the row's tiles keep 16:9 at the widest the
+    row allows; a bar between the main live and the row drags its height (kept in the settings).
+    **Not verified:** in the app.
 - Chat user cards (2026-11-07, the user's request), YouTube and Twitch: a click on an author's name or
   on a mention opens their card over the chat, with their picture, their name, their last messages in
   this chat and a button opening their channel in a new tab (docs/design.md, `Chat panel`). Lint and tests

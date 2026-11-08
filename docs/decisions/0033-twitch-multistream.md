@@ -8,7 +8,8 @@
 The user wants to watch several Twitch lives at once: a large main live and smaller ones that are
 still visible, the chat either as a tab per channel or merged into one. Decided with the user on
 2026-11-08: Twitch only for now (the parts in `ui` stay generic, for YouTube lives later); at most
-four lives; the secondary ones always muted, in a row under the main one; only the main live
+four lives (six since 2026-11-08, the user's request); the secondary ones always muted, in a row
+under the main one; only the main live
 earns points (minutes watched, the bonus); the multistream opens from a sidebar entry of its own,
 with a "+" that searches the followed channels on air or the whole of Twitch, and nothing about
 it on the other pages.
@@ -51,7 +52,7 @@ with the four starting together.
   the chosen channel: it takes that panel's field state, emotes, points footer and pinned items
   (`ChatPanel::writing`, `write_like`) and hands what is sent to that panel, whose writer sends it.
 - **One connection per channel**, anonymous for reading and signed in for writing, as on a live's
-  page: four of each is well within what Twitch allows, and keeps every chat feature as it is.
+  page: six of each is well within what Twitch allows, and keeps every chat feature as it is.
   Twitch's rate limit (20 messages per 30 s) is the account's, whatever the channel, so every
   writer of the process now counts in one window (`twitch::chat::writer`'s `SENT`), which also
   covers two live pages open in two tabs.
@@ -63,12 +64,16 @@ with the four starting together.
   frame (`PlayerView`'s held picture, `VideoView::has_frame`), so the quality change shows no
   black either; this also holds for any quality change and restart at a live's edge. Not with
   reduced motion.
+- **The row** (2026-11-08, the user's request): its tiles keep 16:9, as wide as the row's
+  height allows and narrower when its width cannot hold them all; the bar between the main live
+  and the row drags that height (72 px at least, the main live keeping 180 px), kept in
+  `[twitch] multistream_row_height`.
 
 ## Consequences
 
 - Swapping lives looks seamless: frames stretch while a player is resized each frame (mpv's
   ring settles 60 ms after the last size), then the quality changes behind the held picture.
-- Four lives cost four times a live's network and memory; the row's 480p keeps their decoding
+- Six lives cost six times a live's network and memory; the row's 480p keeps their decoding
   small.
 - The merged chat holds its own copy of the lines (at most `MAX_MESSAGES`): two busy chats fill it
   twice as fast, the eye is there to quiet one.

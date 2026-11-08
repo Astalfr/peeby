@@ -197,6 +197,9 @@ pub struct Twitch {
   pub multistream_merged: Option<bool>,
   /// The multistream's chat tab follows the main live; on when unset.
   pub multistream_chat_follows: Option<bool>,
+  /// Height of the multistream's row of secondary lives, logical pixels (its bar's drag); 140
+  /// when unset.
+  pub multistream_row_height: Option<u32>,
 }
 
 /// `[player]`: how the player behaves, in every space.

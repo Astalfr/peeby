@@ -568,7 +568,7 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
 
 ## Multistream
 
-ADR 0033. The sidebar's "Multistream" opens a page that plays up to four lives at once; nothing
+ADR 0033. The sidebar's "Multistream" opens a page that plays up to six lives at once; nothing
 about it shows on the other pages.
 
 - **Adding**: the big "+" of the empty page, then the "+" at the end of the row, open "Add a
@@ -578,7 +578,9 @@ about it shows on the other pages.
   closes it.
 - **The main live** fills the page with the whole player (keyboard, qualities, its past from its
   recording, the mini-player); the cross at its top right removes it, the first of the row taking
-  its place. **The row's lives** play muted, at most 480p; hovered, a tile shows its channel, its
+  its place. **The row's lives** play muted, at most 480p, in 16:9 tiles as wide as the row's
+  height allows, narrower when the row cannot hold them all; the "+" takes what they leave of the row;
+  the bar between the main live and the row drags its height (`[twitch] multistream_row_height`, the main live keeping 180 px); hovered, a tile shows its channel, its
   category and viewers, and its cross; a click makes it the main live, the two gliding to each
   other's place (420 ms, not with reduced motion), their qualities changing once they land behind
   their last picture.
