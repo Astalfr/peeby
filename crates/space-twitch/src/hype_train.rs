@@ -7,9 +7,9 @@
 //! the page opens (and after each PubSub reconnection), then moved by the PubSub topic.
 //!
 //! When a train starts or levels up, the user's mascot (`assets/hype-train.webp`, its corners
-//! rounded) crosses its bar bouncing as a ball, a whole turn in the air at each bounce: in from the left, a few seconds at a
-//! fifth of the bar with "The Hype Train is coming!" (or the new level), out on the right
-//! ([`Intro`]; none with reduced motion).
+//! rounded) crosses its bar bouncing as a ball, a whole turn in the air at each bounce: in from
+//! the left, a few seconds 20 px from the bar's left edge with "The Hype Train is coming!" (or the
+//! new level), out on the right ([`Intro`]; none with reduced motion).
 
 use std::cell::Cell;
 use std::sync::{Arc, OnceLock};
@@ -59,14 +59,15 @@ const MASCOT_SIDE: f32 = 28.;
 const MASCOT_PIXELS: u32 = 96;
 /// Steps of its turn.
 const MASCOT_STEPS: usize = 48;
-/// How long it takes to come in from the left to [`MASCOT_STOP`], seconds.
-const INTRO_IN: f32 = 1.4;
+/// How long it takes to come in from the left to [`MASCOT_STOP`], seconds. Each step lasts
+/// whole bounces, so that each starts and ends on the ground.
+const INTRO_IN: f32 = 2. * HOP;
 /// How long it stays there with its message.
-const INTRO_HOLD: f32 = 3.;
+const INTRO_HOLD: f32 = 4. * HOP;
 /// How long it takes to leave on the right.
-const INTRO_OUT: f32 = 1.8;
-/// Where it stops, as a share of the bar's width (its center).
-const MASCOT_STOP: f32 = 0.2;
+const INTRO_OUT: f32 = 1.2;
+/// Where it stops: its picture's left edge from the bar's, logical pixels.
+const MASCOT_STOP: f32 = 20.;
 /// One bounce, seconds: the mascot makes a whole turn in the air at each.
 const HOP: f32 = 0.7;
 /// How high it bounces while it travels, and while it waits, logical pixels.
@@ -152,26 +153,32 @@ pub fn warm_up() {
 }
 
 /// The announcement at `t` seconds: the mascot, turning on itself and bouncing, comes in from the
-/// left, stops at [`MASCOT_STOP`] of the bar with `text` beside it, then leaves on the right. A
-/// layer in the bar's colors covers the bar meanwhile. `None` once over, or while its steps are
-/// not drawn yet ([`cover`] then).
+/// left, stops [`MASCOT_STOP`] pixels from the bar's left edge with `text` beside it, then leaves
+/// on the right. A layer in the bar's colors covers the bar meanwhile. `None` once over, or while
+/// its steps are not drawn yet ([`cover`] then).
 fn intro_element(text: SharedString, gap: f32, t: f32, accent: Hsla) -> Option<AnyElement> {
   let frames = mascot_frames()?;
   if t >= Intro::LENGTH {
     return None;
   }
   let ease_out = |x: f32| 1. - (1. - x).powi(3);
-  let ease_in = |x: f32| x * x * x;
+  // Leaving: a little slower at first, then the same distance at each bounce.
+  let leave = |x: f32| 0.25 * x * x + 0.75 * x;
   // The mascot's center as a share of the bar, and how far left of that point its box starts
   // (in its own widths): wholly left of the bar at first, wholly right of it at the end.
-  let (center, shift) = if t < INTRO_IN {
+  let boxed = MASCOT_SIDE * std::f32::consts::SQRT_2;
+  // Its box's left edge: a share of the bar plus pixels. Wholly left of the bar at first, its
+  // picture's left edge at [`MASCOT_STOP`] pixels while it waits, wholly right of the bar at the
+  // end (its box is wider than the picture: the turned corners).
+  let stop = MASCOT_STOP - (boxed - MASCOT_SIDE) / 2.;
+  let (share, offset) = if t < INTRO_IN {
     let p = ease_out(t / INTRO_IN);
-    (MASCOT_STOP * p, 1. - 0.5 * p)
+    (0., -boxed + (stop + boxed) * p)
   } else if t < INTRO_IN + INTRO_HOLD {
-    (MASCOT_STOP, 0.5)
+    (0., stop)
   } else {
-    let p = ease_in((t - INTRO_IN - INTRO_HOLD) / INTRO_OUT);
-    (MASCOT_STOP + (1. - MASCOT_STOP) * p, 0.5 - 0.5 * p)
+    let p = leave((t - INTRO_IN - INTRO_HOLD) / INTRO_OUT);
+    (p, stop * (1. - p))
   };
   // It bounces as a ball on the bar's bottom edge: a parabola from contact to contact, high
   // while it travels, lower while it waits, a whole turn in the air at each bounce (the turn
@@ -199,7 +206,6 @@ fn intro_element(text: SharedString, gap: f32, t: f32, accent: Hsla) -> Option<A
   };
   let (width, height) = (1. + 1.1 * squash - 0.5 * stretch, 1. - squash + stretch);
   let frame = frames[step].clone();
-  let boxed = MASCOT_SIDE * std::f32::consts::SQRT_2;
   // The cover and the text fade in and out.
   let fade = |start: f32, length: f32| ((t - start) / length).clamp(0., 1.);
   let cover = fade(0., 0.2).min(1. - fade(Intro::LENGTH - 0.25, 0.25));
@@ -221,8 +227,7 @@ fn intro_element(text: SharedString, gap: f32, t: f32, accent: Hsla) -> Option<A
           .absolute()
           .top_0()
           .bottom_0()
-          .left(relative(MASCOT_STOP))
-          .ml(px(MASCOT_SIDE / 2. + gap))
+          .left(px(MASCOT_STOP + MASCOT_SIDE + gap))
           .right_0()
           .flex()
           .items_center()
@@ -240,8 +245,8 @@ fn intro_element(text: SharedString, gap: f32, t: f32, accent: Hsla) -> Option<A
           .absolute()
           .top_0()
           .bottom_0()
-          .left(relative(center))
-          .ml(px(-boxed * shift))
+          .left(relative(share))
+          .ml(px(offset))
           .w(px(boxed))
           .flex()
           .items_end()
