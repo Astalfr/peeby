@@ -13,6 +13,7 @@ pub mod picture;
 pub mod player;
 pub mod rows;
 pub mod runtime;
+pub mod spin;
 pub mod splash;
 pub mod text;
 pub mod theme;

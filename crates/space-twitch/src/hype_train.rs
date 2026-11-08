@@ -5,11 +5,21 @@
 //! contributions…") shows the same way, and an ended one stays [`ENDED_SHOWN`] with the levels it
 //! completed and the emotes it unlocked. The state is `twitch::hype_train`'s, held by `points::PointsView`: read from GQL when
 //! the page opens (and after each PubSub reconnection), then moved by the PubSub topic.
+//!
+//! When a train starts or levels up, the user's mascot (`assets/hype-train.webp`, its corners
+//! rounded) crosses its bar bouncing as a ball, a whole turn in the air at each bounce: in from the left, a few seconds at a
+//! fifth of the bar with "The Hype Train is coming!" (or the new level), out on the right
+//! ([`Intro`]; none with reduced motion).
 
-use std::time::Duration;
+use std::cell::Cell;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, ElementId, FontWeight, Hsla, Window, div, px, relative};
+use gpui::{
+  AnyElement, App, ElementId, FontWeight, Hsla, ImageSource, ObjectFit, RenderImage, SharedString,
+  Window, div, img, px, relative,
+};
 use gpui_component::{h_flex, v_flex};
 use twitch::hype_train::{Approaching, Conductor, Emote, HypeTrain, Source, State};
 
@@ -41,17 +51,267 @@ const AVATAR: f32 = 24.;
 /// Height of the card's progress bar, logical pixels.
 const BAR: f32 = 8.;
 
+/// The mascot that crosses the bar when a train starts or levels up (the user's picture).
+const MASCOT: &[u8] = include_bytes!("../assets/hype-train.webp");
+/// The mascot's side on screen, logical pixels.
+const MASCOT_SIDE: f32 = 28.;
+/// Its side in the drawn steps, pixels: sharp up to a 3× scale.
+const MASCOT_PIXELS: u32 = 96;
+/// Steps of its turn.
+const MASCOT_STEPS: usize = 48;
+/// How long it takes to come in from the left to [`MASCOT_STOP`], seconds.
+const INTRO_IN: f32 = 1.4;
+/// How long it stays there with its message.
+const INTRO_HOLD: f32 = 3.;
+/// How long it takes to leave on the right.
+const INTRO_OUT: f32 = 1.8;
+/// Where it stops, as a share of the bar's width (its center).
+const MASCOT_STOP: f32 = 0.2;
+/// One bounce, seconds: the mascot makes a whole turn in the air at each.
+const HOP: f32 = 0.7;
+/// How high it bounces while it travels, and while it waits, logical pixels.
+const HOP_HIGH: f32 = 22.;
+const HOP_LOW: f32 = 16.;
+/// The bar's height at rest (two lines of text), and what it grows by during the announcement
+/// to give the bounces room, logical pixels.
+const BAR_REST: f32 = 52.;
+const BAR_GROWTH: f32 = 9.;
+/// How long the bar takes to grow, and to shrink back at the end, seconds.
+const BAR_EASE: f32 = 0.3;
+/// How long it stays squashed on landing, as a share of a bounce, on each side of the contact.
+const SQUASH: f32 = 0.14;
+/// How much it flattens at the contact (its height loses this share, its width gains more than it).
+const SQUASH_DEPTH: f32 = 0.22;
+/// How much it stretches upward just after take-off and just before landing.
+const STRETCH: f32 = 0.06;
+
+/// The announcement playing over the train's bar: what it says, and since when. Its clock
+/// starts once the mascot's steps are drawn; until then the bar stays covered.
+#[derive(Clone, Debug)]
+pub struct Intro {
+  since: Cell<Option<Instant>>,
+  text: SharedString,
+  /// Space between the mascot and the text, logical pixels.
+  gap: f32,
+}
+
+impl Intro {
+  /// The whole animation, seconds.
+  pub const LENGTH: f32 = INTRO_IN + INTRO_HOLD + INTRO_OUT;
+
+  /// `text` beside the mascot, `gap` pixels from it.
+  pub fn new(text: SharedString, gap: f32) -> Self {
+    Self {
+      since: Cell::new(None),
+      text,
+      gap,
+    }
+  }
+
+  /// Seconds since it started; `None` while it waits for the mascot's steps (it starts at the
+  /// first call that finds them drawn).
+  fn elapsed(&self) -> Option<f32> {
+    if self.since.get().is_none() && mascot_frames().is_some() {
+      self.since.set(Some(Instant::now()));
+    }
+    Some(self.since.get()?.elapsed().as_secs_f32())
+  }
+
+  /// Whether it is still playing (or waiting to).
+  pub fn playing(&self) -> bool {
+    self.elapsed().is_none_or(|t| t < Self::LENGTH)
+  }
+}
+
+/// The mascot's steps, once drawn.
+fn mascot_frames() -> Option<&'static Vec<Arc<RenderImage>>> {
+  MASCOT_FRAMES.get().filter(|f| !f.is_empty())
+}
+
+/// The mascot's turn, drawn once in the background ([`warm_up`]); empty when its picture cannot
+/// be read.
+static MASCOT_FRAMES: OnceLock<Vec<Arc<RenderImage>>> = OnceLock::new();
+
+/// Draws the mascot's turn in the background, once per run, before a train needs it.
+pub fn warm_up() {
+  static STARTED: OnceLock<()> = OnceLock::new();
+  if STARTED.set(()).is_err() {
+    return;
+  }
+  std::thread::spawn(|| {
+    // Rounded as an app icon: a fifth of its side.
+    let frames = ui::spin::rotations(
+      MASCOT,
+      MASCOT_PIXELS,
+      MASCOT_PIXELS as f32 / 5.,
+      MASCOT_STEPS,
+    )
+    .unwrap_or_default();
+    MASCOT_FRAMES.set(frames).ok();
+  });
+}
+
+/// The announcement at `t` seconds: the mascot, turning on itself and bouncing, comes in from the
+/// left, stops at [`MASCOT_STOP`] of the bar with `text` beside it, then leaves on the right. A
+/// layer in the bar's colors covers the bar meanwhile. `None` once over, or while its steps are
+/// not drawn yet ([`cover`] then).
+fn intro_element(text: SharedString, gap: f32, t: f32, accent: Hsla) -> Option<AnyElement> {
+  let frames = mascot_frames()?;
+  if t >= Intro::LENGTH {
+    return None;
+  }
+  let ease_out = |x: f32| 1. - (1. - x).powi(3);
+  let ease_in = |x: f32| x * x * x;
+  // The mascot's center as a share of the bar, and how far left of that point its box starts
+  // (in its own widths): wholly left of the bar at first, wholly right of it at the end.
+  let (center, shift) = if t < INTRO_IN {
+    let p = ease_out(t / INTRO_IN);
+    (MASCOT_STOP * p, 1. - 0.5 * p)
+  } else if t < INTRO_IN + INTRO_HOLD {
+    (MASCOT_STOP, 0.5)
+  } else {
+    let p = ease_in((t - INTRO_IN - INTRO_HOLD) / INTRO_OUT);
+    (MASCOT_STOP + (1. - MASCOT_STOP) * p, 0.5 - 0.5 * p)
+  };
+  // It bounces as a ball on the bar's bottom edge: a parabola from contact to contact, high
+  // while it travels, lower while it waits, a whole turn in the air at each bounce (the turn
+  // eased: fast at take-off, slowing at the top, fast again into the landing), squashed at each
+  // at each contact.
+  let moving = t < INTRO_IN || t >= INTRO_IN + INTRO_HOLD;
+  let phase = (t / HOP).fract();
+  let height = if moving { HOP_HIGH } else { HOP_LOW };
+  let lift = height * 4. * phase * (1. - phase);
+  let turn = phase - (std::f32::consts::TAU * phase).sin() / (std::f32::consts::TAU * 1.6);
+  let step = (turn.rem_euclid(1.) * frames.len() as f32) as usize % frames.len();
+  let contact = phase.min(1. - phase);
+  // Squishy: flattened and widened around the contact (eased, so that it sinks in and springs
+  // back softly), then a little stretched upward as it leaves the ground and as it comes down.
+  let squash = if contact < SQUASH {
+    let k = 1. - contact / SQUASH;
+    SQUASH_DEPTH * k * k * (3. - 2. * k)
+  } else {
+    0.
+  };
+  let stretch = if (SQUASH..SQUASH * 2.5).contains(&contact) {
+    STRETCH * (std::f32::consts::PI * (contact - SQUASH) / (SQUASH * 1.5)).sin()
+  } else {
+    0.
+  };
+  let (width, height) = (1. + 1.1 * squash - 0.5 * stretch, 1. - squash + stretch);
+  let frame = frames[step].clone();
+  let boxed = MASCOT_SIDE * std::f32::consts::SQRT_2;
+  // The cover and the text fade in and out.
+  let fade = |start: f32, length: f32| ((t - start) / length).clamp(0., 1.);
+  let cover = fade(0., 0.2).min(1. - fade(Intro::LENGTH - 0.25, 0.25));
+  let message = fade(INTRO_IN - 0.1, 0.25).min(1. - fade(INTRO_IN + INTRO_HOLD - 0.3, 0.3));
+  Some(
+    div()
+      .size_full()
+      .relative()
+      .child(
+        div()
+          .absolute()
+          .inset_0()
+          .opacity(cover)
+          .bg(theme::surface())
+          .child(div().size_full().bg(accent.opacity(0.22))),
+      )
+      .child(
+        div()
+          .absolute()
+          .top_0()
+          .bottom_0()
+          .left(relative(MASCOT_STOP))
+          .ml(px(MASCOT_SIDE / 2. + gap))
+          .right_0()
+          .flex()
+          .items_center()
+          .opacity(message)
+          .child(
+            div()
+              .text_size(px(16.))
+              .font_weight(FontWeight::BOLD)
+              .truncate()
+              .child(text),
+          ),
+      )
+      .child(
+        div()
+          .absolute()
+          .top_0()
+          .bottom_0()
+          .left(relative(center))
+          .ml(px(-boxed * shift))
+          .w(px(boxed))
+          .flex()
+          .items_end()
+          .justify_center()
+          // On the bar's bottom edge, the turned picture's corners reaching below it.
+          .pb(px(lift - (boxed - MASCOT_SIDE) / 2. + 4.))
+          .child(
+            img(ImageSource::Render(frame))
+              // Stretched to its box: `img` keeps the picture's ratio otherwise, and the squash
+              // would only shrink it.
+              .object_fit(ObjectFit::Fill)
+              .w(px(boxed * width))
+              .h(px(boxed * height))
+              .flex_none(),
+          ),
+      )
+      .into_any_element(),
+  )
+}
+
+/// The announcement's cover alone, while it waits for the mascot's steps: the bar does not show
+/// its text before the announcement.
+fn cover(accent: Hsla) -> AnyElement {
+  div()
+    .size_full()
+    .bg(theme::surface())
+    .child(div().size_full().bg(accent.opacity(0.22)))
+    .into_any_element()
+}
+
+/// How much of [`BAR_GROWTH`] the bar has at `t`: it grows at the start (ease out) and shrinks
+/// back at the end (ease in), 0 to 1.
+fn bar_growth(t: f32) -> f32 {
+  let grow = (t / BAR_EASE).clamp(0., 1.);
+  let shrink = ((Intro::LENGTH - t) / BAR_EASE).clamp(0., 1.);
+  let ease = |x: f32| 1. - (1. - x) * (1. - x);
+  ease(grow).min(ease(shrink))
+}
+
 /// The pinned item for the channel's train or its approach, if one shows at `now` (milliseconds
-/// since the epoch).
+/// since the epoch), with the announcement playing over the train's bar.
 pub fn pinned(
   state: &State,
   unfolded: &Unfolded,
+  intro: Option<&Intro>,
   now: i64,
   window: &mut Window,
   cx: &mut App,
 ) -> Option<Pinned> {
   if let Some(train) = state.train.as_ref().filter(|t| shown(t, now)) {
-    return Some(train_item(train, unfolded, now, window, cx));
+    let mut item = train_item(train, unfolded, now, window, cx);
+    if let Some(intro) = intro {
+      match intro.elapsed() {
+        Some(t) => {
+          item.overlay = intro_element(intro.text.clone(), intro.gap, t, item.accent);
+          if item.overlay.is_some() {
+            item.bar_height = Some(BAR_REST + BAR_GROWTH * bar_growth(t));
+          }
+          if t < Intro::LENGTH {
+            window.request_animation_frame();
+          }
+        }
+        // Covered until the mascot is ready, checked at each frame.
+        None => {
+          item.overlay = Some(cover(item.accent));
+          window.request_animation_frame();
+        }
+      }
+    }
+    return Some(item);
   }
   let approaching = state.approaching.as_ref()?;
   Some(approaching_item(approaching, unfolded, now, window, cx))
@@ -176,6 +436,8 @@ fn train_item(
       None => level_badge(level, accent),
     }),
     fill: Some(fill),
+    overlay: None,
+    bar_height: None,
   }
 }
 
@@ -231,6 +493,8 @@ fn approaching_item(
       window,
       cx,
     )),
+    overlay: None,
+    bar_height: None,
   }
 }
 

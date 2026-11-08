@@ -1430,6 +1430,15 @@ impl FakeChatView {
               },
               cx,
             ),
+            self.button(
+              "hype-kill",
+              t("Remove it", "Le supprimer").into(),
+              |this, cx| {
+                this.hype = None;
+                this.points_view.update(cx, |p, cx| p.clear_hype(cx));
+              },
+              cx,
+            ),
           ],
         ),
         div()

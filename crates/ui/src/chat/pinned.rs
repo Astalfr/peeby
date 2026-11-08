@@ -48,6 +48,10 @@ pub struct Pinned {
   /// A progress (0 to 1) filling the bar from the left in a tint of the accent, as Twitch's
   /// Hype Train banner does; `None` for a plain bar.
   pub fill: Option<f32>,
+  /// Drawn over the whole bar, under nothing (an animation the space plays on it).
+  pub overlay: Option<AnyElement>,
+  /// The bar's height at least, logical pixels: an animation over it makes room this way.
+  pub bar_height: Option<f32>,
 }
 
 /// Which item is unfolded, by id: held by the space across its reloads.
@@ -112,6 +116,7 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
     .id(ElementId::Name(format!("pinned-bar-{}", item.id).into()))
     .flex_none()
     .relative()
+    .when_some(item.bar_height, |bar, height| bar.min_h(px(height)))
     .px_3()
     .py_2()
     .gap_2()
@@ -170,6 +175,11 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
       })
       .size(px(16.))
       .text_color(theme::muted()),
+    )
+    .children(
+      item
+        .overlay
+        .map(|overlay| div().absolute().inset_0().child(overlay)),
     );
   v_flex()
     .when(open, |el| el.flex_shrink(1.).min_h_0())

@@ -320,7 +320,8 @@ Two credentials, for different things. Both are secrets, under the same rules as
       gone at once (a followed one says what would open).
     - A Hype Train: approaching (one more contribution per click), started (or a Golden Kappa
       Train), a sub (+500) or 1,000 bits that fill the level and make their giver its
-      conductor, and its end (it stays pinned 30 s with the emotes it unlocked).
+      conductor, its end (it stays pinned 30 s with the emotes it unlocked), or removed at once
+      ("Le supprimer": no ended state, to start again).
       They show with the points off too.
 
 ## Catalog through GQL instead of Helix

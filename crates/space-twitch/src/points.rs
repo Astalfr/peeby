@@ -311,6 +311,8 @@ pub struct PointsView {
   hype: hype_train::State,
   /// The last Hype Train reading failed (the next failures log at debug).
   hype_failing: bool,
+  /// The announcement playing over the train's bar (a start, a level-up).
+  hype_intro: Option<hype_train_view::Intro>,
   /// The choices the viewer voted for, by poll id: Twitch does not give them back.
   voted: HashMap<String, Vec<String>>,
   /// The last poll reading failed (the next failures log at debug).
@@ -336,6 +338,8 @@ impl PointsView {
     player: WeakEntity<PlayerView>,
     cx: &mut Context<Self>,
   ) -> Self {
+    // The Hype Train's mascot, drawn before a train needs it.
+    hype_train_view::warm_up();
     let mut view = Self {
       login,
       backend,
@@ -365,6 +369,7 @@ impl PointsView {
       pubsub_task: None,
       hype: hype_train::State::default(),
       hype_failing: false,
+      hype_intro: None,
       unfolded: Unfolded::default(),
       voting: false,
       vote_error: None,
@@ -523,6 +528,7 @@ impl PointsView {
     if self.pubsub_task.is_some() || self.backend.twitch().is_none() {
       return;
     }
+    hype_train_view::warm_up();
     let (mut events, run) = twitch::pubsub::listen(&channel_id);
     // The connection runs on the network runtime and ends when `events` is dropped.
     drop(runtime::spawn(cx, run));
@@ -576,8 +582,52 @@ impl PointsView {
     &self.hype
   }
 
+  /// Drops the Hype Train, its approach and its announcement at once, with no ended state (the
+  /// fake chat, to start again).
+  #[cfg(debug_assertions)]
+  pub fn clear_hype(&mut self, cx: &mut Context<Self>) {
+    self.hype = hype_train::State::default();
+    self.hype_intro = None;
+    self.fold_gone();
+    cx.notify();
+  }
+
   /// What the Hype Train topic says (or the fake chat).
   pub fn hype_event(&mut self, event: HypeEvent, cx: &mut Context<Self>) {
+    hype_train_view::warm_up();
+    let level = self
+      .hype
+      .train
+      .as_ref()
+      .filter(|t| t.ended_at.is_none())
+      .map(|t| (t.id.clone(), t.progress.level));
+    // The text and its gap from the mascot: the start's longer line sits closer to it.
+    let text: Option<(SharedString, f32)> = match &event {
+      HypeEvent::Start(_) => Some((
+        t("The Hype Train is coming!", "Le Hype Train arrive !").into(),
+        14.,
+      )),
+      // A level-up of the train on screen, to a level it had not reached.
+      HypeEvent::Progress {
+        id,
+        progress,
+        level_up: true,
+        ..
+      } => level
+        .filter(|(train, before)| {
+          id.as_ref().is_none_or(|id| id == train) && progress.level > *before
+        })
+        .map(|_| {
+          let level = progress.level;
+          (tf!("Level {level}!", "Niveau {level} !").into(), 24.)
+        }),
+      _ => None,
+    };
+    if let Some((text, gap)) = text
+      && !cx.reduce_motion()
+    {
+      self.hype_intro = Some(hype_train_view::Intro::new(text, gap));
+    }
     self.hype.apply(event);
     self.fold_gone();
     cx.notify();
@@ -1697,12 +1747,15 @@ impl PointsView {
           .and_then(|start| polls::share_left(start, length, now)),
         lead: raid_avatar(raid, LEAD, window, cx),
         fill: None,
+        overlay: None,
+        bar_height: None,
       });
     }
     // Then the Hype Train, at the top as on Twitch.
     items.extend(hype_train_view::pinned(
       &self.hype,
       &self.unfolded,
+      self.hype_intro.as_ref().filter(|i| i.playing()),
       now,
       window,
       cx,
@@ -1729,6 +1782,8 @@ impl PointsView {
             PredictionStatus::Resolved | PredictionStatus::Canceled => self.ended_left(&p.id),
           },
           fill: None,
+          overlay: None,
+          bar_height: None,
         });
       }
     }
@@ -1750,6 +1805,8 @@ impl PointsView {
         time_left: poll.time_left(now).or_else(|| self.ended_left(&poll.id)),
         lead: None,
         fill: None,
+        overlay: None,
+        bar_height: None,
       });
     }
     items
