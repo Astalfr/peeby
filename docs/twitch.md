@@ -147,6 +147,15 @@ Two credentials, for different things. Both are secrets, under the same rules as
   (Chatterino), not in Twitch's docs; it worked on 2026-11-01 (16 channels joined at once).
 - **Twitch's recommendation** **[src]**: EventSub `channel.chat.message`, which needs a user token with
   `user:read:chat`. Its message fragments: text, emote, mention, cheermote, `gif` (2026-07).
+- **GIFs** (Twitch's, from Giphy, 2026-07; 7TV's extension shows them since 3.1.24): IRC gives
+  them in a `gifs` tag, `<start>-<end>|<giphy id>|<url>`, comma-separated, ranges in `char`s
+  (end included) as emotes', over the text Twitch writes for them (`[Yes GIF by …]`, at the end
+  of the message or alone). Format from Chatterino's `TwitchIrc.cpp` and its sample line, not
+  yet seen on a live by Peeby. Peeby keeps only the id (the URL carries Giphy's tracking
+  parameters) and loads `https://media4.giphy.com/media/<id>/{100|200}.webp` (animated WebP,
+  Giphy's `fixed_height`: 100 or 200 px high), as Chatterino does; a click opens
+  `giphy.com/gifs/<id>`. The panel draws it on its own line, 160 px high at most
+  (`ui::chat::Gif`). VOD chat's GQL fragments are not read for GIFs yet.
 - **Emotes**:
   - The IRC `emotes` tag gives `id:start-end` ranges (end included) that **count Unicode code points**
     (Rust `char`s), checked on 2026-11-01: on 8 captured lines with an emoji before an emote, code points
@@ -282,7 +291,7 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - Fake 7TV/BTTV words (animated, wide, zero-width, BTTV's modifiers before some; the squares' white
     corner shows a flip or a turn), badges and the points icon are drawn in memory
     (`ui::chat::fake::Squares`, under `fake-chat://`). Only Twitch's own emotes, off by default,
-    load from Twitch's CDN. "Vraies 7TV / BTTV", off by default too, loads the real global sets
+    load from Twitch's CDN, and GIFs ("GIF (Giphy)", off by default) from Giphy. "Vraies 7TV / BTTV", off by default too, loads the real global sets
     (anonymous, the live chat's session cache) and writes their words, zero-width ones stacked
     by one or two on an emote, in place of the squares; they also lead the picker.
   - The same gear as a live's, with "Reload 7TV emotes": it forgets the session's 7TV copies and
@@ -396,6 +405,7 @@ Checked against the code on 2026-11-01:
 | Ads removed | `twitch::Proxy`, the local playlist proxy (step 3) | Covered |
 | Low latency | The proxy adds Twitch's prefetch segments (step 10); the player catches up to a 0.6 s buffer at the edge (`Source::catch_up`) | Covered |
 | Animated emotes (WebP, GIF) | `ui::images::decode` keeps the frames, `img` with an id plays them | Covered (step 9) |
+| GIFs in chat (Giphy, the `gifs` tag) | `Fragment::Gif`, drawn on a line of its own | Covered |
 | Chat WebSocket | `tokio-tungstenite` (agreed), `twitch::chat::connect` | Covered (step 9) |
 | Single-use refresh token kept at once | Credential Manager (`keyring`), as Jellyfin's token | Covered (small secrets) |
 | GQL hashes and Client-ID refreshed without a release | The Client-ID is read from twitch.tv's page at startup (`Client::refresh_client_id`); raw queries, no hashes | **Partly**: since ADR 0016 the whole catalog depends on GQL too; the Helix backup covers a connected user |

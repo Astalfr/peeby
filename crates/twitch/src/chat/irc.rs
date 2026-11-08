@@ -3,7 +3,9 @@
 //!
 //! Emote ranges (`emotes=<id>:<start>-<end>,…/…`) count Unicode scalar values (Rust `char`s), not
 //! bytes nor UTF-16 units: they are mapped on `char` indexes, never on byte slices, so an emoji
-//! before an emote does not shift it, and a range that does not fit is dropped.
+//! before an emote does not shift it, and a range that does not fit is dropped. GIFs
+//! (`gifs=<start>-<end>|<giphy id>|<url>,…`, 2026-07) cover the text Twitch writes for them
+//! (`[Yes GIF by …]`) and count the same way.
 
 use std::collections::HashMap;
 
@@ -161,6 +163,8 @@ pub struct ChatLine {
   pub action: bool,
   /// Twitch emotes in `text`, by `char` range, sorted.
   pub emotes: Vec<EmoteRange>,
+  /// GIFs in `text` (Giphy's), by `char` range, sorted.
+  pub gifs: Vec<EmoteRange>,
   /// The notice's text (`system-msg`), for a [`Event::Notice`].
   pub system: Option<String>,
   /// `msg-id` of a notice (`sub`, `raid`…) or of a special message (`highlighted-message`).
@@ -196,26 +200,60 @@ pub enum Piece {
     /// Its code (the text it replaces).
     name: String,
   },
+  /// A GIF, on its own.
+  Gif {
+    /// Its Giphy id ([`gif_url`]).
+    id: String,
+    /// The text it replaces: its title in brackets.
+    title: String,
+  },
+}
+
+/// A GIF's file on Giphy, by its id: animated WebP, 100 or 200 px high (Giphy's `fixed_height`
+/// renditions, the width follows), whichever is the first at least `height` device pixels.
+pub fn gif_url(id: &str, height: u32) -> String {
+  let size = if height <= 100 { "100" } else { "200" };
+  format!("https://media4.giphy.com/media/{id}/{size}.webp")
+}
+
+/// A GIF's page on Giphy.
+pub fn gif_link(id: &str) -> String {
+  format!("https://giphy.com/gifs/{id}")
 }
 
 impl ChatLine {
-  /// The text cut at its emotes.
+  /// The text cut at its emotes and GIFs; of two that overlap, the first is kept.
   pub fn pieces(&self) -> Vec<Piece> {
     let chars: Vec<char> = self.text.chars().collect();
+    let mut ranges: Vec<(&EmoteRange, bool)> = self
+      .emotes
+      .iter()
+      .map(|r| (r, false))
+      .chain(self.gifs.iter().map(|r| (r, true)))
+      .collect();
+    ranges.sort_by_key(|(r, _)| r.start);
     let mut pieces = Vec::new();
     let mut at = 0;
-    for emote in &self.emotes {
-      if emote.start < at || emote.end > chars.len() || emote.start >= emote.end {
+    for (range, gif) in ranges {
+      if range.start < at || range.end > chars.len() || range.start >= range.end {
         continue;
       }
-      if emote.start > at {
-        pieces.push(Piece::Text(chars[at..emote.start].iter().collect()));
+      if range.start > at {
+        pieces.push(Piece::Text(chars[at..range.start].iter().collect()));
       }
-      pieces.push(Piece::Emote {
-        id: emote.id.clone(),
-        name: chars[emote.start..emote.end].iter().collect(),
+      let name: String = chars[range.start..range.end].iter().collect();
+      pieces.push(if gif {
+        Piece::Gif {
+          id: range.id.clone(),
+          title: name,
+        }
+      } else {
+        Piece::Emote {
+          id: range.id.clone(),
+          name,
+        }
       });
-      at = emote.end;
+      at = range.end;
     }
     if at < chars.len() {
       pieces.push(Piece::Text(chars[at..].iter().collect()));
@@ -338,6 +376,7 @@ fn chat_line(line: &Line) -> ChatLine {
       })
       .unwrap_or_default(),
     emotes: emotes(line.tag("emotes").unwrap_or_default()),
+    gifs: gifs(line.tag("gifs").unwrap_or_default()),
     text,
     action,
     system: tag("system-msg"),
@@ -362,6 +401,29 @@ fn emotes(tag: &str) -> Vec<EmoteRange> {
           start,
           end: end + 1,
         })
+      })
+    })
+    .collect();
+  ranges.sort_by_key(|r| r.start);
+  ranges
+}
+
+/// `0-33|<id>|<url>,…` as ranges sorted by start, end excluded. Only the id is kept (the URL
+/// carries Giphy's tracking parameters); one that is not a plain Giphy id is dropped, since it
+/// goes into URLs.
+fn gifs(tag: &str) -> Vec<EmoteRange> {
+  let mut ranges: Vec<EmoteRange> = tag
+    .split(',')
+    .filter_map(|gif| {
+      let mut parts = gif.split('|');
+      let (start, end) = parts.next()?.split_once('-')?;
+      let (start, end) = (start.parse::<usize>().ok()?, end.parse::<usize>().ok()?);
+      let id = parts.next()?;
+      let plain = !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric());
+      (plain && end >= start).then(|| EmoteRange {
+        id: id.to_owned(),
+        start,
+        end: end + 1,
       })
     })
     .collect();
@@ -440,6 +502,39 @@ mod tests {
         name: "Kappa".into()
       }]
     );
+  }
+
+  #[test]
+  fn gifs_cut_their_title_out() {
+    // Twitch's own sample (Chatterino's `SampleData.cpp`), its user renamed.
+    let raw = concat!(
+      "@badge-info=;badges=;color=#033700;display-name=Viewer1;emotes=;first-msg=0;flags=;",
+      "gifs=7-40|joSNxeswxuc74Juo8X|https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif?",
+      "cid=095d7a5d&ep=v1_gifs_trending&rid=giphy.gif&ct=g;id=401abf17-7e99-45d6-9bdf-43934e839327;",
+      "mod=0;room-id=11148817;subscriber=0;tmi-sent-ts=1783632907018;turbo=0;user-id=1;user-type= ",
+      ":viewer1!viewer1@viewer1.tmi.twitch.tv PRIVMSG #channel1 ",
+      ":before [Y A Y Yes GIF by Djemilah Birnie] after"
+    );
+    let Some(Event::Message(line)) = parse(raw) else {
+      panic!("a message");
+    };
+    assert_eq!(
+      line.pieces(),
+      [
+        Piece::Text("before ".into()),
+        Piece::Gif {
+          id: "joSNxeswxuc74Juo8X".into(),
+          title: "[Y A Y Yes GIF by Djemilah Birnie]".into()
+        },
+        Piece::Text(" after".into()),
+      ]
+    );
+    assert_eq!(
+      gif_url("joSNxeswxuc74Juo8X", 150),
+      "https://media4.giphy.com/media/joSNxeswxuc74Juo8X/200.webp"
+    );
+    // An id that is not plain, or a range without one, is dropped.
+    assert_eq!(gifs("0-3|a/b|x,0-3"), []);
   }
 
   #[test]

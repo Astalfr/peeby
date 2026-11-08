@@ -31,6 +31,7 @@ use gpui::{App, Entity, Global, Hsla, SharedString, Subscription, Task, WeakEnti
 use twitch::catalog::Catalog;
 use twitch::chat::{
   ChatLine, Event, Piece, RoomState, Status, Update, Writer, WriterStatus, WriterUpdate, emote_url,
+  gif_link, gif_url,
 };
 use twitch::helix;
 use twitch::seventv::cosmetics::{self, Cosmetic, Entitlement, Fill};
@@ -38,7 +39,7 @@ use twitch::seventv::events::{self, Topic};
 use twitch::{bttv, seventv};
 use ui::chat::{
   Author, AuthorStyle, Badge, ChatEvent, ChatMessage, ChatOption, ChatPanel, ChatPanelEvent,
-  Composing, EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, MessageKind, UserLookup, UserProfile,
+  Composing, EMOTE_HEIGHT, Emote, EmoteGroup, Fragment, Gif, MessageKind, UserLookup, UserProfile,
   UserQuery, split_text,
 };
 use ui::i18n::t;
@@ -1192,6 +1193,11 @@ pub(super) fn message(
         overlay: false,
         modifiers: Default::default(),
       })],
+      Piece::Gif { id, title } => vec![Fragment::Gif(Gif {
+        title: title.into(),
+        link: gif_link(&id).into(),
+        picture: Picture::sized(move |_, height| gif_url(&id, height)),
+      })],
     })
     .collect();
   let author = Author {
@@ -1463,6 +1469,7 @@ mod tests {
         Fragment::Emote(e) => format!("e:{}:{}", e.name, e.aspect),
         Fragment::Mention(m) => format!("m:{m}"),
         Fragment::Link(l) => format!("l:{l}"),
+        Fragment::Gif(g) => format!("g:{}", g.title),
       })
       .collect();
     assert_eq!(

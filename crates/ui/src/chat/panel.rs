@@ -26,8 +26,8 @@ use gpui_component::{Sizable, h_flex, v_flex};
 pub use composer::{ChatOption, ChatPanelEvent, Composing, EmoteGroup};
 
 use super::{
-  AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, MessageKind,
-  PaintFill, UserLookup, UserQuery, image_colors, name_color,
+  AuthorStyle, Badge, ChatEvent, ChatMessage, EMOTE_HEIGHT, Emote, Fragment, GIF_HEIGHT, Gif,
+  MessageKind, PaintFill, UserLookup, UserQuery, image_colors, name_color,
 };
 use crate::assets::Icon;
 use crate::i18n::t;
@@ -65,6 +65,11 @@ const SHAKE: [(f32, f32); 10] = [
   (-1., -2.),
   (1., 0.),
 ];
+/// Widest a GIF's file is decoded, logical pixels (Giphy's are rarely wider than 16:9).
+const GIF_MAX_WIDTH: f32 = 320.;
+/// Rounding of a GIF's corners.
+const GIF_RADIUS: f32 = 4.;
+
 const SHAKE_PERIOD: Duration = Duration::from_millis(500);
 
 /// Width of an emote's image, [`EMOTE_HEIGHT`] high, before its modifiers.
@@ -184,6 +189,91 @@ fn emote_stack<'a>(
     }
   }
   drawn
+}
+
+/// A GIF on a line of its own: its frame (the surface with its title while it loads, square)
+/// keeps [`GIF_HEIGHT`] so that the message does not grow when it arrives, then takes its
+/// file's width, shrunk to the column if wider. A click opens its page, its title shows on hover.
+fn gif_block(
+  gif: &Gif,
+  id: ElementId,
+  deleted: bool,
+  image: &mut impl FnMut(&Picture, Effects, f32, f32) -> Option<Arc<RenderImage>>,
+) -> gpui::Stateful<gpui::Div> {
+  let render = image(&gif.picture, Effects::default(), GIF_MAX_WIDTH, GIF_HEIGHT);
+  let width = render
+    .as_ref()
+    .map(|r| {
+      let size = r.size(0);
+      let (w, h) = (size.width.0 as f32, size.height.0 as f32);
+      if h > 0. {
+        GIF_HEIGHT * w / h
+      } else {
+        GIF_HEIGHT
+      }
+    })
+    .unwrap_or(GIF_HEIGHT)
+    .min(GIF_MAX_WIDTH);
+  let frame = div()
+    .w(px(width))
+    .max_w_full()
+    .h(px(GIF_HEIGHT))
+    .rounded(px(GIF_RADIUS))
+    .when(deleted, |el| el.opacity(0.35));
+  let frame = match render {
+    Some(render) => frame.child(gif_image(render).size_full()),
+    None => frame
+      .bg(theme::surface_hover())
+      .p_2()
+      .text_xs()
+      .text_color(theme::muted())
+      .child(gif.title.clone()),
+  };
+  let title = gif.title.clone();
+  let link = gif.link.clone();
+  div()
+    .id(id)
+    .w_full()
+    .pt_1()
+    .child(frame)
+    .when(!deleted, |el| {
+      el.cursor_pointer()
+        .on_click(move |_, _, cx| cx.open_url(&link))
+        .tooltip(move |window, cx| {
+          gpui_component::tooltip::Tooltip::new(title.clone()).build(window, cx)
+        })
+    })
+}
+
+/// A GIF's frames, played (the first one alone with reduced motion), fitted in its bounds with
+/// rounded corners.
+fn gif_image(render: Arc<RenderImage>) -> gpui::Canvas<()> {
+  canvas(
+    |_, _, _| {},
+    move |bounds: Bounds<Pixels>, (), window: &mut Window, cx: &mut App| {
+      let animated = render.frame_count() > 1 && !cx.reduce_motion();
+      if animated {
+        window.request_animation_frame();
+      }
+      let frame = if animated {
+        frame_at(&render, clock())
+      } else {
+        0
+      };
+      let fitted = ObjectFit::Contain.get_bounds(bounds, render.size(frame));
+      // A frame that cannot be drawn leaves the GIF's place empty.
+      window
+        .paint_image(
+          fitted,
+          fitted,
+          Corners::all(px(GIF_RADIUS)),
+          render.clone(),
+          frame,
+          false,
+        )
+        .ok();
+    },
+  )
 }
 
 /// An emote's preview on hover: it at [`PREVIEW_HEIGHT`] with its code, and its overlays' codes.
@@ -915,6 +1005,14 @@ fn push_fragments(
             })
             .child(url.clone()),
         );
+      }
+      Fragment::Gif(gif) => {
+        line = line.child(gif_block(
+          gif,
+          ElementId::NamedInteger(message.id.clone(), index as u64),
+          message.deleted,
+          &mut *image,
+        ));
       }
       Fragment::Emote(emote) => {
         // The overlays that follow it (blank text between) are drawn on it.

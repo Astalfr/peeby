@@ -25,7 +25,7 @@ fn emote_names(line: &ChatLine) -> Vec<String> {
     .into_iter()
     .filter_map(|piece| match piece {
       Piece::Emote { name, .. } => Some(name),
-      Piece::Text(_) => None,
+      Piece::Text(_) | Piece::Gif { .. } => None,
     })
     .collect()
 }

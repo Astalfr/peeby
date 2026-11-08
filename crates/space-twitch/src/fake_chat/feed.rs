@@ -175,6 +175,14 @@ const WORDS: &[&str] = &[
   "Ça",
   "l'équipe",
 ];
+/// Real Giphy GIFs (id, the title Twitch writes for them).
+const GIFS: &[(&str, &str)] = &[
+  ("joSNxeswxuc74Juo8X", "[Y A Y Yes GIF by Djemilah Birnie]"),
+  (
+    "3o7abKhOpu0NwenH3O",
+    "[SpongeBob SquarePants GIF by SpongeBob SquarePants]",
+  ),
+];
 const EMOJI: &[&str] = &["😂", "🔥", "❤️", "👀", "🇫🇷", "👍🏽", "🫠"];
 const LINKS: &[&str] = &[
   "https://example.com/un/lien/assez/long/pour/voir/comment/il/passe/a/la/ligne",
@@ -187,6 +195,8 @@ const LINKS: &[&str] = &[
 pub struct Content {
   /// Twitch's emotes (ranges in the `emotes` tag; images from Twitch's CDN).
   pub twitch_emotes: bool,
+  /// Twitch's GIFs (ranges in the `gifs` tag; images from Giphy).
+  pub gifs: bool,
   /// 7TV and BTTV words, animated and zero-width ones included, BTTV's modifiers too.
   pub third_party: bool,
   pub badges: bool,
@@ -207,6 +217,7 @@ impl Default for Content {
     Self {
       // Off by default: the only part that reaches the network.
       twitch_emotes: false,
+      gifs: false,
       third_party: true,
       badges: true,
       colors: true,
@@ -336,6 +347,19 @@ impl Feed {
       };
       words.push(word);
     }
+    // Now and then a GIF, at the end as Twitch's composer puts it, or alone.
+    if content.gifs && self.rng.one_in(8) {
+      if self.rng.one_in(2) {
+        words.clear();
+      }
+      words.push(
+        self
+          .rng
+          .pick(GIFS)
+          .map_or("[GIF]", |(_, title)| title)
+          .to_owned(),
+      );
+    }
     let text = words.join(" ");
     let action = content.actions && self.rng.one_in(25);
     let highlighted = !action && content.highlighted && self.rng.one_in(40);
@@ -449,6 +473,14 @@ impl Feed {
           String::new()
         },
       ),
+      (
+        "gifs",
+        if content.gifs {
+          gifs_tag(text)
+        } else {
+          String::new()
+        },
+      ),
       ("id", id.to_owned()),
       ("room-id", ROOM_ID.to_owned()),
       ("tmi-sent-ts", now_millis().to_string()),
@@ -547,6 +579,22 @@ fn emotes_tag(text: &str) -> String {
     .join("/")
 }
 
+/// The `gifs` tag for the GIF titles in `text`: `start-end|id|url,…`, `char` indexes, end
+/// included.
+fn gifs_tag(text: &str) -> String {
+  let mut gifs = Vec::new();
+  for (id, title) in GIFS {
+    for (byte, _) in text.match_indices(title) {
+      let start = text[..byte].chars().count();
+      let end = start + title.chars().count() - 1;
+      gifs.push(format!(
+        "{start}-{end}|{id}|https://media4.giphy.com/media/{id}/giphy.gif"
+      ));
+    }
+  }
+  gifs.join(",")
+}
+
 /// `key=value;…`, values escaped as IRCv3 tags are.
 fn tag_string(tags: &[(&str, String)]) -> String {
   tags
@@ -583,6 +631,7 @@ mod tests {
   fn all() -> Content {
     Content {
       twitch_emotes: true,
+      gifs: true,
       ..Content::default()
     }
   }
@@ -591,7 +640,7 @@ mod tests {
   fn generated_messages_parse_with_emotes_where_they_are() {
     let mut feed = Feed::new(7);
     let content = all();
-    let mut emotes = 0;
+    let (mut emotes, mut gifs) = (0, 0);
     for _ in 0..500 {
       let line = feed.message(&content);
       let Some(Event::Message(message)) = irc::parse(&line) else {
@@ -600,12 +649,16 @@ mod tests {
       assert!(USERS.iter().any(|u| u.id == message.user_id));
       // Every range covers its code, whatever the emoji and accents before it.
       for piece in message.pieces() {
-        if let Piece::Emote { id, name } = piece {
+        if let Piece::Emote { id, name } = &piece {
           emotes += 1;
           assert!(
             TWITCH_EMOTES.contains(&(id.as_str(), name.as_str())),
             "{name}"
           );
+        }
+        if let Piece::Gif { id, title } = &piece {
+          gifs += 1;
+          assert!(GIFS.contains(&(id.as_str(), title.as_str())), "{title}");
         }
       }
       assert_eq!(
@@ -617,7 +670,7 @@ mod tests {
           .count()
       );
     }
-    assert!(emotes > 0);
+    assert!(emotes > 0 && gifs > 0);
   }
 
   #[test]

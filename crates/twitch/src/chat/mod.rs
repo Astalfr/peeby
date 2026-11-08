@@ -7,7 +7,7 @@ pub mod irc;
 mod writer;
 
 pub use connection::{Status, Update, connect};
-pub use irc::{ChatLine, EmoteRange, Event, Piece, RoomState, emote_url};
+pub use irc::{ChatLine, EmoteRange, Event, Piece, RoomState, emote_url, gif_link, gif_url};
 pub use writer::{
   MAX_CHARS, RATE_COUNT, RATE_WINDOW, Writer, WriterStatus, WriterUpdate, clean, connect_writer,
   outgoing,

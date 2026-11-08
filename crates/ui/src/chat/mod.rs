@@ -91,7 +91,25 @@ pub enum Fragment {
   Mention(SharedString),
   /// An `http(s)` URL, shown as such and opened in the browser by a click.
   Link(SharedString),
+  /// A GIF, on a line of its own under the words before it.
+  Gif(Gif),
 }
+
+/// A GIF in a message (Twitch's, from Giphy): drawn [`GIF_HEIGHT`] high at most, as wide as
+/// its file makes it within the column; it plays like an animated emote and a click opens
+/// its page.
+#[derive(Clone)]
+pub struct Gif {
+  /// Its title, shown while it loads and on hover.
+  pub title: SharedString,
+  /// Its image.
+  pub picture: Picture,
+  /// Its page, opened by a click.
+  pub link: SharedString,
+}
+
+/// Height of a GIF, logical pixels.
+pub const GIF_HEIGHT: f32 = 160.;
 
 /// An emote drawn inline, [`EMOTE_HEIGHT`] high; an animated image plays.
 #[derive(Clone)]
@@ -190,7 +208,7 @@ pub fn mentions(message: &ChatMessage, user: &str) -> bool {
   message.fragments.iter().any(|fragment| match fragment {
     Fragment::Mention(name) => names(name, user),
     Fragment::Text(text) => text.split_whitespace().any(|word| names(word, user)),
-    Fragment::Emote(_) | Fragment::Link(_) => false,
+    Fragment::Emote(_) | Fragment::Link(_) | Fragment::Gif(_) => false,
   })
 }
 
@@ -300,6 +318,7 @@ mod tests {
         Fragment::Mention(m) => format!("m:{m}"),
         Fragment::Link(l) => format!("l:{l}"),
         Fragment::Emote(e) => format!("e:{}", e.name),
+        Fragment::Gif(g) => format!("g:{}", g.title),
       })
       .collect()
   }

@@ -1,5 +1,5 @@
 //! The chat panel alone, fed with generated messages: words, mentions, links, emotes (squares
-//! drawn in memory, no network; some blink, some are rings drawn over the emote before them), badges, `/me`, notices, deletions and bans, at a busy channel's
+//! drawn in memory, no network; some blink, some are rings drawn over the emote before them), GIFs (blinking squares too), badges, `/me`, notices, deletions and bans, at a busy channel's
 //! rate. Every 5 s it prints the frames drawn and the slowest frame, to check that the list keeps
 //! up at [`ui::chat::MAX_MESSAGES`] messages (docs/twitch-plan.md, step 9).
 //!
@@ -22,7 +22,7 @@ use gpui_platform::application;
 use ui::chat::fake::{Rng, Squares};
 use ui::chat::{
   Author, Badge, ChatEvent, ChatMessage, ChatPanel, ChatPanelEvent, Composing, Emote, EmoteGroup,
-  Fragment, MessageKind, split_text,
+  Fragment, Gif, MessageKind, split_text,
 };
 use ui::images;
 use ui::picture::Picture;
@@ -119,6 +119,14 @@ fn message(n: u64, rng: &mut Rng) -> ChatMessage {
         format!("{} ", WORDS[rng.below(WORDS.len())]).into(),
       )),
     }
+  }
+  // Now and then a GIF after the words, as Twitch's composer puts it.
+  if rng.below(15) == 0 {
+    fragments.push(Fragment::Gif(Gif {
+      title: "[Yes GIF by Someone]".into(),
+      picture: picture(format!("anim/{}", rng.below(20))),
+      link: "https://giphy.com".into(),
+    }));
   }
   let mut message = ChatMessage::new(
     n.to_string(),

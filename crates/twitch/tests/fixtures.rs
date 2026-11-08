@@ -400,7 +400,7 @@ fn vod_comments() {
     .into_iter()
     .filter_map(|p| match p {
       twitch::chat::Piece::Emote { name, .. } => Some(name),
-      twitch::chat::Piece::Text(_) => None,
+      twitch::chat::Piece::Text(_) | twitch::chat::Piece::Gif { .. } => None,
     })
     .collect();
   assert_eq!(names, ["PrideLaugh", "PrideLaugh", "PrideLaugh", "zrtLL"]);

@@ -837,6 +837,13 @@ impl FakeChatView {
         cx,
       ),
       self.switch(
+        "gifs",
+        t("GIFs (Giphy)", "GIF (Giphy)"),
+        c.gifs,
+        |this, on, _| this.content.gifs = on,
+        cx,
+      ),
+      self.switch(
         "badges",
         t("Badges", "Badges"),
         c.badges,
