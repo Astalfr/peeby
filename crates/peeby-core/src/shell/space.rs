@@ -68,6 +68,8 @@ pub struct HoverCard {
   pub title: SharedString,
   /// A muted line under the title.
   pub detail: Option<SharedString>,
+  /// The audience under it, after a red dot, e.g. `2.4K viewers`.
+  pub viewers: Option<SharedString>,
 }
 
 /// An entry of the sidebar.
@@ -89,8 +91,11 @@ pub struct MenuEntry {
   pub detail: Option<SharedString>,
   /// A heading above the entry, e.g. `Bibliothèques` above the first library.
   pub heading: Option<SharedString>,
-  /// On air: a "LIVE" pill at the right of the entry, a dot on its icon when folded.
+  /// On air: a "LIVE" pill at the right of the entry (a red dot and [`Self::viewers`] when
+  /// given), a dot on its icon when folded.
   pub live: bool,
+  /// The audience of an entry on air, short (`2.4K`): shown with a red dot instead of "LIVE".
+  pub viewers: Option<SharedString>,
   /// A card on hover, in place of the folded sidebar's tooltip.
   pub hover: Option<HoverCard>,
 }
@@ -108,6 +113,7 @@ impl MenuEntry {
       detail: None,
       heading: None,
       live: false,
+      viewers: None,
       hover: None,
     }
   }

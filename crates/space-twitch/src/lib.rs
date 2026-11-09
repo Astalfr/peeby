@@ -1145,10 +1145,12 @@ impl Space for TwitchSpace {
         }),
         detail: Some(stream.game_name.clone().into()),
         live: true,
+        viewers: Some(cards::compact(stream.viewer_count).into()),
         hover: Some(HoverCard {
           // `line_clamp` only limits wrapped lines.
           title: stream.title.replace(['\n', '\r'], " ").into(),
           detail: (!stream.game_name.is_empty()).then(|| stream.game_name.clone().into()),
+          viewers: Some(cards::compact_viewers(stream.viewer_count).into()),
         }),
         ..MenuEntry::new(
           format!("live:{}", stream.user_login),

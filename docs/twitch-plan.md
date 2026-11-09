@@ -438,7 +438,7 @@ Same rules as ADR 0004 and 0009, plus what Twitch adds:
 
   A click on a channel opens its live; an offline one says so (its page with VODs and clips: step 8)
 - [x] Sidebar: Suivies, Parcourir, then up to 12 followed channels on air (avatar, name, category,
-      a red "LIVE" pill, a dot on the avatar when folded), refreshed every 2 minutes; the user and sign-out at the bottom
+      a red dot and the viewers (`2.4K`), a dot on the avatar when folded), refreshed every 2 minutes; the user and sign-out at the bottom
 - [x] A Helix `SessionExpired` from any page signs the space out with its message
 - Moved to step 8: the channel page (header, live, VODs, clips)
 - Not in `smoke`: Helix needs the user's session; the capture tool is the live check

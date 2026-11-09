@@ -1622,6 +1622,8 @@ impl Shell {
               v_flex()
                 .flex_1()
                 .min_w_0()
+                // Tight lines: the detail (a live's category) sits close under the label.
+                .line_height(gpui::relative(1.25))
                 .child(div().truncate().child(entry.label))
                 .children(entry.detail.map(|detail| {
                   div()
@@ -1631,7 +1633,12 @@ impl Shell {
                     .child(detail)
                 })),
             )
-            .when(entry.live, |el| el.child(live_pill()))
+            .when(entry.live, |el| {
+              el.child(match entry.viewers {
+                Some(viewers) => live_viewers(viewers).into_any_element(),
+                None => live_pill().into_any_element(),
+              })
+            })
           }
         })
         .on_aux_click(cx.listener({
@@ -1748,6 +1755,23 @@ fn live_pill() -> impl IntoElement {
     .child("LIVE")
 }
 
+/// A red dot and the audience (`2.4K`), at the right of a sidebar entry on air.
+fn live_viewers(viewers: SharedString) -> impl IntoElement {
+  h_flex()
+    .flex_none()
+    .gap_1()
+    .items_center()
+    .text_xs()
+    .text_color(theme::muted())
+    .child(live_dot())
+    .child(viewers)
+}
+
+/// The red dot of a live, before its audience.
+fn live_dot() -> impl IntoElement {
+  div().flex_none().size(px(7.)).rounded_full().bg(live_red())
+}
+
 /// A sidebar entry's [`HoverCard`] at its right, over the page: the avatar, larger, beside the
 /// entry's label, the card's title and its detail. It fades in sliding toward the entry while
 /// `visible`, and out sliding away; `None` once it has faded out.
@@ -1815,6 +1839,15 @@ fn hover_card(
             .text_xs()
             .text_color(theme::accent())
             .child(detail)
+        }))
+        .children(card.viewers.map(|viewers| {
+          h_flex()
+            .gap_1p5()
+            .items_center()
+            .text_xs()
+            .text_color(theme::muted())
+            .child(live_dot())
+            .child(div().truncate().child(viewers))
         })),
     );
   // A point at the entry's top right corner; deferred, the card escapes the sidebar's clip.
