@@ -1259,6 +1259,17 @@ pub fn parse_comment_action(response: &Value) -> Option<String> {
     .map(str::to_owned)
 }
 
+/// The text of a `comment/perform_comment_action` translation: the comment entity's
+/// `translatedContent`, plain (it carries no links); `None` when empty.
+pub fn parse_comment_translation(response: &Value) -> Option<String> {
+  response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
+    .as_array()?
+    .iter()
+    .find_map(|m| m["payload"]["commentEntityPayload"]["translatedContent"]["content"].as_str())
+    .filter(|text| !text.trim().is_empty())
+    .map(str::to_owned)
+}
+
 /// The thumbs' actions of a comment's toolbar (`engagementToolbarSurfaceEntityPayload`); signed
 /// out, its commands carry no endpoint.
 fn comment_actions(surface: &Value) -> Option<CommentActions> {

@@ -11,6 +11,7 @@
 //! - [`Client::shorts`], [`Client::shorts_more`]: the Shorts feed, an endless sequence picked
 //!   by YouTube (`reel/…`), each Short's metadata then from [`Client::watch`];
 //! - [`Client::comments`]: comment pages and replies (`next` continuations);
+//!   [`Client::rate_comment`] rates one, [`Client::translate_comment`] translates one;
 //! - [`Client::rate`]: likes, dislikes or clears the user's rating of a video (`like/…`);
 //! - [`Client::set_subscribed`]: subscribes to a channel or unsubscribes
 //!   (`subscription/subscribe`, `subscription/unsubscribe`), its state read from the watch page;
@@ -41,6 +42,7 @@ pub mod hls;
 mod live;
 mod models;
 mod parse;
+mod proto;
 
 pub use auth::{Cookies, parse_rotation_delay};
 pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
@@ -57,9 +59,10 @@ pub use models::{
 };
 pub use parse::{
   is_mix, parse_account_handle, parse_captions, parse_channel_search, parse_channels,
-  parse_comment_action, parse_comments, parse_feed, parse_live, parse_live_chat,
-  parse_live_formats, parse_members_only, parse_mix, parse_mixes, parse_notifications,
-  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
-  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
-  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch,
+  parse_comment_action, parse_comment_translation, parse_comments, parse_feed, parse_live,
+  parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
+  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
+  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
+  parse_watch,
 };

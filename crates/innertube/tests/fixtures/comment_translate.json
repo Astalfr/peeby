@@ -1,0 +1,48 @@
+{
+  "actionResults": [
+    {
+      "status": "STATUS_SUCCEEDED"
+    }
+  ],
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhpVZ3dTMF9jRWZvbDNfZjhmdEdCNEFhQUJBZyAoKAE%3D",
+          "fieldMask": {
+            "xfieldMask": {
+              "field": [
+                10
+              ]
+            }
+          },
+          "payload": {
+            "commentEntityPayload": {
+              "translatedContent": {
+                "content": "Avez-vous remarqué que la barre de lecture de toutes les chansons de YOASOBI s'est transformée en fleur de sakura ?"
+              }
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_UPDATE"
+        }
+      ],
+      "timestamp": {
+        "nanos": 660542178,
+        "seconds": "1794252871"
+      }
+    }
+  },
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "0"
+          }
+        ],
+        "service": "GFEEDBACK"
+      }
+    ]
+  }
+}

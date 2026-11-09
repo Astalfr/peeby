@@ -2,7 +2,8 @@
 //! load as the panel scrolls near its end, replies when a thread opens. The links of comments
 //! and descriptions ([`Links`], [`linked_text`]) live here too: a timestamp of the video seeks
 //! its player, YouTube pages open in the tab, other sites in the browser. Signed in, the thumbs
-//! rate a comment: the button changes at once and goes back if YouTube refuses.
+//! rate a comment: the button changes at once and goes back if YouTube refuses. "Translate"
+//! shows a comment in the client's language, translated by Google, until "See original".
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -51,6 +52,16 @@ struct Replies {
   open: bool,
 }
 
+/// A comment's translation ([`Client::translate_comment`]), by comment id.
+enum Translation {
+  /// Asked for: the button says so and sends nothing more.
+  Loading,
+  /// Shown in place of the text.
+  Shown(String),
+  /// Back to the original; the translation is kept for the next click.
+  Hidden(String),
+}
+
 /// A link of a text under the pointer: the id of its text and its index there.
 pub type HoveredLink = Option<(SharedString, usize)>;
 
@@ -75,6 +86,8 @@ pub struct CommentSection {
   replies: HashMap<String, Replies>,
   /// Comments whose rating waits for YouTube's answer: their thumbs send nothing meanwhile.
   rating: HashSet<String>,
+  /// By comment id.
+  translations: HashMap<String, Translation>,
   hovered_link: HoveredLink,
 }
 
@@ -105,6 +118,7 @@ impl CommentSection {
       comments: Comments::default(),
       replies: HashMap::new(),
       rating: HashSet::new(),
+      translations: HashMap::new(),
       hovered_link: None,
     }
   }
@@ -214,6 +228,75 @@ impl CommentSection {
             handle
               .update(cx, |_, window, cx| window.push_notification(note, cx))
               .ok();
+          }
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// A click on "Translate" or "See original" under comment `id`: shows its translation, asked
+  /// for the first time, or the original again.
+  fn translate(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    match self.translations.remove(id) {
+      Some(Translation::Loading) => {
+        self
+          .translations
+          .insert(id.to_owned(), Translation::Loading);
+        return;
+      }
+      Some(Translation::Shown(text)) => {
+        self
+          .translations
+          .insert(id.to_owned(), Translation::Hidden(text));
+        return cx.notify();
+      }
+      Some(Translation::Hidden(text)) => {
+        self
+          .translations
+          .insert(id.to_owned(), Translation::Shown(text));
+        return cx.notify();
+      }
+      None => {}
+    }
+    let Some(text) = self.comment_mut(id).map(|c| c.text.clone()) else {
+      return;
+    };
+    self
+      .translations
+      .insert(id.to_owned(), Translation::Loading);
+    cx.notify();
+    let client = self.client.clone();
+    let (video_id, comment_id) = (self.video_id.clone(), id.to_owned());
+    let fetch = runtime::spawn(cx, async move {
+      client
+        .translate_comment(&video_id, &comment_id, &text)
+        .await
+    });
+    let handle = window.window_handle();
+    let id = id.to_owned();
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          this.translations.remove(&id);
+          cx.notify();
+          match result {
+            Some(Ok(text)) => {
+              this.translations.insert(id, Translation::Shown(text));
+            }
+            Some(Err(e)) => {
+              tracing::warn!("translate comment: {e}");
+              let note = Notification::error(tf!(
+                "Cannot translate this comment. {}",
+                "Impossible de traduire ce commentaire. {}",
+                error_text(&e)
+              ));
+              handle
+                .update(cx, |_, window, cx| window.push_notification(note, cx))
+                .ok();
+            }
+            None => {}
           }
         })
         .ok();
@@ -371,7 +454,10 @@ impl CommentSection {
       let rows: Vec<_> = r
         .items
         .iter()
-        .map(|reply| comment_row(reply, &links, &section, window, cx))
+        .map(|reply| {
+          let translation = self.translations.get(&reply.id);
+          comment_row(reply, translation, &links, &section, window, cx)
+        })
         .collect();
       let more = r.continuation.as_ref().map(|_| {
         let id = comment.id.clone();
@@ -389,7 +475,14 @@ impl CommentSection {
     });
     v_flex()
       .gap_2()
-      .child(comment_row(comment, &links, &section, window, cx))
+      .child(comment_row(
+        comment,
+        self.translations.get(&comment.id),
+        &links,
+        &section,
+        window,
+        cx,
+      ))
       .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
       .children(shown)
   }
@@ -492,9 +585,11 @@ impl Links {
   }
 }
 
-/// A comment: its author's avatar, name and age, its text and its thumbs.
+/// A comment: its author's avatar, name and age, its text (or its `translation`), its thumbs
+/// and its translate button.
 fn comment_row(
   comment: &Comment,
+  translation: Option<&Translation>,
   links: &Links,
   section: &WeakEntity<CommentSection>,
   window: &mut Window,
@@ -521,7 +616,25 @@ fn comment_row(
     .text_xs()
     .text_color(theme::muted())
     .child(thumb(comment, section, LikeStatus::Like, likes))
-    .child(thumb(comment, section, LikeStatus::Dislike, ""));
+    .child(thumb(comment, section, LikeStatus::Dislike, ""))
+    .when(!comment.text.trim().is_empty(), |el| {
+      el.child(translate_button(comment, translation, section))
+    });
+  // The translation has no links: YouTube's answer carries none.
+  let text = match translation {
+    Some(Translation::Shown(text)) => linked_text(
+      format!("comment-translated-{}", comment.id),
+      text,
+      &[],
+      links,
+    ),
+    _ => linked_text(
+      format!("comment-{}", comment.id),
+      &comment.text,
+      &comment.links,
+      links,
+    ),
+  };
   h_flex()
     .gap_3()
     .items_start()
@@ -548,12 +661,7 @@ fn comment_row(
                 .child(comment.published.clone()),
             ),
         )
-        .child(div().child(linked_text(
-          format!("comment-{}", comment.id),
-          &comment.text,
-          &comment.links,
-          links,
-        )))
+        .child(div().child(text))
         .child(thumbs),
     )
 }
@@ -604,6 +712,41 @@ fn thumb(
     })
     .child(gpui_component::Icon::new(icon).size(px(14.)))
     .when(!count.is_empty(), |el| el.child(count.to_owned()))
+}
+
+/// "Translate" under `comment`, "Translating…" while it waits, "See original" once translated.
+fn translate_button(
+  comment: &Comment,
+  translation: Option<&Translation>,
+  section: &WeakEntity<CommentSection>,
+) -> impl IntoElement + use<> {
+  let label = match translation {
+    None | Some(Translation::Hidden(_)) => t("Translate", "Traduire"),
+    Some(Translation::Loading) => t("Translating…", "Traduction…"),
+    Some(Translation::Shown(_)) => t(
+      "See original (translated by Google)",
+      "Voir l'original (traduit par Google)",
+    ),
+  };
+  let loading = matches!(translation, Some(Translation::Loading));
+  let id = comment.id.clone();
+  let section = section.clone();
+  h_flex()
+    .id(SharedString::from(format!("translate-{}", comment.id)))
+    .h(px(28.))
+    .px_2()
+    .items_center()
+    .rounded_full()
+    .when(!loading, |el| {
+      el.cursor_pointer()
+        .hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+    })
+    .on_click(move |_, window, cx| {
+      section
+        .update(cx, |this, cx| this.translate(&id, window, cx))
+        .ok();
+    })
+    .child(label)
 }
 
 /// `text` with its `links` in the accent color, the hovered one underlined, followed on a click

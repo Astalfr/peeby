@@ -414,6 +414,28 @@ fn comment_action() {
 }
 
 #[test]
+fn comment_translation() {
+  // A comment translated into French (captured 2026-11-09, anonymous): the comment entity's
+  // `translatedContent`, keyed by its `commentKey`.
+  let response = fixture("comment_translate.json");
+  assert_eq!(
+    innertube::parse_comment_action(&response).as_deref(),
+    Some("STATUS_SUCCEEDED")
+  );
+  assert_eq!(
+    innertube::parse_comment_translation(&response).as_deref(),
+    Some(
+      "Avez-vous remarqué que la barre de lecture de toutes les chansons de YOASOBI s'est \
+       transformée en fleur de sakura ?"
+    )
+  );
+  assert_eq!(
+    innertube::parse_comment_translation(&fixture("comment_like.json")),
+    None
+  );
+}
+
+#[test]
 fn comment_replies() {
   // Replies pages list `commentViewModel`s directly, then "Afficher plus de réponses".
   let page = innertube::parse_comments(&fixture("comment_replies.json"));

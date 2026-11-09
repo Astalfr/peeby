@@ -17,11 +17,12 @@ use crate::models::{
 };
 use crate::parse::{
   find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
-  parse_channels, parse_comment_action, parse_comments, parse_feed, parse_live, parse_live_chat,
-  parse_live_formats, parse_members_only, parse_mix, parse_mixes, parse_notifications,
-  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
-  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
-  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
+  parse_channels, parse_comment_action, parse_comment_translation, parse_comments, parse_feed,
+  parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
+  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
+  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
+  parse_watch, tracking_param,
 };
 
 /// "My Mix": the account's own mix, in no feed.
@@ -407,6 +408,44 @@ impl Client {
   /// The whole answer behind [`Client::rate_comment`], for the `comments` example's fixtures.
   pub async fn rate_comment_response(&self, action: &str) -> Result<Value> {
     self.require_session()?;
+    let body = json!({ "actions": [action] });
+    self.web("comment/perform_comment_action", body, true).await
+  }
+
+  /// Comment `comment_id` of `video_id`, whose text is `text`, translated by Google into the
+  /// client's language (`hl`), as the web client's "Translate" button asks for it
+  /// (`comment/perform_comment_action`). No answer gives that action: it is built here. Needs no
+  /// sign-in and writes nothing to the account.
+  pub async fn translate_comment(
+    &self,
+    video_id: &str,
+    comment_id: &str,
+    text: &str,
+  ) -> Result<String> {
+    let response = self
+      .translate_comment_response(video_id, comment_id, text)
+      .await?;
+    let failed = |detail: String| Error::Parse {
+      endpoint: "comment/perform_comment_action",
+      detail,
+    };
+    match parse_comment_action(&response) {
+      Some(status) if status == "STATUS_SUCCEEDED" => {
+        parse_comment_translation(&response).ok_or_else(|| failed("no translation".into()))
+      }
+      status => Err(failed(format!("status: {status:?}"))),
+    }
+  }
+
+  /// The whole answer behind [`Client::translate_comment`], for fixtures.
+  pub async fn translate_comment_response(
+    &self,
+    video_id: &str,
+    comment_id: &str,
+    text: &str,
+  ) -> Result<Value> {
+    let action =
+      crate::proto::translate_comment_action(video_id, comment_id, text, &self.language.0);
     let body = json!({ "actions": [action] });
     self.web("comment/perform_comment_action", body, true).await
   }
