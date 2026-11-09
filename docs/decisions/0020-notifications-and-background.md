@@ -36,7 +36,8 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
 ## Decision
 
 - **Kinds and settings.** `[notifications]` holds a `Delivery { in_app, windows }` per kind
-  (`twitch_live`, `twitch_category`, `youtube_video`, `youtube_live`), all on by default. Each
+  (`twitch_live`, `twitch_category`, `twitch_inbox`, `youtube_video`, `youtube_live`), all on
+  by default. Each
   space shows its kinds in its part of the settings (`shell::delivery_row`: "Peeby" and
   "Windows" switches). The spaces decide what to announce; `desktop::toast` only shows.
 - **Twitch** (`spaces::twitch::bell`): the bell remembers each live's category id. A channel
@@ -52,6 +53,26 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   the list is read only then. The panel leaves out the kinds whose `in_app` is off; `Other`
   (replies, mentions) always shows in the bell and never in Windows'. A toast's click marks the
   notification read and opens the video.
+- **Twitch's notification center** (`spaces::twitch::inbox`, 2026-11-09): the account's own
+  notifications on twitch.tv (its bell: watch streaks, drops, Twitch's news), read with the
+  auth-token every 3 minutes through raw GQL (`twitch::notifications`: `currentUser {
+  notifications(first: 20, displayType: VIEWER) { summary { unseenCount lastSeenAt } edges {
+  node } } }`, fields found from GQL's validation messages, introspection being off; fixture
+  `gql_notifications.json`). They need only the auth-token, not Helix. Reading writes nothing:
+  no mutation marking them seen was found among the guessed names, so Peeby's "seen" is its own
+  (the panel opened), after twitch.tv's `lastSeenAt`, and twitch.tv's count stays as it is. A
+  notification made after the last look is new. The first reading only learns; later, one not
+  read before and made since Peeby started (minus a minute) is announced. Its kind is
+  `twitch_inbox` (a Windows notification with its picture, titled "Twitch"). They show in
+  Twitch's tab with the followed lives' events, newest first: a channel's avatar round,
+  Twitch's art square, bold runs as Twitch writes them (`**reward**`). A click opens a
+  channel's live, a VOD or a clip in Peeby; anything else (a drop campaign, a streak to save,
+  Twitch's blog) opens in the browser.
+- **The bell's panel** (`shell::bell`, 2026-11-09): a tab per space whose `Space::unseen` is
+  `Some`, with its unread count, the tab bar of the list of lives (`shell::space_tabs`, shared
+  by both). It opens on the tab shown last while it has unread notifications, else on the first
+  that has some. Only the tab shown builds its space's section, so a space sees its
+  notifications (its badge cleared, YouTube's marked read) only when its tab shows.
 - **Floods**: beyond 3 Windows notifications from one reading (after a sleep, an outage), one
   sums them up.
 - **Toasts** (`desktop::toast`): built with WinRT (`windows` 0.62, the version GPUI's Windows

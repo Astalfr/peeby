@@ -143,6 +143,9 @@ pub struct Notifications {
   pub twitch_live: Delivery,
   /// A followed Twitch live changed category.
   pub twitch_category: Delivery,
+  /// A notification of the account's Twitch notification center (twitch.tv's bell: watch
+  /// streaks, drops, Twitch's news).
+  pub twitch_inbox: Delivery,
   /// A YouTube channel the bell follows uploaded a video (a Short included).
   pub youtube_video: Delivery,
   /// A YouTube channel the bell follows went live.

@@ -5,6 +5,7 @@
 //! tab's list slides in from the side of its tab and its rows come in from the right one after
 //! the other (none of it with reduced motion).
 
+use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use gpui::prelude::*;
@@ -12,16 +13,17 @@ use gpui::{
   Animation, AnimationExt, AnyElement, App, Bounds, Context, DisplayId, ElementId, FocusHandle,
   FontWeight, Global, KeyDownEvent, SharedString, Subscription, Task, Window,
   WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
-  ease_out_quint, point, px, relative, size,
+  ease_out_quint, point, px, size,
 };
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{ActiveTheme, h_flex, v_flex};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::{assets, motion, picture, theme, widgets};
+use ui::{picture, theme, widgets};
 
 use super::space::{LiveEntry, Lives, SpaceHandle};
+use super::space_tabs::{self, OnSelect, SpaceTab};
 use crate::desktop;
 
 const WIDTH: f32 = 380.;
@@ -41,8 +43,6 @@ const META_GAP: f32 = 2.;
 const TOOLTIP: f32 = 300.;
 /// How far the list rises from the taskbar as it opens.
 const RISE: f32 = 16.;
-/// How far a tab's list slides in from the side of its tab.
-const SLIDE: f32 = 24.;
 /// How far a row comes in from the right.
 const ROW_SLIDE: f32 = 32.;
 /// Between two rows coming in, and how many rows wait for the ones above at most.
@@ -257,22 +257,26 @@ impl LivesView {
     }
   }
 
+  /// The tabs, each with its count of lives on air.
+  fn space_tabs(&self, cx: &App) -> Vec<SpaceTab> {
+    self
+      .spaces
+      .iter()
+      .map(|space| SpaceTab {
+        info: space.info(cx),
+        count: match space.lives(cx) {
+          Some(Lives::On(lives)) => Some(lives.len()),
+          _ => None,
+        },
+      })
+      .collect()
+  }
+
   fn select(&mut self, tab: SharedString, cx: &mut Context<Self>) {
     if tab == self.tab {
       return;
     }
-    let index = |name: &SharedString| {
-      self
-        .spaces
-        .iter()
-        .position(|s| s.info(cx).name == *name)
-        .unwrap_or(0)
-    };
-    self.came_from = if index(&tab) > index(&self.tab) {
-      1.
-    } else {
-      -1.
-    };
+    self.came_from = space_tabs::direction(&self.space_tabs(cx), &self.tab, &tab);
     cx.default_global::<State>().tab = Some(tab.clone());
     self.tab = tab;
     cx.notify();
@@ -290,105 +294,24 @@ impl LivesView {
   }
 
   fn tabs(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-    let mut bar = h_flex().px_2().gap_1();
-    for space in &self.spaces {
-      let info = space.info(cx);
-      let count = match space.lives(cx) {
-        Some(Lives::On(lives)) => Some(lives.len()),
-        _ => None,
-      };
-      let selected = info.name == self.tab;
-      let name = info.name.clone();
-      // The underline grows from the middle of the tab chosen and shrinks under the other.
-      let shown = if selected { 1. } else { 0. };
-      let line = if cx.reduce_motion() {
-        shown
-      } else {
-        motion::tween(
-          ElementId::Name(format!("lives-line-{}", info.name).into()),
-          shown,
-          shown,
-          theme::NORMAL,
-          window,
-          cx,
-        )
-      };
-      bar = bar.child(
-        h_flex()
-          .id(ElementId::Name(format!("lives-tab-{}", info.name).into()))
-          .relative()
-          .px_3()
-          .py_2()
-          .gap_2()
-          .cursor_pointer()
-          .text_sm()
-          .text_color(if selected {
-            theme::foreground()
-          } else {
-            theme::muted()
-          })
-          .hover(|s| s.text_color(theme::foreground()))
-          .on_click(cx.listener(move |this, _, _, cx| this.select(name.clone(), cx)))
-          .child(assets::color_svg(info.icon, 16., window, cx))
-          .child(info.name.clone())
-          .children(count.map(|n| {
-            div()
-              .px_1p5()
-              .rounded_full()
-              .text_xs()
-              .bg(if selected {
-                info.accent.base
-              } else {
-                theme::surface_hover()
-              })
-              .text_color(if selected {
-                theme::on_accent()
-              } else {
-                theme::muted()
-              })
-              .child(n.to_string())
-          }))
-          .when(line > 0., |el| {
-            el.child(
-              h_flex()
-                .absolute()
-                .bottom_0()
-                .left_0()
-                .right_0()
-                .justify_center()
-                .child(
-                  div()
-                    .h(px(2.))
-                    .w(relative(line))
-                    .rounded_full()
-                    .bg(info.accent.base)
-                    .opacity(line),
-                ),
-            )
-          }),
-      );
-    }
-    bar.into_any_element()
+    let view = cx.weak_entity();
+    let on_select: OnSelect = Rc::new(move |tab, _, cx| {
+      view.update(cx, |this, cx| this.select(tab, cx)).ok();
+    });
+    space_tabs::bar(
+      "lives",
+      &self.space_tabs(cx),
+      &self.tab,
+      on_select,
+      window,
+      cx,
+    )
   }
 
   /// The tab's list, sliding in from the side of the tab it came from.
   fn list(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
     let content = self.content(window, cx);
-    let slide = SLIDE * self.came_from;
-    let list = div()
-      .flex_1()
-      .min_h_0()
-      .flex()
-      .flex_col()
-      .relative()
-      .child(content);
-    animated(
-      list,
-      ElementId::Name(format!("lives-tab-list-{}", self.tab).into()),
-      Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
-      move |el, t| el.opacity(t).left(px(slide * (1. - t))),
-      cx,
-    )
+    space_tabs::sliding("lives", &self.tab, self.came_from, content, cx)
   }
 
   fn content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

@@ -25,6 +25,9 @@
 //! the saved `auth-token` (the debug profile's, else the release one's), in dry run: it prints what
 //! the page shows (signed in, points, the bonus button) and clicks nothing; with `--claim`, it
 //! claims the bonus (a write to the account) and prints Twitch's answer. Build `peeby` first.
+//! `-- notifications [<file>]` reads the account's notification center (twitch.tv's bell) with
+//! the saved `auth-token` and prints counts and kinds; it reads, never writes. The file gets the
+//! whole answer, which names the followed channels: trim and rename it before a fixture.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -86,6 +89,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if let Some(i) = args.iter().position(|a| a == "poll") {
     let login = args.get(i + 1).ok_or("poll <login>")?.clone();
     return twitch::block_on(capture_poll(login))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "notifications") {
+    let save = args.get(i + 1).cloned();
+    return twitch::block_on(capture_notifications(save))?;
   }
   if let Some(i) = args.iter().position(|a| a == "gql-probe") {
     let query = args.get(i + 1).ok_or("gql-probe <query> [login]")?.clone();
@@ -551,6 +558,46 @@ async fn capture_poll(login: String) -> Result<(), Box<dyn std::error::Error>> {
 /// Sends one GQL `query` anonymous (`$login` as its variable) and prints GQL's messages and the
 /// data: for finding a field's shape, since introspection is disabled. Anonymous: only public
 /// data comes back.
+/// Reads the account's notification center (twitch.tv's bell, `currentUser.notifications`) with
+/// the saved `auth-token` and prints counts and kinds only; reads, never writes (nothing is marked
+/// read). With a path, writes the whole answer there: it names the account's channels, so trim
+/// and rename it before it becomes a fixture.
+async fn capture_notifications(save: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+  let auth_token = keyring::Entry::new("peeby", "twitch|auth-token")
+    .and_then(|e| e.get_password())
+    .ok();
+  println!(
+    "auth-token: {}",
+    if auth_token.is_some() { "yes" } else { "no" }
+  );
+  let client = twitch::Client::new(None, auth_token)?;
+  let answer = client
+    .gql(&twitch::notifications::request(twitch::notifications::PAGE))
+    .await?;
+  for error in answer["errors"].as_array().into_iter().flatten() {
+    println!("error: {}", error["message"].as_str().unwrap_or_default());
+  }
+  let page = twitch::notifications::parse(&answer)?;
+  println!(
+    "{} notifications, {} unseen on twitch.tv",
+    page.notifications.len(),
+    page.unseen
+  );
+  for n in &page.notifications {
+    println!(
+      "  kind {:?} · read {} · action {}",
+      n.kind,
+      n.read,
+      if n.url.is_some() { "url" } else { "none" }
+    );
+  }
+  if let Some(path) = save {
+    std::fs::write(&path, serde_json::to_string_pretty(&answer)?)?;
+    println!("saved {path}");
+  }
+  Ok(())
+}
+
 async fn gql_probe(query: String, login: String) -> Result<(), Box<dyn std::error::Error>> {
   let client = twitch::Client::new(None, None)?;
   let answer = client

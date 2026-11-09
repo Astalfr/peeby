@@ -1,0 +1,147 @@
+{
+  "data": {
+    "currentUser": {
+      "id": "12345678",
+      "notifications": {
+        "summary": {
+          "unseenCount": 1,
+          "lastSeenAt": "2026-11-09T19:04:16.608602883Z"
+        },
+        "edges": [
+          {
+            "node": {
+              "id": "27904b18-682e-46be-9bcd-81cb7d2b98fe",
+              "body": "Your 3-stream streak is maintained with channelone!",
+              "type": "recovering_watch_streaks_recovered_streak",
+              "category": "recommended_content",
+              "isRead": false,
+              "createdAt": "2026-11-09T19:08:52.084876728Z",
+              "updatedAt": "2026-11-09T19:08:52.084876728Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/00000000-0000-4000-8000-000000000001-profile_image-70x70.png",
+              "renderStyle": "DEFAULT",
+              "destinationType": "ChannelPage",
+              "actions": [
+                {
+                  "id": "2lm4xufqfxeyq",
+                  "type": "click",
+                  "label": "primary-button-cta",
+                  "url": "https://www.twitch.tv/channelone"
+                }
+              ]
+            }
+          },
+          {
+            "node": {
+              "id": "2f5b9958-1585-4b43-8d0f-a38e774d8b6e",
+              "body": "Your 2-stream streak on channelone broke! Watch a clip, VOD or stream in the next 24h to save it.",
+              "type": "recovering_watch_streaks_recovered_streak_new",
+              "category": "watch_streaks",
+              "isRead": false,
+              "createdAt": "2026-11-09T01:39:53.098966611Z",
+              "updatedAt": "2026-11-09T01:39:53.098966611Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/00000000-0000-4000-8000-000000000001-profile_image-70x70.png",
+              "renderStyle": "DEFAULT",
+              "destinationType": "WatchStreakRescue",
+              "actions": [
+                {
+                  "id": "1t19s3gkawy1o",
+                  "type": "click",
+                  "label": "primary-button-cta",
+                  "url": "https://www.twitch.tv/save-streak/channelone"
+                }
+              ]
+            }
+          },
+          {
+            "node": {
+              "id": "0e3653d7-5fef-4210-9003-aa5da8b0a083",
+              "body": "You're about to reach a 3-stream watch streak! Join  ChannelTwo's stream now to earn your streak rewards!",
+              "type": "watch_streak_live_up_new",
+              "category": "watch_streaks",
+              "isRead": false,
+              "createdAt": "2026-10-25T20:11:18.235991314Z",
+              "updatedAt": "2026-10-25T20:11:18.235991314Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/00000000-0000-4000-8000-000000000002-profile_image-70x70.png",
+              "renderStyle": "DEFAULT",
+              "destinationType": "ChannelPage",
+              "actions": [
+                {
+                  "id": "2usrrsctwl9ck",
+                  "type": "click",
+                  "label": "primary-button-cta",
+                  "url": "https://www.twitch.tv/channeltwo"
+                }
+              ]
+            }
+          },
+          {
+            "node": {
+              "id": "571e5225-a8e3-4772-ad08-26b46a4e2d71",
+              "body": "You better BELIEVE it! Sub for 1 month of FREE Apple TV and exclusive Ted Lasso Chat Badges.",
+              "type": "apple_tv_101426",
+              "category": "promotions",
+              "isRead": false,
+              "createdAt": "2026-10-21T23:34:24.048926718Z",
+              "updatedAt": "2026-10-21T23:34:24.048926718Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/growth-assets/twitch_uv_glitch_purple",
+              "renderStyle": "DEFAULT",
+              "destinationType": "ExternalLink",
+              "actions": [
+                {
+                  "id": "acs8y1u8co3u",
+                  "type": "click",
+                  "label": "primary-button-cta",
+                  "url": "https://blog.twitch.tv/2026/10/20/sub-for-apple-tv-and-ted-lasso-chat-badges/"
+                }
+              ]
+            }
+          },
+          {
+            "node": {
+              "id": "43ee68b4-5def-473a-ad91-b8bb34b1a1d0",
+              "body": "Fresh Drop for Just Chatting detected! 👀",
+              "type": "drops_lifecycle_062625_p1",
+              "category": "drops_and_quests",
+              "isRead": false,
+              "createdAt": "2026-10-07T17:15:23.141544685Z",
+              "updatedAt": "2026-10-07T17:15:23.141544685Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/dartapi-assets/11095-twitch-box-anim.gif",
+              "renderStyle": "DEFAULT",
+              "destinationType": "DropsCampaign",
+              "actions": [
+                {
+                  "id": "txaxvc4ydmyf",
+                  "type": "click",
+                  "label": "primary-button-cta",
+                  "url": "https://www.twitch.tv/drops/campaigns?dropID=6f854328-686e-4e06-b209-a599ee53cdfe"
+                }
+              ]
+            }
+          },
+          {
+            "node": {
+              "id": "9e26ba8f-184f-40b8-966e-942dbe9e3a75",
+              "body": "You are now eligible to get **Cyber Glasses** for AION 2. To get your loot, claim your Drop by October 24, 2026 6:59:00 am UTC on the Inventory page!",
+              "type": "user_drop_reward_reminder_notification",
+              "category": "transactional",
+              "isRead": false,
+              "createdAt": "2026-10-01T23:07:01.777003833Z",
+              "updatedAt": "2026-10-01T23:07:01.777003833Z",
+              "thumbnailURL": "https://static-cdn.jtvnw.net/twitch-quests-assets/REWARD/5a3238e7-cb46-4c92-b10d-b8a52cfe98a2.png",
+              "renderStyle": "DEFAULT",
+              "destinationType": "DropsInventory",
+              "actions": [
+                {
+                  "id": "3i8gyhgzoeetd",
+                  "type": "click",
+                  "label": "CTA",
+                  "url": "https://www.twitch.tv/inventory"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

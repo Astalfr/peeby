@@ -308,8 +308,9 @@ impl SettingsView {
   }
 }
 
-/// Where the followed channels' lives and category changes show.
+/// Where the followed channels' lives and category changes, and Twitch's own notifications, show.
 fn notifications_section(nav: WeakEntity<TwitchSpace>, cx: &gpui::App) -> AnyElement {
+  let inbox_nav = nav.clone();
   let test = move |change: Change| {
     let nav = nav.clone();
     move |cx: &mut gpui::App| {
@@ -344,6 +345,24 @@ fn notifications_section(nav: WeakEntity<TwitchSpace>, cx: &gpui::App) -> AnyEle
         ),
         |n| &mut n.twitch_category,
         test(Change::Category),
+        cx,
+      ),
+      delivery_row(
+        "twitch-notify-inbox",
+        t(
+          "Twitch's notifications",
+          "Les notifications de Twitch",
+        ),
+        t(
+          "The account's notifications on twitch.tv: watch streaks, drops, Twitch's news (every three minutes). Needs the account's sign-in.",
+          "Les notifications du compte sur twitch.tv : séries de visionnage, drops, actualités de Twitch (toutes les trois minutes). Demande la connexion du compte.",
+        ),
+        |n| &mut n.twitch_inbox,
+        move |cx| {
+          if let Some(space) = inbox_nav.upgrade() {
+            TwitchSpace::test_inbox_toast(&space, cx);
+          }
+        },
         cx,
       ),
     ],

@@ -487,6 +487,18 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     - The top lives page holds 30 at most (`streams(first: 30)`, `options: { languages: [FR] }`),
       and a query takes 15 root aliases at most. A second page (`after: <cursor>`) fails Twitch's
       integrity check; the 30 top categories' first pages give thousands of lives instead.
+  - **Notification center** (twitch.tv's bell), checked on 2026-11-09 (`twitch_capture --
+    gql-probe`, then `-- notifications` signed in, read only; `twitch::notifications`):
+    `currentUser { notifications(first, after, displayType: VIEWER, language) }` gives
+    `summary { unseenCount lastSeenAt }` and `edges { cursor node }` of `OnsiteNotification`s:
+    `id body type category isRead createdAt updatedAt thumbnailURL renderStyle destinationType
+    actions { id type label url body modalID }` and `extra` (a union). Seen: plain-text bodies
+    (a drop's reward in `**…**`), categories `watch_streaks`, `recommended_content`,
+    `promotions`, `drops_and_quests`, `transactional`, one `click` action with a twitch.tv or
+    external URL, `unseenCount` the notifications made after `lastSeenAt`. No live announcement
+    in the account's list (Peeby announces lives itself, from Helix). No mutation marking them
+    seen answered among the guessed names (`updateOnsiteNotification…`, `markOnsite…`): Peeby
+    keeps its own seen state. ADR 0020.
   - **Outgoing raids** ([ADR 0024](decisions/0024-twitch-raids-pubsub.md)): GQL's
     `user(login) { raid }` exists but stayed null for viewers (2026-11-04, about 2,600 lives
     scanned 52 times, anonymous and with the auth-token). Twitch's PubSub gives them instead,

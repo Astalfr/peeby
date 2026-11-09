@@ -51,7 +51,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   saves it, anonymous; `-- gql-probe '<query>' [login]` prints GQL's validation messages (introspection is
   off); `-- chat-page <login>` runs the bonus claim's hidden chat window signed in, in dry run (clicks
   nothing; prints whether the page is signed in, has points and a bonus button; it joins that chat as
-  the user: prefer their own channel); `-- predictions-ended <login>` probes, anonymous,
+  the user: prefer their own channel); `-- notifications [<file>]` reads the account's twitch.tv notification center with the
+  auth-token (read only, counts and kinds; the file holds the whole answer, the followed channels
+  included: trim and rename before a fixture); `-- predictions-ended <login>` probes, anonymous,
   the GQL fields of ended predictions and saves the app's predictions answer)
 - 7TV's EventAPI (anonymous): `cargo run -p twitch --example seventv_events -- <minutes> (<login>… | top) [--save <file>] [--cosmetics]`
   subscribes to channels' 7TV sets and users and prints what comes (ADR 0030; trim the `actor` before a fixture);

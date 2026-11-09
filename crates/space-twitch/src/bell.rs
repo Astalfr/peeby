@@ -1,5 +1,5 @@
-//! Twitch's section of the bell: the followed channels that went live or changed category while
-//! Peeby runs, from the sidebar's reading of the followed lives (every two minutes). The first
+//! Twitch's tab of the bell: the account's notification center ([`super::inbox`]) and the
+//! followed channels that went live or changed category while Peeby runs, from the sidebar's reading of the followed lives (every two minutes). The first
 //! reading only learns who is on air, so that opening Peeby does not announce every live at
 //! once. Opening the panel sees them; a click opens the live. Each kind shows in the bell, as a
 //! Windows notification with the channel's avatar, both or neither (`[notifications]`,
@@ -10,7 +10,8 @@ use std::time::SystemTime;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, ClickEvent, Context, ElementId, SharedString, WeakEntity, Window, div, px,
+  AnyElement, App, ClickEvent, Context, Div, ElementId, FontWeight, SharedString, Stateful,
+  StyledText, TextRun, WeakEntity, Window, div, px,
 };
 use gpui_component::popover::PopoverState;
 use gpui_component::{h_flex, v_flex};
@@ -21,9 +22,11 @@ use ui::picture;
 use ui::{tf, theme};
 
 use super::cards::{self, Avatars};
+use super::inbox;
 use super::{Route, TwitchSpace};
 use peeby_core::desktop::toast::{self, Toast};
 use peeby_core::settings::{Delivery, Settings};
+use twitch::notifications::Notification;
 
 /// Events kept in the panel.
 const KEPT: usize = 30;
@@ -255,20 +258,51 @@ fn open(nav: &WeakEntity<TwitchSpace>, route: Route, cx: &mut App) {
     .ok();
 }
 
+/// What the Twitch tab of the bell shows.
+pub struct Sections {
+  /// The followed lives' events, newest first; `None` without the followed channels' connection.
+  pub lives: Option<Vec<Event>>,
+  /// How many of them are new.
+  pub unseen: usize,
+  /// The channels' avatars.
+  pub avatars: Avatars,
+  /// The notification center's notifications, newest first, each with whether it is new.
+  pub notifications: Vec<(Notification, bool)>,
+}
+
+/// One row of the panel.
+enum Item {
+  Live {
+    event: Event,
+    new: bool,
+  },
+  Twitch {
+    notification: Notification,
+    new: bool,
+  },
+}
+
+impl Item {
+  fn at(&self) -> SystemTime {
+    match self {
+      Item::Live { event, .. } => event.at,
+      Item::Twitch { notification, .. } => inbox::created(notification),
+    }
+  }
+}
+
 /// The section of the open panel. It lives in the popover's element state: made when the panel
 /// opens, with the events as they were (the new ones keep their dot while it is open).
 pub fn panel(
   nav: WeakEntity<TwitchSpace>,
   popover: WeakEntity<PopoverState>,
-  entries: Vec<Event>,
-  unseen: usize,
-  avatars: Avatars,
+  sections: Sections,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
   window
     .use_keyed_state(ElementId::Name("twitch-bell".into()), cx, |_, cx| {
-      BellPanel::new(nav, popover, entries, unseen, avatars, cx)
+      BellPanel::new(nav, popover, sections, cx)
     })
     .into_any_element()
 }
@@ -276,8 +310,10 @@ pub fn panel(
 struct BellPanel {
   nav: WeakEntity<TwitchSpace>,
   popover: WeakEntity<PopoverState>,
-  entries: Vec<Event>,
-  unseen: usize,
+  /// Newest first, lives and notifications together.
+  items: Vec<Item>,
+  /// The followed channels are not connected: their lives cannot show.
+  no_lives: bool,
   avatars: Avatars,
 }
 
@@ -285,9 +321,7 @@ impl BellPanel {
   fn new(
     nav: WeakEntity<TwitchSpace>,
     popover: WeakEntity<PopoverState>,
-    entries: Vec<Event>,
-    unseen: usize,
-    avatars: Avatars,
+    sections: Sections,
     cx: &mut Context<Self>,
   ) -> Self {
     if let Some(images) = cx.try_global::<Images>().cloned() {
@@ -299,20 +333,43 @@ impl BellPanel {
       see.update(cx, |space, cx| space.see_bell(cx)).ok();
     })
     .detach();
+    let no_lives = sections.lives.is_none();
+    let mut items: Vec<Item> = sections
+      .lives
+      .unwrap_or_default()
+      .into_iter()
+      .enumerate()
+      .map(|(i, event)| Item::Live {
+        event,
+        new: i < sections.unseen,
+      })
+      .chain(
+        sections
+          .notifications
+          .into_iter()
+          .map(|(notification, new)| Item::Twitch { notification, new }),
+      )
+      .collect();
+    // Newest first; the sort is stable, so each list keeps its own order.
+    items.sort_by_key(|item| std::cmp::Reverse(item.at()));
     Self {
       nav,
       popover,
-      entries,
-      unseen,
-      avatars,
+      items,
+      no_lives,
+      avatars: sections.avatars,
     }
   }
 
-  fn open(&mut self, login: String, window: &mut Window, cx: &mut Context<Self>) {
+  fn dismiss(&self, window: &mut Window, cx: &mut App) {
     self
       .popover
       .update(cx, |popover, cx| popover.dismiss(window, cx))
       .ok();
+  }
+
+  fn open(&mut self, login: String, window: &mut Window, cx: &mut Context<Self>) {
+    self.dismiss(window, cx);
     self
       .nav
       .update(cx, |space, cx| {
@@ -321,30 +378,205 @@ impl BellPanel {
       .ok();
   }
 
-  /// A middle click: the live in a new tab, in the background; the panel stays open for the
+  fn open_notification(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(Item::Twitch { notification, .. }) = self.items.get(index) else {
+      return;
+    };
+    if notification.url.is_none() {
+      return;
+    }
+    let notification = notification.clone();
+    self.dismiss(window, cx);
+    inbox::open(&self.nav, &notification, cx);
+  }
+
+  /// A middle click: the page in a new tab, in the background; the panel stays open for the
   /// next ones.
-  fn open_in_new_tab(&mut self, login: String, cx: &mut Context<Self>) {
+  fn open_in_new_tab(&mut self, route: Route, cx: &mut Context<Self>) {
     self
       .nav
       .update(cx, |space, cx| {
-        space.open_from_notification_in_new_tab(Route::Watch(login), cx)
+        space.open_from_notification_in_new_tab(route, cx)
       })
       .ok();
   }
+
+  fn live_row(
+    &self,
+    event: &Event,
+    new: bool,
+    now: SystemTime,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let avatar = self
+      .avatars
+      .get(&event.user_id)
+      .map(|url| picture::avatar(&cards::template(url), AVATAR, window, cx));
+    let login = event.login.clone();
+    let in_new_tab = Route::Watch(login.clone());
+    // The category is in the headline of a change already.
+    let category = match event.change {
+      Change::Live => event.category.clone(),
+      Change::Category => String::new(),
+    };
+    let line = [category, ago(event.at, now)]
+      .into_iter()
+      .filter(|s| !s.is_empty())
+      .collect::<Vec<_>>()
+      .join(" · ");
+    row(
+      ElementId::Name(format!("twitch-bell-{}", event.user_id).into()),
+      new,
+      div()
+        .size(px(AVATAR))
+        .flex_none()
+        .rounded_full()
+        .bg(theme::surface_hover())
+        .children(avatar)
+        .into_any_element(),
+      v_flex()
+        .flex_1()
+        .min_w_0()
+        .gap_1()
+        .child(div().text_sm().child(SharedString::from(headline(event))))
+        .child(
+          div()
+            .text_sm()
+            .text_color(theme::muted())
+            .line_clamp(2)
+            .child(event.title.clone()),
+        )
+        .child(div().text_xs().text_color(theme::subtle()).child(line))
+        .into_any_element(),
+    )
+    .on_click(cx.listener(move |this, _, window, cx| this.open(login.clone(), window, cx)))
+    .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+      if event.is_middle_click() {
+        cx.stop_propagation();
+        this.open_in_new_tab(in_new_tab.clone(), cx);
+      }
+    }))
+    .into_any_element()
+  }
+
+  fn notification_row(
+    &self,
+    index: usize,
+    notification: &Notification,
+    new: bool,
+    now: SystemTime,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let round = inbox::is_avatar(notification);
+    let radius = if round {
+      px(AVATAR / 2.)
+    } else {
+      theme::RADIUS
+    };
+    let image = inbox::picture(notification)
+      .map(|picture| picture::image_fill(&picture, AVATAR, 1., radius, window, cx));
+    let in_new_tab = notification.url.as_deref().and_then(inbox::route);
+    // Bold runs as Twitch shows them (a drop's reward), the text wrapping across them.
+    let runs: Vec<TextRun> = notification
+      .spans
+      .iter()
+      .map(|span| {
+        let mut style = window.text_style();
+        if span.bold {
+          style.font_weight = FontWeight::SEMIBOLD;
+        }
+        style.to_run(span.text.len())
+      })
+      .collect();
+    let text = StyledText::new(notification.text()).with_runs(runs);
+    let line = [
+      t("Twitch", "Twitch").to_owned(),
+      ago(inbox::created(notification), now),
+    ]
+    .join(" · ");
+    let clickable = notification.url.is_some();
+    row(
+      ElementId::Name(format!("twitch-inbox-{}", notification.id).into()),
+      new,
+      div()
+        .size(px(AVATAR))
+        .flex_none()
+        .rounded(radius)
+        .bg(theme::surface_hover())
+        .children(image)
+        .into_any_element(),
+      v_flex()
+        .flex_1()
+        .min_w_0()
+        .gap_1()
+        .child(div().text_sm().line_clamp(3).child(text))
+        .child(div().text_xs().text_color(theme::subtle()).child(line))
+        .into_any_element(),
+    )
+    .when(!clickable, |el| el.cursor_default())
+    .on_click(cx.listener(move |this, _, window, cx| this.open_notification(index, window, cx)))
+    .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+      if event.is_middle_click()
+        && let Some(route) = in_new_tab.clone()
+      {
+        cx.stop_propagation();
+        this.open_in_new_tab(route, cx);
+      }
+    }))
+    .into_any_element()
+  }
+}
+
+/// A row of the panel: its dot while new, its picture and its lines.
+fn row(id: ElementId, new: bool, picture: AnyElement, lines: AnyElement) -> Stateful<Div> {
+  h_flex()
+    .id(id)
+    .w_full()
+    .px_2()
+    .py_2()
+    .gap_3()
+    .items_start()
+    .rounded(theme::RADIUS)
+    .cursor_pointer()
+    .hover(|s| s.bg(theme::surface_hover()))
+    .child(
+      div()
+        .mt(px(16.))
+        .size(px(6.))
+        .flex_none()
+        .rounded_full()
+        .when(new, |el| el.bg(theme::accent())),
+    )
+    .child(picture)
+    .child(lines)
 }
 
 impl Render for BellPanel {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    if self.entries.is_empty() {
+    if self.items.is_empty() {
+      let message = if self.no_lives {
+        t(
+          "No notification. The followed channels going live show here once they are connected \
+           (Following page).",
+          "Aucune notification. Les chaînes suivies qui passent en direct s'affichent ici une fois \
+           connectées (page Suivies).",
+        )
+      } else {
+        t(
+          "No notification, and no followed channel has gone live or changed category since \
+           Peeby opened.",
+          "Aucune notification, et aucune chaîne suivie n'est passée en direct ni n'a changé de \
+           catégorie depuis l'ouverture de Peeby.",
+        )
+      };
       return div()
         .px_2()
+        .pb_2()
         .text_sm()
         .text_color(theme::muted())
-        .child(t(
-          "No followed channel has gone live or changed category since Peeby opened.",
-          "Aucune chaîne suivie n'est passée en direct ni n'a changé de catégorie depuis \
-           l'ouverture de Peeby.",
-        ))
+        .child(message)
         .into_any_element();
     }
     let now = SystemTime::now();
@@ -353,89 +585,36 @@ impl Render for BellPanel {
       .max_h(px(560.))
       .overflow_y_scroll()
       .gap_0p5();
-    for (i, entry) in self.entries.iter().enumerate() {
-      let avatar = self
-        .avatars
-        .get(&entry.user_id)
-        .map(|url| picture::avatar(&cards::template(url), AVATAR, window, cx));
-      let login = entry.login.clone();
-      let in_new_tab = login.clone();
-      // The category is in the headline of a change already.
-      let category = match entry.change {
-        Change::Live => entry.category.clone(),
-        Change::Category => String::new(),
+    for index in 0..self.items.len() {
+      let row = match &self.items[index] {
+        Item::Live { event, new } => {
+          let (event, new) = (event.clone(), *new);
+          self.live_row(&event, new, now, window, cx)
+        }
+        Item::Twitch { notification, new } => {
+          let (notification, new) = (notification.clone(), *new);
+          self.notification_row(index, &notification, new, now, window, cx)
+        }
       };
-      let line = [category, ago(entry.at, now)]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
-      list = list.child(
-        h_flex()
-          .id(ElementId::Name(
-            format!("twitch-bell-{}", entry.user_id).into(),
-          ))
-          .w_full()
-          .px_2()
-          .py_2()
-          .gap_3()
-          .items_start()
-          .rounded(theme::RADIUS)
-          .cursor_pointer()
-          .hover(|s| s.bg(theme::surface_hover()))
-          .on_click(cx.listener(move |this, _, window, cx| this.open(login.clone(), window, cx)))
-          .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
-            if event.is_middle_click() {
-              cx.stop_propagation();
-              this.open_in_new_tab(in_new_tab.clone(), cx);
-            }
-          }))
-          .child(
-            div()
-              .mt(px(16.))
-              .size(px(6.))
-              .flex_none()
-              .rounded_full()
-              .when(i < self.unseen, |el| el.bg(theme::accent())),
-          )
-          .child(
-            div()
-              .size(px(AVATAR))
-              .flex_none()
-              .rounded_full()
-              .bg(theme::surface_hover())
-              .children(avatar),
-          )
-          .child(
-            v_flex()
-              .flex_1()
-              .min_w_0()
-              .gap_1()
-              .child(div().text_sm().child(SharedString::from(headline(entry))))
-              .child(
-                div()
-                  .text_sm()
-                  .text_color(theme::muted())
-                  .line_clamp(2)
-                  .child(entry.title.clone()),
-              )
-              .child(div().text_xs().text_color(theme::subtle()).child(line)),
-          ),
-      );
+      list = list.child(row);
     }
     list.into_any_element()
   }
 }
 
-/// "just now", "5 min ago", "2 h ago".
+/// "just now", "5 min ago", "2 h ago", "3 d ago".
 fn ago(at: SystemTime, now: SystemTime) -> String {
   let minutes = now.duration_since(at).map_or(0, |d| d.as_secs() / 60);
   match minutes {
     0 => t("just now", "à l'instant").into(),
     1..=59 => tf!("{minutes} min ago", "il y a {minutes} min"),
-    _ => {
+    60..=1439 => {
       let hours = minutes / 60;
       tf!("{hours} h ago", "il y a {hours} h")
+    }
+    _ => {
+      let days = minutes / 1440;
+      tf!("{days} d ago", "il y a {days} j")
     }
   }
 }
@@ -554,6 +733,10 @@ mod tests {
     assert_eq!(ago(t0, t0 + Duration::from_secs(30)), "just now");
     assert_eq!(ago(t0, t0 + Duration::from_secs(300)), "5 min ago");
     assert_eq!(ago(t0, t0 + Duration::from_secs(7300)), "2 h ago");
+    assert_eq!(
+      ago(t0, t0 + Duration::from_secs(3 * 86_400 + 60)),
+      "3 d ago"
+    );
   }
 
   #[test]

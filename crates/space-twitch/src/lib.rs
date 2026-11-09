@@ -22,6 +22,7 @@ mod fake_chat;
 mod follow;
 mod following;
 mod hype_train;
+mod inbox;
 mod login;
 mod multistream;
 mod play;
@@ -310,6 +311,12 @@ pub struct TwitchSpace {
   /// again when it is built again.
   multistream: Vec<String>,
   _login_subscription: Option<Subscription>,
+  /// The account's notification center, read with the auth-token.
+  inbox: inbox::Inbox,
+  /// When the space started, milliseconds since the epoch: older notifications are not
+  /// announced.
+  started_ms: i64,
+  _inbox: Option<Task<()>>,
 }
 
 impl TwitchSpace {
@@ -344,6 +351,9 @@ impl TwitchSpace {
       account_flash: Flash::default(),
       multistream: Vec::new(),
       _login_subscription: None,
+      inbox: inbox::Inbox::default(),
+      started_ms: inbox::now_ms(),
+      _inbox: None,
     };
     space.set_auth_token(secrets.auth_token, cx);
     // The sidebar's avatars arrive through the image store.
@@ -816,7 +826,7 @@ impl TwitchSpace {
     }
   }
 
-  /// The bell's lives are seen (its panel opened).
+  /// The bell's lives and the notification center are seen (its panel opened).
   pub fn see_bell(&mut self, cx: &mut Context<Self>) {
     if let State::SignedIn(signed) = &mut self.state
       && signed.bell.unseen() > 0
@@ -824,6 +834,35 @@ impl TwitchSpace {
       signed.bell.see();
       cx.notify();
     }
+    if self.inbox.unseen() > 0 {
+      self.inbox.see(inbox::now_ms());
+      cx.notify();
+    }
+  }
+
+  /// Shows the settings' test notification of the notification center: its newest one, else a
+  /// sample.
+  pub fn test_inbox_toast(space: &Entity<Self>, cx: &mut App) {
+    let sample = space.read(cx).inbox.newest().cloned().unwrap_or_else(|| {
+      twitch::notifications::Notification {
+        id: String::new(),
+        spans: vec![twitch::notifications::Span {
+          text: t(
+            "This is a test notification",
+            "Ceci est une notification de test",
+          )
+          .to_owned(),
+          bold: false,
+        }],
+        kind: String::new(),
+        category: String::new(),
+        read: false,
+        created_at: Some(inbox::now_ms()),
+        thumbnail: None,
+        url: None,
+      }
+    });
+    inbox::test_toast(&sample, cx);
   }
 
   /// The login Helix is connected with.
@@ -982,6 +1021,11 @@ impl TwitchSpace {
       }
       _ => None,
     };
+    self.inbox.clear();
+    self._inbox = match (&self.client, &token) {
+      (Some(client), Some(_)) => Some(self.read_inbox(client.clone(), cx)),
+      _ => None,
+    };
     self.auth_token = token;
     // A saved Helix session waited for the account's sign-in.
     if self.auth_token.is_some()
@@ -991,6 +1035,46 @@ impl TwitchSpace {
       self.restore(refresh, cx);
     }
     self.following_changed(cx);
+  }
+
+  /// Reads the account's notification center now and every [`inbox::EVERY`], until the
+  /// auth-token changes or Twitch refuses it.
+  fn read_inbox(&self, client: twitch::Client, cx: &mut Context<Self>) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+      loop {
+        let client = client.clone();
+        let Ok(fetch) = this.update(cx, |_, cx| {
+          runtime::spawn(cx, async move {
+            let answer = client
+              .gql(&twitch::notifications::request(twitch::notifications::PAGE))
+              .await?;
+            twitch::notifications::parse(&answer)
+          })
+        }) else {
+          return;
+        };
+        let result = fetch.await;
+        let go_on = this.update(cx, |this, cx| match result {
+          Some(Ok(page)) => {
+            let fresh = this.inbox.update(page, this.started_ms);
+            inbox::toasts(fresh, cx.weak_entity(), cx);
+            cx.notify();
+            true
+          }
+          // The account's own reading marks the token refused.
+          Some(Err(Error::NotLoggedIn)) => false,
+          Some(Err(e)) => {
+            tracing::warn!("Twitch notifications: {e}");
+            true
+          }
+          None => true,
+        });
+        if !matches!(go_on, Ok(true)) {
+          return;
+        }
+        cx.background_executor().timer(inbox::EVERY).await;
+      }
+    })
   }
 
   fn render_login(&mut self, cx: &mut Context<Self>) -> Entity<LoginView> {
@@ -1234,14 +1318,20 @@ impl Space for TwitchSpace {
     self.top_player(tab, cx)
   }
 
-  fn unseen(&self, _cx: &App) -> Option<usize> {
+  fn unseen(&self, cx: &App) -> Option<usize> {
     if !self.account_signed_in() {
       return None;
     }
-    match &self.state {
-      State::SignedIn(signed) => Some(signed.bell.unseen()),
-      _ => None,
-    }
+    let lives = match &self.state {
+      State::SignedIn(signed) => signed.bell.unseen(),
+      _ => 0,
+    };
+    let inbox = if inbox::delivery(cx).in_app {
+      self.inbox.unseen()
+    } else {
+      0
+    };
+    Some(lives + inbox)
   }
 
   fn notifications(
@@ -1250,18 +1340,36 @@ impl Space for TwitchSpace {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<AnyElement> {
-    let State::SignedIn(signed) = &self.state else {
-      return None;
-    };
     if !self.account_signed_in() {
       return None;
     }
+    let (lives, unseen, avatars) = match &self.state {
+      State::SignedIn(signed) => (
+        Some(signed.bell.entries()),
+        signed.bell.unseen(),
+        signed.avatars.clone(),
+      ),
+      _ => (None, 0, Avatars::new()),
+    };
+    let notifications = if inbox::delivery(cx).in_app {
+      self
+        .inbox
+        .notifications()
+        .iter()
+        .map(|n| (n.clone(), self.inbox.is_new(n)))
+        .collect()
+    } else {
+      Vec::new()
+    };
     Some(bell::panel(
       cx.weak_entity(),
       popover,
-      signed.bell.entries(),
-      signed.bell.unseen(),
-      signed.avatars.clone(),
+      bell::Sections {
+        lives,
+        unseen,
+        avatars,
+        notifications,
+      },
       window,
       cx,
     ))

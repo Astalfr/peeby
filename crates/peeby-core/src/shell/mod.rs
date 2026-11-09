@@ -7,11 +7,13 @@
 //! (docs/design.md, ADR 0008, ADR 0015, ADR 0019). A tab held and moved is reordered along the
 //! bar (`tab_drag`, ADR 0028).
 
+mod bell;
 pub mod lives;
 mod mini_player;
 mod output_volume;
 mod settings_page;
 pub mod space;
+mod space_tabs;
 mod tab_drag;
 pub mod windows;
 
@@ -1324,8 +1326,8 @@ impl Shell {
     )
   }
 
-  /// The notifications of every space in one panel, a section per space that has some; the
-  /// badge adds up their unread counts.
+  /// The notifications of every space in one panel, a tab per space that has some
+  /// ([`bell::panel`]); the badge adds up their unread counts.
   fn bell(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let unseen: usize = self.spaces.iter().filter_map(|s| s.unseen(cx)).sum();
     let badge = (unseen > 0).then(|| {
@@ -1363,50 +1365,7 @@ impl Shell {
           .trigger(trigger)
           .content(move |_, window, cx| {
             let popover = cx.entity().downgrade();
-            let sections: Vec<_> = spaces
-              .iter()
-              .filter_map(|space| {
-                let panel = space.notifications(popover.clone(), window, cx)?;
-                Some((space.info(cx), panel))
-              })
-              .collect();
-            let empty = sections.is_empty();
-            v_flex()
-              .w(px(NOTIFICATIONS_WIDTH))
-              .gap_2()
-              .child(
-                div()
-                  .px_2()
-                  .pb_1()
-                  .font_weight(FontWeight::SEMIBOLD)
-                  .child(t("Notifications", "Notifications")),
-              )
-              .when(empty, |el| {
-                el.child(
-                  div()
-                    .px_2()
-                    .pb_2()
-                    .text_sm()
-                    .text_color(theme::muted())
-                    .child(t(
-                      "No notifications. YouTube's appear once signed in.",
-                      "Aucune notification. Celles de YouTube s'affichent une fois connecté.",
-                    )),
-                )
-              })
-              .children(sections.into_iter().map(|(info, panel)| {
-                v_flex()
-                  .gap_1()
-                  .child(
-                    div()
-                      .px_2()
-                      .text_xs()
-                      .font_weight(FontWeight::SEMIBOLD)
-                      .text_color(info.accent.base)
-                      .child(info.name),
-                  )
-                  .child(panel)
-              }))
+            bell::panel(spaces.clone(), popover, NOTIFICATIONS_WIDTH, window, cx)
           }),
       )
       .children(badge)

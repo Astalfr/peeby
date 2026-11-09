@@ -20,6 +20,7 @@ mod fallback;
 pub mod gql;
 pub mod helix;
 pub mod hype_train;
+pub mod notifications;
 pub mod points;
 pub mod polls;
 mod proxy;
