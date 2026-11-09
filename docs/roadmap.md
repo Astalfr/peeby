@@ -34,6 +34,19 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Done (2026-11-04): the YouTube jar is encrypted with DPAPI for the Windows user in `cookies.dat`; the former plain `cookies.txt` is encrypted then deleted at the first start, yt-dlp gets a plain copy deleted at the next start and on sign-out, and `peeby --export-cookies` gives the examples a plain copy ([ADR 0022](decisions/0022-encrypted-cookie-jar.md)). Checked: DPAPI round trip (unit test), a plain jar given with `PEEBY_COOKIES` encrypted in place then exported unchanged. **Not verified:** the migration of the real `cookies.txt` and a rotation in the app (the next run of Peeby).
 
+## Session cookie rotation
+
+- Done (2026-11-09, [ADR 0004](decisions/0004-cookie-session.md)): the session ended after about
+  five days (2026-11-08) although Peeby kept the `Set-Cookie` of every signed-in request:
+  InnerTube responses rotate `SIDCC` but never `__Secure-1PSIDTS`/`3PSIDTS`. Peeby now posts to
+  `accounts.youtube.com/RotateCookies` as youtube.com's hidden `RotateCookiesPage` frame does
+  (`Client::rotate_cookies`), at startup then at the delay the answer gives (`identity.hfcr`,
+  600 s), while it runs (`space-youtube` `rotation`). Checked live on a fresh session: 200 with
+  new `PSIDTS`/`PSIDCC` values, the rotated jar accepted (`account` example), and in the app the
+  rotation at startup then Home signed in; the delay's parser is tested on the saved answer.
+  **Not verified:** a session lasting beyond five days this way; a session left unused while
+  Peeby is quit for days.
+
 ## Log file
 
 - Done (2026-11-03): Peeby writes its log to `%LOCALAPPDATA%\peeby\logs\<profile>-<ms>.log` as well as stderr: a release build has no console, so its warnings were lost (a Twitch live's Windows notification went missing with no trace; `build` or `Show` failed in `desktop::toast`). One file per launch, created at its first line by a thread of its own, a panic logged and flushed, deleted after 7 days with mpv's logs. Checked with a debug run: the file holds the stderr lines.
@@ -440,5 +453,5 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 |---|---|---|
 | YouTube blocks the VISIONOS client | No playback | yt-dlp fallback, values tracked against yt-dlp's source |
 | YouTube changes renderers | Empty feeds or pages | Lenient parsing, fixtures, `logged_in` checks |
-| Cookies expire or rotate | Signed out | `Error::NotLoggedIn` shown to the user; persist `Set-Cookie` (milestone 4) |
+| Cookies expire or rotate | Signed out | `Error::NotLoggedIn` shown to the user; persist `Set-Cookie` (milestone 4); `RotateCookies` every 10 min (ADR 0004) |
 | Copied crates drift from peeby | Duplicate fixes | Shared repository once both stabilize |

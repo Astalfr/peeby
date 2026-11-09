@@ -1201,3 +1201,17 @@ fn oembed_title_is_the_original() {
     None
   );
 }
+
+#[test]
+fn cookie_rotation_gives_its_next_delay() {
+  let path = format!(
+    "{}/tests/fixtures/rotate_cookies.txt",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let body = std::fs::read_to_string(path).unwrap();
+  assert_eq!(
+    innertube::parse_rotation_delay(&body),
+    Some(std::time::Duration::from_secs(600))
+  );
+  assert_eq!(innertube::parse_rotation_delay("<html>"), None);
+}

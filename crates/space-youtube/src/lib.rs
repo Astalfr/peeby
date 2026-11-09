@@ -16,6 +16,7 @@ mod playlists;
 pub mod prefetch;
 mod queue;
 mod rating;
+mod rotation;
 mod save;
 mod search;
 mod settings_page;
@@ -233,6 +234,7 @@ impl YouTubeSpace {
     let unseen = inbox::inbox(cx);
     cx.observe(&unseen, |_, _, cx| cx.notify()).detach();
     inbox::reset(cx.weak_entity(), cx);
+    rotation::reset(cx);
     let mut tabs = Tabs::default();
     let videos = !initial_videos.is_empty();
     if videos || Settings::get(cx).opens_at_startup(ID) {
@@ -294,6 +296,7 @@ impl YouTubeSpace {
     bell::reset(cx);
     subscribe::reset(cx);
     inbox::reset(cx.weak_entity(), cx);
+    rotation::reset(cx);
     self.client = client;
     self.live = lives::Live::default();
     // Every page holds the old client: each tab starts over, rebuilt when it shows.

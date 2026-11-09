@@ -84,6 +84,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   Never write them in clear on disk, except the copy yt-dlp needs (deleted at start and sign-out).
 - YouTube rotates session cookies through `Set-Cookie`: every signed-in request goes through `Client::send` /
   `keep_rotated_cookies`, which writes the jar back. Ignoring them invalidates the session within about an hour.
+  They never rotate `__Secure-*PSIDTS`: `Client::rotate_cookies` (`accounts.youtube.com/RotateCookies`) does,
+  every 10 minutes while Peeby runs, or the session ends within days (ADR 0004).
   Never give the user's file to yt-dlp (it rewrites it): give it a copy.
 - Stream URLs embed the user's IP and signatures: never log them at info level or above; the mpv log file is opt-in
   (`PEEBY_MPV_LOG`, or the player setting "mpv logs": one file per video in `%LOCALAPPDATA%\peeby\logs`, kept

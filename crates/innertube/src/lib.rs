@@ -42,7 +42,7 @@ mod live;
 mod models;
 mod parse;
 
-pub use auth::Cookies;
+pub use auth::{Cookies, parse_rotation_delay};
 pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
 pub use error::Error;
 pub use live::LiveProxy;

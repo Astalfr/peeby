@@ -224,6 +224,28 @@ impl Cookies {
   }
 }
 
+/// The page that rotates `__Secure-1PSIDTS`/`__Secure-3PSIDTS`: youtube.com loads it in a hidden
+/// frame (`RotateCookiesPage`), which posts to it every few minutes. InnerTube responses rotate
+/// `SIDCC` only; without this, the session ended after about five days (2026-11-08).
+pub(crate) const ROTATE_COOKIES_URL: &str = "https://accounts.youtube.com/RotateCookies";
+
+/// The body the rotation frame posts (Google ignores its values).
+pub(crate) const ROTATE_COOKIES_BODY: &str = r#"[000,"-0000000000000000000"]"#;
+
+/// When to rotate again, from a `RotateCookies` answer: `)]}'` then
+/// `[["identity.hfcr",600],["di",65]]`, `identity.hfcr` being the delay in seconds.
+pub fn parse_rotation_delay(body: &str) -> Option<std::time::Duration> {
+  let json = body.trim_start().strip_prefix(")]}'").unwrap_or(body);
+  let value: serde_json::Value = serde_json::from_str(json.trim()).ok()?;
+  value.as_array()?.iter().find_map(|pair| {
+    let pair = pair.as_array()?;
+    (pair.first()?.as_str()? == "identity.hfcr")
+      .then(|| pair.get(1)?.as_u64())
+      .flatten()
+      .map(std::time::Duration::from_secs)
+  })
+}
+
 fn now() -> u64 {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)

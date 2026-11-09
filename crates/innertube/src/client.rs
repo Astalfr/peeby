@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::auth::{Cookies, ORIGIN};
+use crate::auth::{Cookies, ORIGIN, ROTATE_COOKIES_BODY, ROTATE_COOKIES_URL, parse_rotation_delay};
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::live::LiveProxy;
@@ -708,6 +708,39 @@ impl Client {
       });
     }
     Ok(())
+  }
+
+  /// Rotates the session's `__Secure-1PSIDTS`/`__Secure-3PSIDTS`, as youtube.com's hidden
+  /// `RotateCookiesPage` frame does in a browser: the new values are saved like every rotation.
+  /// Returns when to call it again (YouTube's `identity.hfcr`, 10 minutes so far). A 401 means
+  /// the session is gone: [`Error::NotLoggedIn`]. Signed in only.
+  pub async fn rotate_cookies(&self) -> Result<Duration> {
+    /// When the answer gives no delay: the one it gave on 2026-11-09.
+    const DEFAULT: Duration = Duration::from_secs(600);
+    let session = self.session.as_ref().ok_or(Error::SignInRequired)?;
+    let cookies = lock(&session.cookies).header();
+    let response = self
+      .http
+      .post(ROTATE_COOKIES_URL)
+      .header("Origin", "https://accounts.youtube.com")
+      .header("Content-Type", "application/json")
+      .header("Cookie", cookies)
+      .body(ROTATE_COOKIES_BODY)
+      .send()
+      .await?;
+    self.keep_rotated_cookies(&response);
+    match response.status() {
+      status if status.is_success() => {}
+      reqwest::StatusCode::UNAUTHORIZED => return Err(Error::NotLoggedIn),
+      status => {
+        return Err(Error::Status {
+          status: status.as_u16(),
+          endpoint: "RotateCookies",
+        });
+      }
+    }
+    let body = response.text().await?;
+    Ok(parse_rotation_delay(&body).unwrap_or(DEFAULT))
   }
 
   /// Downloads an image (thumbnails, avatars).

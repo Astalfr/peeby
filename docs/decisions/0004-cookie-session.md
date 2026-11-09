@@ -17,7 +17,15 @@ Anonymous Home has been empty since 2024 (verified: `logged_in=0`, empty grid, "
 ## Consequences
 
 - Cookies are secrets: never in logs, URLs or error messages. `Cookies` has a redacting `Debug`.
-- **YouTube rotates session cookies** (`SIDCC`, `__Secure-*PSIDTS`…) through `Set-Cookie` on signed-in responses. A client that keeps sending the old values gets the session invalidated: it happened on 2026-11-01, about an hour after the first export, before the updates were handled. Since then `Client` applies the `Set-Cookie` headers of signed-in responses and writes the whole jar back to the file (temporary file + rename). Deletions are ignored. Not yet verified over a long session.
+- **YouTube rotates session cookies** (`SIDCC`, `__Secure-*PSIDTS`…) through `Set-Cookie` on signed-in responses. A client that keeps sending the old values gets the session invalidated: it happened on 2026-11-01, about an hour after the first export, before the updates were handled. Since then `Client` applies the `Set-Cookie` headers of signed-in responses and writes the whole jar back to the file (temporary file + rename). Deletions are ignored.
+- **That is not enough** (2026-11-08): a session used every 3 minutes ended after about five
+  days. InnerTube responses rotate `SIDCC` only; a browser renews `__Secure-1PSIDTS` and
+  `__Secure-3PSIDTS` through a hidden frame of youtube.com (`accounts.youtube.com/RotateCookiesPage`)
+  that posts to `accounts.youtube.com/RotateCookies` (body `[000,"-0000000000000000000"]`) and is
+  told when to come back (`identity.hfcr`, 600 s). Since 2026-11-09 Peeby does the same while it
+  runs (`Client::rotate_cookies`, the `space-youtube` `rotation` loop): at startup, then at that
+  delay (bounded to 1 min–1 h; 2 min after a network error; stopped on a 401, the session being
+  gone). Its `Set-Cookie` are saved like the others. Not yet verified over more than five days.
 - yt-dlp also writes the jar back when it exits, so the fallback gives it a copy, never the user's file.
 - A sign-in WebView now comes first ([ADR 0017](0017-sign-in-webview.md), 2026-11-03): Google allows
   WebView2, and the jar it gives goes through the same Home check. This import stays as the manual way.
