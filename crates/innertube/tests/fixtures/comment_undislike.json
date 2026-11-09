@@ -1,0 +1,20 @@
+{
+  "actionResults": [
+    {
+      "status": "STATUS_SUCCEEDED"
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      }
+    ]
+  }
+}

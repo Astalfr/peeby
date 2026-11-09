@@ -17,10 +17,10 @@ use crate::models::{
 };
 use crate::parse::{
   find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
-  parse_channels, parse_comments, parse_feed, parse_live, parse_live_chat, parse_live_formats,
-  parse_members_only, parse_mix, parse_mixes, parse_notifications, parse_oembed_title,
-  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
+  parse_channels, parse_comment_action, parse_comments, parse_feed, parse_live, parse_live_chat,
+  parse_live_formats, parse_members_only, parse_mix, parse_mixes, parse_notifications,
+  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
+  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
   parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
 };
 
@@ -357,10 +357,17 @@ impl Client {
   /// [`WatchPage::comments_continuation`], [`CommentPage::continuation`] or
   /// [`crate::Comment::replies_continuation`].
   pub async fn comments(&self, token: &str) -> Result<CommentPage> {
+    let response = self.comments_response(token).await?;
+    Ok(parse_comments(&response))
+  }
+
+  /// The whole answer behind [`Client::comments`], for the `comments` example's fixtures.
+  pub async fn comments_response(&self, token: &str) -> Result<Value> {
     let response = self
       .web("next", json!({ "continuation": token }), true)
       .await?;
-    Ok(parse_comments(&response))
+    self.check_session(&response)?;
+    Ok(response)
   }
 
   /// Sets the user's rating of `video_id`: `like/like`, `like/dislike`, or `like/removelike`
@@ -380,6 +387,28 @@ impl Client {
     }
     self.web(endpoint, body, true).await?;
     Ok(())
+  }
+
+  /// Likes or dislikes a comment, or removes that rating: `action` comes from
+  /// [`crate::CommentActions::get`], as the comment's thumbs send it
+  /// (`comment/perform_comment_action`). Needs cookies. The answer's `actionResults` must say
+  /// `STATUS_SUCCEEDED`.
+  pub async fn rate_comment(&self, action: &str) -> Result<()> {
+    let response = self.rate_comment_response(action).await?;
+    match parse_comment_action(&response) {
+      Some(status) if status == "STATUS_SUCCEEDED" => Ok(()),
+      status => Err(Error::Parse {
+        endpoint: "comment/perform_comment_action",
+        detail: format!("status: {status:?}"),
+      }),
+    }
+  }
+
+  /// The whole answer behind [`Client::rate_comment`], for the `comments` example's fixtures.
+  pub async fn rate_comment_response(&self, action: &str) -> Result<Value> {
+    self.require_session()?;
+    let body = json!({ "actions": [action] });
+    self.web("comment/perform_comment_action", body, true).await
   }
 
   /// Sets how much YouTube notifies the user about a subscribed channel. `params` come from

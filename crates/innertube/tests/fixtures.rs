@@ -352,6 +352,65 @@ fn comments_page() {
   assert_eq!(first.published, "il y a 7 ans");
   assert!(!first.likes.is_empty());
   assert!(first.replies_continuation.is_some());
+  // Signed out, the thumbs send nothing.
+  assert!(page.comments.iter().all(|c| c.actions.is_none()));
+  assert_eq!(first.rating, LikeStatus::Indifferent);
+}
+
+#[test]
+fn comments_signed_in() {
+  // Signed in, each toolbar's commands carry `performCommentActionEndpoint`s; the first
+  // comment was liked by the account (`TOOLBAR_LIKE_STATE_LIKED`), the others are not rated.
+  let page = innertube::parse_comments(&fixture("comments_signed_in.json"));
+  assert_eq!(page.comments.len(), 3);
+  assert!(page.continuation.is_some());
+  let first = &page.comments[0];
+  assert_eq!(first.rating, LikeStatus::Like);
+  assert!(
+    page.comments[1..]
+      .iter()
+      .all(|c| c.rating == LikeStatus::Indifferent)
+  );
+  assert_eq!(first.likes, "570\u{a0}k");
+  assert_eq!(first.likes_liked, "570\u{a0}k");
+  let actions = first.actions.as_ref().expect("signed-in actions");
+  assert!(actions.like.starts_with("CAUQAh"));
+  assert!(actions.dislike.starts_with("CAQQAh"));
+  assert_ne!(actions.like, actions.unlike);
+  assert_ne!(actions.dislike, actions.undislike);
+  assert!(page.comments.iter().all(|c| c.actions.is_some()));
+  // From a rating to another, the new one's action; back to none, the undoing one.
+  use LikeStatus::{Dislike, Indifferent, Like};
+  assert_eq!(actions.get(Indifferent, Like), Some(actions.like.as_str()));
+  assert_eq!(actions.get(Dislike, Like), Some(actions.like.as_str()));
+  assert_eq!(actions.get(Like, Dislike), Some(actions.dislike.as_str()));
+  assert_eq!(
+    actions.get(Like, Indifferent),
+    Some(actions.unlike.as_str())
+  );
+  assert_eq!(
+    actions.get(Dislike, Indifferent),
+    Some(actions.undislike.as_str())
+  );
+  assert_eq!(actions.get(Like, Like), None);
+  assert_eq!(actions.get(Indifferent, Indifferent), None);
+}
+
+#[test]
+fn comment_action() {
+  // `comment/perform_comment_action` answers, liking then removing a dislike: the like's has a
+  // `feedback` and an attestation command, the undislike's only its status.
+  for name in ["comment_like.json", "comment_undislike.json"] {
+    assert_eq!(
+      innertube::parse_comment_action(&fixture(name)).as_deref(),
+      Some("STATUS_SUCCEEDED"),
+      "{name}"
+    );
+  }
+  assert_eq!(
+    innertube::parse_comment_action(&serde_json::json!({})),
+    None
+  );
 }
 
 #[test]

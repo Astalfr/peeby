@@ -34,11 +34,11 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
-  Live, LiveChatPage, LiveFormat, Notification, NotificationKind, NotificationLevel,
-  NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
-  Related, SearchPage, SearchResult, ShortsPage, Storyboard, Subscription, TextLink, Thumbnail,
-  Tracking, VideoItem, WatchPage,
+  ChatMessage, ChatRun, Comment, CommentActions, CommentPage, Feed, FeedChip, LikeParams,
+  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, Notification, NotificationKind,
+  NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
+  PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage, Storyboard,
+  Subscription, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -1180,18 +1180,22 @@ pub fn parse_members_only(player: &Value) -> bool {
 }
 
 /// Parses a comments page (`next` continuation). Threads are `commentThreadRenderer`s pointing
-/// by key to `commentEntityPayload` mutations; replies pages list `commentViewModel`s.
+/// by key to entity payloads (`commentEntityPayload`, the toolbar's state and its commands);
+/// replies pages list `commentViewModel`s.
 pub fn parse_comments(response: &Value) -> CommentPage {
   let entities: HashMap<&str, &Value> =
     response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
       .as_array()
       .into_iter()
       .flatten()
-      .filter_map(|m| {
-        let payload = m["payload"].get("commentEntityPayload")?;
-        Some((m["entityKey"].as_str()?, payload))
-      })
+      .filter_map(|m| Some((m["entityKey"].as_str()?, &m["payload"])))
       .collect();
+  let entity = |view: &Value, key: &str, kind: &str| {
+    view[key]
+      .as_str()
+      .and_then(|k| entities.get(k))
+      .and_then(|payload| payload.get(kind))
+  };
   let mut page = CommentPage::default();
   let items = response["onResponseReceivedEndpoints"]
     .as_array()
@@ -1216,16 +1220,59 @@ pub fn parse_comments(response: &Value) -> CommentPage {
         ),
         None => (&item["commentViewModel"], &Value::Null),
       };
-      let Some(entity) = view["commentKey"].as_str().and_then(|k| entities.get(k)) else {
+      let Some(payload) = entity(view, "commentKey", "commentEntityPayload") else {
         continue;
       };
-      if let Some(mut comment) = parse_comment(entity) {
+      if let Some(mut comment) = parse_comment(payload) {
         comment.replies_continuation = find_continuation(replies);
+        if let Some(state) = entity(
+          view,
+          "toolbarStateKey",
+          "engagementToolbarStateEntityPayload",
+        ) {
+          comment.rating = match state["likeState"].as_str() {
+            Some("TOOLBAR_LIKE_STATE_LIKED") => LikeStatus::Like,
+            Some("TOOLBAR_LIKE_STATE_DISLIKED") => LikeStatus::Dislike,
+            _ => LikeStatus::Indifferent,
+          };
+        }
+        comment.actions = entity(
+          view,
+          "toolbarSurfaceKey",
+          "engagementToolbarSurfaceEntityPayload",
+        )
+        .and_then(comment_actions);
         page.comments.push(comment);
       }
     }
   }
   page
+}
+
+/// The status of a `comment/perform_comment_action` answer: its first `actionResults` entry's,
+/// e.g. `STATUS_SUCCEEDED`.
+pub fn parse_comment_action(response: &Value) -> Option<String> {
+  response["actionResults"]
+    .as_array()?
+    .iter()
+    .find_map(|r| r["status"].as_str())
+    .map(str::to_owned)
+}
+
+/// The thumbs' actions of a comment's toolbar (`engagementToolbarSurfaceEntityPayload`); signed
+/// out, its commands carry no endpoint.
+fn comment_actions(surface: &Value) -> Option<CommentActions> {
+  let action = |command: &str| {
+    surface[command]["innertubeCommand"]["performCommentActionEndpoint"]["action"]
+      .as_str()
+      .map(str::to_owned)
+  };
+  Some(CommentActions {
+    like: action("likeCommand")?,
+    unlike: action("unlikeCommand")?,
+    dislike: action("dislikeCommand")?,
+    undislike: action("undislikeCommand")?,
+  })
 }
 
 fn parse_comment(entity: &Value) -> Option<Comment> {
@@ -1242,6 +1289,9 @@ fn parse_comment(entity: &Value) -> Option<Comment> {
     links: attributed_links(&properties["content"]),
     published: string(&properties["publishedTime"]),
     likes: string(&toolbar["likeCountNotliked"]),
+    likes_liked: string(&toolbar["likeCountLiked"]),
+    rating: LikeStatus::Indifferent,
+    actions: None,
     replies: string(&toolbar["replyCount"]),
     replies_continuation: None,
   })

@@ -1,0 +1,40 @@
+{
+  "actionResults": [
+    {
+      "feedback": "FEEDBACK_LIKE",
+      "status": "STATUS_SUCCEEDED"
+    }
+  ],
+  "actions": [
+    {
+      "clickTrackingParams": "IhMI2uDTz877lwMVjUVPBB32yzQIygEEj1qcMQ==",
+      "runAttestationCommand": {
+        "engagementType": "ENGAGEMENT_TYPE_COMMENT_LIKE",
+        "ids": [
+          {
+            "commentId": "UgyEnXfdC-umwvTt8JF4AaABAg"
+          },
+          {
+            "encryptedVideoId": "dQw4w9WgXcQ"
+          },
+          {
+            "externalChannelId": "UCuAXFkgsw1L7xaCfnd5JJOw"
+          }
+        ]
+      }
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ],
+        "service": "GFEEDBACK"
+      }
+    ]
+  }
+}

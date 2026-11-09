@@ -279,7 +279,7 @@ pub enum ChatRun {
   },
 }
 
-/// A user's rating of a video, as `likeStatusEntity` gives it.
+/// A user's rating of a video (as `likeStatusEntity` gives it) or of a comment.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LikeStatus {
   /// Neither liked nor disliked.
@@ -697,12 +697,47 @@ pub struct Comment {
   pub links: Vec<TextLink>,
   /// Localized age, e.g. `il y a 7 ans`.
   pub published: String,
-  /// Localized like count, empty when none.
+  /// Localized like count without the user's like, empty when none.
   pub likes: String,
+  /// Localized like count with the user's like (`likeCountLiked`): what a liked comment shows.
+  pub likes_liked: String,
+  /// The signed-in user's rating of the comment, as YouTube gave it.
+  pub rating: LikeStatus,
+  /// What the thumbs send, signed in only.
+  pub actions: Option<CommentActions>,
   /// Number of replies as shown (localized), empty when none.
   pub replies: String,
   /// Token of the replies, for [`crate::Client::comments`].
   pub replies_continuation: Option<String>,
+}
+
+/// The `action`s of a comment's thumbs (`performCommentActionEndpoint`), for
+/// [`crate::Client::rate_comment`]. YouTube gives them to signed-in users only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentActions {
+  /// Likes the comment.
+  pub like: String,
+  /// Removes the like.
+  pub unlike: String,
+  /// Dislikes the comment.
+  pub dislike: String,
+  /// Removes the dislike.
+  pub undislike: String,
+}
+
+impl CommentActions {
+  /// The action going from rating `from` to `to`; `None` when they are the same. Going from a
+  /// like to a dislike (or back) takes one action: YouTube's own buttons send only the new one.
+  pub fn get(&self, from: LikeStatus, to: LikeStatus) -> Option<&str> {
+    let action = match (from, to) {
+      (_, LikeStatus::Like) if from != to => &self.like,
+      (_, LikeStatus::Dislike) if from != to => &self.dislike,
+      (LikeStatus::Like, LikeStatus::Indifferent) => &self.unlike,
+      (LikeStatus::Dislike, LikeStatus::Indifferent) => &self.undislike,
+      _ => return None,
+    };
+    Some(action)
+  }
 }
 
 /// A page of comments.

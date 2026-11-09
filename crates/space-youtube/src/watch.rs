@@ -34,7 +34,7 @@ use crate::comments::{CommentSection, HoveredLink, Links, linked_text};
 use crate::convert::{self, error_text};
 use crate::history::{self, Reporter};
 use crate::queue::{Queue, QueueEvent};
-use crate::rating::{self, Rating};
+use crate::rating::{self, DISLIKE_RED, LIKE_BLUE, Rating};
 use crate::{Nav, Route};
 use crate::{bell, chat, prefetch, save, subscribe, tools};
 use peeby_core::settings::{Player, Settings};
@@ -58,10 +58,6 @@ const QUEUE_BEFORE: usize = 50;
 const QUEUE_AFTER: usize = 150;
 /// Lines of the description shown until it is expanded.
 const DESCRIPTION_LINES: usize = 4;
-/// The like button and the ratio bar's likes: the blue of YouTube's thumb (dark theme).
-const LIKE_BLUE: u32 = 0x3ea6ff;
-/// The dislike button and the ratio bar's dislikes: YouTube red.
-const DISLIKE_RED: u32 = 0xff0000;
 /// Theater mode: height left under the player for the start of the title, and the player's
 /// least height.
 const THEATER_BELOW: f32 = 120.;

@@ -10,6 +10,12 @@ use crate::convert::error_text;
 use ui::i18n::t;
 use ui::{runtime, tf};
 
+/// The like buttons (videos and comments) and the ratio bar's likes: the blue of YouTube's
+/// thumb (dark theme).
+pub const LIKE_BLUE: u32 = 0x3ea6ff;
+/// The dislike buttons and the ratio bar's dislikes: YouTube red.
+pub const DISLIKE_RED: u32 = 0xff0000;
+
 /// The rating a page shows.
 #[derive(Default)]
 pub struct Rating {

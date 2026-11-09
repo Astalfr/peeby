@@ -1,9 +1,10 @@
 //! The comments of a video, under the watch page's details or in the Shorts page's panel: pages
 //! load as the panel scrolls near its end, replies when a thread opens. The links of comments
 //! and descriptions ([`Links`], [`linked_text`]) live here too: a timestamp of the video seeks
-//! its player, YouTube pages open in the tab, other sites in the browser.
+//! its player, YouTube pages open in the tab, other sites in the browser. Signed in, the thumbs
+//! rate a comment: the button changes at once and goes back if YouTube refuses.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use gpui::prelude::*;
@@ -11,11 +12,15 @@ use gpui::{
   App, Context, Entity, FontWeight, HighlightStyle, InteractiveText, ScrollHandle, SharedString,
   StyledText, UnderlineStyle, WeakEntity, Window, div, point, px,
 };
+use gpui_component::WindowExt;
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::notification::Notification;
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{h_flex, v_flex};
-use innertube::{Client, Comment, LinkTarget, TextLink};
+use innertube::{Client, Comment, LikeStatus, LinkTarget, TextLink};
 
-use crate::convert;
+use crate::convert::{self, error_text};
+use crate::rating::{DISLIKE_RED, LIKE_BLUE};
 use crate::{Nav, Route};
 use ui::assets::Icon;
 use ui::i18n::{Lang, lang, t};
@@ -68,6 +73,8 @@ pub struct CommentSection {
   comments: Comments,
   /// By comment id.
   replies: HashMap<String, Replies>,
+  /// Comments whose rating waits for YouTube's answer: their thumbs send nothing meanwhile.
+  rating: HashSet<String>,
   hovered_link: HoveredLink,
 }
 
@@ -97,6 +104,7 @@ impl CommentSection {
       first: None,
       comments: Comments::default(),
       replies: HashMap::new(),
+      rating: HashSet::new(),
       hovered_link: None,
     }
   }
@@ -135,6 +143,82 @@ impl CommentSection {
       self.load_replies(comment.id.clone(), cx);
     }
     cx.notify();
+  }
+
+  /// The comment `id`, a thread's or a reply.
+  fn comment_mut(&mut self, id: &str) -> Option<&mut Comment> {
+    self
+      .comments
+      .items
+      .iter_mut()
+      .chain(self.replies.values_mut().flat_map(|r| r.items.iter_mut()))
+      .find(|c| c.id == id)
+  }
+
+  /// A click on a thumb of comment `id`: sets that rating, or clears it when it is the current
+  /// one.
+  fn rate(&mut self, id: &str, clicked: LikeStatus, window: &mut Window, cx: &mut Context<Self>) {
+    if !self.client.signed_in() {
+      let note = Notification::info(t(
+        "To rate comments, sign in to YouTube in the settings.",
+        "Pour noter les commentaires, connectez-vous à YouTube dans les réglages.",
+      ));
+      return window.push_notification(note, cx);
+    }
+    if self.rating.contains(id) {
+      return;
+    }
+    let Some(comment) = self.comment_mut(id) else {
+      return;
+    };
+    let previous = comment.rating;
+    let status = if previous == clicked {
+      LikeStatus::Indifferent
+    } else {
+      clicked
+    };
+    let Some(action) = comment
+      .actions
+      .as_ref()
+      .and_then(|a| a.get(previous, status))
+      .map(str::to_owned)
+    else {
+      return;
+    };
+    comment.rating = status;
+    self.rating.insert(id.to_owned());
+    cx.notify();
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.rate_comment(&action).await });
+    let handle = window.window_handle();
+    let id = id.to_owned();
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          this.rating.remove(&id);
+          if let Some(Ok(())) = result {
+            return cx.notify();
+          }
+          if let Some(comment) = this.comment_mut(&id) {
+            comment.rating = previous;
+          }
+          cx.notify();
+          if let Some(Err(e)) = result {
+            tracing::warn!("rate comment: {e}");
+            let note = Notification::error(tf!(
+              "Cannot save your rating. {}",
+              "Impossible d'enregistrer votre avis. {}",
+              error_text(&e)
+            ));
+            handle
+              .update(cx, |_, window, cx| window.push_notification(note, cx))
+              .ok();
+          }
+        })
+        .ok();
+    })
+    .detach();
   }
 
   /// Next page of replies of comment `id`.
@@ -268,6 +352,7 @@ impl CommentSection {
     cx: &mut Context<Self>,
   ) -> impl IntoElement + use<> {
     let links = self.links(cx);
+    let section = cx.weak_entity();
     let replies = self.replies.get(&comment.id);
     let open = replies.is_some_and(|r| r.open);
     let toggle = comment.replies_continuation.as_ref().map(|_| {
@@ -286,7 +371,7 @@ impl CommentSection {
       let rows: Vec<_> = r
         .items
         .iter()
-        .map(|reply| comment_row(reply, &links, window, cx))
+        .map(|reply| comment_row(reply, &links, &section, window, cx))
         .collect();
       let more = r.continuation.as_ref().map(|_| {
         let id = comment.id.clone();
@@ -304,7 +389,7 @@ impl CommentSection {
     });
     v_flex()
       .gap_2()
-      .child(comment_row(comment, &links, window, cx))
+      .child(comment_row(comment, &links, &section, window, cx))
       .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
       .children(shown)
   }
@@ -407,9 +492,11 @@ impl Links {
   }
 }
 
+/// A comment: its author's avatar, name and age, its text and its thumbs.
 fn comment_row(
   comment: &Comment,
   links: &Links,
+  section: &WeakEntity<CommentSection>,
   window: &mut Window,
   cx: &mut App,
 ) -> impl IntoElement + use<> {
@@ -421,17 +508,20 @@ fn comment_row(
     }];
     image_fill(&convert::picture(&sizes), 36., 1., px(18.), window, cx)
   });
-  // As on YouTube: a thumb with the count next to it, the thumb alone at no likes. Display
-  // only, comments are not rated from the app.
-  let likes = h_flex()
-    .gap_1p5()
+  // As on YouTube: the like thumb with the count next to it (alone at no likes), then the
+  // dislike thumb, never counted. A liked comment shows the count with the user's like.
+  let likes = if comment.rating == LikeStatus::Like {
+    &comment.likes_liked
+  } else {
+    &comment.likes
+  };
+  let thumbs = h_flex()
+    .gap_1()
     .items_center()
     .text_xs()
     .text_color(theme::muted())
-    .child(gpui_component::Icon::new(Icon::ThumbsUp).size(px(14.)))
-    .when(!comment.likes.is_empty(), |el| {
-      el.child(comment.likes.clone())
-    });
+    .child(thumb(comment, section, LikeStatus::Like, likes))
+    .child(thumb(comment, section, LikeStatus::Dislike, ""));
   h_flex()
     .gap_3()
     .items_start()
@@ -464,8 +554,56 @@ fn comment_row(
           &comment.links,
           links,
         )))
-        .child(likes),
+        .child(thumbs),
     )
+}
+
+/// The like or dislike thumb of `comment`, `count` beside it: in YouTube's blue or red when it
+/// is the user's rating and on hover. Signed out, YouTube gives no actions: a click says to
+/// sign in.
+fn thumb(
+  comment: &Comment,
+  section: &WeakEntity<CommentSection>,
+  status: LikeStatus,
+  count: &str,
+) -> impl IntoElement + use<> {
+  let current = comment.rating == status;
+  let (kind, icon, color, tooltip) = if status == LikeStatus::Dislike {
+    let tooltip = if current {
+      t("Remove dislike", "Retirer « Je n'aime pas »")
+    } else {
+      t("Dislike", "Je n'aime pas")
+    };
+    ("dislike", Icon::ThumbsDown, DISLIKE_RED, tooltip)
+  } else {
+    let tooltip = if current {
+      t("Remove like", "Je n'aime plus")
+    } else {
+      t("Like", "J'aime")
+    };
+    ("like", Icon::ThumbsUp, LIKE_BLUE, tooltip)
+  };
+  let color = gpui::Hsla::from(gpui::rgb(color));
+  let id = comment.id.clone();
+  let section = section.clone();
+  h_flex()
+    .id(SharedString::from(format!("{kind}-{}", comment.id)))
+    .h(px(28.))
+    .px_2()
+    .gap_1p5()
+    .items_center()
+    .rounded_full()
+    .cursor_pointer()
+    .hover(move |s| s.bg(color.opacity(0.14)).text_color(color))
+    .when(current, |el| el.text_color(color))
+    .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+    .on_click(move |_, window, cx| {
+      section
+        .update(cx, |this, cx| this.rate(&id, status, window, cx))
+        .ok();
+    })
+    .child(gpui_component::Icon::new(icon).size(px(14.)))
+    .when(!count.is_empty(), |el| el.child(count.to_owned()))
 }
 
 /// `text` with its `links` in the accent color, the hovered one underlined, followed on a click
