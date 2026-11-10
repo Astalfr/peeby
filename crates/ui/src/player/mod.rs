@@ -80,6 +80,14 @@ const RELOAD_RETRY: Duration = Duration::from_secs(60);
 /// reading ahead without end while nothing more is decoded. A new mpv from the same position
 /// plays again.
 const STALL_AFTER: Duration = Duration::from_secs(10);
+/// The playhead further than this past the end of what the file's own demuxer read: the video
+/// stopped (corrupt data no decoder takes, its segments stopped) while the separate audio of a
+/// YouTube variant plays on, under a frozen picture. mpv can play no further than the file's
+/// demuxer read otherwise.
+const VIDEO_BEHIND: f64 = 2.0;
+/// How long the playhead stays [`VIDEO_BEHIND`] before the video counts as stopped: a seek's
+/// position can come before the cache's.
+const VIDEO_STOPPED_AFTER: Duration = Duration::from_secs(2);
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// The wheel's step over the volume slider, finer than the picture's.
@@ -444,6 +452,8 @@ pub struct PlayerView {
   last_reload: Option<Instant>,
   /// Reloads the stream if buffering lasts [`STALL_AFTER`].
   stall_task: Option<Task<()>>,
+  /// Reloads the stream if the video stays stopped for [`VIDEO_STOPPED_AFTER`].
+  video_stopped_task: Option<Task<()>>,
   /// A live's speed kept close to its edge ([`Source::catch_up`]).
   catch_up: catch_up::CatchUp,
   _events: Option<Task<()>>,
@@ -559,6 +569,7 @@ impl PlayerView {
       notice: None,
       last_reload: None,
       stall_task: None,
+      video_stopped_task: None,
       catch_up: Default::default(),
       _events: None,
     }
@@ -1506,13 +1517,17 @@ impl PlayerView {
         }
         self.update_up_next(cx);
         self.tell_muted(cx);
+        self.watch_video_stopped(cx);
       }
       Event::Position(_) => {}
       Event::Cached(seconds) if self.rewind.is_some() && !self.rewound => {
         let edge = self.rewind_edge().unwrap_or(0.0);
         self.cached = edge - (self.live_mpv.1 - seconds).max(0.0);
       }
-      Event::Cached(seconds) => self.cached = seconds,
+      Event::Cached(seconds) => {
+        self.cached = seconds;
+        self.watch_video_stopped(cx);
+      }
       // A live's duration is only its playlist's window: kept at 0, it turns off the seek
       // bar's math, "up next" and `finished`. A DVR live's is its edge, for the seek bar.
       // A recorded live's is the time since its recording started; the live's own, its edge
@@ -1549,11 +1564,13 @@ impl PlayerView {
         self.paused = paused;
         // Paused while stuck: the wait starts over on resume.
         self.watch_stall(cx);
+        self.watch_video_stopped(cx);
         self.show_controls(cx);
       }
       Event::Buffering(buffering) => {
         self.buffering = buffering;
         self.watch_stall(cx);
+        self.watch_video_stopped(cx);
       }
       // A secondary player is muted by its page, not by the viewer.
       Event::Muted(_) if self.secondary => {}
@@ -1652,6 +1669,60 @@ impl PlayerView {
     }));
   }
 
+  /// Whether the playhead runs [`VIDEO_BEHIND`] past what the file's demuxer read
+  /// (`demuxer-cache-time`, its video when the audio is a separate file), well before the end.
+  /// `cached` is 0 until mpv reports it.
+  fn video_stopped(&self) -> bool {
+    self.started
+      && !self.paused
+      && !self.buffering
+      && !self.is_live()
+      && self.duration > 0.0
+      && self.cached > 0.0
+      && self.cached < self.duration - EARLY_END_MARGIN
+      && self.position > self.cached + VIDEO_BEHIND
+  }
+
+  /// Starts or stops the timer that reloads a video whose picture stopped while its sound
+  /// plays on ([`VIDEO_STOPPED_AFTER`]). Reloaded once a minute at most, else stopped with an
+  /// error rather than left frozen.
+  fn watch_video_stopped(&mut self, cx: &mut Context<Self>) {
+    if !self.video_stopped() {
+      self.video_stopped_task = None;
+      return;
+    }
+    if self.video_stopped_task.is_some() {
+      return;
+    }
+    let from = self.position;
+    self.video_stopped_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(VIDEO_STOPPED_AFTER).await;
+      this
+        .update(cx, |this, cx| {
+          this.video_stopped_task = None;
+          // The sound played on meanwhile: not a slow seek waiting on its target.
+          if !this.video_stopped() || this.position < from + 1.0 {
+            return;
+          }
+          let (cached, position) = (this.cached, this.position);
+          if this.reload_here(cx) {
+            tracing::warn!("video stopped at {cached:.0} s, sound at {position:.0} s: reloading");
+            return;
+          }
+          tracing::warn!("video stopped at {cached:.0} s, reloaded less than a minute ago");
+          this.fail(
+            t(
+              "Playback stopped: the video stream broke off.",
+              "Lecture interrompue : le flux vidéo s'est interrompu.",
+            )
+            .into(),
+            cx,
+          );
+        })
+        .ok();
+    }));
+  }
+
   /// Restarts mpv on the playing quality from the current position, unless it was already
   /// reloaded less than [`RELOAD_RETRY`] ago; whether it did.
   fn reload_here(&mut self, cx: &mut Context<Self>) -> bool {
@@ -1669,6 +1740,7 @@ impl PlayerView {
     };
     self.last_reload = Some(Instant::now());
     self.stall_task = None;
+    self.video_stopped_task = None;
     let options = StartOptions {
       start_seconds: self.position,
       ..options
