@@ -3,6 +3,7 @@
 //! service: spaces convert their data into these components' models (docs/refactor-plan.md).
 
 pub mod assets;
+pub mod calendar;
 pub mod card;
 pub mod chat;
 pub mod form;

@@ -1,0 +1,112 @@
+{
+  "data": {
+    "user": {
+      "id": "50597026",
+      "channel": {
+        "schedule": {
+          "segments": [
+            {
+              "id": "eyJzZWdtZW50SUQiOiIxY2JhOGIxNS00MzEwLTRiNGYtODc1MS1iMGZlOGExNDVhZDIiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-09T12:00:00Z",
+              "endAt": "2026-11-09T16:00:00Z",
+              "title": "Le lundi c'est culture !",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "338715930",
+                  "name": "Maitre des Fleurs",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/338715930_IGDB-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiJkMWY5Yjc1Mi0wMTA0LTQ0YmEtYTkwZS0wZmJjN2RlOWQ1MTgiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-10T11:00:00Z",
+              "endAt": "2026-11-10T15:00:00Z",
+              "title": "Lycans",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "1494074023",
+                  "name": "Lycans",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/1494074023_IGDB-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiJhZjkyZTgyZi1mNWExLTRhZGYtOThiZi01NzcwOGQxYTc5ZDYiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-10T15:00:00Z",
+              "endAt": "2026-11-10T19:00:00Z",
+              "title": "WoW Forever",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "18122",
+                  "name": "World of Warcraft",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/18122-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiI2NzNiZTg0OS01Mjg1LTQ1ODktOWM4My1mMjZiMTlhNDM1ZWUiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-11T12:00:00Z",
+              "endAt": "2026-11-11T16:00:00Z",
+              "title": "On continue le REMAKE",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "2067181260",
+                  "name": "The Legend of Zelda: Ocarina of Time",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/2067181260_IGDB-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiI0YjQ5NGU5My04Zjg5LTQ4OWMtYjFhOS01MTg5NmIyZjA0NWYiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-11T16:00:00Z",
+              "endAt": "2026-11-11T19:00:00Z",
+              "title": "WoW Forever",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "18122",
+                  "name": "World of Warcraft",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/18122-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiI4ODJlYzQ5MC1hODE2LTRiNWQtOTNiMS1lZjJiYjRkODM5OTIiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-12T11:00:00Z",
+              "endAt": "2026-11-12T13:00:00Z",
+              "title": "RPG couronnÃ© par la critique",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "494806",
+                  "name": "Metaphor: ReFantazio",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/494806_IGDB-{width}x{height}.jpg"
+                }
+              ]
+            },
+            {
+              "id": "eyJzZWdtZW50SUQiOiI2NGI2NDM5NS01ZjQxLTQ1NTgtYjY1Yy04M2ViNDBmNTBjMjIiLCJpc29ZZWFyIjoyMDI2LCJpc29XZWVrIjo0Nn0=",
+              "startAt": "2026-11-12T13:00:00Z",
+              "endAt": "2026-11-12T17:00:00Z",
+              "title": "WoW Forever",
+              "isCancelled": false,
+              "categories": [
+                {
+                  "id": "18122",
+                  "name": "World of Warcraft",
+                  "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/18122-{width}x{height}.jpg"
+                }
+              ]
+            }
+          ],
+          "interruption": null
+        }
+      }
+    }
+  }
+}

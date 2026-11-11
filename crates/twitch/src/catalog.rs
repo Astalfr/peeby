@@ -34,6 +34,102 @@ fn request(name: &str, query: String, variables: Value) -> Value {
   json!({ "operationName": name, "query": query, "variables": variables })
 }
 
+/// A channel's schedule (its streams to come, as twitch.tv's channel page shows them).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Schedule {
+  /// Its segments around this week, in Twitch's order (some may be over).
+  pub segments: Vec<ScheduleSegment>,
+  /// A break the streamer announced (`interruption`): its start and end, epoch milliseconds.
+  pub vacation: Option<(i64, Option<i64>)>,
+}
+
+impl Schedule {
+  /// The segments not over at `now` (epoch milliseconds), soonest first.
+  pub fn upcoming(&self, now: i64) -> Vec<&ScheduleSegment> {
+    let mut segments: Vec<_> = self
+      .segments
+      .iter()
+      .filter(|s| s.end.unwrap_or(s.start) > now)
+      .collect();
+    segments.sort_by_key(|s| s.start);
+    segments
+  }
+}
+
+/// A stream to come.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScheduleSegment {
+  /// Twitch's id.
+  pub id: String,
+  /// Its start, epoch milliseconds.
+  pub start: i64,
+  /// Its end, epoch milliseconds (none for an open one).
+  pub end: Option<i64>,
+  /// Its title (often empty).
+  pub title: String,
+  /// Its category's name, if set.
+  pub category: Option<String>,
+  /// Its category's box art, a `{width}x{height}` template.
+  pub box_art: Option<String>,
+  /// Cancelled by the streamer (it still shows, struck).
+  pub cancelled: bool,
+}
+
+/// Channel `login`'s schedule.
+pub fn schedule_request(login: &str) -> Value {
+  request(
+    "ChannelSchedule",
+    "query ChannelSchedule($login: String!) { user(login: $login) { id channel { schedule { \
+     segments { id startAt endAt title isCancelled categories { id name boxArtURL } } \
+     interruption { startAt endAt } } } } }"
+      .to_owned(),
+    json!({ "login": login }),
+  )
+}
+
+/// [`schedule_request`]'s answer: `None` for a channel without a schedule; an unknown login is
+/// [`Error::NotFound`]. A segment without its start is skipped.
+pub fn parse_schedule(answer: &Value) -> Result<Option<Schedule>> {
+  let user = &answer["data"]["user"];
+  failed(answer, user)?;
+  if user.is_null() {
+    return Err(Error::NotFound);
+  }
+  let schedule = &user["channel"]["schedule"];
+  if schedule.is_null() {
+    return Ok(None);
+  }
+  let millis = |v: &Value| v.as_str().and_then(crate::time::epoch_millis);
+  let segments = schedule["segments"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|s| {
+      Some(ScheduleSegment {
+        id: text(&s["id"]),
+        start: millis(&s["startAt"])?,
+        end: millis(&s["endAt"]),
+        title: text(&s["title"]),
+        category: s["categories"]
+          .as_array()
+          .and_then(|c| c.first())
+          .and_then(|c| non_empty(&c["name"]))
+          .map(str::to_owned),
+        box_art: s["categories"]
+          .as_array()
+          .and_then(|c| c.first())
+          .and_then(|c| non_empty(&c["boxArtURL"]))
+          .map(str::to_owned),
+        cancelled: s["isCancelled"] == true,
+      })
+    })
+    .collect();
+  let interruption = &schedule["interruption"];
+  let vacation =
+    millis(&interruption["startAt"]).map(|start| (start, millis(&interruption["endAt"])));
+  Ok(Some(Schedule { segments, vacation }))
+}
+
 /// The categories with the most viewers.
 pub fn top_categories_request() -> Value {
   request(
@@ -509,6 +605,13 @@ impl Catalog {
     self
       .or_helix(request, parse_users, |h| async move { h.users(ids).await })
       .await
+  }
+
+  /// Channel `login`'s schedule (GQL only: Helix has none without its own sign-in); `None`
+  /// without one.
+  pub async fn schedule(&self, login: &str) -> Result<Option<Schedule>> {
+    let answer = self.gql.gql(&schedule_request(login)).await?;
+    parse_schedule(&answer)
   }
 
   /// A user by login.

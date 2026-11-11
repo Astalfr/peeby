@@ -155,6 +155,8 @@ the panel already knows (its emote sets, the recent authors) feed it: nothing is
 
 ### T3. A channel's schedule
 
+Done (2026-11-11), checked by the user in the app (each row with its category's box art).
+
 On a Twitch channel's page, its upcoming streams (title, category, start and length, recurring or
 not; a vacation shown as such), from GQL's channel schedule (`channel.schedule.segments`,
 anonymous): its answer saved as a fixture first (`twitch_capture -- gql-probe` to find the

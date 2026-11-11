@@ -365,6 +365,12 @@ Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the
   fixtures `gql_catalog_*.json` (`twitch_capture -- catalog`), counts in `smoke`. The same image
   templates as Helix's (`{width}x{height}`), the same badge URLs (`/1`, `/2`, `/3`), and
   `users(ids:)` takes the 97 ids of a category's first page at once.
+- **A channel's schedule** (checked 2026-11-11, anonymous): `user(login:) { channel { schedule {
+  segments { id startAt endAt title isCancelled categories { id name boxArtURL } } interruption { startAt
+  endAt } } } }`. `segments` takes no argument (`first`, `from`, `startAt` are refused) and answers
+  the segments around this week, past ones included: Peeby keeps those not over. The break is
+  `interruption` (there is no `vacation`); `schedule` is null for a channel without one. Fixtures
+  `gql_schedule.json`, `gql_schedule_none.json`.
 
 ## Helix
 

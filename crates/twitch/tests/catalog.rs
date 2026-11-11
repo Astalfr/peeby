@@ -179,3 +179,38 @@ fn null_list() {
     Err(Error::NotFound)
   ));
 }
+
+#[test]
+fn schedule() {
+  // Ponce's schedule (captured 2026-11-11, anonymous): seven segments of the week, titled, each
+  // with its category; and a channel without a schedule.
+  let answer: serde_json::Value =
+    serde_json::from_str(include_str!("fixtures/gql_schedule.json")).unwrap();
+  let schedule = twitch::catalog::parse_schedule(&answer)
+    .unwrap()
+    .expect("a schedule");
+  assert_eq!(schedule.segments.len(), 7);
+  let first = &schedule.segments[0];
+  assert_eq!(first.title, "Le lundi c'est culture !");
+  assert_eq!(first.category.as_deref(), Some("Maitre des Fleurs"));
+  assert!(
+    first
+      .box_art
+      .as_deref()
+      .is_some_and(|art| art.contains("{width}x{height}"))
+  );
+  assert!(first.end.is_some_and(|end| end > first.start));
+  assert!(!first.cancelled);
+  assert_eq!(schedule.vacation, None);
+  // Those not over on 2026-11-11 at noon UTC, soonest first.
+  let noon = twitch::time::epoch_millis("2026-11-11T12:00:00Z").unwrap();
+  let upcoming = schedule.upcoming(noon);
+  assert_eq!(
+    upcoming.first().map(|s| s.title.as_str()),
+    Some("On continue le REMAKE")
+  );
+  assert!(upcoming.windows(2).all(|w| w[0].start <= w[1].start));
+  let none: serde_json::Value =
+    serde_json::from_str(include_str!("fixtures/gql_schedule_none.json")).unwrap();
+  assert_eq!(twitch::catalog::parse_schedule(&none).unwrap(), None);
+}
