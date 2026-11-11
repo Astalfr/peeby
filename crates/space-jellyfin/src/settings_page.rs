@@ -65,15 +65,16 @@ impl SettingsView {
     cx: &mut Context<Self>,
   ) -> Self {
     cx.observe_global::<Settings>(|_, cx| cx.notify()).detach();
-    let mut view = Self {
+    // The server's info is asked at the first render, not here: this view is built from inside
+    // `JellyfinSpace::settings`, while the space is being updated, and `reachable` reads it
+    // (reading an entity during its own update panics).
+    Self {
       client,
       vpn,
       nav,
       server: None,
       asked: false,
-    };
-    view.ask_server(cx);
-    view
+    }
   }
 
   /// Asks the server's name and version once, unless that opens the VPN: the settings page
