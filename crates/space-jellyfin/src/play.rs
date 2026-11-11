@@ -608,6 +608,8 @@ fn from_server(segments: &[MediaSegment]) -> Vec<Segment> {
         kind,
         start: s.start_seconds(),
         end: s.end_seconds(),
+        auto_skip: false,
+        mark: None,
       })
     })
     .collect()
@@ -673,7 +675,9 @@ mod tests {
       vec![Segment {
         kind: SegmentKind::Intro,
         start: 60.0,
-        end: 150.0
+        end: 150.0,
+        auto_skip: false,
+        mark: None,
       }]
     );
   }

@@ -1,6 +1,6 @@
 //! YouTube's part of the settings page: the account (cookie import), the start page, YouTube's
 //! content language and region (not the interface's), the original titles, the default quality,
-//! and where the notifications show.
+//! SponsorBlock (ADR 0034), and where the notifications show.
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Entity, Window};
@@ -9,9 +9,10 @@ use gpui_component::v_flex;
 use crate::account::AccountView;
 use crate::{YouTubeSpace, inbox};
 use innertube::NotificationKind;
-use peeby_core::settings::{LANGUAGES, QUALITIES, Settings, StartPage};
+use innertube::SponsorCategory;
+use peeby_core::settings::{LANGUAGES, QUALITIES, SegmentAction, Settings, StartPage};
 use peeby_core::shell::delivery_row;
-use ui::form::{OnClick, choices, row, section, toggle};
+use ui::form::{OnClick, chips, choices, row, section, toggle};
 use ui::i18n::t;
 use ui::widgets::Flash;
 
@@ -108,6 +109,7 @@ pub fn part(
         .into_any_element(),
       ],
     ))
+    .child(sponsorblock_section(&settings))
     .child(section(
       t("Notifications", "Notifications"),
       vec![
@@ -136,4 +138,127 @@ pub fn part(
       ],
     ))
     .into_any_element()
+}
+
+/// SponsorBlock: on or off, then what each category does (skipped, a button, ignored), and the
+/// attribution SponsorBlock asks for.
+fn sponsorblock_section(settings: &Settings) -> impl IntoElement + use<> {
+  let sponsorblock = &settings.sponsorblock;
+  let mut rows = vec![
+    row(
+      t("Skip sponsored parts", "Passer les parties sponsorisées"),
+      t(
+        "Asks SponsorBlock, a database run by its users, which parts of a video are sponsors, reminders or intros (by a prefix of the video's hash: SponsorBlock does not learn which video plays). They show on the seek bar in their color.",
+        "Demande à SponsorBlock, une base tenue par ses utilisateurs, quelles parties d'une vidéo sont des sponsors, des rappels ou des intros (par un préfixe du hachage de la vidéo : SponsorBlock ne sait pas laquelle est regardée). Elles s'affichent sur la barre de lecture dans leur couleur.",
+      ),
+      toggle("sponsorblock", sponsorblock.enabled, |on, cx| {
+        Settings::update(cx, |s| s.sponsorblock.enabled = on)
+      }),
+    )
+    .into_any_element(),
+  ];
+  if sponsorblock.enabled {
+    rows.extend(SponsorCategory::ALL.into_iter().map(|category| {
+      let key = category.key();
+      let (title, description) = category_text(category);
+      row(
+        title,
+        description,
+        chips(
+          &format!("sponsorblock-{key}"),
+          vec![
+            (SegmentAction::Skip, t("Skip", "Passer").to_owned()),
+            (SegmentAction::Button, t("Button", "Bouton").to_owned()),
+            (SegmentAction::Off, t("Off", "Ignorer").to_owned()),
+          ],
+          &sponsorblock.action(key),
+          move |action, cx| {
+            Settings::update(cx, |s| {
+              if let Some(setting) = s.sponsorblock.action_mut(key) {
+                *setting = action;
+              }
+            })
+          },
+        ),
+      )
+      .into_any_element()
+    }));
+    rows.push(
+      row(
+        t("Source", "Source"),
+        t(
+          "Segments from SponsorBlock (sponsor.ajay.app), under CC BY-NC-SA 4.0. A change applies to the next video.",
+          "Segments fournis par SponsorBlock (sponsor.ajay.app), sous licence CC BY-NC-SA 4.0. Un changement s'applique à la vidéo suivante.",
+        ),
+        gpui_component::button::Button::new("sponsorblock-site")
+          .label("sponsor.ajay.app")
+          .on_click(|_, _, cx| cx.open_url("https://sponsor.ajay.app")),
+      )
+      .into_any_element(),
+    );
+  }
+  section("SponsorBlock", rows)
+}
+
+/// A SponsorBlock category's title and description in the settings, SponsorBlock's own words.
+fn category_text(category: SponsorCategory) -> (&'static str, &'static str) {
+  match category {
+    SponsorCategory::Sponsor => (
+      t("Sponsor", "Sponsor"),
+      t("A paid promotion.", "Une promotion payée."),
+    ),
+    SponsorCategory::SelfPromo => (
+      t("Self-promotion", "Autopromotion"),
+      t(
+        "Unpaid or self promotion: merchandise, donations, the channel's other projects.",
+        "Promotion non payée ou de la chaîne : produits dérivés, dons, ses autres projets.",
+      ),
+    ),
+    SponsorCategory::Interaction => (
+      t("Reminder to subscribe", "Rappel d'abonnement"),
+      t(
+        "A short reminder to like, subscribe or follow.",
+        "Un court rappel pour aimer, s'abonner ou suivre.",
+      ),
+    ),
+    SponsorCategory::Intro => (
+      t("Intro", "Intro"),
+      t(
+        "An intro animation or a pause with no content.",
+        "Une animation d'intro ou une pause sans contenu.",
+      ),
+    ),
+    SponsorCategory::Outro => (
+      t("End cards", "Écran de fin"),
+      t("End cards and credits.", "L'écran de fin et le générique."),
+    ),
+    SponsorCategory::Preview => (
+      t("Preview and recap", "Aperçu et récap"),
+      t(
+        "A preview of the video or a recap of earlier ones.",
+        "Un aperçu de la vidéo ou un récapitulatif des précédentes.",
+      ),
+    ),
+    SponsorCategory::Hook => (
+      t("Hook", "Accroche"),
+      t(
+        "A teaser or greeting before the video starts.",
+        "Une accroche ou des salutations avant le début.",
+      ),
+    ),
+    SponsorCategory::Filler => (
+      t("Tangent", "Digression"),
+      t(
+        "A tangent or a joke beside the subject.",
+        "Une digression ou une blague hors sujet.",
+      ),
+    ),
+    SponsorCategory::MusicOffTopic => (
+      t("Non-music", "Sans musique"),
+      t(
+        "In a music video, a part without music.",
+        "Dans un clip, une partie sans musique.",
+      ),
+    ),
+  }
 }

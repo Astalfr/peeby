@@ -133,6 +133,90 @@ pub struct Settings {
   pub startup_tabs: Vec<String>,
   /// How the tab bar offers a new tab.
   pub new_tab_style: NewTabStyle,
+  /// YouTube's SponsorBlock segments.
+  pub sponsorblock: SponsorBlock,
+}
+
+/// What the player does with a SponsorBlock category's segments.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SegmentAction {
+  /// Skipped as they start.
+  Skip,
+  /// Marked on the seek bar, with a skip button while they play.
+  #[default]
+  Button,
+  /// Ignored.
+  Off,
+}
+
+/// `[sponsorblock]`: YouTube videos' parts SponsorBlock's users marked (ADR 0034).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SponsorBlock {
+  /// Asks SponsorBlock for the segments of each video.
+  pub enabled: bool,
+  /// A paid promotion.
+  pub sponsor: SegmentAction,
+  /// Unpaid or self promotion.
+  pub selfpromo: SegmentAction,
+  /// A reminder to like or subscribe.
+  pub interaction: SegmentAction,
+  /// An intro animation.
+  pub intro: SegmentAction,
+  /// End cards and credits.
+  pub outro: SegmentAction,
+  /// A preview or recap.
+  pub preview: SegmentAction,
+  /// A teaser or greeting before the video.
+  pub hook: SegmentAction,
+  /// A tangent.
+  pub filler: SegmentAction,
+  /// In a music video, a part without music.
+  pub music_offtopic: SegmentAction,
+}
+
+impl Default for SponsorBlock {
+  fn default() -> Self {
+    Self {
+      enabled: true,
+      sponsor: SegmentAction::Skip,
+      selfpromo: SegmentAction::Button,
+      interaction: SegmentAction::Button,
+      intro: SegmentAction::Button,
+      outro: SegmentAction::Button,
+      preview: SegmentAction::Button,
+      hook: SegmentAction::Off,
+      filler: SegmentAction::Off,
+      music_offtopic: SegmentAction::Button,
+    }
+  }
+}
+
+impl SponsorBlock {
+  /// The setting of the category SponsorBlock names `key` (`innertube::SponsorCategory::key`).
+  pub fn action_mut(&mut self, key: &str) -> Option<&mut SegmentAction> {
+    Some(match key {
+      "sponsor" => &mut self.sponsor,
+      "selfpromo" => &mut self.selfpromo,
+      "interaction" => &mut self.interaction,
+      "intro" => &mut self.intro,
+      "outro" => &mut self.outro,
+      "preview" => &mut self.preview,
+      "hook" => &mut self.hook,
+      "filler" => &mut self.filler,
+      "music_offtopic" => &mut self.music_offtopic,
+      _ => return None,
+    })
+  }
+
+  /// The setting of the category `key`; [`SegmentAction::Off`] for an unknown one.
+  pub fn action(&self, key: &str) -> SegmentAction {
+    self
+      .clone()
+      .action_mut(key)
+      .map_or(SegmentAction::Off, |a| *a)
+  }
 }
 
 /// `[notifications]`: where each kind shows (ADR 0020).
@@ -423,6 +507,7 @@ impl Default for Settings {
       start_with_windows: false,
       startup_tabs: vec!["youtube".into()],
       new_tab_style: NewTabStyle::OnHover,
+      sponsorblock: SponsorBlock::default(),
     }
   }
 }

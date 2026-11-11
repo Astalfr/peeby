@@ -38,7 +38,8 @@ use crate::models::{
   LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
   NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
   PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
-  Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
+  SponsorCategory, SponsorSegment, Storyboard, Subscription, TextLink, Thumbnail, Tracking,
+  VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -1298,6 +1299,31 @@ pub fn parse_comments(response: &Value) -> CommentPage {
     }
   }
   page
+}
+
+/// The segments of `video_id` in a SponsorBlock answer by hash prefix (`skipSegments/<prefix>`:
+/// every video whose id's hash starts so, each with its segments): its `skip` ones (not `mute`,
+/// `full` nor `poi`), sorted, in the categories Peeby knows.
+pub fn parse_sponsor_segments(video_id: &str, response: &Value) -> Vec<SponsorSegment> {
+  let mut segments: Vec<SponsorSegment> = response
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter(|video| video["videoID"] == video_id)
+    .flat_map(|video| video["segments"].as_array().into_iter().flatten())
+    .filter(|s| s["actionType"] == "skip")
+    .filter_map(|s| {
+      let category = SponsorCategory::from_key(s["category"].as_str()?)?;
+      let (start, end) = (s["segment"][0].as_f64()?, s["segment"][1].as_f64()?);
+      (end > start).then_some(SponsorSegment {
+        category,
+        start,
+        end,
+      })
+    })
+    .collect();
+  segments.sort_by(|a, b| a.start.total_cmp(&b.start));
+  segments
 }
 
 /// Whether YouTube took a `feedback` request ("Not interested", its undo): each of its

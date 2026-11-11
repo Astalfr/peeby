@@ -349,8 +349,31 @@ impl PlayerView {
       SegmentKind::Preview => t("Skip preview", "Passer l'aperçu"),
       SegmentKind::Commercial => t("Skip ad", "Passer la pub"),
       SegmentKind::Muted => t("Skip muted part", "Passer la partie muette"),
+      SegmentKind::Sponsor => t("Skip sponsor", "Passer le sponsor"),
+      SegmentKind::SelfPromo => t("Skip self-promotion", "Passer l'autopromo"),
+      SegmentKind::Interaction => t("Skip reminder", "Passer le rappel"),
+      SegmentKind::EndCards => t("Skip end cards", "Passer l'écran de fin"),
+      SegmentKind::Hook => t("Skip hook", "Passer l'accroche"),
+      SegmentKind::Filler => t("Skip tangent", "Passer la digression"),
+      SegmentKind::OffTopic => t("Skip non-music", "Passer la partie sans musique"),
     };
     Some((label, SkipAction::SeekTo(segment.end)))
+  }
+
+  /// A segment to skip on its own started: the playhead jumps to its end, once (seeking back
+  /// into it plays it), and the on-screen message says what was skipped.
+  pub(super) fn auto_skip(&mut self, cx: &mut Context<Self>) {
+    let Some(segment) = segments::active(&self.segments, self.position) else {
+      return;
+    };
+    if !segment.auto_skip || !self.auto_skipped.insert(segment.start.to_bits()) {
+      return;
+    }
+    self.seek_to(segment.end, cx);
+    self.show_osd(
+      crate::tf!("{} skipped", "{} passé", segment.kind.name()).into(),
+      cx,
+    );
   }
 
   /// S: skips the playing segment.
@@ -366,6 +389,7 @@ impl PlayerView {
   /// guesses them from the chapter titles.
   pub fn set_segments(&mut self, segments: Vec<Segment>, cx: &mut Context<Self>) {
     self.given_segments = segments::usable(segments);
+    self.auto_skipped.clear();
     self.refresh_segments();
     cx.notify();
   }

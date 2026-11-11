@@ -236,6 +236,8 @@ pub fn muted(parts: &[MutedSegment]) -> Vec<Segment> {
         kind: SegmentKind::Muted,
         start,
         end,
+        auto_skip: false,
+        mark: None,
       }),
     }
   }

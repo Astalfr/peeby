@@ -613,6 +613,41 @@ impl Client {
     }
   }
 
+  /// The parts of `video_id` SponsorBlock's users marked to skip (ADR 0034), in every category.
+  /// Asked by the first four hex digits of the id's SHA-256, so that SponsorBlock does not learn
+  /// which video plays: the answer holds every video sharing them, and this one's are kept. A
+  /// video nobody marked answers 404: no segments.
+  pub async fn sponsor_segments(&self, video_id: &str) -> Result<Vec<crate::SponsorSegment>> {
+    use crate::SponsorCategory;
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(video_id.as_bytes());
+    let prefix = format!("{:02x}{:02x}", hash[0], hash[1]);
+    // `["sponsor","selfpromo",…]`, percent-encoded (the keys are plain ASCII words).
+    let categories = SponsorCategory::ALL
+      .iter()
+      .map(|c| format!("%22{}%22", c.key()))
+      .collect::<Vec<_>>()
+      .join("%2C");
+    let response = self
+      .http
+      .get(format!(
+        "https://sponsor.ajay.app/api/skipSegments/{prefix}?categories=%5B{categories}%5D&actionTypes=%5B%22skip%22%5D"
+      ))
+      .send()
+      .await?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+      return Ok(Vec::new());
+    }
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "sponsorblock",
+      });
+    }
+    let value: Value = response.json().await?;
+    Ok(crate::parse::parse_sponsor_segments(video_id, &value))
+  }
+
   /// Videos and channels matching `query`.
   pub async fn search(&self, query: &str) -> Result<SearchPage> {
     let response = self.web("search", json!({ "query": query }), true).await?;

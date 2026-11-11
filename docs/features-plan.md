@@ -13,6 +13,8 @@ settings page, or to General.
 
 ### 1. SponsorBlock
 
+Done (2026-11-11, [ADR 0034](decisions/0034-sponsorblock.md)), checked by the user in the app.
+
 Skip, or offer to skip, a video's sponsored parts, intros, outros, self-promotion and subscription
 reminders, from [SponsorBlock](https://sponsor.ajay.app)'s public API (anonymous, by video id or
 its hashed prefix for privacy: `/api/skipSegments/<sha256 prefix>`).

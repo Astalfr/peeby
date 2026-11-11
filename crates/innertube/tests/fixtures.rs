@@ -424,6 +424,33 @@ fn watch_page_collaboration() {
 }
 
 #[test]
+fn sponsor_segments() {
+  // SponsorBlock's answer for the hash prefix `5f6b` (dQw4w9WgXcQ's), anonymous, captured
+  // 2026-11-11, trimmed to three videos (one with only a `mute` segment).
+  use innertube::SponsorCategory::*;
+  let response = fixture("sponsorblock_5f6b.json");
+  let segments = innertube::parse_sponsor_segments("HGFmLq3_VCU", &response);
+  let categories: Vec<_> = segments.iter().map(|s| s.category).collect();
+  assert_eq!(
+    categories,
+    [
+      Interaction,
+      SelfPromo,
+      Sponsor,
+      SelfPromo,
+      Interaction,
+      Interaction,
+      Outro
+    ]
+  );
+  assert!((segments[2].start - 310.589).abs() < 1e-6);
+  assert!((segments[2].end - 409.0).abs() < 1e-6);
+  // A `mute` segment is no skip; a video not in the answer has none.
+  assert!(innertube::parse_sponsor_segments("spGouXKGTaY", &response).is_empty());
+  assert!(innertube::parse_sponsor_segments("dQw4w9WgXcQ", &response).is_empty());
+}
+
+#[test]
 fn feedback() {
   // `feedback` answers, signed in, captured 2026-11-11 (`not_interested` example): a Home
   // video marked "Not interested", then its undo; trimmed to `logged_in`.

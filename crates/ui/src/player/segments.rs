@@ -1,11 +1,16 @@
-//! Skippable parts of a video (opening, recap, credits, preview).
+//! Skippable parts of a video (opening, recap, credits, preview, a sponsor's).
 //!
-//! A space can give the player the segments its server knows (Jellyfin's media segments).
+//! A space can give the player the segments its server knows (Jellyfin's media segments,
+//! SponsorBlock's for YouTube): marked on the seek bar in their color when they have one, and
+//! skipped as they start when the space says so.
 //! Otherwise they are derived from the chapter titles that fansub and BD releases carry
 //! (`Opening`, `OP`, `ED`, `Credits`, `Preview`…). A chapter runs until the next one starts.
 //! From peeby.
 
+use gpui::Hsla;
 use player::Chapter;
+
+use crate::i18n::t;
 
 /// Longest opening or recap taken from a chapter title; a longer one is probably mislabeled.
 const MAX_INTRO_SECONDS: f64 = 240.0;
@@ -29,6 +34,41 @@ pub enum SegmentKind {
   Commercial,
   /// Audio removed by the server (Twitch's copyright mutes): marked on the seek bar.
   Muted,
+  /// A paid promotion (SponsorBlock).
+  Sponsor,
+  /// Unpaid or self promotion (SponsorBlock).
+  SelfPromo,
+  /// A reminder to like or subscribe (SponsorBlock).
+  Interaction,
+  /// End cards (SponsorBlock's outro: not the story's end, unlike credits).
+  EndCards,
+  /// A teaser or greeting before the video (SponsorBlock).
+  Hook,
+  /// A tangent (SponsorBlock).
+  Filler,
+  /// In a music video, a part without music (SponsorBlock).
+  OffTopic,
+}
+
+impl SegmentKind {
+  /// Its name, as the seek bar's hover tells it.
+  pub fn name(self) -> &'static str {
+    match self {
+      Self::Intro => t("Intro", "Intro"),
+      Self::Recap => t("Recap", "Récap"),
+      Self::Outro => t("Credits", "Générique"),
+      Self::Preview => t("Preview", "Aperçu"),
+      Self::Commercial => t("Ad", "Pub"),
+      Self::Muted => t("Muted", "Son coupé"),
+      Self::Sponsor => t("Sponsor", "Sponsor"),
+      Self::SelfPromo => t("Self-promotion", "Autopromotion"),
+      Self::Interaction => t("Reminder to subscribe", "Rappel d'abonnement"),
+      Self::EndCards => t("End cards", "Écran de fin"),
+      Self::Hook => t("Hook", "Accroche"),
+      Self::Filler => t("Tangent", "Digression"),
+      Self::OffTopic => t("Non-music", "Sans musique"),
+    }
+  }
 }
 
 /// A skippable part of a video.
@@ -40,9 +80,20 @@ pub struct Segment {
   pub start: f64,
   /// Seconds.
   pub end: f64,
+  /// Skipped as soon as it plays (once: seeking back into it plays it).
+  pub auto_skip: bool,
+  /// Its color on the seek bar; muted parts take the muted color without one.
+  pub mark: Option<Hsla>,
 }
 
 impl Segment {
+  /// Its color on the seek bar, if it is marked.
+  pub fn mark_color(&self) -> Option<Hsla> {
+    self
+      .mark
+      .or_else(|| (self.kind == SegmentKind::Muted).then(crate::theme::muted_audio))
+  }
+
   /// Whether the segment is credits or a preview: nothing of the story.
   pub fn is_tail(&self) -> bool {
     matches!(self.kind, SegmentKind::Outro | SegmentKind::Preview)
@@ -91,6 +142,8 @@ pub fn from_chapters(chapters: &[Chapter], duration: f64) -> Vec<Segment> {
       kind,
       start: chapter.start,
       end,
+      auto_skip: false,
+      mark: None,
     };
     let length = segment.end - segment.start;
     let too_long =
@@ -107,6 +160,14 @@ pub fn muted_at(segments: &[Segment], seconds: f64) -> Option<Segment> {
   segments
     .iter()
     .find(|s| s.kind == SegmentKind::Muted && s.start <= seconds && seconds < s.end)
+    .copied()
+}
+
+/// The marked segment at `seconds` (the seek bar's hover), the muted ones included.
+pub fn marked_at(segments: &[Segment], seconds: f64) -> Option<Segment> {
+  segments
+    .iter()
+    .find(|s| s.mark_color().is_some() && s.start <= seconds && seconds < s.end)
     .copied()
 }
 
@@ -324,11 +385,15 @@ mod tests {
         kind: SegmentKind::Intro,
         start: 0.0,
         end: 50.0,
+        auto_skip: false,
+        mark: None,
       },
       Segment {
         kind: SegmentKind::Muted,
         start: 10.0,
         end: 100.0,
+        auto_skip: false,
+        mark: None,
       },
     ];
     assert_eq!(muted_at(&s, 5.0), None);
@@ -342,6 +407,8 @@ mod tests {
       kind: SegmentKind::Intro,
       start: 10.0,
       end: 100.0,
+      auto_skip: false,
+      mark: None,
     }];
     assert_eq!(active(&s, 9.0), None);
     assert!(active(&s, 10.0).is_some());

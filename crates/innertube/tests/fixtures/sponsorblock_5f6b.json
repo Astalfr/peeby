@@ -1,0 +1,173 @@
+[
+  {
+    "videoID": "itvW82VXKNs",
+    "segments": [
+      {
+        "category": "preview",
+        "actionType": "skip",
+        "segment": [
+          0,
+          8.224
+        ],
+        "UUID": "b8a0d32e86ac3c4b55fd017d20fd9a9b237854777fdea5644e8b51cd09eed5f07",
+        "videoDuration": 2821.701,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "intro",
+        "actionType": "skip",
+        "segment": [
+          8.224,
+          13.77
+        ],
+        "UUID": "b82965752a0f9854b1527151ee645e7f280b317158900da792f888d840c9b1f87",
+        "videoDuration": 2821.701,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "filler",
+        "actionType": "skip",
+        "segment": [
+          13.77,
+          45.541
+        ],
+        "UUID": "54898acd45f502a7eb8b75366cc42d95dc76d627d5b8c78cf28a9fdefcb9a0067",
+        "videoDuration": 2821.701,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "selfpromo",
+        "actionType": "skip",
+        "segment": [
+          45.541,
+          104.315
+        ],
+        "UUID": "5950c24a9ac468651685e5b2ca9cf9dbd13d3cd5f50f9b82a0fc778e0587019e7",
+        "videoDuration": 2821.701,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      }
+    ]
+  },
+  {
+    "videoID": "HGFmLq3_VCU",
+    "segments": [
+      {
+        "category": "interaction",
+        "actionType": "skip",
+        "segment": [
+          24.691,
+          30.923
+        ],
+        "UUID": "cd7a3792e48b50126f2d3494b59b802d04048978c71fdb4d541203fe44b48b606",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "selfpromo",
+        "actionType": "skip",
+        "segment": [
+          146.503,
+          161.818
+        ],
+        "UUID": "dd905c807bb649725d5063fe2e0537d10bdce1c8df9c55e68e497827ef61a3da6",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "sponsor",
+        "actionType": "skip",
+        "segment": [
+          310.589,
+          409
+        ],
+        "UUID": "435f9586dd0d2bbdb593d0604dfb41a83af478894b5b8cccf9db7faaf8eb722a6",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "selfpromo",
+        "actionType": "skip",
+        "segment": [
+          653.245,
+          659.596
+        ],
+        "UUID": "55c9fcd2cb93aedf10e0161b3341d51a3f5d540cf99b0e981c0d091032be1a706",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "interaction",
+        "actionType": "skip",
+        "segment": [
+          659.596,
+          664.756
+        ],
+        "UUID": "fad9a78a55f4f2e15befd558da5e601be8799e08be1b84ce93bf215e087860296",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "interaction",
+        "actionType": "skip",
+        "segment": [
+          675.849,
+          681.498
+        ],
+        "UUID": "e82a7e34908b36ed839a9add662495042d65c6be61a70930282b0150c97328626",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      },
+      {
+        "category": "outro",
+        "actionType": "skip",
+        "segment": [
+          681.498,
+          726.781
+        ],
+        "UUID": "79240421b1b1e664150fe55afa0ff3c02c3f9c674479407b3e69eb71a9eec60f6",
+        "videoDuration": 726.781,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      }
+    ]
+  },
+  {
+    "videoID": "spGouXKGTaY",
+    "segments": [
+      {
+        "category": "filler",
+        "actionType": "mute",
+        "segment": [
+          699.285,
+          737.818
+        ],
+        "UUID": "72b115a1cb37c3a6af779d867f82120e7134965731ae47142e38b5d7d910789e7",
+        "videoDuration": 3211.341,
+        "locked": 0,
+        "votes": 0,
+        "description": ""
+      }
+    ]
+  }
+]

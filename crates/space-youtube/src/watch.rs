@@ -27,7 +27,9 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, h_flex, v_flex};
-use innertube::{Client, LikeStatus, Related, TextLink, Votes, WatchPage};
+use innertube::{
+  Client, LikeStatus, Related, SponsorCategory, SponsorSegment, TextLink, Votes, WatchPage,
+};
 
 use crate::cards::{compact_card, playlist_compact_card, playlist_row};
 use crate::comments::{CommentSection, HoveredLink, Links, linked_text};
@@ -37,7 +39,7 @@ use crate::queue::{Queue, QueueEvent};
 use crate::rating::{self, DISLIKE_RED, LIKE_BLUE, Rating};
 use crate::{Nav, Route};
 use crate::{bell, chat, prefetch, save, subscribe, tools};
-use peeby_core::settings::{Player, Settings};
+use peeby_core::settings::{Player, SegmentAction, Settings};
 use peeby_core::shell::space::middle_click;
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
@@ -45,6 +47,7 @@ use ui::chat::{ChatPanel, ChatPanelEvent, watch_layout};
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
+use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{PlayerEvent, PlayerView, Prefs};
 use ui::{runtime, theme};
 
@@ -75,6 +78,13 @@ const THEATER_MIN: f32 = 240.;
 struct VotesCache(HashMap<String, Votes>);
 
 impl Global for VotesCache {}
+
+/// SponsorBlock's segments of the videos opened, for the session (ADR 0034): a video opened
+/// again asks nothing.
+#[derive(Default)]
+struct SponsorCache(HashMap<String, Vec<SponsorSegment>>);
+
+impl Global for SponsorCache {}
 
 pub struct WatchView {
   client: Client,
@@ -232,6 +242,7 @@ impl WatchView {
     if view.votes.is_none() {
       view.load_votes(cx);
     }
+    view.load_sponsor_segments(cx);
     view
   }
 
@@ -517,6 +528,68 @@ impl WatchView {
         .ok();
     })
     .detach();
+  }
+
+  /// The video's SponsorBlock segments, when the setting is on: from the session's cache, else
+  /// asked for (by hash prefix); a failure leaves the video as it is.
+  fn load_sponsor_segments(&self, cx: &mut Context<Self>) {
+    if !Settings::get(cx).sponsorblock.enabled {
+      return;
+    }
+    let cached = cx
+      .try_global::<SponsorCache>()
+      .and_then(|cache| cache.0.get(&self.video_id))
+      .cloned();
+    if let Some(segments) = cached {
+      self.apply_sponsor_segments(&segments, cx);
+      return;
+    }
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    let fetch = runtime::spawn(cx, async move { client.sponsor_segments(&id).await });
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| match result {
+          Some(Ok(segments)) => {
+            tracing::debug!("SponsorBlock: {} segments", segments.len());
+            cx.default_global::<SponsorCache>()
+              .0
+              .insert(this.video_id.clone(), segments.clone());
+            this.apply_sponsor_segments(&segments, cx);
+          }
+          Some(Err(e)) => tracing::warn!("SponsorBlock: {e}"),
+          None => {}
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// Gives the player the segments whose category is not off, each in SponsorBlock's color,
+  /// skipped on its own when its category says so.
+  fn apply_sponsor_segments(&self, segments: &[SponsorSegment], cx: &mut Context<Self>) {
+    let settings = Settings::get(cx).sponsorblock.clone();
+    let segments: Vec<Segment> = segments
+      .iter()
+      .filter_map(|s| {
+        let auto_skip = match settings.action(s.category.key()) {
+          SegmentAction::Off => return None,
+          SegmentAction::Skip => true,
+          SegmentAction::Button => false,
+        };
+        let (kind, color) = sponsor_kind(s.category);
+        Some(Segment {
+          kind,
+          start: s.start,
+          end: s.end,
+          auto_skip,
+          mark: Some(gpui::rgb(color).into()),
+        })
+      })
+      .collect();
+    if !segments.is_empty() {
+      self.player.update(cx, |p, cx| p.set_segments(segments, cx));
+    }
   }
 
   fn rate(&mut self, clicked: LikeStatus, window: &mut Window, cx: &mut Context<Self>) {
@@ -1335,6 +1408,22 @@ impl Render for WatchView {
       .child(page)
       .vertical_scrollbar(&self.scroll)
       .into_any_element()
+  }
+}
+
+/// The player's kind for a SponsorBlock category, and the category's color on youtube.com
+/// with SponsorBlock's extension.
+fn sponsor_kind(category: SponsorCategory) -> (SegmentKind, u32) {
+  match category {
+    SponsorCategory::Sponsor => (SegmentKind::Sponsor, 0x00d400),
+    SponsorCategory::SelfPromo => (SegmentKind::SelfPromo, 0xffff00),
+    SponsorCategory::Interaction => (SegmentKind::Interaction, 0xcc00ff),
+    SponsorCategory::Intro => (SegmentKind::Intro, 0x00ffff),
+    SponsorCategory::Outro => (SegmentKind::EndCards, 0x0202ed),
+    SponsorCategory::Preview => (SegmentKind::Recap, 0x008fd6),
+    SponsorCategory::Hook => (SegmentKind::Hook, 0x395699),
+    SponsorCategory::Filler => (SegmentKind::Filler, 0x7300ff),
+    SponsorCategory::MusicOffTopic => (SegmentKind::OffTopic, 0xff9900),
   }
 }
 

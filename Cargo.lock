@@ -3509,6 +3509,7 @@ dependencies = [
  "reqwest",
  "serde_json",
  "sha1 0.10.7",
+ "sha2 0.10.9",
  "thiserror 2.0.21",
  "tokio",
  "tracing",

@@ -11,6 +11,8 @@ publish.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "http2", "charset"] }
 serde_json = "1"
 sha1 = "0.10"
+# SponsorBlock is asked by a prefix of the video id's SHA-256, not by the id (ADR 0034).
+sha2 = "0.10"
 thiserror = "2"
 # The local playlist proxy of lives (ADR 0025): the features the twitch crate already builds.
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync"] }

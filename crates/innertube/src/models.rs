@@ -110,6 +110,75 @@ pub struct FeedChip {
   pub token: String,
 }
 
+/// A SponsorBlock category ([sponsor.ajay.app](https://wiki.sponsor.ajay.app/w/Segment_Categories)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SponsorCategory {
+  /// A paid promotion.
+  Sponsor,
+  /// Unpaid or self promotion: merchandise, the channel's other projects.
+  SelfPromo,
+  /// A reminder to like, subscribe or follow.
+  Interaction,
+  /// An intro animation or a pause with no content.
+  Intro,
+  /// End cards and credits.
+  Outro,
+  /// A preview or recap of the video or of others.
+  Preview,
+  /// A teaser or greeting before the video starts.
+  Hook,
+  /// A tangent, a joke beside the subject.
+  Filler,
+  /// In a music video, a part without music.
+  MusicOffTopic,
+}
+
+impl SponsorCategory {
+  /// Every category, in SponsorBlock's order.
+  pub const ALL: [Self; 9] = [
+    Self::Sponsor,
+    Self::SelfPromo,
+    Self::Interaction,
+    Self::Intro,
+    Self::Outro,
+    Self::Preview,
+    Self::Hook,
+    Self::Filler,
+    Self::MusicOffTopic,
+  ];
+
+  /// The API's name, e.g. `selfpromo`.
+  pub fn key(self) -> &'static str {
+    match self {
+      Self::Sponsor => "sponsor",
+      Self::SelfPromo => "selfpromo",
+      Self::Interaction => "interaction",
+      Self::Intro => "intro",
+      Self::Outro => "outro",
+      Self::Preview => "preview",
+      Self::Hook => "hook",
+      Self::Filler => "filler",
+      Self::MusicOffTopic => "music_offtopic",
+    }
+  }
+
+  /// The category named `key` by the API.
+  pub fn from_key(key: &str) -> Option<Self> {
+    Self::ALL.into_iter().find(|c| c.key() == key)
+  }
+}
+
+/// A part of a video SponsorBlock's users marked, to skip.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SponsorSegment {
+  /// What it holds.
+  pub category: SponsorCategory,
+  /// Seconds.
+  pub start: f64,
+  /// Seconds.
+  pub end: f64,
+}
+
 /// One of the channels of a collaboration, as its watch page lists them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Collaborator {
