@@ -65,6 +65,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Twitch raids on PubSub (anonymous): `cargo run -p twitch --example raid_probe -- <minutes> (<login>… | top) [--save <file>]`
   listens to channels' raid topics (`top`: 500 lives, PubSub's limit) and prints what comes (ADR 0024);
   `--topic hype-train-events-v1` their Hype Trains instead (ADR 0032; rename the contributors before a fixture)
+- Lives in a Shared Chat session now (anonymous IRC, read-only): `cargo run -p twitch --example shared_chat_probe -- <minutes> (<login>… | top) [--save <file>]`
+  (prints the channels whose chat carries another room's lines; rename the chatters before a fixture)
 - Hype Trains now on the top lives (anonymous GQL): `cargo run -p twitch --example hype_probe -- [--save <file>] [--approaching] [login…]`
   (`--save`: the app's answer for the first train found, its conductors renamed)
 - Chat panel alone, generated messages and frame timings: `cargo run -p ui --example chat --release` (`PEEBY_RATE`)

@@ -175,6 +175,11 @@ pub struct ChatLine {
   pub bits: u32,
   /// When the server got it, Unix milliseconds.
   pub sent: Option<i64>,
+  /// In a Shared Chat session, the room the line was sent in when it is another one's
+  /// (`source-room-id`, a channel's user id); `None` for the room's own lines.
+  pub source_room: Option<String>,
+  /// The author's badges in that room (`source-badges`), for a line of another room.
+  pub source_badges: Option<Vec<(String, String)>>,
 }
 
 /// A Twitch emote in a message's text: `chars` indexes, end excluded.
@@ -384,7 +389,23 @@ fn chat_line(line: &Line) -> ChatLine {
     first: line.tag("first-msg") == Some("1"),
     bits: line.tag("bits").and_then(|b| b.parse().ok()).unwrap_or(0),
     sent: line.tag("tmi-sent-ts").and_then(|t| t.parse().ok()),
+    source_room: line
+      .tag("source-room-id")
+      .filter(|source| Some(*source) != line.tag("room-id"))
+      .map(str::to_owned),
+    source_badges: line.tag("source-badges").map(badge_list),
   }
+}
+
+/// `set/version,set/version` as pairs.
+fn badge_list(tag: &str) -> Vec<(String, String)> {
+  tag
+    .split(',')
+    .filter_map(|badge| {
+      let (set, version) = badge.split_once('/')?;
+      Some((set.to_owned(), version.to_owned()))
+    })
+    .collect()
 }
 
 /// `id:0-4,6-10/id2:12-15` as ranges sorted by start, end excluded.

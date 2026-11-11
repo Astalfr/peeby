@@ -164,6 +164,8 @@ fields). Nothing shows when the channel has no schedule.
 
 ### T5. Shared Chat
 
+Done (2026-11-11), checked by the user in the app. Left out: the session's participants over the chat (IRC does not tell them, GQL needs a sign-in) and the duplicates of a merged multistream chat joined to two participants.
+
 When several streamers merge their chats (Twitch's Shared Chat), each line from another channel
 carries that channel's avatar (as twitch.tv shows it) and its badges are the other channel's; the
 session's participants show over the chat. IRC tags the lines (`source-room-id`,

@@ -133,6 +133,14 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - `CAP REQ :twitch.tv/tags twitch.tv/commands`, then `PASS`, `NICK`, `JOIN #login`.
   - Answer every `PING` with `PONG :tmi.twitch.tv`.
   - Handle `PRIVMSG`, `CLEARCHAT`, `CLEARMSG`, `USERNOTICE` and `ROOMSTATE`.
+- **Shared Chat** (checked 2026-11-11, `shared_chat_probe`: 9 of the 300 top lives in a session):
+  a session's lines reach every participant room; one sent in another room carries
+  `source-room-id` (that channel's user id, else the room's own), `source-id` (the same in every
+  room, the line's own `id` differing), `source-badges`/`source-badge-info` (the author's there),
+  `source-only` and, for a notice, `source-msg-id`. The participants are not told on IRC, and
+  GQL's `user.sharedChatSession` needs a sign-in. Peeby marks another room's line with that
+  channel (its picture and color, `ChatSource`, looked up once by id: `Catalog::users`) and shows
+  the author's badges there, but `subscriber`, `founder` and `bits` (that channel's art).
 - **History on joining** ([ADR 0036](decisions/0036-twitch-chat-history.md)): IRC sends none.
   `GET https://recent-messages.robotty.de/api/v2/recent-messages/<login>?limit=100` (anonymous)
   answers `{"messages": [raw IRC lines], "error", "error_code"}`, the lines as Twitch sent them

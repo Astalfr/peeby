@@ -125,6 +125,9 @@ pub fn start(
     let extras = shared.extras.clone();
     let mut room = RoomState::default();
     let mut extras_asked = false;
+    // A Shared Chat session's other rooms.
+    let rooms: SharedRooms = Rc::default();
+    let rooms_catalog = catalog.clone();
     // The history first, waited for a moment: it goes before what the connection says.
     let mut history_len = 0;
     let mut first_held = Vec::new();
@@ -186,12 +189,20 @@ pub fn start(
           }));
           let known = extras.borrow().clone();
           let mut events: Vec<ChatEvent> = Vec::new();
+          let mut unknown = Vec::new();
           for (i, update) in held.take().into_iter().flatten().enumerate() {
             if i == history_len && history_len > 0 {
               events.push(joined_line());
             }
-            events.extend(event(update, &mut room, &known));
+            events.extend(shared_event(
+              update,
+              &mut room,
+              &known,
+              &rooms,
+              &mut unknown,
+            ));
           }
+          look_up_rooms(unknown, &rooms_catalog, &rooms, cx);
           // Only the history came before the extras.
           if history_len > 0 && !events.iter().any(is_joined_line) {
             events.push(joined_line());
@@ -216,13 +227,20 @@ pub fn start(
       }
       let known = extras.borrow().clone();
       let mut events = Vec::new();
+      let mut unknown = Vec::new();
       for update in batch {
         match (&mut held, update) {
           // The room's state carries its id, which the extras' load needs.
           (_, update @ (Update::Status(_) | Update::Event(Event::RoomState(_))))
           | (None, update) => {
             let connected = matches!(update, Update::Status(Status::Connected));
-            events.extend(event(update, &mut room, &known));
+            events.extend(shared_event(
+              update,
+              &mut room,
+              &known,
+              &rooms,
+              &mut unknown,
+            ));
             if connected && held.is_some() {
               events.push(ChatEvent::Loading(
                 t("Loading emotes…", "Chargement des emotes…").into(),
@@ -232,6 +250,7 @@ pub fn start(
           (Some(held), update) => held.push(update),
         }
       }
+      look_up_rooms(unknown, &rooms_catalog, &rooms, cx);
       if !extras_asked && let Some(room_id) = room.room_id.clone() {
         extras_asked = true;
         *shared.room_id.borrow_mut() = Some(room_id.clone());
@@ -944,6 +963,106 @@ where
     None => None,
   })
 }
+/// The channels of a Shared Chat session the chat showed lines of, by room id: their mark on
+/// those lines (a placeholder until their name and picture are known).
+type SharedRooms = Rc<RefCell<HashMap<String, Rc<ui::chat::ChatSource>>>>;
+
+/// Badges of another channel's chat drawn with this one's art: left out of a shared line.
+const CHANNEL_BADGES: [&str; 3] = ["subscriber", "founder", "bits"];
+
+/// [`event`] for a chat that may be in a Shared Chat session: a line from another room carries
+/// that room's mark ([`ChatSource`]: its picture before the line, its color along it) and the
+/// author's badges there (but those of [`CHANNEL_BADGES`]). A room seen for the first time is
+/// pushed to `unknown`, to be looked up.
+fn shared_event(
+  mut update: Update,
+  room: &mut RoomState,
+  extras: &Extras,
+  rooms: &SharedRooms,
+  unknown: &mut Vec<String>,
+) -> Option<ChatEvent> {
+  let source = match &mut update {
+    Update::Event(Event::Message(line) | Event::Notice(line)) => {
+      let source = line.source_room.clone();
+      if source.is_some()
+        && let Some(badges) = line.source_badges.take()
+      {
+        line.badges = badges
+          .into_iter()
+          .filter(|(set, _)| !CHANNEL_BADGES.contains(&set.as_str()))
+          .collect();
+      }
+      source
+    }
+    _ => None,
+  };
+  let mut event = event(update, room, extras)?;
+  if let (Some(id), ChatEvent::Message(message)) = (source, &mut event) {
+    let mark = rooms
+      .borrow_mut()
+      .entry(id.clone())
+      .or_insert_with(|| {
+        unknown.push(id.clone());
+        Rc::new(room_mark(&id, &id, None))
+      })
+      .clone();
+    message.source = Some(mark);
+  }
+  Some(event)
+}
+
+/// A Shared Chat room's mark: `key` (its login, its id until known), its name, its picture.
+fn room_mark(id: &str, key: &str, user: Option<&helix::User>) -> ui::chat::ChatSource {
+  let author = ui::chat::Author {
+    id: SharedString::default(),
+    name: id.to_owned().into(),
+    color: None,
+    badges: Vec::new(),
+    avatar: None,
+    channel: None,
+  };
+  ui::chat::ChatSource {
+    key: user.map_or(key.to_owned(), |u| u.login.clone()).into(),
+    name: user
+      .map_or_else(String::new, |u| u.display_name.clone())
+      .into(),
+    color: ui::chat::name_color(&author),
+    avatar: user
+      .filter(|u| !u.profile_image_url.is_empty())
+      .map(|u| super::cards::template(&u.profile_image_url)),
+  }
+}
+
+/// Looks up the Shared Chat rooms of `unknown` (their login, name and picture), for their next
+/// lines.
+fn look_up_rooms(
+  unknown: Vec<String>,
+  catalog: &Catalog,
+  rooms: &SharedRooms,
+  cx: &mut gpui::AsyncApp,
+) {
+  if unknown.is_empty() {
+    return;
+  }
+  let catalog = catalog.clone();
+  let fetch = cx.update(|cx| runtime::spawn(cx, async move { catalog.users(&unknown).await }));
+  let rooms = rooms.clone();
+  cx.spawn(async move |_| match fetch.await {
+    Some(Ok(users)) => {
+      let mut rooms = rooms.borrow_mut();
+      for user in &users {
+        rooms.insert(
+          user.id.clone(),
+          Rc::new(room_mark(&user.id, &user.login, Some(user))),
+        );
+      }
+    }
+    Some(Err(e)) => tracing::warn!("shared chat rooms: {e}"),
+    None => {}
+  })
+  .detach();
+}
+
 /// The panel's event for a connection's update, `room` keeping the merged modes.
 pub(super) fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Option<ChatEvent> {
   Some(match update {

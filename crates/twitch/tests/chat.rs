@@ -179,3 +179,29 @@ fn recent_messages() {
   );
   assert!(twitch::chat::parse_recent(&serde_json::json!({ "messages": [] })).is_empty());
 }
+
+#[test]
+fn shared_chat_lines() {
+  // Lines of two channels in a Shared Chat session (captured 2026-11-11 with the
+  // `shared_chat_probe` example, anonymous), the chatters renamed: each from the other room,
+  // with its badges there.
+  let events: Vec<Event> = include_str!("fixtures/chat_shared.txt")
+    .lines()
+    .map(|line| parse(line).unwrap_or_else(|| panic!("no event for {line}")))
+    .collect();
+  let third = message(&events, 2);
+  assert_eq!(third.source_room.as_deref(), Some("635077921"));
+  let badges: Vec<&str> = third
+    .source_badges
+    .iter()
+    .flatten()
+    .map(|(set, _)| set.as_str())
+    .collect();
+  assert_eq!(badges, ["moderator", "founder", "bingbonglove"]);
+  assert_eq!(message(&events, 4).source_room.as_deref(), Some("506823694"));
+  // A room's own line has no source.
+  assert!(lines().iter().all(|event| match event {
+    Event::Message(line) | Event::Notice(line) => line.source_room.is_none(),
+    _ => true,
+  }));
+}
