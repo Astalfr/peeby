@@ -1,0 +1,1542 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "Accueil",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EghmZWF0dXJlZPIGBAoCMgA%3D"
+              },
+              "clickTrackingParams": "CIkDEPCTARgJIhMI7dinoqaAmAMV0TvxBR28oT3oygEEid8b1Q==",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/featured",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Vidéos",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EgZ2aWRlb3PyBgQKAjoA"
+              },
+              "clickTrackingParams": "CDoQ8JMBGAoiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/videos",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            },
+            "selected": true
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Shorts",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EgZzaG9ydHPyBgUKA5oBAA%3D%3D"
+              },
+              "clickTrackingParams": "CDkQ8JMBGAsiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/shorts",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "En direct",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EgdzdHJlYW1z8gYECgJ6AA%3D%3D"
+              },
+              "clickTrackingParams": "CDgQ8JMBGAwiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/streams",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Podcasts",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "Eghwb2RjYXN0c_IGBQoDugEA"
+              },
+              "clickTrackingParams": "CDcQ8JMBGA0iEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/podcasts",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Playlists",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA"
+              },
+              "clickTrackingParams": "CDYQ8JMBGA4iEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/playlists",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Posts",
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCWeg2Pkate69NFdBeuRFTAw",
+                "canonicalBaseUrl": "/@Squeezie",
+                "params": "EgVwb3N0c_IGBAoCSgA%3D"
+              },
+              "clickTrackingParams": "CDUQ8JMBGA8iEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+              "commandMetadata": {
+                "webCommandMetadata": {
+                  "apiUrl": "/youtubei/v1/browse",
+                  "rootVe": 3611,
+                  "url": "/@Squeezie/posts",
+                  "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "header": {
+    "pageHeaderRenderer": {
+      "content": {
+        "pageHeaderViewModel": {
+          "actions": {
+            "flexibleActionsViewModel": {
+              "actionsRows": [
+                {
+                  "actions": [
+                    {
+                      "subscribeButtonViewModel": {
+                        "backgroundStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_BACKGROUND_STYLE_UNKNOWN",
+                        "bellAccessibilityData": {
+                          "allLabel": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne SQUEEZIE.",
+                          "disabledLabel": "Les notifications YouTube sont désactivées. Appuyez si vous souhaitez modifier vos paramètres de notification.",
+                          "occasionalLabel": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne SQUEEZIE.",
+                          "offLabel": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne SQUEEZIE."
+                        },
+                        "buttonStyle": {
+                          "buttonSize": "SUBSCRIBE_BUTTON_VIEW_MODEL_SIZE_MEDIUM",
+                          "subscribeButtonAnimationStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_ANIMATION_STYLE_CAIRO",
+                          "subscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_SUBSCRIBED_STATE_STYLE_DROPDOWN",
+                          "unsubscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_UNSUBSCRIBED_STATE_STYLE_PILL"
+                        },
+                        "channelId": "UCWeg2Pkate69NFdBeuRFTAw",
+                        "disableNotificationBell": false,
+                        "disableSubscribeButton": false,
+                        "enableSubscribeButtonPostClickAnimation": true,
+                        "loggingDirectives": {
+                          "trackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96CjyODIJY2hhbm5lbHM0",
+                          "visibility": {
+                            "types": "12"
+                          }
+                        },
+                        "notificationStateEntityStoreKeys": {
+                          "subsNotificationStateKey": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgjAEoAQ%3D%3D"
+                        },
+                        "onShowSubscriptionOptions": {
+                          "innertubeCommand": {
+                            "clickTrackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96MoBBInfG9U=",
+                            "showSheetCommand": {
+                              "panelLoadingStrategy": {
+                                "inlineContent": {
+                                  "sheetViewModel": {
+                                    "content": {
+                                      "listViewModel": {
+                                        "listItems": [
+                                          {
+                                            "listItemViewModel": {
+                                              "isDisabled": false,
+                                              "isSelected": false,
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "NOTIFICATIONS_ACTIVE"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CC4Q67UEGAAiEwjt2KeipoCYAxXRO_EFHbyhPegyHFBSRUZFUkVOQ0VfQUxMX05PVElGSUNBVElPTlPKAQSJ3xvV",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                          "sendPost": true
+                                                        }
+                                                      },
+                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                        "params": "ChhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcSAggCGAAgBFIGCgIIAhgA"
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "loggingContext": {
+                                                  "loggingDirectives": {
+                                                    "trackingParams": "CC4Q67UEGAAiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                                                    "visibility": {
+                                                      "types": "12"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                              "title": {
+                                                "content": "Toutes"
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "listItemViewModel": {
+                                              "isDisabled": false,
+                                              "isSelected": true,
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "NOTIFICATIONS_NONE"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CC0Q7LUEGAEiEwjt2KeipoCYAxXRO_EFHbyhPegyElBSRUZFUkVOQ0VfREVGQVVMVMoBBInfG9U=",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                          "sendPost": true
+                                                        }
+                                                      },
+                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                        "params": "ChhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcSAggBGAAgBFIGCgIIAhgA"
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "loggingContext": {
+                                                  "loggingDirectives": {
+                                                    "trackingParams": "CC0Q7LUEGAEiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                                                    "visibility": {
+                                                      "types": "12"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                              "title": {
+                                                "content": "Personnalisées"
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "listItemViewModel": {
+                                              "isDisabled": false,
+                                              "isSelected": false,
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "NOTIFICATIONS_OFF"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CCwQ7bUEGAIiEwjt2KeipoCYAxXRO_EFHbyhPegyG1BSRUZFUkVOQ0VfTk9fTk9USUZJQ0FUSU9OU8oBBInfG9U=",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                          "sendPost": true
+                                                        }
+                                                      },
+                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                        "params": "ChhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcSAggDGAAgBFIGCgIIAhgA"
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "loggingContext": {
+                                                  "loggingDirectives": {
+                                                    "trackingParams": "CCwQ7bUEGAIiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                                                    "visibility": {
+                                                      "types": "12"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                              "title": {
+                                                "content": "Aucune"
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "listItemViewModel": {
+                                              "isDisabled": false,
+                                              "leadingImage": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageName": "PERSON_MINUS"
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              "rendererContext": {
+                                                "commandContext": {
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "clickTrackingParams": "CCgQ24sKGAMiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "sendPost": true
+                                                        }
+                                                      },
+                                                      "signalServiceEndpoint": {
+                                                        "actions": [
+                                                          {
+                                                            "clickTrackingParams": "CCgQ24sKGAMiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+                                                            "openPopupAction": {
+                                                              "popup": {
+                                                                "confirmDialogRenderer": {
+                                                                  "cancelButton": {
+                                                                    "buttonRenderer": {
+                                                                      "accessibility": {
+                                                                        "label": "Annuler"
+                                                                      },
+                                                                      "isDisabled": false,
+                                                                      "size": "SIZE_DEFAULT",
+                                                                      "style": "STYLE_TEXT",
+                                                                      "text": {
+                                                                        "runs": [
+                                                                          {
+                                                                            "text": "Annuler"
+                                                                          }
+                                                                        ]
+                                                                      },
+                                                                      "trackingParams": "CCoQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                                                    }
+                                                                  },
+                                                                  "confirmButton": {
+                                                                    "buttonRenderer": {
+                                                                      "accessibility": {
+                                                                        "label": "Se désabonner"
+                                                                      },
+                                                                      "isDisabled": false,
+                                                                      "serviceEndpoint": {
+                                                                        "clickTrackingParams": "CCsQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPego8jgyCWNoYW5uZWxzNMoBBInfG9U=",
+                                                                        "commandMetadata": {
+                                                                          "webCommandMetadata": {
+                                                                            "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                            "sendPost": true
+                                                                          }
+                                                                        },
+                                                                        "unsubscribeEndpoint": {
+                                                                          "channelIds": [
+                                                                            "UCWeg2Pkate69NFdBeuRFTAw"
+                                                                          ],
+                                                                          "params": "CgIIAhgA"
+                                                                        }
+                                                                      },
+                                                                      "size": "SIZE_DEFAULT",
+                                                                      "style": "STYLE_BLUE_TEXT",
+                                                                      "text": {
+                                                                        "runs": [
+                                                                          {
+                                                                            "text": "Se désabonner"
+                                                                          }
+                                                                        ]
+                                                                      },
+                                                                      "trackingParams": "CCsQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                                                    }
+                                                                  },
+                                                                  "dialogMessages": [
+                                                                    {
+                                                                      "runs": [
+                                                                        {
+                                                                          "text": "Se désabonner de "
+                                                                        },
+                                                                        {
+                                                                          "text": "SQUEEZIE"
+                                                                        },
+                                                                        {
+                                                                          "text": " ?"
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ],
+                                                                  "primaryIsCancel": false,
+                                                                  "trackingParams": "CCkQxjgiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                                                }
+                                                              },
+                                                              "popupType": "DIALOG"
+                                                            }
+                                                          }
+                                                        ],
+                                                        "signal": "CLIENT_SIGNAL"
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "loggingContext": {
+                                                  "loggingDirectives": {
+                                                    "trackingParams": "CCgQ24sKGAMiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                                                    "visibility": {
+                                                      "types": "12"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "title": {
+                                                "content": "Se désabonner"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "stateEntityStoreKey": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgMygB",
+                        "subscribeButtonContent": {
+                          "accessibilityText": "S'abonner à SQUEEZIE.",
+                          "buttonText": "S’abonner",
+                          "imageName": "ic_video_youtube",
+                          "onTapCommand": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96CjyODIJY2hhbm5lbHM0ygEEid8b1Q==",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "apiUrl": "/youtubei/v1/subscription/subscribe",
+                                  "sendPost": true
+                                }
+                              },
+                              "subscribeEndpoint": {
+                                "channelIds": [
+                                  "UCWeg2Pkate69NFdBeuRFTAw"
+                                ],
+                                "params": "EgIIAhgA"
+                              }
+                            }
+                          },
+                          "subscribeState": {
+                            "key": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgMygB",
+                            "subscribed": false
+                          }
+                        },
+                        "trackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96CjyODIJY2hhbm5lbHM0",
+                        "unsubscribeButtonContent": {
+                          "accessibilityText": "Se désabonner de SQUEEZIE.",
+                          "buttonText": "Abonné",
+                          "imageName": "ic_video_youtube",
+                          "onTapCommand": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96MoBBInfG9U=",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "sendPost": true
+                                }
+                              },
+                              "signalServiceEndpoint": {
+                                "actions": [
+                                  {
+                                    "clickTrackingParams": "CCcQmysYASITCO3Yp6KmgJgDFdE78QUdvKE96MoBBInfG9U=",
+                                    "openPopupAction": {
+                                      "popup": {
+                                        "confirmDialogRenderer": {
+                                          "cancelButton": {
+                                            "buttonRenderer": {
+                                              "accessibility": {
+                                                "label": "Annuler"
+                                              },
+                                              "isDisabled": false,
+                                              "size": "SIZE_DEFAULT",
+                                              "style": "STYLE_TEXT",
+                                              "text": {
+                                                "runs": [
+                                                  {
+                                                    "text": "Annuler"
+                                                  }
+                                                ]
+                                              },
+                                              "trackingParams": "CDAQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                            }
+                                          },
+                                          "confirmButton": {
+                                            "buttonRenderer": {
+                                              "accessibility": {
+                                                "label": "Se désabonner"
+                                              },
+                                              "isDisabled": false,
+                                              "serviceEndpoint": {
+                                                "clickTrackingParams": "CDEQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPego8jgyCWNoYW5uZWxzNMoBBInfG9U=",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "unsubscribeEndpoint": {
+                                                  "channelIds": [
+                                                    "UCWeg2Pkate69NFdBeuRFTAw"
+                                                  ],
+                                                  "params": "CgIIAhgA"
+                                                }
+                                              },
+                                              "size": "SIZE_DEFAULT",
+                                              "style": "STYLE_BLUE_TEXT",
+                                              "text": {
+                                                "runs": [
+                                                  {
+                                                    "text": "Se désabonner"
+                                                  }
+                                                ]
+                                              },
+                                              "trackingParams": "CDEQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                            }
+                                          },
+                                          "dialogMessages": [
+                                            {
+                                              "runs": [
+                                                {
+                                                  "text": "Se désabonner de "
+                                                },
+                                                {
+                                                  "text": "SQUEEZIE"
+                                                },
+                                                {
+                                                  "text": " ?"
+                                                }
+                                              ]
+                                            }
+                                          ],
+                                          "primaryIsCancel": false,
+                                          "trackingParams": "CC8QxjgiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                        }
+                                      },
+                                      "popupType": "DIALOG"
+                                    }
+                                  }
+                                ],
+                                "signal": "CLIENT_SIGNAL"
+                              }
+                            }
+                          },
+                          "subscribeState": {
+                            "key": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgMygB",
+                            "subscribed": true
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ],
+              "justifyContent": "FLEXIBLE_ACTIONS_JUSTIFY_CONTENT_START",
+              "minimumRowHeight": 44,
+              "rendererContext": {
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "clientVeSpec": {
+                      "uiType": 184974,
+                      "veCounter": 671381192
+                    },
+                    "trackingParams": "CBkQot8KIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "attribution": {
+            "attributionViewModel": {
+              "rendererContext": {
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CBsQjaULIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              },
+              "suffix": {
+                "commandRuns": [
+                  {
+                    "length": 15,
+                    "loggingDirectives": {
+                      "trackingParams": "CBwQmIkLGAAiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                      "visibility": {
+                        "types": "12"
+                      }
+                    },
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CBwQmIkLGAAiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+                        "showEngagementPanelEndpoint": {
+                          "engagementPanel": {
+                            "engagementPanelSectionListRenderer": {
+                              "content": {
+                                "sectionListRenderer": {
+                                  "contents": [
+                                    {
+                                      "itemSectionRenderer": {
+                                        "contents": [
+                                          {
+                                            "continuationItemRenderer": {
+                                              "continuationEndpoint": {
+                                                "clickTrackingParams": "CB8Quy8YACITCO3Yp6KmgJgDFdE78QUdvKE96MoBBInfG9U=",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "apiUrl": "/youtubei/v1/browse",
+                                                    "sendPost": true
+                                                  }
+                                                },
+                                                "continuationCommand": {
+                                                  "request": "CONTINUATION_REQUEST_TYPE_BROWSE",
+                                                  "token": "4qmFsgJgEhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcaRDhnWXJHaW1hQVNZS0pEWmtNV0kyWVRBM0xUQXdNREF0TWpGaVl5MWhZVGcxTFRFMFl6RTBaV1kzTUdWbE9BJTNEJTNE"
+                                                }
+                                              },
+                                              "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN"
+                                            }
+                                          }
+                                        ],
+                                        "sectionIdentifier": "6d1b6a07-0000-21bc-aa85-14c14ef70ee8",
+                                        "targetId": "6d1b6a07-0000-21bc-aa85-14c14ef70ee8",
+                                        "trackingParams": "CB8Quy8YACITCO3Yp6KmgJgDFdE78QUdvKE96A=="
+                                      }
+                                    }
+                                  ],
+                                  "scrollPaneStyle": {
+                                    "scrollable": true
+                                  },
+                                  "trackingParams": "CB4Qui8iEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                }
+                              },
+                              "header": {
+                                "engagementPanelTitleHeaderRenderer": {
+                                  "title": {
+                                    "simpleText": "SQUEEZIE"
+                                  },
+                                  "trackingParams": "CB0Q040EIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                                  "visibilityButton": {
+                                    "buttonRenderer": {
+                                      "accessibility": {
+                                        "label": "Fermer"
+                                      },
+                                      "accessibilityData": {
+                                        "accessibilityData": {
+                                          "label": "Fermer"
+                                        }
+                                      },
+                                      "command": {
+                                        "changeEngagementPanelVisibilityAction": {
+                                          "targetId": "6d1b6a06-0000-21bc-aa85-14c14ef70ee8",
+                                          "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                                        },
+                                        "clickTrackingParams": "CCAQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV"
+                                      },
+                                      "icon": {
+                                        "iconType": "CLOSE"
+                                      },
+                                      "isDisabled": false,
+                                      "size": "SIZE_DEFAULT",
+                                      "style": "STYLE_DEFAULT",
+                                      "trackingParams": "CCAQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                    }
+                                  }
+                                }
+                              },
+                              "identifier": {
+                                "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                                "tag": "6d1b6a06-0000-21bc-aa85-14c14ef70ee8"
+                              },
+                              "targetId": "6d1b6a06-0000-21bc-aa85-14c14ef70ee8"
+                            }
+                          },
+                          "engagementPanelPresentationConfigs": {
+                            "engagementPanelPopupPresentationConfig": {
+                              "popupType": "PANEL_POPUP_TYPE_DIALOG"
+                            }
+                          },
+                          "identifier": {
+                            "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                            "tag": "6d1b6a06-0000-21bc-aa85-14c14ef70ee8"
+                          }
+                        }
+                      }
+                    },
+                    "startIndex": 0
+                  }
+                ],
+                "content": "et 1 autre lien",
+                "styleRuns": [
+                  {
+                    "fontName": "",
+                    "fontSize": 0,
+                    "weightLabel": "FONT_WEIGHT_MEDIUM"
+                  }
+                ]
+              },
+              "text": {
+                "attachmentRuns": [
+                  {
+                    "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                    "element": {
+                      "properties": {
+                        "layoutProperties": {
+                          "height": {
+                            "unit": "DIMENSION_UNIT_POINT",
+                            "value": 14
+                          },
+                          "width": {
+                            "unit": "DIMENSION_UNIT_POINT",
+                            "value": 14
+                          }
+                        }
+                      },
+                      "type": {
+                        "imageType": {
+                          "image": {
+                            "sources": [
+                              {
+                                "customImageSource": {
+                                  "youtubeIconSource": {
+                                    "clientResource": {
+                                      "icon": "YTICON_OUTLINE_LINK_S24"
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "length": 0,
+                    "startIndex": 0
+                  }
+                ],
+                "commandRuns": [
+                  {
+                    "length": 17,
+                    "loggingDirectives": {
+                      "trackingParams": "CCEQmokLGAIiEwjt2KeipoCYAxXRO_EFHbyhPeg=",
+                      "visibility": {
+                        "types": "12"
+                      }
+                    },
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CCEQmokLGAIiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "rootVe": 83769,
+                            "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUlxb01IYmI2Mk9TNlhoZjdhVl9WSHRTbm5nNXxBQnJ0NjlsZlNMaTNobTZnekRMZnRGbWRQeUdOdTZmUXJCVkFJbVl0TE1LeWZxbktiUW41ZHVQOVhyM3lMS0JDWEk0M2M0UHFtaVlVSzBTY1YxcHY3YUQ2S3A5Nm1EOWJPbGNi&q=https%3A%2F%2Fwww.ciaokombucha.com",
+                            "webPageType": "WEB_PAGE_TYPE_UNKNOWN"
+                          }
+                        },
+                        "urlEndpoint": {
+                          "target": "TARGET_NEW_WINDOW",
+                          "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUlxb01IYmI2Mk9TNlhoZjdhVl9WSHRTbm5nNXxBQnJ0NjlsZlNMaTNobTZnekRMZnRGbWRQeUdOdTZmUXJCVkFJbVl0TE1LeWZxbktiUW41ZHVQOVhyM3lMS0JDWEk0M2M0UHFtaVlVSzBTY1YxcHY3YUQ2S3A5Nm1EOWJPbGNi&q=https%3A%2F%2Fwww.ciaokombucha.com"
+                        }
+                      }
+                    },
+                    "startIndex": 0
+                  }
+                ],
+                "content": " ciaokombucha.com",
+                "styleRuns": [
+                  {
+                    "styleRunExtensions": {
+                      "styleRunColorMapExtension": {
+                        "colorMap": [
+                          {
+                            "key": "USER_INTERFACE_THEME_LIGHT",
+                            "value": 4278607828
+                          },
+                          {
+                            "key": "USER_INTERFACE_THEME_DARK",
+                            "value": 4282296063
+                          }
+                        ]
+                      }
+                    },
+                    "weightLabel": "FONT_WEIGHT_NORMAL"
+                  }
+                ]
+              }
+            }
+          },
+          "banner": {
+            "imageBannerViewModel": {
+              "image": {
+                "sources": [
+                  {
+                    "height": 175,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 1060
+                  },
+                  {
+                    "height": 188,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 1138
+                  },
+                  {
+                    "height": 283,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 1707
+                  },
+                  {
+                    "height": 351,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 2120
+                  },
+                  {
+                    "height": 377,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 2276
+                  },
+                  {
+                    "height": 424,
+                    "url": "https://yt3.googleusercontent.com/ViTDW81REb4p9Z-WTiDmfHN9BP1jeKtH_hpWdIC1ig-F7hfSaYeYoyjipE8eEfQSWENBtCZ9wg=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+                    "width": 2560
+                  }
+                ]
+              },
+              "rendererContext": {
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CBoQnfILIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              },
+              "style": "IMAGE_BANNER_STYLE_INSET"
+            }
+          },
+          "description": {
+            "descriptionPreviewViewModel": {
+              "alwaysShowTruncationText": true,
+              "description": {
+                "content": "clique sur une vidéo nan?? "
+              },
+              "maxLines": 2,
+              "rendererContext": {
+                "accessibilityContext": {
+                  "label": "Description : clique sur une vidéo nan??… Afficher plus"
+                },
+                "commandContext": {
+                  "onTap": {
+                    "innertubeCommand": {
+                      "clickTrackingParams": "CCIQr_4KIhMI7dinoqaAmAMV0TvxBR28oT3oygEEid8b1Q==",
+                      "showEngagementPanelEndpoint": {
+                        "engagementPanel": {
+                          "engagementPanelSectionListRenderer": {
+                            "content": {
+                              "sectionListRenderer": {
+                                "contents": [
+                                  {
+                                    "itemSectionRenderer": {
+                                      "contents": [
+                                        {
+                                          "continuationItemRenderer": {
+                                            "continuationEndpoint": {
+                                              "clickTrackingParams": "CCUQuy8YACITCO3Yp6KmgJgDFdE78QUdvKE96MoBBInfG9U=",
+                                              "commandMetadata": {
+                                                "webCommandMetadata": {
+                                                  "apiUrl": "/youtubei/v1/browse",
+                                                  "sendPost": true
+                                                }
+                                              },
+                                              "continuationCommand": {
+                                                "request": "CONTINUATION_REQUEST_TYPE_BROWSE",
+                                                "token": "4qmFsgJgEhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcaRDhnWXJHaW1hQVNZS0pEWmtNV0kyWVRBMUxUQXdNREF0TWpGaVl5MWhZVGcxTFRFMFl6RTBaV1kzTUdWbE9BJTNEJTNE"
+                                              }
+                                            },
+                                            "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN"
+                                          }
+                                        }
+                                      ],
+                                      "sectionIdentifier": "6d1b6a05-0000-21bc-aa85-14c14ef70ee8",
+                                      "targetId": "6d1b6a05-0000-21bc-aa85-14c14ef70ee8",
+                                      "trackingParams": "CCUQuy8YACITCO3Yp6KmgJgDFdE78QUdvKE96A=="
+                                    }
+                                  }
+                                ],
+                                "scrollPaneStyle": {
+                                  "scrollable": true
+                                },
+                                "trackingParams": "CCQQui8iEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                              }
+                            },
+                            "header": {
+                              "engagementPanelTitleHeaderRenderer": {
+                                "title": {
+                                  "simpleText": "SQUEEZIE"
+                                },
+                                "trackingParams": "CCMQ040EIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                                "visibilityButton": {
+                                  "buttonRenderer": {
+                                    "accessibility": {
+                                      "label": "Fermer"
+                                    },
+                                    "accessibilityData": {
+                                      "accessibilityData": {
+                                        "label": "Fermer"
+                                      }
+                                    },
+                                    "command": {
+                                      "changeEngagementPanelVisibilityAction": {
+                                        "targetId": "6d1b6a04-0000-21bc-aa85-14c14ef70ee8",
+                                        "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                                      },
+                                      "clickTrackingParams": "CCYQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPejKAQSJ3xvV"
+                                    },
+                                    "icon": {
+                                      "iconType": "CLOSE"
+                                    },
+                                    "isDisabled": false,
+                                    "size": "SIZE_DEFAULT",
+                                    "style": "STYLE_DEFAULT",
+                                    "trackingParams": "CCYQ8FsiEwjt2KeipoCYAxXRO_EFHbyhPeg="
+                                  }
+                                }
+                              }
+                            },
+                            "identifier": {
+                              "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                              "tag": "6d1b6a04-0000-21bc-aa85-14c14ef70ee8"
+                            },
+                            "targetId": "6d1b6a04-0000-21bc-aa85-14c14ef70ee8"
+                          }
+                        },
+                        "engagementPanelPresentationConfigs": {
+                          "engagementPanelPopupPresentationConfig": {
+                            "popupType": "PANEL_POPUP_TYPE_DIALOG"
+                          }
+                        },
+                        "identifier": {
+                          "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                          "tag": "6d1b6a04-0000-21bc-aa85-14c14ef70ee8"
+                        }
+                      }
+                    }
+                  }
+                },
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CCIQr_4KIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              },
+              "truncationText": {
+                "content": "…plus",
+                "styleRuns": [
+                  {
+                    "length": 5,
+                    "startIndex": 0,
+                    "weight": 500
+                  }
+                ]
+              }
+            }
+          },
+          "image": {
+            "decoratedAvatarViewModel": {
+              "avatar": {
+                "avatarViewModel": {
+                  "avatarImageSize": "AVATAR_SIZE_XL",
+                  "image": {
+                    "processor": {
+                      "borderImageProcessor": {
+                        "circular": true
+                      }
+                    },
+                    "sources": [
+                      {
+                        "height": 72,
+                        "url": "https://yt3.googleusercontent.com/ytc/AIdro_mPZvx-xk6pbAYdC7G8jUZzgCNDDTg1ZfF0_Lwd8UpJT4M=s72-c-k-c0x00ffffff-no-rj",
+                        "width": 72
+                      },
+                      {
+                        "height": 120,
+                        "url": "https://yt3.googleusercontent.com/ytc/AIdro_mPZvx-xk6pbAYdC7G8jUZzgCNDDTg1ZfF0_Lwd8UpJT4M=s120-c-k-c0x00ffffff-no-rj",
+                        "width": 120
+                      },
+                      {
+                        "height": 160,
+                        "url": "https://yt3.googleusercontent.com/ytc/AIdro_mPZvx-xk6pbAYdC7G8jUZzgCNDDTg1ZfF0_Lwd8UpJT4M=s160-c-k-c0x00ffffff-no-rj",
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "loggingDirectives": {
+                    "trackingParams": "CDMQ6OENIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "metadata": {
+            "contentMetadataViewModel": {
+              "delimiter": "•",
+              "metadataRows": [
+                {
+                  "metadataParts": [
+                    {
+                      "enableTruncation": true,
+                      "text": {
+                        "content": "@Squeezie",
+                        "styleRuns": [
+                          {
+                            "styleRunExtensions": {
+                              "styleRunColorMapExtension": {
+                                "colorMap": [
+                                  {
+                                    "key": "USER_INTERFACE_THEME_DARK",
+                                    "value": 4294967295
+                                  },
+                                  {
+                                    "key": "USER_INTERFACE_THEME_LIGHT",
+                                    "value": 4279440147
+                                  }
+                                ]
+                              }
+                            },
+                            "weightLabel": "FONT_WEIGHT_MEDIUM"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "metadataParts": [
+                    {
+                      "accessibilityLabel": "20,2 millions d’abonnés",
+                      "text": {
+                        "content": "20,2 M d’abonnés"
+                      }
+                    },
+                    {
+                      "text": {
+                        "content": "1,8 k vidéos",
+                        "styleRuns": [
+                          {
+                            "length": 12,
+                            "startIndex": 0
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "rendererContext": {
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CDIQ9eQKIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "rendererContext": {
+            "loggingContext": {
+              "loggingDirectives": {
+                "trackingParams": "CBkQot8KIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                "visibility": {
+                  "types": "12"
+                }
+              }
+            }
+          },
+          "title": {
+            "dynamicTextViewModel": {
+              "maxLines": 2,
+              "rendererContext": {
+                "accessibilityContext": {
+                  "label": "SQUEEZIE, validé"
+                },
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CDQQj-QKIhMI7dinoqaAmAMV0TvxBR28oT3o",
+                    "visibility": {
+                      "types": "12"
+                    }
+                  }
+                }
+              },
+              "text": {
+                "attachmentRuns": [
+                  {
+                    "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                    "element": {
+                      "properties": {
+                        "layoutProperties": {
+                          "height": {
+                            "unit": "DIMENSION_UNIT_POINT",
+                            "value": 24
+                          },
+                          "margin": {
+                            "left": {
+                              "unit": "DIMENSION_UNIT_POINT",
+                              "value": 8
+                            }
+                          },
+                          "width": {
+                            "unit": "DIMENSION_UNIT_POINT",
+                            "value": 24
+                          }
+                        }
+                      },
+                      "type": {
+                        "imageType": {
+                          "image": {
+                            "sources": [
+                              {
+                                "clientResource": {
+                                  "imageName": "CHECK_CIRCLE_FILLED"
+                                },
+                                "height": 24,
+                                "width": 24
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "length": 0,
+                    "startIndex": 8
+                  }
+                ],
+                "content": "SQUEEZIE",
+                "styleRuns": [
+                  {
+                    "startIndex": 8,
+                    "styleRunExtensions": {
+                      "styleRunColorMapExtension": {
+                        "colorMap": [
+                          {
+                            "key": "USER_INTERFACE_THEME_DARK",
+                            "value": 4294967295
+                          },
+                          {
+                            "key": "USER_INTERFACE_THEME_LIGHT",
+                            "value": 4279440147
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "pageTitle": "SQUEEZIE"
+    }
+  },
+  "metadata": {
+    "channelMetadataRenderer": {
+      "androidAppindexingLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCWeg2Pkate69NFdBeuRFTAw",
+      "androidDeepLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCWeg2Pkate69NFdBeuRFTAw",
+      "availableCountryCodes": [
+        "MO",
+        "GY",
+        "PH",
+        "SX",
+        "SS",
+        "CU",
+        "TH",
+        "SB",
+        "NE",
+        "KZ",
+        "UM",
+        "AU",
+        "BQ",
+        "TF",
+        "AO",
+        "SA",
+        "LA",
+        "FJ",
+        "UY",
+        "SE",
+        "RO",
+        "TD",
+        "CX",
+        "IL",
+        "LT",
+        "MR",
+        "GH",
+        "KP",
+        "LK",
+        "MM",
+        "EC",
+        "BE",
+        "SV",
+        "KY",
+        "BW",
+        "BO",
+        "SN",
+        "DK",
+        "YT",
+        "GB",
+        "TM",
+        "CY",
+        "LY",
+        "VN",
+        "MT",
+        "IT",
+        "TZ",
+        "KN",
+        "SH",
+        "PK",
+        "PY",
+        "GQ",
+        "UA",
+        "FR",
+        "JE",
+        "BG",
+        "MH",
+        "TR",
+        "CG",
+        "MV",
+        "SC",
+        "VC",
+        "BS",
+        "LB",
+        "MS",
+        "ZW",
+        "GU",
+        "CM",
+        "CZ",
+        "CI",
+        "MG",
+        "AZ",
+        "SJ",
+        "CV",
+        "US",
+        "DM",
+        "SI",
+        "GR",
+        "IO",
+        "MD",
+        "PF",
+        "MY",
+        "QA",
+        "MK",
+        "GN",
+        "HK",
+        "AM",
+        "ER",
+        "BM",
+        "DE",
+        "FO",
+        "IS",
+        "AX",
+        "NU",
+        "ML",
+        "BI",
+        "MN",
+        "GG",
+        "MQ",
+        "RS",
+        "AW",
+        "SO",
+        "AG",
+        "NR",
+        "CC",
+        "MF",
+        "NI",
+        "BH",
+        "KI",
+        "PE",
+        "AI",
+        "LR",
+        "PL",
+        "PW",
+        "GP",
+        "LU",
+        "TT",
+        "TN",
+        "SR",
+        "GE",
+        "UZ",
+        "VI",
+        "UG",
+        "MX",
+        "BL",
+        "HT",
+        "ET",
+        "GF",
+        "NA",
+        "GD",
+        "VA",
+        "NF",
+        "OM",
+        "CW",
+        "GI",
+        "PT",
+        "TG",
+        "DO",
+        "CD",
+        "EE",
+        "KR",
+        "NL",
+        "SD",
+        "MZ",
+        "SY",
+        "BY",
+        "HR",
+        "SG",
+        "KH",
+        "MU",
+        "BF",
+        "NP",
+        "LI",
+        "VE",
+        "CO",
+        "DZ",
+        "FI",
+        "MC",
+        "WS",
+        "NO",
+        "YE",
+        "DJ",
+        "IM",
+        "TW",
+        "AT",
+        "GM",
+        "TK",
+        "TO",
+        "EG",
+        "NZ",
+        "BV",
+        "TV",
+        "BR",
+        "TC",
+        "AQ",
+        "JP",
+        "IR",
+        "TJ",
+        "CK",
+        "MA",
+        "GT",
+        "AE",
+        "LS",
+        "GL",
+        "ID",
+        "IQ",
+        "NG",
+        "PS",
+        "BT",
+        "BZ",
+        "ZM",
+        "BD",
+        "HM",
+        "ST",
+        "BB",
+        "SZ",
+        "SL",
+        "PG",
+        "PN",
+        "CN",
+        "KW",
+        "BJ",
+        "RW",
+        "SK",
+        "FK",
+        "CF",
+        "AR",
+        "CL",
+        "HN",
+        "IE",
+        "CR",
+        "BN",
+        "IN",
+        "WF",
+        "ZA",
+        "ME",
+        "TL",
+        "ES",
+        "PR",
+        "AD",
+        "AF",
+        "GS",
+        "MW",
+        "EH",
+        "HU",
+        "JM",
+        "GA",
+        "KM",
+        "BA",
+        "PA",
+        "LV",
+        "AS",
+        "FM",
+        "KG",
+        "LC",
+        "NC",
+        "AL",
+        "VU",
+        "CH",
+        "KE",
+        "RU",
+        "SM",
+        "CA",
+        "GW",
+        "JO",
+        "VG",
+        "MP",
+        "PM",
+        "RE"
+      ],
+      "avatar": {
+        "thumbnails": [
+          {
+            "height": 900,
+            "url": "https://yt3.googleusercontent.com/ytc/AIdro_mPZvx-xk6pbAYdC7G8jUZzgCNDDTg1ZfF0_Lwd8UpJT4M=s900-c-k-c0x00ffffff-no-rj",
+            "width": 900
+          }
+        ]
+      },
+      "channelConversionUrl": "https://www.youtube.com/measurement/follow_on/962985656/?backend=innertube&cname=1&cver=2_20261029_11_00&data=backend%3Dinnertube%3Bcname%3D1%3Bcver%3D2_20261029_11_00%3Bptype%3Dcview%3Btype%3Dcview%3Butuid%3DWeg2Pkate69NFdBeuRFTAw&foc_id=Weg2Pkate69NFdBeuRFTAw&label=followon_cvisit&ptype=cview&utuid=Weg2Pkate69NFdBeuRFTAw",
+      "channelUrl": "https://www.youtube.com/channel/UCWeg2Pkate69NFdBeuRFTAw",
+      "description": "clique sur une vidéo nan??",
+      "externalId": "UCWeg2Pkate69NFdBeuRFTAw",
+      "iosAppindexingLink": "ios-app://544007664/vnd.youtube/www.youtube.com/channel/UCWeg2Pkate69NFdBeuRFTAw",
+      "isFamilySafe": true,
+      "keywords": "Squeezie aMOODIEsqueezie SqueeZie amoodiesqueezie skouizie skoueezie sqoueezie aMODIEsqueezie aMOODIEsquezie Crazy Commentaries le fou squeezie squizie squeeze",
+      "ownerUrls": [
+        "http://www.youtube.com/@Squeezie"
+      ],
+      "rssUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCWeg2Pkate69NFdBeuRFTAw",
+      "title": "SQUEEZIE",
+      "vanityChannelUrl": "http://www.youtube.com/@Squeezie"
+    }
+  },
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgMygB",
+              "subscribed": true
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgjAEoAQ%3D%3D",
+          "payload": {
+            "subscriptionNotificationStateEntity": {
+              "key": "EhhVQ1dlZzJQa2F0ZTY5TkZkQmV1UkZUQXcgjAEoAQ%3D%3D",
+              "state": "SUBSCRIPTION_NOTIFICATION_STATE_OCCASIONAL"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        }
+      ]
+    }
+  },
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ]
+      }
+    ]
+  }
+}

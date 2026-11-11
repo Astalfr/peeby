@@ -596,7 +596,14 @@ struct Slide {
 
 impl ShortsView {
   pub fn new(client: Client, nav: Nav, cx: &mut Context<Self>) -> Self {
-    let mut view = Self {
+    let mut view = Self::new_empty(client, nav);
+    view.load(cx);
+    view
+  }
+
+  /// No Shorts yet.
+  fn new_empty(client: Client, nav: Nav) -> Self {
+    Self {
       client,
       nav,
       ids: Vec::new(),
@@ -611,7 +618,21 @@ impl ShortsView {
       slide: None,
       slides: 0,
       _subscription: None,
-    };
+    }
+  }
+
+  /// The Shorts from `id` (a card's), then the ones of its `sequence` (a channel's Shorts in
+  /// order, from the card's `reelWatchEndpoint`); without one, `id` alone.
+  pub fn starting_at(
+    client: Client,
+    nav: Nav,
+    id: String,
+    sequence: Option<String>,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    let mut view = Self::new_empty(client, nav);
+    view.ids = vec![id];
+    view.continuation = sequence;
     view.load(cx);
     view
   }

@@ -424,6 +424,85 @@ fn watch_page_collaboration() {
 }
 
 #[test]
+fn channel_header() {
+  // Squeezie's "Videos" tab, anonymous, captured 2026-11-11, trimmed to two videos and the tabs'
+  // titles and endpoints.
+  use innertube::ChannelTabKind::*;
+  let feed = parse_feed(&fixture("channel_header.json"));
+  let header = feed.header.expect("a channel's header");
+  assert_eq!(header.name, "SQUEEZIE");
+  assert_eq!(header.handle.as_deref(), Some("@Squeezie"));
+  assert_eq!(header.subscribers.as_deref(), Some("20,2\u{a0}M d’abonnés"));
+  assert_eq!(header.videos.as_deref(), Some("1,8\u{a0}k\u{a0}vidéos"));
+  assert!(!header.avatar.is_empty());
+  assert!(!header.banner.is_empty());
+  assert!(header.description.starts_with("clique sur une vidéo"));
+  assert!(header.about.starts_with("clique sur une vidéo"));
+  let tabs: Vec<_> = header
+    .tabs
+    .iter()
+    .map(|t| (t.kind, t.title.as_str()))
+    .collect();
+  assert_eq!(
+    tabs,
+    [
+      (Videos, "Vidéos"),
+      (Shorts, "Shorts"),
+      (Streams, "En direct"),
+      (Playlists, "Playlists")
+    ]
+  );
+  assert_eq!(header.tabs[1].params, "EgZzaG9ydHPyBgUKA5oBAA==");
+  assert_eq!(feed.items.len(), 2);
+  // Another page has no header.
+  assert!(
+    parse_feed(&fixture("home_signed_in_mix.json"))
+      .header
+      .is_none()
+  );
+}
+
+#[test]
+fn channel_header_signed_in() {
+  // Squeezie's "Videos" tab signed in (subscribed, bell on "Personnalisées"), captured
+  // 2026-11-11, trimmed to the header, the tabs and the subscription's entities, without
+  // account data.
+  use innertube::NotificationLevel;
+  let header = parse_feed(&fixture("channel_header_signed_in.json"))
+    .header
+    .expect("a channel's header");
+  let subscription = header.subscription.expect("its subscribe button");
+  assert!(subscription.subscribed);
+  assert_eq!(subscription.subscribe_params.as_deref(), Some("EgIIAhgA"));
+  assert_eq!(subscription.unsubscribe_params.as_deref(), Some("CgIIAhgA"));
+  let bell = header.notifications.expect("its bell");
+  assert_eq!(bell.level, NotificationLevel::Personalized);
+  assert_eq!(bell.options.len(), 3);
+  // Signed out: no subscribe button to send from.
+  let signed_out = parse_feed(&fixture("channel_header.json")).header.unwrap();
+  assert!(signed_out.subscription.is_none());
+  assert!(signed_out.notifications.is_none());
+}
+
+#[test]
+fn channel_shorts_and_playlists() {
+  // Squeezie's "Shorts" and "Playlists" tabs, anonymous, captured 2026-11-11, trimmed to two
+  // cards each.
+  let shorts = parse_feed(&fixture("channel_shorts.json"));
+  assert_eq!(shorts.shorts.len(), 2);
+  let first = &shorts.shorts[0];
+  assert_eq!(first.id, "Xvl0tzKzeLM");
+  assert!(first.title.starts_with("THEODORT"));
+  assert_eq!(first.views.as_deref(), Some("227\u{a0}k\u{a0}vues"));
+  assert!(!first.thumbnails.is_empty());
+  assert!(first.sequence.is_some());
+  assert!(shorts.continuation.is_some());
+  let playlists = parse_feed(&fixture("channel_playlists.json"));
+  assert_eq!(playlists.playlists.len(), 2);
+  assert!(playlists.items.is_empty());
+}
+
+#[test]
 fn sponsor_segments() {
   // SponsorBlock's answer for the hash prefix `5f6b` (dQw4w9WgXcQ's), anonymous, captured
   // 2026-11-11, trimmed to three videos (one with only a `mute` segment).

@@ -4,7 +4,7 @@
 //! opens their page.
 
 use gpui::{AnyElement, App, Window};
-use innertube::{PlaylistSummary, VideoItem};
+use innertube::{PlaylistSummary, ShortItem, VideoItem};
 use ui::card::{Hover, MediaCard, RowAction};
 
 use crate::{Nav, Route};
@@ -35,10 +35,18 @@ fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &
 }
 
 /// The card of `video` under `id` (which tells apart the same video in two lists): title,
-/// thumbnail, duration or live badge, members-only badge, channel then views · date, and the stream prefetch on hover.
-fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
+/// thumbnail, duration or live badge, members-only badge, channel (a link to its page) then
+/// views · date, and the stream prefetch on hover. Without `nav`, the channel is plain text.
+fn card(id: &str, hover: Hover, video: &VideoItem, nav: Option<&Nav>) -> MediaCard {
   let video_id = video.id.clone();
-  MediaCard::new(
+  let channel = nav.zip(
+    video
+      .channel
+      .clone()
+      .zip(video.channel_id.clone())
+      .map(|(name, id)| Route::Channel { id, name }),
+  );
+  let card = MediaCard::new(
     id.to_owned(),
     hover,
     video.title.clone(),
@@ -57,7 +65,20 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
   .badge_left_icon(video.members_only.then_some(ui::assets::Icon::Star))
   .live(video.live)
   .progress(video.progress.map(|p| f32::from(p.percent) / 100.0))
-  .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, hovered, cx))
+  .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, hovered, cx));
+  match channel {
+    Some((nav, route)) => {
+      let open = {
+        let (nav, route) = (nav.clone(), route.clone());
+        move |window: &mut Window, cx: &mut App| nav.open(route.clone(), window, cx)
+      };
+      let nav = nav.clone();
+      card
+        .on_line_click(open)
+        .on_line_middle_click(move |_, cx| nav.open_in_new_tab(route.clone(), None, cx))
+    }
+    None => card,
+  }
 }
 
 /// Grid card, `width` wide, with the channel avatar and the save buttons; its menu has "Not
@@ -73,7 +94,7 @@ pub fn video_card(
   let id = format!("card-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
-  card(&id, hover, video)
+  card(&id, hover, video, Some(nav))
     .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t, not_interested))
@@ -87,7 +108,7 @@ pub fn compact_card(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut 
   let id = format!("related-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
-  card(&id, hover, video)
+  card(&id, hover, video, Some(nav))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .on_click(open_video(video, nav))
     .on_middle_click(open_video_in_new_tab(video, nav))
@@ -107,7 +128,7 @@ pub fn video_row(
   let id = format!("row-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
-  card(&id, hover, video)
+  card(&id, hover, video, Some(nav))
     .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
     .trailing(save::menu_button(&id, &video.id, t, not_interested))
@@ -206,7 +227,7 @@ pub fn playlist_row(
   cx: &mut App,
 ) -> AnyElement {
   let hover = Hover::new(id, window, cx);
-  card(id, hover, video).on_click(on_click).numbered(
+  card(id, hover, video, None).on_click(on_click).numbered(
     number,
     thumb_width,
     current,
@@ -214,4 +235,41 @@ pub fn playlist_row(
     window,
     cx,
   )
+}
+
+/// The vertical card of a Short, `width` wide (9:16), its title and views under it: a click
+/// opens the Shorts page on it, then the Shorts after it in its sequence (a middle click, in a
+/// new tab).
+pub fn short_card(
+  short: &ShortItem,
+  width: f32,
+  nav: &Nav,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
+  let id = format!("short-{}", short.id);
+  let hover = Hover::new(&id, window, cx);
+  let route = Route::Short {
+    id: short.id.clone(),
+    sequence: short.sequence.clone(),
+  };
+  let open = {
+    let (nav, route) = (nav.clone(), route.clone());
+    move |window: &mut Window, cx: &mut App| nav.open(route.clone(), window, cx)
+  };
+  let open_in_new_tab = {
+    let nav = nav.clone();
+    let title = gpui::SharedString::from(short.title.clone());
+    move |_: &mut Window, cx: &mut App| nav.open_in_new_tab(route.clone(), Some(title.clone()), cx)
+  };
+  MediaCard::new(
+    id.clone(),
+    hover,
+    short.title.clone(),
+    convert::picture(&short.thumbnails),
+  )
+  .lines([short.views.clone().unwrap_or_default()])
+  .on_click(open)
+  .on_middle_click(open_in_new_tab)
+  .poster(width, 9. / 16., window, cx)
 }

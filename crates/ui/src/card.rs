@@ -113,6 +113,8 @@ pub struct MediaCard {
   stacked: bool,
   title_click: Option<Rc<Handler>>,
   title_middle_click: Option<Rc<Handler>>,
+  line_click: Option<Rc<Handler>>,
+  line_middle_click: Option<Rc<Handler>>,
   overlays: Vec<AnyElement>,
   trailing: Option<AnyElement>,
   on_click: Option<Rc<Handler>>,
@@ -147,6 +149,8 @@ impl MediaCard {
       stacked: false,
       title_click: None,
       title_middle_click: None,
+      line_click: None,
+      line_middle_click: None,
       overlays: Vec::new(),
       trailing: None,
       on_click: None,
@@ -233,6 +237,36 @@ impl MediaCard {
   pub fn play(mut self, play: bool) -> Self {
     self.play = play;
     self
+  }
+
+  /// Makes the first line a link of its own (a video's channel), highlighted while hovered.
+  pub fn on_line_click(mut self, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+    self.line_click = Some(Rc::new(on_click));
+    self
+  }
+
+  /// What a middle click on the first line's link does (opens it in a new tab).
+  pub fn on_line_middle_click(
+    mut self,
+    on_click: impl Fn(&mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.line_middle_click = Some(Rc::new(on_click));
+    self
+  }
+
+  /// The lines, the first a link when the card has one ([`Self::on_line_click`]).
+  fn line_elements(&mut self) -> Vec<AnyElement> {
+    let (click, middle) = (self.line_click.take(), self.line_middle_click.take());
+    let id = SharedString::from(format!("{}-line", self.id));
+    self
+      .lines
+      .iter()
+      .enumerate()
+      .map(|(i, line)| match (&click, i) {
+        (Some(click), 0) => link(id.clone(), line.clone(), click.clone(), middle.clone()),
+        _ => div().truncate().child(line.clone()).into_any_element(),
+      })
+      .collect()
   }
 
   /// Makes the title (a poster's) a link of its own, e.g. an episode's series name.
@@ -413,7 +447,11 @@ impl MediaCard {
           .border_2()
           .border_color(theme::accent().opacity(t)),
       );
-    let lines = muted_lines(&self.lines).text_sm().line_height(px(18.));
+    let lines = v_flex()
+      .text_color(theme::muted())
+      .children(self.line_elements())
+      .text_sm()
+      .line_height(px(18.));
     let trailing = self.trailing.take();
     // The hovered box stays in place and only its content rises: a box that moved itself could
     // slip out from under the pointer, lose the hover, fall back and loop.
@@ -544,7 +582,11 @@ impl MediaCard {
     let t = self.hover.t;
     let title_color = self.title_color(false);
     let thumb = self.thumbnail(COMPACT_WIDTH, theme::RADIUS, Some(36.), window, cx);
-    let lines = muted_lines(&self.lines).text_xs().line_height(px(16.));
+    let lines = v_flex()
+      .text_color(theme::muted())
+      .children(self.line_elements())
+      .text_xs()
+      .line_height(px(16.));
     self
       .frame()
       .w_full()
@@ -581,13 +623,13 @@ impl MediaCard {
     let title_color = self.title_color(false);
     let thumb = self.thumbnail(ROW_WIDTH, theme::RADIUS, Some(44.), window, cx);
     let avatar = self.avatar.take().map(|a| avatar(&a, 20., window, cx));
-    let mut lines = self.lines.clone().into_iter();
+    let mut lines = self.line_elements().into_iter();
     let first = lines.next().map(|line| {
       h_flex()
         .gap_2()
         .items_center()
         .children(avatar)
-        .child(div().min_w_0().truncate().child(line))
+        .child(div().min_w_0().flex().child(line))
     });
     let trailing = self.trailing.take();
     self
@@ -620,7 +662,7 @@ impl MediaCard {
                   .child(self.title.clone()),
               )
               .children(first)
-              .children(lines.map(|line| div().truncate().child(line))),
+              .children(lines),
           )
           .children(trailing),
       )
@@ -726,10 +768,40 @@ impl MediaCard {
 }
 
 /// The lines under a title, one per line, truncated, in muted text.
-fn muted_lines(lines: &[SharedString]) -> gpui::Div {
-  v_flex()
-    .text_color(theme::muted())
-    .children(lines.iter().map(|l| div().truncate().child(l.clone())))
+/// A line of a card as a link of its own, only as wide as its text, highlighted while hovered;
+/// its clicks stay off the card.
+fn link(
+  id: SharedString,
+  text: SharedString,
+  on_click: Rc<Handler>,
+  on_middle_click: Option<Rc<Handler>>,
+) -> AnyElement {
+  // A flex row, so the link is only as wide as its text.
+  div()
+    .flex()
+    .min_w_0()
+    .child(
+      div()
+        .id(ElementId::Name(id))
+        .min_w_0()
+        .truncate()
+        .cursor_pointer()
+        .hover(|s| s.text_color(theme::foreground()))
+        .on_click(move |_, window, cx| {
+          cx.stop_propagation();
+          on_click(window, cx);
+        })
+        .when_some(on_middle_click, |el, on_click| {
+          el.on_aux_click(move |event, window, cx| {
+            if event.is_middle_click() {
+              cx.stop_propagation();
+              on_click(window, cx);
+            }
+          })
+        })
+        .child(text),
+    )
+    .into_any_element()
 }
 
 /// Dark badge at a picture's bottom (duration), after a `dot` of that color or an `icon` if

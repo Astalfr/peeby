@@ -21,17 +21,21 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::notification::Notification;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{IconName, Selectable, WindowExt, h_flex, v_flex};
-use innertube::{Client, Error, Feed, FeedChip, PlaylistSummary, Related, VideoItem};
+use innertube::{
+  ChannelHeader, ChannelTabKind, Client, Error, Feed, FeedChip, PlaylistSummary, Related,
+  ShortItem, VideoItem,
+};
 
-use crate::cards::{playlist_grid_card, playlist_result_row, video_card, video_row};
-use crate::convert::error_text;
+use crate::cards::{playlist_grid_card, playlist_result_row, short_card, video_card, video_row};
+use crate::convert::{self, error_text};
 use crate::save::CardAction;
-use crate::{Nav, Route};
+use crate::{Nav, Route, bell, subscribe};
 use peeby_core::settings::{FeedLayout, Settings};
 use ui::assets::Icon;
 use ui::card::{skeleton_card, skeleton_row};
 use ui::i18n::t;
 use ui::images::Images;
+use ui::picture::image_fill;
 use ui::widgets::{loading_more, notice, page_title};
 use ui::{motion, runtime, tf, theme};
 
@@ -44,6 +48,12 @@ const CARD_GAP: f32 = 16.;
 const PAGE_MARGIN: f32 = 32.;
 /// Space above the first row, for a hovered card's rise (4 px), ring and shadow.
 const TOP_ROOM: f32 = 8.;
+/// Narrowest Short card: a row holds as many as fit at this width.
+const MIN_SHORT_WIDTH: f32 = 200.;
+/// A channel's banner, width over height (YouTube's are 1060 × 175 on the desktop).
+const BANNER_ASPECT: f32 = 1060. / 175.;
+/// A channel's avatar in its header.
+const CHANNEL_AVATAR: f32 = 120.;
 /// Height of the notice in the place of a list row marked "Not interested".
 const DISMISSED_ROW_HEIGHT: f32 = 96.;
 /// Height built beyond the visible part of the list, above and below.
@@ -73,11 +83,17 @@ enum State {
   Failed(SharedString),
 }
 
-/// What the list items are: list rows (`list`) or rows of `columns` cards.
+/// What the list items are: list rows (`list`) or rows of `columns` cards (of Shorts with
+/// `shorts`), after `lead` items (a channel's header). With `placeholder`, one item holds what
+/// shows instead of the rows (the skeleton, an error, an empty page): a channel's header stays
+/// the same element, in the same place, while a tab loads.
 #[derive(Clone, Copy, PartialEq)]
 struct Shape {
   list: bool,
   columns: usize,
+  shorts: bool,
+  lead: usize,
+  placeholder: bool,
 }
 
 impl Shape {
@@ -124,6 +140,14 @@ pub struct FeedView {
   /// The videos marked "Not interested" (their menu's): each shows a notice in its place, with
   /// "Undo", until the page loads again.
   dismissed: HashSet<String>,
+  /// A channel's header, from its first page; kept while its tabs change.
+  channel: Option<ChannelHeader>,
+  /// The channel's tab shown.
+  channel_tab: ChannelTabKind,
+  /// The Shorts of a channel's "Shorts" tab.
+  shorts: Vec<ShortItem>,
+  /// The channel's whole description shows in its header.
+  about_open: bool,
   _search_subscription: Option<Subscription>,
 }
 
@@ -178,6 +202,10 @@ impl FeedView {
       search,
       generation: 0,
       dismissed: HashSet::new(),
+      channel: None,
+      channel_tab: ChannelTabKind::Videos,
+      shorts: Vec::new(),
+      about_open: false,
       _search_subscription: search_subscription,
     };
     view.load(None, cx);
@@ -189,6 +217,13 @@ impl FeedView {
     let client = self.client.clone();
     let source = self.source.clone();
     let (sort, query) = (self.sort.clone(), self.query.clone());
+    // The tab's own `params` when the header gave them.
+    let tab = self.channel_tab;
+    let params = self
+      .channel
+      .as_ref()
+      .and_then(|c| c.tabs.iter().find(|t| t.kind == tab))
+      .map_or_else(|| tab.default_params().to_owned(), |t| t.params.clone());
     let more = token.is_some();
     if !more {
       self.generation += 1;
@@ -209,7 +244,8 @@ impl FeedView {
         (None, Source::Channel { id, .. }) => match (query, sort) {
           (Some(query), _) => client.channel_search(&id, &query).await,
           (None, Some(sort)) => client.continuation(&sort).await,
-          (None, None) => client.channel_videos(&id).await,
+          (None, None) if tab == ChannelTabKind::Videos => client.channel_videos(&id).await,
+          (None, None) => client.channel_tab(&id, &params).await,
         },
       }
     });
@@ -282,15 +318,22 @@ impl FeedView {
 
   fn apply(&mut self, feed: Feed, more: bool) {
     tracing::info!(
-      "{:?}: logged_in={} · {} videos · more: {}",
+      "{:?} ({:?}): logged_in={} · {} videos · {} playlists · {} shorts · more: {}",
       self.source,
+      self.channel_tab,
       feed.logged_in,
       feed.items.len(),
+      feed.playlists.len(),
+      feed.shorts.len(),
       feed.continuation.is_some()
     );
     if !more {
       self.cards.clear();
       self.dismissed.clear();
+      self.shorts.clear();
+      if feed.header.is_some() {
+        self.channel = feed.header.clone();
+      }
       self.logged_in = feed.logged_in;
       self.message = feed.message;
       // A search's results have no chips: the sort orders stay for when it ends.
@@ -303,7 +346,13 @@ impl FeedView {
     // then flips on every frame: keep the first.
     let received = feed.items.len() + feed.playlists.len();
     let before = self.cards.len();
+    let before_shorts = self.shorts.len();
     let old_count = self.shape.map(|shape| self.item_count(shape));
+    for short in feed.shorts {
+      if !self.shorts.iter().any(|s| s.id == short.id) {
+        self.shorts.push(short);
+      }
+    }
     for card in merge(feed.items, feed.playlists) {
       if !self.cards.iter().any(|c| key(c) == key(&card)) {
         self.cards.push(card);
@@ -318,7 +367,8 @@ impl FeedView {
     match (self.shape, old_count) {
       // The row that held the last video may take more cards now, then come the new rows.
       (Some(shape), Some(old_count)) if more => {
-        let first = before / shape.per_item();
+        let shown = if shape.shorts { before_shorts } else { before };
+        let first = shape.lead + shown / shape.per_item();
         self
           .list
           .splice(first..old_count, self.item_count(shape) - first);
@@ -328,9 +378,268 @@ impl FeedView {
     }
   }
 
-  /// List items for `shape`: the rows, then the end of the list.
+  /// List items for `shape`: the header, the rows (or the placeholder), then the end of the
+  /// list.
   fn item_count(&self, shape: Shape) -> usize {
-    self.cards.len().div_ceil(shape.per_item()) + 1
+    if shape.placeholder {
+      return shape.lead + 1;
+    }
+    let count = if shape.shorts {
+      self.shorts.len()
+    } else {
+      self.cards.len()
+    };
+    shape.lead + count.div_ceil(shape.per_item()) + 1
+  }
+
+  /// Whether a channel's Shorts show (its "Shorts" tab, no search).
+  fn showing_shorts(&self) -> bool {
+    matches!(self.source, Source::Channel { .. })
+      && self.channel_tab == ChannelTabKind::Shorts
+      && self.query.is_none()
+  }
+
+  /// Whether the page has something to list.
+  fn has_items(&self) -> bool {
+    if self.showing_shorts() {
+      !self.shorts.is_empty()
+    } else {
+      !self.cards.is_empty()
+    }
+  }
+
+  /// Shows a channel's tab `kind` (a search in progress ends).
+  fn set_channel_tab(&mut self, kind: ChannelTabKind, window: &mut Window, cx: &mut Context<Self>) {
+    if kind == self.channel_tab && self.query.is_none() {
+      return;
+    }
+    self.channel_tab = kind;
+    // Each tab has its own sort orders.
+    self.chips.clear();
+    self.sort = None;
+    if self.query.take().is_some()
+      && let Some(input) = &self.search
+    {
+      input.update(cx, |input, cx| input.set_value("", window, cx));
+    }
+    self.reload(cx);
+  }
+
+  /// What shows instead of the videos: the skeleton while they load, else the error or the
+  /// empty page.
+  fn placeholder(&self, shape: Shape, cx: &mut Context<Self>) -> AnyElement {
+    match &self.state {
+      State::Loading => skeleton(shape.list, self.card_width),
+      State::Failed(e) => notice(
+        IconName::TriangleAlert,
+        t("Cannot load the page", "Impossible de charger la page"),
+        e.clone(),
+      )
+      .child(
+        h_flex().pt_2().child(
+          Button::new("retry")
+            .primary()
+            .label(t("Retry", "Réessayer"))
+            .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
+        ),
+      )
+      .into_any_element(),
+      _ => self.empty_state().into_any_element(),
+    }
+  }
+
+  /// A channel's header: its banner, its avatar, name, handle and counts, its description
+  /// (unfolded on "More"), then its tabs, with the sort orders and the search on their right.
+  fn channel_header(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let channel = self.channel.as_ref()?;
+    let width = content_width(window, cx);
+    let banner = (!channel.banner.is_empty()).then(|| {
+      div()
+        .w(px(width))
+        .h(px((width / BANNER_ASPECT).round()))
+        .child(image_fill(
+          &convert::picture(&channel.banner),
+          width,
+          BANNER_ASPECT,
+          theme::RADIUS_LG,
+          window,
+          cx,
+        ))
+    });
+    let avatar = (!channel.avatar.is_empty()).then(|| {
+      div().size(px(CHANNEL_AVATAR)).flex_none().child(image_fill(
+        &convert::picture(&channel.avatar),
+        CHANNEL_AVATAR,
+        1.,
+        px(CHANNEL_AVATAR / 2.),
+        window,
+        cx,
+      ))
+    });
+    let counts = [
+      channel.handle.clone(),
+      channel.subscribers.clone(),
+      channel.videos.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
+    // `line_clamp` limits wrapped lines, not explicit line breaks: the first line only.
+    let first_line = channel
+      .description
+      .lines()
+      .next()
+      .unwrap_or_default()
+      .to_owned();
+    let about = if self.about_open {
+      channel.about.clone()
+    } else {
+      first_line
+    };
+    let foldable = channel.about.len() > about.len() || self.about_open;
+    let tabs = channel
+      .tabs
+      .iter()
+      .map(|tab| {
+        let kind = tab.kind;
+        let selected = kind == self.channel_tab && self.query.is_none();
+        // As youtube.com's: the shown tab's title bright over a line in the accent, the
+        // others muted, brighter while hovered; no background.
+        div()
+          .id(SharedString::from(format!("channel-tab-{}", kind.path())))
+          .relative()
+          .px_3()
+          .pt_1()
+          .pb_2()
+          .cursor_pointer()
+          .font_weight(gpui::FontWeight::SEMIBOLD)
+          .text_color(if selected {
+            theme::foreground()
+          } else {
+            theme::muted()
+          })
+          .hover(|s| s.text_color(theme::foreground()))
+          .child(tab.title.clone())
+          .when(selected, |el| {
+            el.child(
+              div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom(px(-1.))
+                .h(px(2.))
+                .rounded_full()
+                .bg(theme::accent()),
+            )
+          })
+          .on_click(cx.listener(move |this, _, window, cx| this.set_channel_tab(kind, window, cx)))
+      })
+      .collect::<Vec<_>>();
+    let sorts = if self.query.is_none() && !self.chips.is_empty() {
+      Some(sort_switch(&self.chips, cx).into_any_element())
+    } else {
+      None
+    };
+    let fold = foldable.then(|| {
+      Button::new("channel-about")
+        .ghost()
+        .compact()
+        .label(if self.about_open {
+          t("Less", "Moins")
+        } else {
+          t("More", "Plus")
+        })
+        .on_click(cx.listener(|this, _, _, cx| {
+          this.about_open = !this.about_open;
+          cx.notify();
+        }))
+    });
+    let follow = match &self.source {
+      Source::Channel { id, .. } => channel.subscription.as_ref().map(|subscription| {
+        let key = format!("channel-{id}");
+        let subscribed = subscribe::is_subscribed(id, subscription, cx);
+        h_flex()
+          .flex_none()
+          .gap_1()
+          .items_center()
+          .child(subscribe::subscribe_button(
+            &key,
+            id,
+            &channel.name,
+            subscription,
+            false,
+            cx,
+          ))
+          .children(
+            channel
+              .notifications
+              .as_ref()
+              .filter(|_| subscribed)
+              .map(|bell| bell::bell_button(&key, id, bell, false, cx)),
+          )
+      }),
+      _ => None,
+    };
+    let search = self.search.as_ref().map(|input| {
+      div().w(px(280.)).child(
+        Input::new(input).cleanable(true).prefix(
+          gpui_component::Icon::new(Icon::Search)
+            .size(px(16.))
+            .text_color(theme::muted()),
+        ),
+      )
+    });
+    Some(
+      v_flex()
+        .gap_6()
+        .pb_6()
+        .children(banner)
+        .child(
+          h_flex().gap_6().items_center().children(avatar).child(
+            v_flex()
+              .min_w_0()
+              .gap_1()
+              .child(
+                div()
+                  .text_3xl()
+                  .font_weight(gpui::FontWeight::BOLD)
+                  .child(channel.name.clone()),
+              )
+              .child(div().text_sm().text_color(theme::muted()).child(counts))
+              .children(follow)
+              .when(!about.is_empty(), |el| {
+                el.child(
+                  h_flex()
+                    .gap_1()
+                    .items_start()
+                    .text_sm()
+                    .text_color(theme::muted())
+                    .child(
+                      div()
+                        .min_w_0()
+                        .when(!self.about_open, |el| el.line_clamp(1))
+                        .child(about),
+                    )
+                    .children(fold),
+                )
+              }),
+          ),
+        )
+        .child(
+          h_flex()
+            .gap_1()
+            .items_end()
+            .border_b_1()
+            .border_color(theme::border())
+            .children(tabs)
+            .child(div().flex_1())
+            .children(sorts)
+            .children(search)
+            .gap_4(),
+        )
+        .into_any_element(),
+    )
   }
 
   /// Rebuilds the list items when the layout or the number of cards per row changed, keeping
@@ -339,13 +648,16 @@ impl FeedView {
     if self.shape == Some(shape) {
       return;
     }
-    let first = self.shape.map_or(0, |old| {
-      self.list.logical_scroll_top().item_ix * old.per_item()
+    // The first video in view, if the list was scrolled past its header (a channel's): a new
+    // page, or one still showing its header, stays at its top.
+    let first = self.shape.and_then(|old| {
+      let top = self.list.logical_scroll_top().item_ix;
+      (top >= old.lead && top > 0).then(|| (top - old.lead) * old.per_item())
     });
     self.shape = Some(shape);
     self.list.reset(self.item_count(shape));
     self.list.scroll_to(ListOffset {
-      item_ix: first / shape.per_item(),
+      item_ix: first.map_or(0, |first| shape.lead + first / shape.per_item()),
       offset_in_item: px(0.),
     });
   }
@@ -356,14 +668,52 @@ impl FeedView {
     let Some(shape) = self.shape else {
       return div().into_any_element();
     };
+    if ix < shape.lead {
+      // Not faded: it stays as it is while a tab loads under it.
+      return div()
+        .px_8()
+        .pt(px(TOP_ROOM))
+        .children(self.channel_header(window, cx))
+        .into_any_element();
+    }
+    if shape.placeholder {
+      return div()
+        .px_8()
+        .pb_6()
+        .child(self.placeholder(shape, cx))
+        .into_any_element();
+    }
+    let first_row = ix == shape.lead;
+    let ix = ix - shape.lead;
     let start = ix * shape.per_item();
-    if start >= self.cards.len() {
+    let total = if shape.shorts {
+      self.shorts.len()
+    } else {
+      self.cards.len()
+    };
+    if start >= total {
       self.load_more(cx);
       return div()
         .px_8()
         .pb_6()
         .opacity(self.fade)
         .children(self.end_of_list(cx))
+        .into_any_element();
+    }
+    if shape.shorts {
+      let shorts = &self.shorts[start..(start + shape.per_item()).min(total)];
+      let width = self.card_width;
+      return div()
+        .px_8()
+        .when(first_row, |el| el.pt(px(TOP_ROOM)))
+        .opacity(self.fade)
+        .child(
+          h_flex().pb_8().items_start().gap_x_4().children(
+            shorts
+              .iter()
+              .map(|short| short_card(short, width, &self.nav, window, cx)),
+          ),
+        )
         .into_any_element();
     }
     let cards = &self.cards[start..(start + shape.per_item()).min(self.cards.len())];
@@ -408,7 +758,7 @@ impl FeedView {
     // Room above the first row: a hovered card rises over its box, and the list clips it.
     div()
       .px_8()
-      .when(ix == 0, |el| el.pt(px(TOP_ROOM)))
+      .when(first_row, |el| el.pt(px(TOP_ROOM)))
       .opacity(self.fade)
       .child(row)
       .into_any_element()
@@ -683,6 +1033,24 @@ fn layout_switch(list: bool, cx: &mut Context<FeedView>) -> impl IntoElement {
 
 /// A channel's sort orders, as YouTube names them; hidden while a search shows (its results
 /// have their own order).
+/// The grid's (or the list's) skeleton while it loads, its cards `card_width` wide.
+fn skeleton(list: bool, card_width: f32) -> AnyElement {
+  if list {
+    v_flex()
+      .w_full()
+      .gap_2()
+      .children((0..8).map(|_| skeleton_row()))
+      .into_any_element()
+  } else {
+    h_flex()
+      .flex_wrap()
+      .gap_x_4()
+      .gap_y_8()
+      .children((0..12).map(|_| skeleton_card(card_width)))
+      .into_any_element()
+  }
+}
+
 fn sort_switch(chips: &[FeedChip], cx: &mut Context<FeedView>) -> impl IntoElement {
   h_flex()
     .p_0p5()
@@ -692,10 +1060,25 @@ fn sort_switch(chips: &[FeedChip], cx: &mut Context<FeedView>) -> impl IntoEleme
     .border_color(theme::border())
     .children(chips.iter().enumerate().map(|(ix, chip)| {
       let token = chip.token.clone();
-      Button::new(("sort", ix))
-        .ghost()
-        .label(chip.label.clone())
-        .selected(chip.selected)
+      // The chosen order in the accent, on a tint of it; the others muted, brighter while
+      // hovered; no grey background.
+      div()
+        .id(("sort", ix))
+        .px_3()
+        .py_1()
+        .rounded(theme::RADIUS)
+        .cursor_pointer()
+        .text_sm()
+        .when(chip.selected, |el| {
+          el.bg(theme::accent().opacity(0.16))
+            .text_color(theme::accent())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+        })
+        .when(!chip.selected, |el| {
+          el.text_color(theme::muted())
+            .hover(|s| s.text_color(theme::foreground()))
+        })
+        .child(chip.label.clone())
         .on_click(cx.listener(move |this, _, _, cx| this.set_sort(token.clone(), cx)))
     }))
 }
@@ -725,15 +1108,23 @@ fn key(card: &Related) -> &str {
 }
 
 fn grid(window: &Window, cx: &gpui::App) -> (usize, f32) {
+  grid_of(MIN_CARD_WIDTH, window, cx)
+}
+
+/// The page's width between its margins.
+fn content_width(window: &Window, cx: &gpui::App) -> f32 {
   let sidebar = theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
-  let width = f32::from(window.viewport_size().width - sidebar) - 2. * PAGE_MARGIN;
-  let columns = ((width + CARD_GAP) / (MIN_CARD_WIDTH + CARD_GAP))
-    .floor()
-    .max(1.);
+  f32::from(window.viewport_size().width - sidebar) - 2. * PAGE_MARGIN
+}
+
+/// Cards per row and their width, the narrowest `min` wide.
+fn grid_of(min: f32, window: &Window, cx: &gpui::App) -> (usize, f32) {
+  let width = content_width(window, cx);
+  let columns = ((width + CARD_GAP) / (min + CARD_GAP)).floor().max(1.);
   // Whole pixels: a fractional width would leave a hairline gap at the row's end.
   let card = ((width - CARD_GAP * (columns - 1.)) / columns)
     .floor()
-    .max(MIN_CARD_WIDTH);
+    .max(min);
   (columns as usize, card)
 }
 
@@ -758,26 +1149,24 @@ impl Render for FeedView {
       window,
       cx,
     );
-    let (columns, card_width) = grid(window, cx);
-    self.card_width = card_width;
-    let skeleton = if list_mode {
-      v_flex()
-        .w_full()
-        .gap_2()
-        .children((0..8).map(|_| skeleton_row()))
-        .into_any_element()
+    let shorts = self.showing_shorts();
+    let (columns, card_width) = if shorts {
+      grid_of(MIN_SHORT_WIDTH, window, cx)
     } else {
-      h_flex()
-        .flex_wrap()
-        .gap_x_4()
-        .gap_y_8()
-        .children((0..12).map(|_| skeleton_card(card_width)))
-        .into_any_element()
+      grid(window, cx)
     };
-    let body = if matches!(self.state, State::Loaded) && !self.cards.is_empty() {
+    self.card_width = card_width;
+    // A channel's header leads the list, and scrolls with it.
+    let lead = usize::from(matches!(self.source, Source::Channel { .. }) && self.channel.is_some());
+    let loaded = matches!(self.state, State::Loaded) && self.has_items();
+    // A channel's page is always its list: its header first, the videos or the placeholder.
+    let body = if loaded || lead > 0 {
       self.set_shape(Shape {
         list: list_mode,
         columns: if list_mode { 1 } else { columns },
+        shorts,
+        lead,
+        placeholder: !loaded,
       });
       div()
         .size_full()
@@ -791,7 +1180,8 @@ impl Render for FeedView {
         )
         // After the content: children paint in order, and a hovered row would cover it.
         .vertical_scrollbar(&self.list)
-        .when(self.fade < 1., |el| {
+        // A channel's placeholder is in its list, under its header.
+        .when(self.fade < 1. && lead == 0, |el| {
           el.child(
             div()
               .absolute()
@@ -801,29 +1191,19 @@ impl Render for FeedView {
               .px_8()
               .pt(px(TOP_ROOM))
               .opacity(1. - self.fade)
-              .child(skeleton),
+              .child(skeleton(list_mode, card_width)),
           )
         })
         .into_any_element()
     } else {
-      let content = match &self.state {
-        State::Loading => skeleton,
-        State::Failed(e) => notice(
-          IconName::TriangleAlert,
-          t("Cannot load the page", "Impossible de charger la page"),
-          e.clone(),
-        )
-        .child(
-          h_flex().pt_2().child(
-            Button::new("retry")
-              .primary()
-              .label(t("Retry", "Réessayer"))
-              .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
-          ),
-        )
-        .into_any_element(),
-        _ => self.empty_state().into_any_element(),
+      let shape = Shape {
+        list: list_mode,
+        columns,
+        shorts,
+        lead,
+        placeholder: true,
       };
+      let content = self.placeholder(shape, cx);
       div()
         .size_full()
         .relative()
@@ -838,8 +1218,9 @@ impl Render for FeedView {
         .vertical_scrollbar(&self.scroll)
         .into_any_element()
     };
-    // The header stays above the videos, which scroll under it.
-    let header = (!matches!(self.source, Source::Home)).then(|| {
+    // The header stays above the videos, which scroll under it; a channel's own header scrolls
+    // with them once loaded.
+    let header = (!matches!(self.source, Source::Home) && lead == 0).then(|| {
       h_flex()
         .px_8()
         .pb_6()

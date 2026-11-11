@@ -71,7 +71,161 @@ fn feed(response: &Value, shelves: bool) -> Feed {
     logged_in: tracking_param(response, "logged_in").as_deref() == Some("1"),
     message: find_key(response, "feedNudgeRenderer").map(|nudge| text(&nudge["title"])),
     chips: parse_chips(response),
+    header: parse_channel_header(response),
+    shorts: parse_short_items(response),
   }
+}
+
+/// A channel page's header (`pageHeaderViewModel`, with the page's `channelMetadataRenderer`):
+/// its title, avatar, banner, metadata rows (the handle, then the subscriber and video counts),
+/// description, and the tabs Peeby knows (by their URL's last part). `None` on any other page.
+fn parse_channel_header(response: &Value) -> Option<crate::models::ChannelHeader> {
+  let metadata = &response["metadata"]["channelMetadataRenderer"];
+  let header = &response["header"]["pageHeaderRenderer"]["content"]["pageHeaderViewModel"];
+  if metadata.is_null() || header.is_null() {
+    return None;
+  }
+  let name = header["title"]["dynamicTextViewModel"]["text"]["content"]
+    .as_str()
+    .or_else(|| metadata["title"].as_str())?
+    .to_owned();
+  let parts: Vec<String> = metadata_rows(&header["metadata"])
+    .into_iter()
+    .flatten()
+    .collect();
+  let handle = parts.iter().find(|p| p.starts_with('@')).cloned();
+  let mut counts = parts.iter().filter(|p| !p.starts_with('@')).cloned();
+  let tabs = response["contents"]["twoColumnBrowseResultsRenderer"]["tabs"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|tab| {
+      let tab = &tab["tabRenderer"];
+      let endpoint = &tab["endpoint"];
+      let url = endpoint["commandMetadata"]["webCommandMetadata"]["url"].as_str()?;
+      let kind = [
+        crate::models::ChannelTabKind::Videos,
+        crate::models::ChannelTabKind::Shorts,
+        crate::models::ChannelTabKind::Streams,
+        crate::models::ChannelTabKind::Playlists,
+      ]
+      .into_iter()
+      .find(|kind| url.rsplit('/').next() == Some(kind.path()))?;
+      Some(crate::models::ChannelTab {
+        kind,
+        title: tab["title"].as_str()?.to_owned(),
+        params: endpoint["browseEndpoint"]["params"]
+          .as_str()
+          .map(|p| p.replace("%3D", "="))
+          .unwrap_or_else(|| kind.default_params().to_owned()),
+      })
+    })
+    .collect();
+  Some(crate::models::ChannelHeader {
+    name,
+    handle,
+    avatar: thumbnails(
+      &header["image"]["decoratedAvatarViewModel"]["avatar"]["avatarViewModel"]["image"]["sources"],
+    ),
+    banner: thumbnails(&header["banner"]["imageBannerViewModel"]["image"]["sources"]),
+    subscribers: counts.next(),
+    videos: counts.next(),
+    description: header["description"]["descriptionPreviewViewModel"]["description"]["content"]
+      .as_str()
+      .unwrap_or_default()
+      .trim()
+      .to_owned(),
+    about: metadata["description"]
+      .as_str()
+      .unwrap_or_default()
+      .trim()
+      .to_owned(),
+    tabs,
+    subscription: header_subscription(header, response),
+    notifications: header_notifications(header),
+  })
+}
+
+/// A channel header's subscribe button, signed in (`subscribeButtonViewModel`; signed out it is
+/// a plain button opening a sign-in dialog): its endpoints' params, and whether the user is
+/// subscribed, from the entity its `stateEntityStoreKey` names (`subscriptionStateEntity`).
+fn header_subscription(header: &Value, response: &Value) -> Option<Subscription> {
+  let button = find_key(&header["actions"], "subscribeButtonViewModel")?;
+  let key = button["stateEntityStoreKey"].as_str();
+  let subscribed = response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .find(|m| key.is_some() && m["entityKey"].as_str() == key)
+    .is_some_and(|m| m["payload"]["subscriptionStateEntity"]["subscribed"] == true);
+  let params = |key: &str| {
+    find_key(&button, key).and_then(|endpoint| endpoint["params"].as_str().map(str::to_owned))
+  };
+  Some(Subscription {
+    subscribed,
+    subscribe_params: params("subscribeEndpoint"),
+    unsubscribe_params: params("unsubscribeEndpoint"),
+  })
+}
+
+/// A channel header's bell, signed in: the subscribe button's options sheet, a list item per
+/// level (its image), the selected one the level now, each with the params setting it.
+fn header_notifications(header: &Value) -> Option<ChannelNotifications> {
+  let button = find_key(&header["actions"], "subscribeButtonViewModel")?;
+  let mut items = Vec::new();
+  find_all(
+    &button["onShowSubscriptionOptions"],
+    "listItemViewModel",
+    &mut items,
+  );
+  let mut level = None;
+  let options: Vec<_> = items
+    .into_iter()
+    .filter_map(|item| {
+      let image = item["leadingImage"]["sources"][0]["clientResource"]["imageName"].as_str()?;
+      let item_level = notification_level(&serde_json::json!({ "iconType": image }))?;
+      let params = find_key(item, "modifyChannelNotificationPreferenceEndpoint")?["params"]
+        .as_str()?
+        .to_owned();
+      if item["isSelected"] == true {
+        level = Some(item_level);
+      }
+      Some((item_level, params))
+    })
+    .collect();
+  (!options.is_empty()).then_some(ChannelNotifications {
+    level: level?,
+    options,
+  })
+}
+
+/// The Shorts cards of a page (`shortsLockupViewModel`): a channel's "Shorts" tab, a feed's
+/// shelf. A card without its video id is skipped.
+fn parse_short_items(response: &Value) -> Vec<crate::models::ShortItem> {
+  let mut lockups = Vec::new();
+  find_all(response, "shortsLockupViewModel", &mut lockups);
+  lockups
+    .into_iter()
+    .filter_map(|lockup| {
+      let endpoint = &lockup["onTap"]["innertubeCommand"]["reelWatchEndpoint"];
+      let id = endpoint["videoId"].as_str().filter(|id| !id.is_empty())?;
+      let overlay = &lockup["overlayMetadata"];
+      Some(crate::models::ShortItem {
+        id: id.to_owned(),
+        title: overlay["primaryText"]["content"]
+          .as_str()
+          .unwrap_or_default()
+          .to_owned(),
+        views: overlay["secondaryText"]["content"]
+          .as_str()
+          .map(str::to_owned),
+        thumbnails: thumbnails(
+          &lockup["thumbnailViewModel"]["thumbnailViewModel"]["image"]["sources"],
+        ),
+        sequence: endpoint["sequenceParams"].as_str().map(str::to_owned),
+      })
+    })
+    .collect()
 }
 
 /// The chips of the grid's `chipBarViewModel` (a channel's sort orders), each with the token of

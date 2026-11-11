@@ -28,6 +28,8 @@ its hashed prefix for privacy: `/api/skipSegments/<sha256 prefix>`).
 
 ### 3. A channel page with its tabs, and 17. its header
 
+Done (2026-11-11), checked by the user in the app.
+
 Today the channel page is its "Videos" grid (sort and search).
 
 - Tabs as on youtube.com: Videos, Shorts, Lives (`channel_streams` is already parsed), Playlists;

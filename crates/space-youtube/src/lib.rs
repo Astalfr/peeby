@@ -61,6 +61,13 @@ pub enum Route {
   Subscriptions,
   /// YouTube's Shorts, one at a time.
   Shorts,
+  /// The Shorts from one (a card's), then the sequence it plays in (a channel's Shorts).
+  Short {
+    /// Its video id.
+    id: String,
+    /// The card's sequence ([`innertube::ShortItem::sequence`]): the Shorts after it.
+    sequence: Option<String>,
+  },
   /// The account's watch history.
   History,
   /// The subscribed channels.
@@ -117,7 +124,7 @@ impl Route {
 
   /// Pages with a player: a sidebar page opened after them drops their view.
   fn plays(&self) -> bool {
-    matches!(self, Self::Watch(_) | Self::Shorts)
+    matches!(self, Self::Watch(_) | Self::Shorts | Self::Short { .. })
   }
 
   /// Top-level pages (the sidebar's and the search): the sidebar lights the last one up to the
@@ -141,7 +148,7 @@ impl Route {
     match self {
       Self::Home => t("Home", "Accueil").into(),
       Self::Subscriptions => t("Subscriptions", "Abonnements").into(),
-      Self::Shorts => t("Shorts", "Shorts").into(),
+      Self::Shorts | Self::Short { .. } => t("Shorts", "Shorts").into(),
       Self::History => t("History", "Historique").into(),
       Self::Channels => t("Channels", "Chaînes").into(),
       Self::Channel { name, .. } => name.clone().into(),
@@ -379,6 +386,9 @@ impl YouTubeSpace {
         .new(|cx| FeedView::new(client, Source::Subscriptions, nav, window, cx))
         .into(),
       Route::Shorts => cx.new(|cx| ShortsView::new(client, nav, cx)).into(),
+      Route::Short { id, sequence } => cx
+        .new(|cx| ShortsView::starting_at(client, nav, id.clone(), sequence.clone(), cx))
+        .into(),
       Route::History => cx
         .new(|cx| FeedView::new(client, Source::History, nav, window, cx))
         .into(),
@@ -727,7 +737,7 @@ impl Render for YouTubeSpace {
     let view = div().size_full().relative().child(view);
     // A short fade and rise each time a page appears. Not on the watch and Shorts pages: their
     // video surface is an external texture, and leaving fullscreen would replay the fade.
-    if matches!(page.route, Route::Watch(_) | Route::Shorts) || window.is_fullscreen() {
+    if page.route.plays() || window.is_fullscreen() {
       return view.into_any_element();
     }
     view

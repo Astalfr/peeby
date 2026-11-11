@@ -325,6 +325,14 @@ impl Client {
     }
   }
 
+  /// A tab of a channel (its Shorts, lives or playlists), opened by the tab's
+  /// [`crate::ChannelTab::params`]. Its next pages come from [`Client::continuation`].
+  pub async fn channel_tab(&self, channel_id: &str, params: &str) -> Result<Feed> {
+    let body = json!({ "browseId": channel_id, "params": params });
+    let response = self.web("browse", body, true).await?;
+    self.feed(&response).await
+  }
+
   /// "Videos" tab of a channel, newest first.
   pub async fn channel_videos(&self, channel_id: &str) -> Result<Feed> {
     // Protobuf selecting the "Videos" tab, as the web client sends it.

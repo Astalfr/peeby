@@ -97,6 +97,101 @@ pub struct Feed {
   /// The chips above the grid: a channel's "Videos" tab sorts by them (latest, popular,
   /// oldest). Empty on a next page.
   pub chips: Vec<FeedChip>,
+  /// A channel's page: its header (name, banner, counts, tabs). `None` elsewhere and on a next
+  /// page.
+  pub header: Option<ChannelHeader>,
+  /// The Shorts of the page (a channel's "Shorts" tab), in display order.
+  pub shorts: Vec<ShortItem>,
+}
+
+/// The header of a channel's page.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChannelHeader {
+  /// Channel name.
+  pub name: String,
+  /// Handle (`@name`).
+  pub handle: Option<String>,
+  /// Avatar sizes.
+  pub avatar: Vec<Thumbnail>,
+  /// Banner sizes (about 6:1).
+  pub banner: Vec<Thumbnail>,
+  /// Localized subscriber count, e.g. `20,2 M d'abonnés`.
+  pub subscribers: Option<String>,
+  /// Localized video count, e.g. `1,8 k vidéos`.
+  pub videos: Option<String>,
+  /// The description's start, as the header shows it.
+  pub description: String,
+  /// The whole description (the "About" dialog's).
+  pub about: String,
+  /// The tabs Peeby shows, in the channel's order.
+  pub tabs: Vec<ChannelTab>,
+  /// Its subscribe button, signed in.
+  pub subscription: Option<Subscription>,
+  /// Its notification bell, signed in (shown while subscribed).
+  pub notifications: Option<ChannelNotifications>,
+}
+
+/// What a channel's tab lists.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ChannelTabKind {
+  /// Its videos.
+  #[default]
+  Videos,
+  /// Its Shorts.
+  Shorts,
+  /// Its lives, past and coming.
+  Streams,
+  /// Its playlists.
+  Playlists,
+}
+
+impl ChannelTabKind {
+  /// The tab's path on youtube.com (`/@name/<path>`).
+  pub fn path(self) -> &'static str {
+    match self {
+      Self::Videos => "videos",
+      Self::Shorts => "shorts",
+      Self::Streams => "streams",
+      Self::Playlists => "playlists",
+    }
+  }
+
+  /// The `params` the web client sends for the tab, when the page gave none.
+  pub fn default_params(self) -> &'static str {
+    match self {
+      Self::Videos => "EgZ2aWRlb3PyBgQKAjoA",
+      Self::Shorts => "EgZzaG9ydHPyBgUKA5oBAA==",
+      Self::Streams => "EgdzdHJlYW1z8gYECgJ6AA==",
+      Self::Playlists => "EglwbGF5bGlzdHPyBgQKAkIA",
+    }
+  }
+}
+
+/// A tab of a channel's page.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChannelTab {
+  /// What it lists.
+  pub kind: ChannelTabKind,
+  /// Its title, in YouTube's language (`Vidéos`, `En direct`).
+  pub title: String,
+  /// The `browse` request's `params` that open it.
+  pub params: String,
+}
+
+/// A Short's card (a channel's "Shorts" tab, a feed's Shorts shelf).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShortItem {
+  /// 11-character video id.
+  pub id: String,
+  /// Title.
+  pub title: String,
+  /// Localized view count, e.g. `227 k vues`.
+  pub views: Option<String>,
+  /// Thumbnail sizes (9:16).
+  pub thumbnails: Vec<Thumbnail>,
+  /// The sequence the card plays in (its `reelWatchEndpoint.sequenceParams`): the next Shorts,
+  /// for [`crate::Client::shorts_more`].
+  pub sequence: Option<String>,
 }
 
 /// One chip above a grid, its label in YouTube's language.
