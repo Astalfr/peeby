@@ -413,6 +413,56 @@ impl Client {
     }
   }
 
+  /// Posts `text` as a comment of the video whose comments header gave `params`: a public write
+  /// from the account. The comment as the list shows it, the user's own (deletable).
+  pub async fn create_comment(&self, params: &str, text: &str) -> Result<crate::Comment> {
+    let response = self.create_comment_response(params, text).await?;
+    crate::parse::parse_created_comment(&response).ok_or_else(|| Error::Parse {
+      endpoint: "comment/create_comment",
+      detail: "no comment created".into(),
+    })
+  }
+
+  /// Posts `text` as a reply to the comment that gave `params`: a public write from the account.
+  /// The reply as the list shows it.
+  pub async fn create_comment_reply(&self, params: &str, text: &str) -> Result<crate::Comment> {
+    let response = self.create_comment_reply_response(params, text).await?;
+    crate::parse::parse_created_comment(&response).ok_or_else(|| Error::Parse {
+      endpoint: "comment/create_comment_reply",
+      detail: "no reply created".into(),
+    })
+  }
+
+  /// Deletes one of the user's comments by its [`crate::Comment::delete_action`]
+  /// (`comment/perform_comment_action`).
+  pub async fn delete_comment(&self, action: &str) -> Result<()> {
+    let response = self.rate_comment_response(action).await?;
+    if crate::parse::parse_comment_removed(&response) {
+      Ok(())
+    } else {
+      Err(Error::Parse {
+        endpoint: "comment/perform_comment_action",
+        detail: "not removed".into(),
+      })
+    }
+  }
+
+  /// Posts `text` as a comment of the video whose comments header gave `params`
+  /// ([`crate::CommentComposer::params`]): a public write from the account. Needs cookies.
+  pub async fn create_comment_response(&self, params: &str, text: &str) -> Result<Value> {
+    self.require_session()?;
+    let body = json!({ "createCommentParams": params, "commentText": text });
+    self.web("comment/create_comment", body, true).await
+  }
+
+  /// Posts `text` as a reply to the comment that gave `params` ([`crate::Comment::reply_params`]):
+  /// a public write from the account. Needs cookies.
+  pub async fn create_comment_reply_response(&self, params: &str, text: &str) -> Result<Value> {
+    self.require_session()?;
+    let body = json!({ "createReplyParams": params, "commentText": text });
+    self.web("comment/create_comment_reply", body, true).await
+  }
+
   /// The whole answer behind [`Client::rate_comment`], for the `comments` example's fixtures.
   pub async fn rate_comment_response(&self, action: &str) -> Result<Value> {
     self.require_session()?;

@@ -1,0 +1,39 @@
+{
+  "actions": [
+    {
+      "clickTrackingParams": "IhMItr38oq2AmAMVTDLxBR2XGjIYygEEid8b1Q==",
+      "removeCommentAction": {
+        "actionResult": {
+          "feedback": "FEEDBACK_REMOVE",
+          "feedbackText": {
+            "runs": [
+              {
+                "text": "Commentaire supprimé"
+              }
+            ]
+          },
+          "status": "STATUS_SUCCEEDED"
+        },
+        "commentId": "Ugx_631yNmHXAMhaSu94AaABAg"
+      }
+    },
+    {
+      "clickTrackingParams": "IhMItr38oq2AmAMVTDLxBR2XGjIYygEEid8b1Q==",
+      "openPopupAction": {
+        "popup": {
+          "notificationActionRenderer": {
+            "responseText": {
+              "runs": [
+                {
+                  "text": "Commentaire supprimé"
+                }
+              ]
+            },
+            "trackingParams": "CAAQuWoiEwi2vfyirYCYAxVMMvEFHZcaMhg="
+          }
+        },
+        "popupType": "TOAST"
+      }
+    }
+  ]
+}

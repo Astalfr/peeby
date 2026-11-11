@@ -56,6 +56,8 @@ menu carries a continuation per order (fixture of the header first).
 
 ### 6. Writing a comment or a reply
 
+Done (2026-11-11), checked by the user in the app (deleting one's own comments came with it).
+
 A field over the comments ("Add a comment…") and under a comment ("Reply"), signed in, from the
 comments page's composer (`createCommentEndpoint`, `createCommentReplyEndpoint`). A public write
 from the account: tested only with the user's go-ahead, on a video they choose; the new comment

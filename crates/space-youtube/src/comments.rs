@@ -4,6 +4,11 @@
 //! its player, YouTube pages open in the tab, other sites in the browser. Signed in, the thumbs
 //! rate a comment: the button changes at once and goes back if YouTube refuses. "Translate"
 //! shows a comment in the client's language, translated by Google, until "See original".
+//!
+//! Signed in, a field over the comments posts one ("Comment"), "Reply" under a comment opens a
+//! field under it, and the user's own comments have "Delete" (a second click confirms): public
+//! writes from the account, each sent once its button is clicked, the list following YouTube's
+//! answer (the new comment on top, the reply in its thread, the deleted one gone).
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -11,14 +16,15 @@ use std::rc::Rc;
 use gpui::prelude::*;
 use gpui::{
   App, Context, Entity, FontWeight, HighlightStyle, InteractiveText, ScrollHandle, SharedString,
-  StyledText, UnderlineStyle, WeakEntity, Window, div, point, px,
+  StyledText, Subscription, UnderlineStyle, WeakEntity, Window, div, point, px,
 };
 use gpui_component::WindowExt;
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::notification::Notification;
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{h_flex, v_flex};
-use innertube::{Client, Comment, LikeStatus, LinkTarget, TextLink};
+use gpui_component::{Disableable, h_flex, v_flex};
+use innertube::{Client, Comment, CommentComposer, LikeStatus, LinkTarget, TextLink};
 
 use crate::convert::{self, error_text};
 use crate::rating::{DISLIKE_RED, LIKE_BLUE};
@@ -37,6 +43,8 @@ struct Comments {
   count: Option<String>,
   /// The orders the header offers, from the first page.
   sorts: Vec<innertube::CommentSort>,
+  /// The header's field, signed in.
+  composer: Option<CommentComposer>,
   continuation: Option<String>,
   loading: bool,
   /// Whether the first page was asked for.
@@ -91,6 +99,28 @@ pub struct CommentSection {
   /// By comment id.
   translations: HashMap<String, Translation>,
   hovered_link: HoveredLink,
+  /// The field over the comments, made once the header offers one (signed in).
+  composer_input: Option<Entity<InputState>>,
+  /// A comment or a reply is being sent: the buttons wait.
+  posting: bool,
+  /// The reply field open under a comment.
+  reply: Option<ReplyBox>,
+  /// The comment whose "Delete" was clicked once: the next click deletes it.
+  confirming_delete: Option<String>,
+  /// Comments being deleted.
+  deleting: HashSet<String>,
+  _composer_subscription: Option<Subscription>,
+}
+
+/// The reply field under a comment.
+struct ReplyBox {
+  /// The thread the reply goes to (the comment's, or its parent's for a reply).
+  thread: String,
+  /// The comment replied to, whose params it sends and under which it shows.
+  target: String,
+  params: String,
+  input: Entity<InputState>,
+  _subscription: Subscription,
 }
 
 impl CommentSection {
@@ -122,7 +152,315 @@ impl CommentSection {
       rating: HashSet::new(),
       translations: HashMap::new(),
       hovered_link: None,
+      composer_input: None,
+      posting: false,
+      reply: None,
+      confirming_delete: None,
+      deleting: HashSet::new(),
+      _composer_subscription: None,
     }
+  }
+
+  /// The field over the comments, once the header offers one: Enter posts too.
+  fn ensure_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if self.composer_input.is_some() {
+      return;
+    }
+    let Some(composer) = &self.comments.composer else {
+      return;
+    };
+    let placeholder = composer
+      .placeholder
+      .clone()
+      .unwrap_or_else(|| t("Add a comment…", "Ajoutez un commentaire…").into());
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+    self._composer_subscription = Some(cx.subscribe_in(
+      &input,
+      window,
+      |this, _, event: &InputEvent, window, cx| match event {
+        InputEvent::PressEnter { .. } => this.post_comment(window, cx),
+        InputEvent::Change => cx.notify(),
+        _ => {}
+      },
+    ));
+    self.composer_input = Some(input);
+  }
+
+  /// Posts the field's text as a comment; on YouTube's answer, the comment shows on top and the
+  /// field empties; refused, a toast says so and the text stays.
+  fn post_comment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let (Some(input), Some(composer)) = (self.composer_input.clone(), &self.comments.composer)
+    else {
+      return;
+    };
+    let text = input.read(cx).value().trim().to_owned();
+    if text.is_empty() || self.posting {
+      return;
+    }
+    self.posting = true;
+    cx.notify();
+    let (client, params) = (self.client.clone(), composer.params.clone());
+    let fetch = runtime::spawn(
+      cx,
+      async move { client.create_comment(&params, &text).await },
+    );
+    let handle = window.window_handle();
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      let posted = this
+        .update(cx, |this, cx| {
+          this.posting = false;
+          cx.notify();
+          match result {
+            Some(Ok(comment)) => {
+              this.comments.items.insert(0, comment);
+              true
+            }
+            Some(Err(e)) => {
+              tracing::warn!("post comment: {e}");
+              false
+            }
+            None => false,
+          }
+        })
+        .unwrap_or(false);
+      handle
+        .update(cx, |_, window, cx| {
+          if posted {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+          } else {
+            window.push_notification(
+              Notification::error(t(
+                "Cannot post your comment.",
+                "Impossible de publier votre commentaire.",
+              )),
+              cx,
+            );
+          }
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// Opens the reply field under comment `target` of `thread`, focused.
+  fn open_reply(
+    &mut self,
+    thread: String,
+    target: String,
+    params: String,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if self.reply.as_ref().is_some_and(|r| r.target == target) {
+      return;
+    }
+    let input = cx
+      .new(|cx| InputState::new(window, cx).placeholder(t("Add a reply…", "Ajoutez une réponse…")));
+    input.update(cx, |input, cx| input.focus(window, cx));
+    let subscription = cx.subscribe_in(
+      &input,
+      window,
+      |this, _, event: &InputEvent, window, cx| match event {
+        InputEvent::PressEnter { .. } => this.post_reply(window, cx),
+        InputEvent::Change => cx.notify(),
+        _ => {}
+      },
+    );
+    self.reply = Some(ReplyBox {
+      thread,
+      target,
+      params,
+      input,
+      _subscription: subscription,
+    });
+    cx.notify();
+  }
+
+  fn close_reply(&mut self, cx: &mut Context<Self>) {
+    self.reply = None;
+    cx.notify();
+  }
+
+  /// Posts the reply field's text; on YouTube's answer, the reply shows in its thread (opened,
+  /// its other replies loading if they never did) and the field closes.
+  fn post_reply(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(reply) = &self.reply else { return };
+    let text = reply.input.read(cx).value().trim().to_owned();
+    if text.is_empty() || self.posting {
+      return;
+    }
+    self.posting = true;
+    cx.notify();
+    let (client, params, thread) = (
+      self.client.clone(),
+      reply.params.clone(),
+      reply.thread.clone(),
+    );
+    let fetch = runtime::spawn(cx, async move {
+      client.create_comment_reply(&params, &text).await
+    });
+    let handle = window.window_handle();
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      let posted = this
+        .update(cx, |this, cx| {
+          this.posting = false;
+          cx.notify();
+          let reply = match result {
+            Some(Ok(reply)) => reply,
+            Some(Err(e)) => {
+              tracing::warn!("post reply: {e}");
+              return false;
+            }
+            None => return false,
+          };
+          this.reply = None;
+          let continuation = this
+            .comments
+            .items
+            .iter()
+            .find(|c| c.id == thread)
+            .and_then(|c| c.replies_continuation.clone());
+          let replies = this.replies.entry(thread.clone()).or_default();
+          // Never opened: its other replies load too, after the new one.
+          let load = replies.items.is_empty() && !replies.loading && continuation.is_some();
+          if load {
+            replies.continuation = continuation;
+          }
+          replies.open = true;
+          replies.items.insert(0, reply);
+          if load {
+            this.load_replies(thread.clone(), cx);
+          }
+          true
+        })
+        .unwrap_or(false);
+      if !posted {
+        handle
+          .update(cx, |_, window, cx| {
+            window.push_notification(
+              Notification::error(t(
+                "Cannot post your reply.",
+                "Impossible de publier votre réponse.",
+              )),
+              cx,
+            );
+          })
+          .ok();
+      }
+    })
+    .detach();
+  }
+
+  /// "Delete" under one of the user's comments: the first click asks for a second, which
+  /// deletes it; it goes from the list once YouTube removed it.
+  fn delete(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    if self.deleting.contains(id) {
+      return;
+    }
+    if self.confirming_delete.as_deref() != Some(id) {
+      self.confirming_delete = Some(id.to_owned());
+      return cx.notify();
+    }
+    self.confirming_delete = None;
+    let Some(action) = self.comment_mut(id).and_then(|c| c.delete_action.clone()) else {
+      return;
+    };
+    self.deleting.insert(id.to_owned());
+    cx.notify();
+    let client = self.client.clone();
+    let fetch = runtime::spawn(cx, async move { client.delete_comment(&action).await });
+    let (handle, id) = (window.window_handle(), id.to_owned());
+    cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      let deleted = this
+        .update(cx, |this, cx| {
+          this.deleting.remove(&id);
+          cx.notify();
+          match result {
+            Some(Ok(())) => {
+              this.comments.items.retain(|c| c.id != id);
+              for replies in this.replies.values_mut() {
+                replies.items.retain(|c| c.id != id);
+              }
+              true
+            }
+            Some(Err(e)) => {
+              tracing::warn!("delete comment: {e}");
+              false
+            }
+            None => false,
+          }
+        })
+        .unwrap_or(false);
+      let note = if deleted {
+        Notification::info(t("Comment deleted", "Commentaire supprimé"))
+      } else {
+        Notification::error(t(
+          "Cannot delete the comment.",
+          "Impossible de supprimer le commentaire.",
+        ))
+      };
+      handle
+        .update(cx, |_, window, cx| window.push_notification(note, cx))
+        .ok();
+    })
+    .detach();
+  }
+
+  /// A field and its buttons ("Cancel" while it holds text or is a reply's, then the send
+  /// button, `label`), greyed while a post is under way.
+  fn field(
+    &self,
+    key: &str,
+    input: &Entity<InputState>,
+    label: &'static str,
+    reply: bool,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
+    let empty = input.read(cx).value().trim().is_empty();
+    let cancel = (reply || !empty).then(|| {
+      let input = input.clone();
+      Button::new(SharedString::from(format!("{key}-cancel")))
+        .ghost()
+        .label(t("Cancel", "Annuler"))
+        .on_click(cx.listener(move |this, _, window, cx| {
+          if reply {
+            this.close_reply(cx);
+          } else {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+          }
+        }))
+    });
+    let send = Button::new(SharedString::from(format!("{key}-send")))
+      .primary()
+      .label(label)
+      .disabled(empty || self.posting)
+      .on_click(cx.listener(move |this, _, window, cx| {
+        if reply {
+          this.post_reply(window, cx);
+        } else {
+          this.post_comment(window, cx);
+        }
+      }));
+    v_flex()
+      .gap_2()
+      .child(Input::new(input))
+      .child(h_flex().gap_2().justify_end().children(cancel).child(send))
+  }
+
+  /// The reply field, when open under comment `id`.
+  fn reply_field(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+    let reply = self.reply.as_ref().filter(|r| r.target == id)?;
+    let input = reply.input.clone();
+    Some(div().pl(px(48.)).child(self.field(
+      &format!("reply-{id}"),
+      &input,
+      t("Reply", "Répondre"),
+      true,
+      cx,
+    )))
   }
 
   /// Loads the first page from `token` (the watch page's); `None` when the video has none.
@@ -151,9 +489,11 @@ impl CommentSection {
       self.comments.count.take(),
       std::mem::take(&mut self.comments.sorts),
     );
+    let composer = self.comments.composer.take();
     self.comments = Comments {
       count,
       sorts,
+      composer,
       ..Comments::default()
     };
     self.replies.clear();
@@ -356,7 +696,11 @@ impl CommentSection {
           replies.loading = false;
           match result {
             Some(Ok(page)) => {
-              replies.items.extend(page.comments);
+              // The user's own reply, shown already, may come again.
+              let known: HashSet<String> = replies.items.iter().map(|c| c.id.clone()).collect();
+              replies
+                .items
+                .extend(page.comments.into_iter().filter(|c| !known.contains(&c.id)));
               replies.continuation = page.continuation;
             }
             Some(Err(e)) => tracing::warn!("replies: {e}"),
@@ -401,6 +745,9 @@ impl CommentSection {
               }
               if !page.sorts.is_empty() {
                 comments.sorts = page.sorts;
+              }
+              if page.composer.is_some() {
+                comments.composer = page.composer;
               }
             }
             Some(Err(e)) => {
@@ -459,6 +806,10 @@ impl CommentSection {
       )
       .child(div().flex_1())
       .children(sorts);
+    let composer = self
+      .composer_input
+      .clone()
+      .map(|input| self.field("comment", &input, t("Comment", "Commenter"), false, cx));
     let items: Vec<_> = comments
       .items
       .iter()
@@ -480,6 +831,7 @@ impl CommentSection {
       .pt_2()
       .gap_5()
       .child(header)
+      .children(composer)
       .children(items)
       .children(empty)
       .when(comments.loading, |el| el.child(loading_more()))
@@ -515,7 +867,20 @@ impl CommentSection {
         .iter()
         .map(|reply| {
           let translation = self.translations.get(&reply.id);
-          comment_row(reply, translation, &links, &section, window, cx)
+          let row = comment_row(
+            reply,
+            Some(&comment.id),
+            self.row_state(&reply.id),
+            translation,
+            &links,
+            &section,
+            window,
+            cx,
+          );
+          v_flex()
+            .gap_2()
+            .child(row)
+            .children(self.reply_field(&reply.id, cx))
         })
         .collect();
       let more = r.continuation.as_ref().map(|_| {
@@ -532,19 +897,34 @@ impl CommentSection {
         .when(r.loading, |el| el.child(loading_more()))
         .children(more.filter(|_| !r.loading).map(|b| h_flex().child(b)))
     });
+    let field = self.reply_field(&comment.id, cx);
     v_flex()
       .gap_2()
       .child(comment_row(
         comment,
+        None,
+        self.row_state(&comment.id),
         self.translations.get(&comment.id),
         &links,
         &section,
         window,
         cx,
       ))
+      .children(field)
       .children(toggle.map(|b| h_flex().pl(px(40.)).child(b)))
       .children(shown)
   }
+  /// Where comment `id`'s delete stands.
+  fn row_state(&self, id: &str) -> RowState {
+    if self.deleting.contains(id) {
+      RowState::Deleting
+    } else if self.confirming_delete.as_deref() == Some(id) {
+      RowState::Confirming
+    } else {
+      RowState::Idle
+    }
+  }
+
   /// What the section's links need to be drawn and followed.
   fn links(&self, cx: &Context<Self>) -> Links {
     Links::new(
@@ -563,6 +943,7 @@ impl Render for CommentSection {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     // Offsets from the last layout: enough to start the next page early.
     self.load_more_if_near_end(cx);
+    self.ensure_composer(window, cx);
     self.render_comments(window, cx)
   }
 }
@@ -646,8 +1027,20 @@ impl Links {
 
 /// A comment: its author's avatar, name and age, its text (or its `translation`), its thumbs
 /// and its translate button.
+/// Where a comment's delete stands.
+#[derive(Clone, Copy, PartialEq)]
+enum RowState {
+  Idle,
+  /// "Delete" clicked once: the next click deletes.
+  Confirming,
+  Deleting,
+}
+
+#[allow(clippy::too_many_arguments)] // A comment's row: each argument is one aspect of it.
 fn comment_row(
   comment: &Comment,
+  thread: Option<&str>,
+  state: RowState,
   translation: Option<&Translation>,
   links: &Links,
   section: &WeakEntity<CommentSection>,
@@ -678,7 +1071,42 @@ fn comment_row(
     .child(thumb(comment, section, LikeStatus::Dislike, ""))
     .when(!comment.text.trim().is_empty(), |el| {
       el.child(translate_button(comment, translation, section))
-    });
+    })
+    .children(comment.reply_params.clone().map(|params| {
+      let (section, id) = (section.clone(), comment.id.clone());
+      // A reply to a reply goes to its thread.
+      let thread = thread.unwrap_or(&comment.id).to_owned();
+      text_action(
+        format!("reply-{}", comment.id),
+        t("Reply", "Répondre"),
+        true,
+        move |window, cx| {
+          section
+            .update(cx, |this, cx| {
+              this.open_reply(thread.clone(), id.clone(), params.clone(), window, cx)
+            })
+            .ok();
+        },
+      )
+    }))
+    .children(comment.delete_action.as_ref().map(|_| {
+      let (section, id) = (section.clone(), comment.id.clone());
+      let label = match state {
+        RowState::Idle => t("Delete", "Supprimer"),
+        RowState::Confirming => t("Delete for good?", "Supprimer pour de bon ?"),
+        RowState::Deleting => t("Deleting…", "Suppression…"),
+      };
+      text_action(
+        format!("delete-{}", comment.id),
+        label,
+        state != RowState::Deleting,
+        move |window, cx| {
+          section
+            .update(cx, |this, cx| this.delete(&id, window, cx))
+            .ok();
+        },
+      )
+    }));
   // The translation has no links: YouTube's answer carries none.
   let text = match translation {
     Some(Translation::Shown(text)) => linked_text(
@@ -774,6 +1202,27 @@ fn thumb(
 }
 
 /// "Translate" under `comment`, "Translating…" while it waits, "See original" once translated.
+/// A text button of a comment's row (Reply, Delete), as "Translate" is.
+fn text_action(
+  id: String,
+  label: &'static str,
+  enabled: bool,
+  on_click: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+  h_flex()
+    .id(SharedString::from(id))
+    .h(px(28.))
+    .px_2()
+    .items_center()
+    .rounded_full()
+    .when(enabled, |el| {
+      el.cursor_pointer()
+        .hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+        .on_click(move |_, window, cx| on_click(window, cx))
+    })
+    .child(label)
+}
+
 fn translate_button(
   comment: &Comment,
   translation: Option<&Translation>,

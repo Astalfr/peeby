@@ -921,6 +921,10 @@ pub struct Comment {
   pub replies: String,
   /// Token of the replies, for [`crate::Client::comments`].
   pub replies_continuation: Option<String>,
+  /// What a reply to it sends ([`crate::Client::create_comment_reply`]), signed in only.
+  pub reply_params: Option<String>,
+  /// The action deleting it ([`crate::Client::delete_comment`]): the user's own comments only.
+  pub delete_action: Option<String>,
 }
 
 /// The `action`s of a comment's thumbs (`performCommentActionEndpoint`), for
@@ -963,6 +967,17 @@ pub struct CommentPage {
   pub count: Option<String>,
   /// The header's sort orders ("Les plus populaires", "Les plus récents"), first page only.
   pub sorts: Vec<CommentSort>,
+  /// The header's field to write a comment, signed in, first page only.
+  pub composer: Option<CommentComposer>,
+}
+
+/// The field of a video's comments header, signed in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentComposer {
+  /// What a new comment sends ([`crate::Client::create_comment`]).
+  pub params: String,
+  /// The field's placeholder, in YouTube's language (`Ajoutez un commentaire…`).
+  pub placeholder: Option<String>,
 }
 
 /// A sort order of a video's comments.

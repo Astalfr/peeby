@@ -6,6 +6,12 @@
 //! the account's session data (`responseContext`, visitorData) and, in its reply composer, the
 //! account's name and avatar: trim it before it becomes a fixture.
 //!
+//! `--post <dir> <text>` and `--reply <dir> <text>` WRITE PUBLICLY FROM THE ACCOUNT (ask the
+//! user first, on a video they choose): the first posts `text` as a comment of the video, the
+//! second as a reply to the page's first comment; each saves YouTube's answer into `<dir>`
+//! (`create_comment.json`, `create_comment_reply.json`). The comment stays: delete it on
+//! youtube.com.
+//!
 //! `--rate` WRITES FROM THE ACCOUNT (ask the user first): it likes the first comment, dislikes
 //! it, then removes the dislike, saving into `<dir>` each `comment/perform_comment_action`
 //! answer (`like.json`, `dislike.json`, `undislike.json`) and the comments page read after the
@@ -20,7 +26,7 @@ use std::path::{Path, PathBuf};
 use innertube::{Client, Comment, Cookies, LikeStatus};
 use serde_json::Value;
 
-const USAGE: &str = "usage: comments <cookies.txt> <video-id> [--save <file>] [--rate <dir>]";
+const USAGE: &str = "usage: comments <cookies.txt> <video-id> [--save <file>] [--rate <dir>]   [--post <dir> <text>] [--reply <dir> <text>]";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -28,11 +34,23 @@ async fn main() {
   let (Some(path), Some(video)) = (args.next(), args.next()) else {
     fail(USAGE);
   };
-  let (mut save, mut rate) = (None, None);
+  let (mut save, mut rate, mut post, mut reply) = (None, None, None, None);
   while let Some(flag) = args.next() {
     match (flag.as_str(), args.next()) {
       ("--save", Some(file)) => save = Some(file),
       ("--rate", Some(dir)) => rate = Some(PathBuf::from(dir)),
+      ("--post", Some(dir)) => {
+        post = Some((
+          PathBuf::from(dir),
+          args.next().unwrap_or_else(|| fail(USAGE)),
+        ))
+      }
+      ("--reply", Some(dir)) => {
+        reply = Some((
+          PathBuf::from(dir),
+          args.next().unwrap_or_else(|| fail(USAGE)),
+        ))
+      }
       _ => fail(USAGE),
     }
   }
@@ -60,9 +78,32 @@ async fn main() {
   if let Some(file) = save {
     write(Path::new(&file), &response);
   }
-  let comments = innertube::parse_comments(&response).comments;
+  let first_page = innertube::parse_comments(&response);
+  let comments = first_page.comments;
   for comment in &comments {
     print(comment);
+  }
+  if let Some((dir, text)) = post {
+    let Some(composer) = &first_page.composer else {
+      fail("no comment field: signed out, or comments off?");
+    };
+    let answer = client
+      .create_comment_response(&composer.params, &text)
+      .await
+      .unwrap_or_else(|e| fail(&format!("create_comment: {e}")));
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display())));
+    write(&dir.join("create_comment.json"), &answer);
+  }
+  if let Some((dir, text)) = reply {
+    let Some(params) = comments.first().and_then(|c| c.reply_params.clone()) else {
+      fail("no reply button on the first comment");
+    };
+    let answer = client
+      .create_comment_reply_response(&params, &text)
+      .await
+      .unwrap_or_else(|e| fail(&format!("create_comment_reply: {e}")));
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display())));
+    write(&dir.join("create_comment_reply.json"), &answer);
   }
   let Some(dir) = rate else { return };
   let Some(first) = comments.first() else {

@@ -503,6 +503,50 @@ fn channel_shorts_and_playlists() {
 }
 
 #[test]
+fn comment_created_and_removed() {
+  // A comment and its reply posted on the account's own video, then deleted (2026-11-11, with
+  // the user's agreement): the answers without the account's handle, avatar and channel (the
+  // params carrying it are `REDACTED`) nor the emoji picker.
+  let comment =
+    innertube::parse_created_comment(&fixture("comment_create.json")).expect("the comment");
+  assert_eq!(comment.text, "test");
+  assert_eq!(comment.author, "@viewer1");
+  assert!(comment.delete_action.is_some());
+  assert!(comment.reply_params.is_some());
+  let reply =
+    innertube::parse_created_comment(&fixture("comment_create_reply.json")).expect("the reply");
+  assert_eq!(reply.text, "test");
+  assert!(reply.id.starts_with(&comment.id));
+  assert!(reply.delete_action.is_some());
+  assert!(innertube::parse_comment_removed(&fixture(
+    "comment_delete.json"
+  )));
+  assert!(!innertube::parse_comment_removed(&fixture(
+    "comment_like.json"
+  )));
+  // Someone else's comment cannot be deleted.
+  let page = innertube::parse_comments(&fixture("comments_composer.json"));
+  assert!(page.comments[0].delete_action.is_none());
+}
+
+#[test]
+fn comment_composer() {
+  // A first comments page signed in (dQw4w9WgXcQ, captured 2026-11-11), trimmed to the header
+  // and one thread, without the account's avatar nor the emoji picker: the header's field and
+  // the thread's reply button carry their params.
+  let page = innertube::parse_comments(&fixture("comments_composer.json"));
+  let composer = page.composer.expect("the field");
+  assert!(composer.params.starts_with("EgtkUXc0dzlXZ1hjUSoC"));
+  assert!(composer.placeholder.is_some());
+  assert_eq!(page.comments.len(), 1);
+  assert!(page.comments[0].reply_params.is_some());
+  // Signed out: neither.
+  let signed_out = innertube::parse_comments(&fixture("comments.json"));
+  assert!(signed_out.composer.is_none());
+  assert!(signed_out.comments.iter().all(|c| c.reply_params.is_none()));
+}
+
+#[test]
 fn comment_sorts() {
   // The first comments page's header offers both orders, the popular one shown.
   let page = innertube::parse_comments(&fixture("comments.json"));

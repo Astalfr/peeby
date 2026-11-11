@@ -1389,19 +1389,7 @@ pub fn parse_members_only(player: &Value) -> bool {
 /// by key to entity payloads (`commentEntityPayload`, the toolbar's state and its commands);
 /// replies pages list `commentViewModel`s.
 pub fn parse_comments(response: &Value) -> CommentPage {
-  let entities: HashMap<&str, &Value> =
-    response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
-      .as_array()
-      .into_iter()
-      .flatten()
-      .filter_map(|m| Some((m["entityKey"].as_str()?, &m["payload"])))
-      .collect();
-  let entity = |view: &Value, key: &str, kind: &str| {
-    view[key]
-      .as_str()
-      .and_then(|k| entities.get(k))
-      .and_then(|payload| payload.get(kind))
-  };
+  let entities = comment_entities(response);
   let mut page = CommentPage::default();
   let items = response["onResponseReceivedEndpoints"]
     .as_array()
@@ -1416,44 +1404,101 @@ pub fn parse_comments(response: &Value) -> CommentPage {
     if let Some(header) = item.get("commentsHeaderRenderer") {
       page.count = non_empty(text(&header["countText"]));
       page.sorts = comment_sorts(header);
+      page.composer = comment_composer(header);
     } else if let Some(cont) = item.get("continuationItemRenderer") {
       page.continuation =
         find_key(cont, "continuationCommand").and_then(|c| c["token"].as_str().map(str::to_owned));
-    } else {
-      let (view, replies) = match item.get("commentThreadRenderer") {
-        Some(thread) => (
-          &thread["commentViewModel"]["commentViewModel"],
-          &thread["replies"],
-        ),
-        None => (&item["commentViewModel"], &Value::Null),
-      };
-      let Some(payload) = entity(view, "commentKey", "commentEntityPayload") else {
-        continue;
-      };
-      if let Some(mut comment) = parse_comment(payload) {
-        comment.replies_continuation = find_continuation(replies);
-        if let Some(state) = entity(
-          view,
-          "toolbarStateKey",
-          "engagementToolbarStateEntityPayload",
-        ) {
-          comment.rating = match state["likeState"].as_str() {
-            Some("TOOLBAR_LIKE_STATE_LIKED") => LikeStatus::Like,
-            Some("TOOLBAR_LIKE_STATE_DISLIKED") => LikeStatus::Dislike,
-            _ => LikeStatus::Indifferent,
-          };
-        }
-        comment.actions = entity(
-          view,
-          "toolbarSurfaceKey",
-          "engagementToolbarSurfaceEntityPayload",
-        )
-        .and_then(comment_actions);
-        page.comments.push(comment);
-      }
+    } else if let Some(comment) = comment_item(item, &entities) {
+      page.comments.push(comment);
     }
   }
   page
+}
+
+/// A comments response's entities (`frameworkUpdates`), by key.
+fn comment_entities(response: &Value) -> HashMap<&str, &Value> {
+  response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|m| Some((m["entityKey"].as_str()?, &m["payload"])))
+    .collect()
+}
+
+/// A comment of a list (a thread, or a reply's `commentViewModel`), its text and author from
+/// its entity, the user's rating, its thumbs', reply's and delete's actions (signed in).
+fn comment_item(item: &Value, entities: &HashMap<&str, &Value>) -> Option<Comment> {
+  let entity = |view: &Value, key: &str, kind: &str| {
+    view[key]
+      .as_str()
+      .and_then(|k| entities.get(k))
+      .and_then(|payload| payload.get(kind))
+  };
+  let (view, replies) = match item.get("commentThreadRenderer") {
+    Some(thread) => (
+      &thread["commentViewModel"]["commentViewModel"],
+      &thread["replies"],
+    ),
+    None => (&item["commentViewModel"], &Value::Null),
+  };
+  let payload = entity(view, "commentKey", "commentEntityPayload")?;
+  let mut comment = parse_comment(payload)?;
+  comment.replies_continuation = find_continuation(replies);
+  if let Some(state) = entity(
+    view,
+    "toolbarStateKey",
+    "engagementToolbarStateEntityPayload",
+  ) {
+    comment.rating = match state["likeState"].as_str() {
+      Some("TOOLBAR_LIKE_STATE_LIKED") => LikeStatus::Like,
+      Some("TOOLBAR_LIKE_STATE_DISLIKED") => LikeStatus::Dislike,
+      _ => LikeStatus::Indifferent,
+    };
+  }
+  let surface = entity(
+    view,
+    "toolbarSurfaceKey",
+    "engagementToolbarSurfaceEntityPayload",
+  );
+  comment.actions = surface.and_then(comment_actions);
+  // The reply dialog's button, signed in.
+  comment.reply_params = surface
+    .and_then(|s| find_key(&s["replyCommand"], "createCommentReplyEndpoint"))
+    .and_then(|e| e["createReplyParams"].as_str().map(str::to_owned));
+  // The user's own comment: its menu's "Supprimer", behind a confirmation dialog.
+  comment.delete_action = surface
+    .and_then(|s| find_key(&s["menuCommand"], "confirmDialogRenderer"))
+    .and_then(|dialog| find_key(&dialog["confirmButton"], "performCommentActionEndpoint"))
+    .and_then(|e| e["action"].as_str().map(str::to_owned));
+  Some(comment)
+}
+
+/// The comment YouTube made from a post (`comment/create_comment`'s `createCommentAction`, or
+/// `comment/create_comment_reply`'s `createCommentReplyAction`), as the list shows it; `None`
+/// when the answer's status is not `STATUS_SUCCEEDED`.
+pub fn parse_created_comment(response: &Value) -> Option<Comment> {
+  if response["actionResult"]["status"] != "STATUS_SUCCEEDED" {
+    return None;
+  }
+  let entities = comment_entities(response);
+  response["actions"]
+    .as_array()?
+    .iter()
+    .filter_map(|a| {
+      a.get("createCommentAction")
+        .or_else(|| a.get("createCommentReplyAction"))
+    })
+    .find_map(|action| comment_item(&action["contents"], &entities))
+}
+
+/// Whether a delete (`comment/perform_comment_action` with a comment's
+/// [`Comment::delete_action`]) removed it: its `removeCommentAction` succeeded.
+pub fn parse_comment_removed(response: &Value) -> bool {
+  response["actions"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .any(|a| a["removeCommentAction"]["actionResult"]["status"] == "STATUS_SUCCEEDED")
 }
 
 /// The segments of `video_id` in a SponsorBlock answer by hash prefix (`skipSegments/<prefix>`:
@@ -1514,6 +1559,20 @@ pub fn parse_search_suggestions(body: &str) -> Vec<crate::models::SearchSuggesti
       Some(crate::models::SearchSuggestion { text, channel })
     })
     .collect()
+}
+
+/// The comments header's field, signed in (`commentSimpleboxRenderer`): its submit button's
+/// `createCommentEndpoint` params and its placeholder.
+fn comment_composer(header: &Value) -> Option<crate::models::CommentComposer> {
+  let simplebox = find_key(&header["createRenderer"], "commentSimpleboxRenderer")?;
+  let params =
+    find_key(&simplebox["submitButton"], "createCommentEndpoint")?["createCommentParams"]
+      .as_str()?
+      .to_owned();
+  Some(crate::models::CommentComposer {
+    params,
+    placeholder: non_empty(text(&simplebox["placeholderText"])),
+  })
 }
 
 /// The comments header's sort menu (`sortFilterSubMenuRenderer`): each order's title, whether
@@ -1603,6 +1662,8 @@ fn parse_comment(entity: &Value) -> Option<Comment> {
     actions: None,
     replies: string(&toolbar["replyCount"]),
     replies_continuation: None,
+    reply_params: None,
+    delete_action: None,
   })
 }
 
