@@ -488,6 +488,17 @@ impl Shell {
     self.activate(id, window, cx);
   }
 
+  /// A middle click on tab `id` closes it; on the window's only tab, it closes the window, as its
+  /// close button does (`desktop::attach`: hidden as a spare while another window is open, else
+  /// in the notification area or Peeby quits).
+  fn middle_click_tab(&mut self, id: TabId, cx: &mut Context<Self>) {
+    if self.tabs.len() > 1 {
+      self.close_tab(id, cx);
+    } else if let Some(hwnd) = windows::get(self.window, cx).and_then(|w| w.hwnd) {
+      crate::desktop::sys::close(hwnd);
+    }
+  }
+
   /// Closes tab `id` (its "×", a middle click on it): its pages and its video go, and the next
   /// tab shows if it was the one shown. The last tab stays.
   fn close_tab(&mut self, id: TabId, cx: &mut Context<Self>) {
@@ -1001,7 +1012,7 @@ impl Shell {
           .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
           .on_aux_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
             if event.is_middle_click() {
-              this.close_tab(id, cx);
+              this.middle_click_tab(id, cx);
             }
           }))
           .context_menu({

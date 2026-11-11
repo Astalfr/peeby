@@ -31,9 +31,9 @@ use windows::Win32::System::Pipes::{
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-  GetClientRect, GetCursorPos, GetWindowRect, HTCAPTION, HWND_TOP, IsIconic, SC_MOVE, SW_HIDE,
-  SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-  SendMessageW, SetWindowPos, ShowWindow, WM_CANCELMODE, WM_SYSCOMMAND,
+  GetClientRect, GetCursorPos, GetWindowRect, HTCAPTION, HWND_TOP, IsIconic, PostMessageW, SC_MOVE,
+  SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+  SWP_NOZORDER, SendMessageW, SetWindowPos, ShowWindow, WM_CANCELMODE, WM_CLOSE, WM_SYSCOMMAND,
 };
 use windows::core::{HSTRING, PCWSTR};
 
@@ -48,6 +48,15 @@ pub fn hide(hwnd: isize) {
   // SAFETY: `ShowWindow` accepts any value: an `hwnd` that is no longer a window only fails.
   unsafe {
     let _ = ShowWindow(HWND(hwnd as *mut _), SW_HIDE);
+  }
+}
+
+/// Asks the window `hwnd` to close, as its close button does (posted: it is handled after the
+/// current message, outside any update of the app).
+pub fn close(hwnd: isize) {
+  // SAFETY: as in `hide`, any value is accepted; `WM_CLOSE` takes no parameters.
+  unsafe {
+    let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
   }
 }
 
