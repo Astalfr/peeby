@@ -23,6 +23,7 @@ use gpui::{
   Task, WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::popover::Popover;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
@@ -755,6 +756,109 @@ impl WatchView {
       .children(attribution)
   }
 
+  /// A collaboration's subscribe button, signed in: "S'abonner" (primary) while subscribed to
+  /// none of its channels, "Abonné" to all, "Abonné 1/2" between; it opens the list of the
+  /// channels, each with its own subscribe button and, while subscribed, its bell, as
+  /// youtube.com's dialog.
+  fn collaboration_subscribe(
+    &self,
+    page: &WatchPage,
+    cx: &App,
+  ) -> Option<impl IntoElement + use<>> {
+    let channels: Vec<_> = page
+      .collaborators
+      .iter()
+      .filter_map(|c| {
+        Some((
+          c.channel_id.clone()?,
+          c.name.clone(),
+          c.subscription.clone()?,
+          c.notifications.clone(),
+          c.avatar.clone(),
+        ))
+      })
+      .collect();
+    if channels.is_empty() {
+      return None;
+    }
+    let subscribed = channels
+      .iter()
+      .filter(|(id, _, subscription, ..)| subscribe::is_subscribed(id, subscription, cx))
+      .count();
+    let label: SharedString = if subscribed == channels.len() {
+      t("Subscribed", "Abonné").into()
+    } else if subscribed == 0 {
+      t("Subscribe", "S'abonner").into()
+    } else {
+      ui::tf!(
+        "Subscribed {}/{}",
+        "Abonné {}/{}",
+        subscribed,
+        channels.len()
+      )
+      .into()
+    };
+    let key = format!("collab-subscribe-{}", self.video_id);
+    let trigger = Button::new(SharedString::from(format!("{key}-button")))
+      .label(label)
+      .when(subscribed == 0, |b| b.primary())
+      .when(subscribed > 0, |b| b.ghost());
+    Some(
+      h_flex().h(px(40.)).items_center().child(
+        Popover::new(SharedString::from(key.clone()))
+          .anchor(gpui::Anchor::TopLeft)
+          .trigger(trigger)
+          .content(move |_, window, cx| {
+            v_flex()
+              .w(px(340.))
+              .p_1()
+              .gap_1()
+              .children(
+                channels
+                  .iter()
+                  .map(|(id, name, subscription, bell, avatar)| {
+                    let row = format!("{key}-{id}");
+                    let subscribed = subscribe::is_subscribed(id, subscription, cx);
+                    h_flex()
+                      .px_2()
+                      .py_1p5()
+                      .gap_3()
+                      .items_center()
+                      .child(ui::picture::avatar(
+                        &convert::picture(avatar),
+                        32.,
+                        window,
+                        cx,
+                      ))
+                      .child(
+                        div()
+                          .flex_1()
+                          .min_w_0()
+                          .truncate()
+                          .font_weight(FontWeight::SEMIBOLD)
+                          .child(name.clone()),
+                      )
+                      .child(subscribe::subscribe_button(
+                        &row,
+                        id,
+                        name,
+                        subscription,
+                        true,
+                        cx,
+                      ))
+                      .children(
+                        bell
+                          .as_ref()
+                          .filter(|_| subscribed)
+                          .map(|bell| bell::bell_button(&row, id, bell, true, cx)),
+                      )
+                  }),
+              )
+          }),
+      ),
+    )
+  }
+
   /// A collaboration's avatars, overlapping from left to right as on youtube.com, each ringed
   /// with the page's background.
   fn collaborator_avatars(
@@ -836,6 +940,9 @@ impl WatchView {
       return skeleton_details();
     };
     let collaboration = !page.collaborators.is_empty();
+    let collaboration_subscribe = self
+      .collaboration_subscribe(page, cx)
+      .map(IntoElement::into_any_element);
     let avatar = if collaboration {
       Some(
         self
@@ -977,11 +1084,13 @@ impl WatchView {
                 ),
               ),
           )
+          .children(collaboration_subscribe)
           .children(
             page
               .channel_id
               .as_deref()
               .zip(page.subscription.as_ref())
+              .filter(|_| !collaboration)
               .map(|(channel_id, subscription)| {
                 let key = format!("watch-{}", self.video_id);
                 let subscribed = subscribe::is_subscribed(channel_id, subscription, cx);

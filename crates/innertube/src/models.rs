@@ -319,6 +319,10 @@ pub struct Collaborator {
   pub handle: Option<String>,
   /// Avatar sizes.
   pub avatar: Vec<Thumbnail>,
+  /// Its own subscribe button, signed in.
+  pub subscription: Option<Subscription>,
+  /// Its own bell, signed in (shown while subscribed).
+  pub notifications: Option<ChannelNotifications>,
 }
 
 /// Metadata of the watch page.

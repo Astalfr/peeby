@@ -73,6 +73,8 @@ feeds", `[youtube]`, on by default).
 
 ### 8. Subscribing to a collaboration's channels
 
+Done (2026-11-11), checked by the user in the app.
+
 On a collaboration's watch page (`WatchPage::collaborators`), the subscribe button opens a menu
 listing the channels, each with its own subscribe state, as youtube.com does (each list item's
 `subscribeButtonViewModel`: a signed-in fixture first).

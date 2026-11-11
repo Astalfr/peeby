@@ -178,16 +178,21 @@ fn parse_channel_header(response: &Value) -> Option<crate::models::ChannelHeader
       .trim()
       .to_owned(),
     tabs,
-    subscription: header_subscription(header, response),
-    notifications: header_notifications(header),
+    subscription: find_key(&header["actions"], "subscribeButtonViewModel")
+      .and_then(|button| button_subscription(&button, response)),
+    notifications: find_key(&header["actions"], "subscribeButtonViewModel")
+      .and_then(|button| button_notifications(&button)),
   })
 }
 
-/// A channel header's subscribe button, signed in (`subscribeButtonViewModel`; signed out it is
-/// a plain button opening a sign-in dialog): its endpoints' params, and whether the user is
-/// subscribed, from the entity its `stateEntityStoreKey` names (`subscriptionStateEntity`).
-fn header_subscription(header: &Value, response: &Value) -> Option<Subscription> {
-  let button = find_key(&header["actions"], "subscribeButtonViewModel")?;
+/// A `subscribeButtonViewModel` (a channel header's, a collaborator's), signed in (signed out
+/// a channel's header has a plain button opening a sign-in dialog instead): its endpoints'
+/// params, and whether the user is subscribed, from the entity its `stateEntityStoreKey` names
+/// (`subscriptionStateEntity`).
+fn button_subscription(button: &Value, response: &Value) -> Option<Subscription> {
+  if button["isSignedOut"] == true {
+    return None;
+  }
   let key = button["stateEntityStoreKey"].as_str();
   let subscribed = response["frameworkUpdates"]["entityBatchUpdate"]["mutations"]
     .as_array()
@@ -196,7 +201,7 @@ fn header_subscription(header: &Value, response: &Value) -> Option<Subscription>
     .find(|m| key.is_some() && m["entityKey"].as_str() == key)
     .is_some_and(|m| m["payload"]["subscriptionStateEntity"]["subscribed"] == true);
   let params = |key: &str| {
-    find_key(&button, key).and_then(|endpoint| endpoint["params"].as_str().map(str::to_owned))
+    find_key(button, key).and_then(|endpoint| endpoint["params"].as_str().map(str::to_owned))
   };
   Some(Subscription {
     subscribed,
@@ -205,10 +210,9 @@ fn header_subscription(header: &Value, response: &Value) -> Option<Subscription>
   })
 }
 
-/// A channel header's bell, signed in: the subscribe button's options sheet, a list item per
-/// level (its image), the selected one the level now, each with the params setting it.
-fn header_notifications(header: &Value) -> Option<ChannelNotifications> {
-  let button = find_key(&header["actions"], "subscribeButtonViewModel")?;
+/// A `subscribeButtonViewModel`'s bell, signed in: its options sheet, a list item per level
+/// (its image), the selected one the level now, each with the params setting it.
+fn button_notifications(button: &Value) -> Option<ChannelNotifications> {
   let mut items = Vec::new();
   find_all(
     &button["onShowSubscriptionOptions"],
@@ -332,7 +336,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
   let owner_run = &owner["title"]["runs"][0];
   // A collaboration's owner has no `title` nor picture: its channels are in a dialog.
   let collaborators = if owner_run.is_null() {
-    parse_collaborators(owner)
+    parse_collaborators(owner, response)
   } else {
     Vec::new()
   };
@@ -422,8 +426,9 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
 
 /// The channels of a collaboration (several channels sign the video): the owner's
 /// `attributedTitle` ("A et B") opens a dialog listing them, the uploader first, each a
-/// `listItemViewModel` with its name, and its avatar linking to the channel.
-fn parse_collaborators(owner: &Value) -> Vec<Collaborator> {
+/// `listItemViewModel` with its name, its avatar linking to the channel, and signed in its own
+/// subscribe button and bell (`subscribeButtonViewModel`, its state among the page's entities).
+fn parse_collaborators(owner: &Value, response: &Value) -> Vec<Collaborator> {
   let mut lists = Vec::new();
   find_all(&owner["attributedTitle"], "listViewModel", &mut lists);
   lists
@@ -444,6 +449,10 @@ fn parse_collaborators(owner: &Value) -> Vec<Collaborator> {
           .filter(|h| h.starts_with('@'))
           .map(str::to_owned),
         avatar: thumbnails(&avatar["image"]["sources"]),
+        subscription: find_key(&item["trailingButtons"], "subscribeButtonViewModel")
+          .and_then(|button| button_subscription(&button, response)),
+        notifications: find_key(&item["trailingButtons"], "subscribeButtonViewModel")
+          .and_then(|button| button_notifications(&button)),
       })
     })
     .collect()

@@ -801,6 +801,11 @@ impl Client {
     Ok(parse_shorts_sequence(&response))
   }
 
+  /// The whole `next` answer for `video_id`, for the examples' fixtures.
+  pub async fn watch_response(&self, video_id: &str) -> Result<Value> {
+    self.web("next", json!({ "videoId": video_id }), true).await
+  }
+
   /// Watch page: metadata, related videos, comments token.
   pub async fn watch(&self, video_id: &str) -> Result<WatchPage> {
     let response = self

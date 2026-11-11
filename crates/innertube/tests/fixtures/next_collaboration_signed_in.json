@@ -1,0 +1,981 @@
+{
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "title": {
+                  "runs": [
+                    {
+                      "text": "New Federation Arc about to be CRAZY | Wuthering Waves Lily Resonator Showcase Reaction"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "videoSecondaryInfoRenderer": {
+                "owner": {
+                  "videoOwnerRenderer": {
+                    "attributedTitle": {
+                      "content": "Hackoru et CosmosZR",
+                      "commandRuns": [
+                        {
+                          "startIndex": 0,
+                          "length": 19,
+                          "onTap": {
+                            "innertubeCommand": {
+                              "showDialogCommand": {
+                                "panelLoadingStrategy": {
+                                  "inlineContent": {
+                                    "dialogViewModel": {
+                                      "customContent": {
+                                        "listViewModel": {
+                                          "listItems": [
+                                            {
+                                              "listItemViewModel": {
+                                                "title": {
+                                                  "content": "Hackoru"
+                                                },
+                                                "subtitle": {
+                                                  "content": "‎⁨@Hackoru⁩ • ⁨133 k abonnés⁩"
+                                                },
+                                                "leadingAccessory": {
+                                                  "avatarViewModel": {
+                                                    "image": {
+                                                      "processor": {
+                                                        "borderImageProcessor": {
+                                                          "circular": true
+                                                        }
+                                                      },
+                                                      "sources": [
+                                                        {
+                                                          "url": "https://yt3.ggpht.com/VPM7bSjIJsoV5F5as4Eta6Ysl3zmBb14t9m5LHHdxqa-B2exdv4KPJyHfY_WZiSJphHY9q46Yw=s88-c-k-c0x00ffffff-no-rj"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "endpoint": {
+                                                      "innertubeCommand": {
+                                                        "browseEndpoint": {
+                                                          "browseId": "UCyvHPV3h__QRHP9R83jDpkw",
+                                                          "canonicalBaseUrl": "/@Hackoru"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "trailingButtons": {
+                                                  "buttons": [
+                                                    {
+                                                      "subscribeButtonViewModel": {
+                                                        "backgroundStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_BACKGROUND_STYLE_UNKNOWN",
+                                                        "bellAccessibilityData": {
+                                                          "allLabel": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Hackoru.",
+                                                          "disabledLabel": "Les notifications YouTube sont désactivées. Appuyez si vous souhaitez modifier vos paramètres de notification.",
+                                                          "occasionalLabel": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne Hackoru.",
+                                                          "offLabel": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne Hackoru."
+                                                        },
+                                                        "buttonStyle": {
+                                                          "subscribeButtonAnimationStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_ANIMATION_STYLE_CAIRO",
+                                                          "subscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_SUBSCRIBED_STATE_STYLE_UNKNOWN",
+                                                          "unsubscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_UNSUBSCRIBED_STATE_STYLE_PILL"
+                                                        },
+                                                        "channelId": "UCyvHPV3h__QRHP9R83jDpkw",
+                                                        "disableNotificationBell": false,
+                                                        "disableSubscribeButton": false,
+                                                        "enableSubscribeButtonPostClickAnimation": true,
+                                                        "notificationStateEntityStoreKeys": {
+                                                          "subsNotificationStateKey": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgjAEoAQ%3D%3D"
+                                                        },
+                                                        "onShowSubscriptionOptions": {
+                                                          "innertubeCommand": {
+                                                            "showSheetCommand": {
+                                                              "panelLoadingStrategy": {
+                                                                "inlineContent": {
+                                                                  "sheetViewModel": {
+                                                                    "content": {
+                                                                      "listViewModel": {
+                                                                        "listItems": [
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_ACTIVE"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cSAggCGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Toutes"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": true,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_NONE"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cSAggBGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Personnalisées"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_OFF"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cSAggDGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Aucune"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "PERSON_MINUS"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "signalServiceEndpoint": {
+                                                                                        "actions": [
+                                                                                          {
+                                                                                            "openPopupAction": {
+                                                                                              "popup": {
+                                                                                                "confirmDialogRenderer": {
+                                                                                                  "cancelButton": {
+                                                                                                    "buttonRenderer": {
+                                                                                                      "isDisabled": false,
+                                                                                                      "size": "SIZE_DEFAULT",
+                                                                                                      "style": "STYLE_TEXT",
+                                                                                                      "text": {
+                                                                                                        "runs": [
+                                                                                                          {
+                                                                                                            "text": "Annuler"
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    }
+                                                                                                  },
+                                                                                                  "confirmButton": {
+                                                                                                    "buttonRenderer": {
+                                                                                                      "isDisabled": false,
+                                                                                                      "serviceEndpoint": {
+                                                                                                        "commandMetadata": {
+                                                                                                          "webCommandMetadata": {
+                                                                                                            "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                                                            "sendPost": true
+                                                                                                          }
+                                                                                                        },
+                                                                                                        "unsubscribeEndpoint": {
+                                                                                                          "channelIds": [
+                                                                                                            "UCyvHPV3h__QRHP9R83jDpkw"
+                                                                                                          ],
+                                                                                                          "params": "CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                                        }
+                                                                                                      },
+                                                                                                      "size": "SIZE_DEFAULT",
+                                                                                                      "style": "STYLE_BLUE_TEXT",
+                                                                                                      "text": {
+                                                                                                        "runs": [
+                                                                                                          {
+                                                                                                            "text": "Se désabonner"
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    }
+                                                                                                  },
+                                                                                                  "dialogMessages": [
+                                                                                                    {
+                                                                                                      "runs": [
+                                                                                                        {
+                                                                                                          "text": "Se désabonner de "
+                                                                                                        },
+                                                                                                        {
+                                                                                                          "text": "Hackoru"
+                                                                                                        },
+                                                                                                        {
+                                                                                                          "text": " ?"
+                                                                                                        }
+                                                                                                      ]
+                                                                                                    }
+                                                                                                  ],
+                                                                                                  "primaryIsCancel": false
+                                                                                                }
+                                                                                              },
+                                                                                              "popupType": "DIALOG"
+                                                                                            }
+                                                                                          }
+                                                                                        ],
+                                                                                        "signal": "CLIENT_SIGNAL"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "title": {
+                                                                                "content": "Se désabonner"
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        },
+                                                        "stateEntityStoreKey": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgMygB",
+                                                        "subscribeButtonContent": {
+                                                          "accessibilityText": "S'abonner à Hackoru.",
+                                                          "buttonText": "S’abonner",
+                                                          "imageName": "ic_video_youtube",
+                                                          "onTapCommand": {
+                                                            "innertubeCommand": {
+                                                              "commandMetadata": {
+                                                                "webCommandMetadata": {
+                                                                  "apiUrl": "/youtubei/v1/subscription/subscribe",
+                                                                  "sendPost": true
+                                                                }
+                                                              },
+                                                              "subscribeEndpoint": {
+                                                                "channelIds": [
+                                                                  "UCyvHPV3h__QRHP9R83jDpkw"
+                                                                ],
+                                                                "params": "EgIIAxgAShhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3dKGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                              }
+                                                            }
+                                                          },
+                                                          "subscribeState": {
+                                                            "key": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgMygB",
+                                                            "subscribed": false
+                                                          }
+                                                        },
+                                                        "unsubscribeButtonContent": {
+                                                          "accessibilityText": "Se désabonner de Hackoru.",
+                                                          "buttonText": "Abonné",
+                                                          "imageName": "ic_video_youtube",
+                                                          "onTapCommand": {
+                                                            "innertubeCommand": {
+                                                              "commandMetadata": {
+                                                                "webCommandMetadata": {
+                                                                  "sendPost": true
+                                                                }
+                                                              },
+                                                              "signalServiceEndpoint": {
+                                                                "actions": [
+                                                                  {
+                                                                    "openPopupAction": {
+                                                                      "popup": {
+                                                                        "confirmDialogRenderer": {
+                                                                          "cancelButton": {
+                                                                            "buttonRenderer": {
+                                                                              "isDisabled": false,
+                                                                              "size": "SIZE_DEFAULT",
+                                                                              "style": "STYLE_TEXT",
+                                                                              "text": {
+                                                                                "runs": [
+                                                                                  {
+                                                                                    "text": "Annuler"
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          "confirmButton": {
+                                                                            "buttonRenderer": {
+                                                                              "isDisabled": false,
+                                                                              "serviceEndpoint": {
+                                                                                "commandMetadata": {
+                                                                                  "webCommandMetadata": {
+                                                                                    "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                                    "sendPost": true
+                                                                                  }
+                                                                                },
+                                                                                "unsubscribeEndpoint": {
+                                                                                  "channelIds": [
+                                                                                    "UCyvHPV3h__QRHP9R83jDpkw"
+                                                                                  ],
+                                                                                  "params": "CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                }
+                                                                              },
+                                                                              "size": "SIZE_DEFAULT",
+                                                                              "style": "STYLE_BLUE_TEXT",
+                                                                              "text": {
+                                                                                "runs": [
+                                                                                  {
+                                                                                    "text": "Se désabonner"
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          "dialogMessages": [
+                                                                            {
+                                                                              "runs": [
+                                                                                {
+                                                                                  "text": "Se désabonner de "
+                                                                                },
+                                                                                {
+                                                                                  "text": "Hackoru"
+                                                                                },
+                                                                                {
+                                                                                  "text": " ?"
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ],
+                                                                          "primaryIsCancel": false
+                                                                        }
+                                                                      },
+                                                                      "popupType": "DIALOG"
+                                                                    }
+                                                                  }
+                                                                ],
+                                                                "signal": "CLIENT_SIGNAL"
+                                                              }
+                                                            }
+                                                          },
+                                                          "subscribeState": {
+                                                            "key": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgMygB",
+                                                            "subscribed": true
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            {
+                                              "listItemViewModel": {
+                                                "title": {
+                                                  "content": "CosmosZR"
+                                                },
+                                                "subtitle": {
+                                                  "content": "‎⁨@CosmosZR⁩ • ⁨153 k abonnés⁩"
+                                                },
+                                                "leadingAccessory": {
+                                                  "avatarViewModel": {
+                                                    "image": {
+                                                      "processor": {
+                                                        "borderImageProcessor": {
+                                                          "circular": true
+                                                        }
+                                                      },
+                                                      "sources": [
+                                                        {
+                                                          "url": "https://yt3.ggpht.com/zD8q53nnh3krzLy4tVeMYioRFIse_1DFTyIw6icMSXwr3UmMVRziOtOAwTrlMvWD1hTAbIb4ug=s88-c-k-c0x00ffffff-no-rj"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "endpoint": {
+                                                      "innertubeCommand": {
+                                                        "browseEndpoint": {
+                                                          "browseId": "UCx6-QwsBu7-p2khs-4jEs1A",
+                                                          "canonicalBaseUrl": "/@CosmosZR"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                "trailingButtons": {
+                                                  "buttons": [
+                                                    {
+                                                      "subscribeButtonViewModel": {
+                                                        "backgroundStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_BACKGROUND_STYLE_UNKNOWN",
+                                                        "bellAccessibilityData": {
+                                                          "allLabel": "Le paramètre \"Recevoir toutes les notifications\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne CosmosZR.",
+                                                          "disabledLabel": "Les notifications YouTube sont désactivées. Appuyez si vous souhaitez modifier vos paramètres de notification.",
+                                                          "occasionalLabel": "Le paramètre \"Notifications personnalisées\" est actuellement sélectionné. Appuyez si vous souhaitez le modifier pour la chaîne CosmosZR.",
+                                                          "offLabel": "Le paramètre \"Aucune notification\" est actuellement sélectionné. Appuyez si vous souhaitez modifier ce paramètre pour la chaîne CosmosZR."
+                                                        },
+                                                        "buttonStyle": {
+                                                          "subscribeButtonAnimationStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_ANIMATION_STYLE_CAIRO",
+                                                          "subscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_SUBSCRIBED_STATE_STYLE_UNKNOWN",
+                                                          "unsubscribedStateStyle": "SUBSCRIBE_BUTTON_VIEW_MODEL_UNSUBSCRIBED_STATE_STYLE_PILL"
+                                                        },
+                                                        "channelId": "UCx6-QwsBu7-p2khs-4jEs1A",
+                                                        "disableNotificationBell": false,
+                                                        "disableSubscribeButton": false,
+                                                        "enableSubscribeButtonPostClickAnimation": true,
+                                                        "notificationStateEntityStoreKeys": {
+                                                          "subsNotificationStateKey": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgjAEoAQ%3D%3D"
+                                                        },
+                                                        "onShowSubscriptionOptions": {
+                                                          "innertubeCommand": {
+                                                            "showSheetCommand": {
+                                                              "panelLoadingStrategy": {
+                                                                "inlineContent": {
+                                                                  "sheetViewModel": {
+                                                                    "content": {
+                                                                      "listViewModel": {
+                                                                        "listItems": [
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_ACTIVE"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUESAggCGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Toutes"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": true,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_NONE"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUESAggBGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Personnalisées"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "isSelected": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "NOTIFICATIONS_OFF"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "apiUrl": "/youtubei/v1/notification/modify_channel_preference",
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "modifyChannelNotificationPreferenceEndpoint": {
+                                                                                        "params": "ChhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUESAggDGAAgBFI6CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "selectionStyle": "LIST_ITEM_SELECTION_STYLE_DEFAULT",
+                                                                              "title": {
+                                                                                "content": "Aucune"
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "listItemViewModel": {
+                                                                              "isDisabled": false,
+                                                                              "leadingImage": {
+                                                                                "sources": [
+                                                                                  {
+                                                                                    "clientResource": {
+                                                                                      "imageName": "PERSON_MINUS"
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "rendererContext": {
+                                                                                "commandContext": {
+                                                                                  "onTap": {
+                                                                                    "innertubeCommand": {
+                                                                                      "commandMetadata": {
+                                                                                        "webCommandMetadata": {
+                                                                                          "sendPost": true
+                                                                                        }
+                                                                                      },
+                                                                                      "signalServiceEndpoint": {
+                                                                                        "actions": [
+                                                                                          {
+                                                                                            "openPopupAction": {
+                                                                                              "popup": {
+                                                                                                "confirmDialogRenderer": {
+                                                                                                  "cancelButton": {
+                                                                                                    "buttonRenderer": {
+                                                                                                      "isDisabled": false,
+                                                                                                      "size": "SIZE_DEFAULT",
+                                                                                                      "style": "STYLE_TEXT",
+                                                                                                      "text": {
+                                                                                                        "runs": [
+                                                                                                          {
+                                                                                                            "text": "Annuler"
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    }
+                                                                                                  },
+                                                                                                  "confirmButton": {
+                                                                                                    "buttonRenderer": {
+                                                                                                      "isDisabled": false,
+                                                                                                      "serviceEndpoint": {
+                                                                                                        "commandMetadata": {
+                                                                                                          "webCommandMetadata": {
+                                                                                                            "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                                                            "sendPost": true
+                                                                                                          }
+                                                                                                        },
+                                                                                                        "unsubscribeEndpoint": {
+                                                                                                          "channelIds": [
+                                                                                                            "UCx6-QwsBu7-p2khs-4jEs1A"
+                                                                                                          ],
+                                                                                                          "params": "CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                                        }
+                                                                                                      },
+                                                                                                      "size": "SIZE_DEFAULT",
+                                                                                                      "style": "STYLE_BLUE_TEXT",
+                                                                                                      "text": {
+                                                                                                        "runs": [
+                                                                                                          {
+                                                                                                            "text": "Se désabonner"
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    }
+                                                                                                  },
+                                                                                                  "dialogMessages": [
+                                                                                                    {
+                                                                                                      "runs": [
+                                                                                                        {
+                                                                                                          "text": "Se désabonner de "
+                                                                                                        },
+                                                                                                        {
+                                                                                                          "text": "CosmosZR"
+                                                                                                        },
+                                                                                                        {
+                                                                                                          "text": " ?"
+                                                                                                        }
+                                                                                                      ]
+                                                                                                    }
+                                                                                                  ],
+                                                                                                  "primaryIsCancel": false
+                                                                                                }
+                                                                                              },
+                                                                                              "popupType": "DIALOG"
+                                                                                            }
+                                                                                          }
+                                                                                        ],
+                                                                                        "signal": "CLIENT_SIGNAL"
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                },
+                                                                                "loggingContext": {}
+                                                                              },
+                                                                              "title": {
+                                                                                "content": "Se désabonner"
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        },
+                                                        "stateEntityStoreKey": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgMygB",
+                                                        "subscribeButtonContent": {
+                                                          "accessibilityText": "S'abonner à CosmosZR.",
+                                                          "buttonText": "S’abonner",
+                                                          "imageName": "ic_video_youtube",
+                                                          "onTapCommand": {
+                                                            "innertubeCommand": {
+                                                              "commandMetadata": {
+                                                                "webCommandMetadata": {
+                                                                  "apiUrl": "/youtubei/v1/subscription/subscribe",
+                                                                  "sendPost": true
+                                                                }
+                                                              },
+                                                              "subscribeEndpoint": {
+                                                                "channelIds": [
+                                                                  "UCx6-QwsBu7-p2khs-4jEs1A"
+                                                                ],
+                                                                "params": "EgIIAxgAShhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3dKGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                              }
+                                                            }
+                                                          },
+                                                          "subscribeState": {
+                                                            "key": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgMygB",
+                                                            "subscribed": false
+                                                          }
+                                                        },
+                                                        "unsubscribeButtonContent": {
+                                                          "accessibilityText": "Se désabonner de CosmosZR.",
+                                                          "buttonText": "Abonné",
+                                                          "imageName": "ic_video_youtube",
+                                                          "onTapCommand": {
+                                                            "innertubeCommand": {
+                                                              "commandMetadata": {
+                                                                "webCommandMetadata": {
+                                                                  "sendPost": true
+                                                                }
+                                                              },
+                                                              "signalServiceEndpoint": {
+                                                                "actions": [
+                                                                  {
+                                                                    "openPopupAction": {
+                                                                      "popup": {
+                                                                        "confirmDialogRenderer": {
+                                                                          "cancelButton": {
+                                                                            "buttonRenderer": {
+                                                                              "isDisabled": false,
+                                                                              "size": "SIZE_DEFAULT",
+                                                                              "style": "STYLE_TEXT",
+                                                                              "text": {
+                                                                                "runs": [
+                                                                                  {
+                                                                                    "text": "Annuler"
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          "confirmButton": {
+                                                                            "buttonRenderer": {
+                                                                              "isDisabled": false,
+                                                                              "serviceEndpoint": {
+                                                                                "commandMetadata": {
+                                                                                  "webCommandMetadata": {
+                                                                                    "apiUrl": "/youtubei/v1/subscription/unsubscribe",
+                                                                                    "sendPost": true
+                                                                                  }
+                                                                                },
+                                                                                "unsubscribeEndpoint": {
+                                                                                  "channelIds": [
+                                                                                    "UCx6-QwsBu7-p2khs-4jEs1A"
+                                                                                  ],
+                                                                                  "params": "CgIIAxgAIhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3ciGFVDeDYtUXdzQnU3LXAya2hzLTRqRXMxQQ%3D%3D"
+                                                                                }
+                                                                              },
+                                                                              "size": "SIZE_DEFAULT",
+                                                                              "style": "STYLE_BLUE_TEXT",
+                                                                              "text": {
+                                                                                "runs": [
+                                                                                  {
+                                                                                    "text": "Se désabonner"
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                          "dialogMessages": [
+                                                                            {
+                                                                              "runs": [
+                                                                                {
+                                                                                  "text": "Se désabonner de "
+                                                                                },
+                                                                                {
+                                                                                  "text": "CosmosZR"
+                                                                                },
+                                                                                {
+                                                                                  "text": " ?"
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ],
+                                                                          "primaryIsCancel": false
+                                                                        }
+                                                                      },
+                                                                      "popupType": "DIALOG"
+                                                                    }
+                                                                  }
+                                                                ],
+                                                                "signal": "CLIENT_SIGNAL"
+                                                              }
+                                                            }
+                                                          },
+                                                          "subscribeState": {
+                                                            "key": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgMygB",
+                                                            "subscribed": true
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "avatarStack": {
+                      "avatarStackViewModel": {
+                        "avatarClusterSize": "AVATAR_SIZE_S",
+                        "avatars": [
+                          {
+                            "avatarViewModel": {
+                              "image": {
+                                "processor": {
+                                  "borderImageProcessor": {
+                                    "circular": true
+                                  }
+                                },
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/VPM7bSjIJsoV5F5as4Eta6Ysl3zmBb14t9m5LHHdxqa-B2exdv4KPJyHfY_WZiSJphHY9q46Yw=s88-c-k-c0x00ffffff-no-rj"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "avatarViewModel": {
+                              "image": {
+                                "processor": {
+                                  "borderImageProcessor": {
+                                    "circular": true
+                                  }
+                                },
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/zD8q53nnh3krzLy4tVeMYioRFIse_1DFTyIw6icMSXwr3UmMVRziOtOAwTrlMvWD1hTAbIb4ug=s88-c-k-c0x00ffffff-no-rj"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        "layoutType": "AVATAR_STACK_LAYOUT_CLUSTER",
+                        "rendererContext": {
+                          "accessibilityContext": {
+                            "label": "Chaînes de collaboration"
+                          },
+                          "loggingContext": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgMygB",
+              "subscribed": false
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgjAEoAQ%3D%3D",
+          "payload": {
+            "subscriptionNotificationStateEntity": {
+              "key": "EhhVQ3l2SFBWM2hfX1FSSFA5UjgzakRwa3cgjAEoAQ%3D%3D",
+              "state": "SUBSCRIPTION_NOTIFICATION_STATE_OCCASIONAL"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgMygB",
+          "payload": {
+            "subscriptionStateEntity": {
+              "key": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgMygB",
+              "subscribed": true
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        },
+        {
+          "entityKey": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgjAEoAQ%3D%3D",
+          "payload": {
+            "subscriptionNotificationStateEntity": {
+              "key": "EhhVQ3g2LVF3c0J1Ny1wMmtocy00akVzMUEgjAEoAQ%3D%3D",
+              "state": "SUBSCRIPTION_NOTIFICATION_STATE_OCCASIONAL"
+            }
+          },
+          "type": "ENTITY_MUTATION_TYPE_REPLACE"
+        }
+      ]
+    }
+  },
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -645,6 +645,39 @@ fn sponsor_segments() {
 }
 
 #[test]
+fn watch_page_collaboration_signed_in() {
+  // The same collaboration signed in (captured 2026-11-11), trimmed to its owner with each
+  // channel's subscribe button, and their subscription entities: subscribed to the second
+  // channel only, each button its own channel's.
+  let page = parse_watch("x7jO42vp2A8", &fixture("next_collaboration_signed_in.json"));
+  let states: Vec<_> = page
+    .collaborators
+    .iter()
+    .map(|c| {
+      (
+        c.name.as_str(),
+        c.subscription.as_ref().map(|s| s.subscribed),
+      )
+    })
+    .collect();
+  assert_eq!(states, [("Hackoru", Some(false)), ("CosmosZR", Some(true))]);
+  assert!(page.collaborators.iter().all(|c| {
+    c.subscription
+      .as_ref()
+      .is_some_and(|s| s.subscribe_params.is_some() && s.unsubscribe_params.is_some())
+  }));
+  assert!(page.collaborators[1].notifications.is_some());
+  // Signed out: no buttons.
+  let signed_out = parse_watch("x7jO42vp2A8", &fixture("next_collaboration.json"));
+  assert!(
+    signed_out
+      .collaborators
+      .iter()
+      .all(|c| c.subscription.is_none())
+  );
+}
+
+#[test]
 fn feedback() {
   // `feedback` answers, signed in, captured 2026-11-11 (`not_interested` example): a Home
   // video marked "Not interested", then its undo; trimmed to `logged_in`.
