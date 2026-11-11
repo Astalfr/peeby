@@ -135,6 +135,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Done (2026-11-11, the user's request, docs/features-plan.md item 6, branch `dev`): signed in, a field over a video's comments posts one (`comment/create_comment` with the header's `createCommentParams`), "Répondre" under a comment opens a field posting a reply (`comment/create_comment_reply` with its `createReplyParams`; a reply's reply goes to its thread), and the user's own comments have "Supprimer", confirmed by a second click (`perform_comment_action` with the menu's confirm dialog action). The list follows YouTube's answers (`parse_created_comment`, `parse_comment_removed`). Captured with the user's agreement on their own video: a comment and its reply posted, then both deleted (`comments` example's `--post`/`--reply`); 2 new tests, 4 fixtures (`comments_composer.json`, `comment_create.json`, `comment_create_reply.json`, `comment_delete.json`, the account's handle, avatar and channel replaced). Checked by the user in the app (2026-11-11).
 
+## YouTube Shorts shelves
+
+- Done (2026-11-11, the user's request, docs/features-plan.md item 7, branch `dev`; the backlog's item): Home's and the subscriptions' Shorts shelves show between their rows where YouTube puts them (`Feed::short_shelves`, each after the videos before it, as the mixes), a row of 9:16 cards (the channel page's Shorts cards, opening the Shorts page on the Short, then its sequence) with "Afficher plus" unfolding the rest; the list's items are now laid out as slots (header, rows, shelves, end). The setting "Shorts dans les flux" (YouTube's part, on by default) hides them. 1 new test, 1 fixture (`home_shorts_shelves.json`), `home --save`. Checked by the user in the app (2026-11-11).
+
 ## YouTube chapters
 
 - Chapters of YouTube videos (2026-11-02): `WatchPage::chapters` from the `next` response's player bar markers (the description's, else YouTube's generated ones), given to the player with `set_chapters`. The shared seek bar now splits into one piece per chapter with gaps, the hovered one thicker (Jellyfin's chapters too); the hover title, the chapters menu and Page Up / Page Down work on them. 1 new test on a trimmed fixture (`next_chapters.json`). Verified: clippy, tests, and the seek bar's pieces on a screenshot of `cargo run -p ui --example player` (which now has chapters). Seen in the app, with the user's agreement: `rfscVS0vtbw` plays with its 35 chapters as pieces of the seek bar and the chapters button. The thickening on hover and the hovered piece's growth are eased (150 ms). **Not verified:** the hovered piece growing and its animation, the chapters menu clicked, Page Up / Page Down pressed.
@@ -472,7 +476,6 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 ## Backlog
 
 - RSS fallback for the subscriptions feed (`feeds/videos.xml?channel_id=`), for use without a session.
-- Shorts shelves (`shortsLockupViewModel`) on Home and subscriptions.
 
 ## Risks
 

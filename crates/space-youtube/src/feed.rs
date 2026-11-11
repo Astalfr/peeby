@@ -94,6 +94,23 @@ struct Shape {
   shorts: bool,
   lead: usize,
   placeholder: bool,
+  /// The feed's Shorts shelves show between its rows (Home, the subscriptions; the setting).
+  shelves: bool,
+}
+
+/// One item of the list.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Slot {
+  /// A channel's header.
+  Header,
+  /// What shows instead of the rows.
+  Placeholder,
+  /// Row `n` of cards (a list row in list mode).
+  Row(usize),
+  /// Shorts shelf `n` (of [`FeedView::shelves`]).
+  Shelf(usize),
+  /// The end: the next page's spinner, or its retry.
+  End,
 }
 
 impl Shape {
@@ -148,6 +165,12 @@ pub struct FeedView {
   shorts: Vec<ShortItem>,
   /// The channel's whole description shows in its header.
   about_open: bool,
+  /// The feed's Shorts shelves, each before the card of this index (in [`Self::cards`]).
+  shelves: Vec<(usize, innertube::ShortShelf)>,
+  /// The shelves unfolded past their first row.
+  expanded_shelves: HashSet<usize>,
+  /// The list's items, for the current shape.
+  slots: Vec<Slot>,
   _search_subscription: Option<Subscription>,
 }
 
@@ -206,6 +229,9 @@ impl FeedView {
       channel_tab: ChannelTabKind::Videos,
       shorts: Vec::new(),
       about_open: false,
+      shelves: Vec::new(),
+      expanded_shelves: HashSet::new(),
+      slots: Vec::new(),
       _search_subscription: search_subscription,
     };
     view.load(None, cx);
@@ -331,6 +357,8 @@ impl FeedView {
       self.cards.clear();
       self.dismissed.clear();
       self.shorts.clear();
+      self.shelves.clear();
+      self.expanded_shelves.clear();
       if feed.header.is_some() {
         self.channel = feed.header.clone();
       }
@@ -346,17 +374,27 @@ impl FeedView {
     // then flips on every frame: keep the first.
     let received = feed.items.len() + feed.playlists.len();
     let before = self.cards.len();
-    let before_shorts = self.shorts.len();
-    let old_count = self.shape.map(|shape| self.item_count(shape));
     for short in feed.shorts {
       if !self.shorts.iter().any(|s| s.id == short.id) {
         self.shorts.push(short);
       }
     }
+    // Each shelf before the card that followed its videos on the page.
+    let mut shelves = feed.short_shelves.into_iter().peekable();
+    let mut videos = 0;
     for card in merge(feed.items, feed.playlists) {
+      while let Some((_, shelf)) = shelves.next_if(|(at, _)| *at <= videos) {
+        self.shelves.push((self.cards.len(), shelf));
+      }
+      if matches!(card, Related::Video(_)) {
+        videos += 1;
+      }
       if !self.cards.iter().any(|c| key(c) == key(&card)) {
         self.cards.push(card);
       }
+    }
+    for (_, shelf) in shelves {
+      self.shelves.push((self.cards.len(), shelf));
     }
     let repeated = received - (self.cards.len() - before);
     if repeated > 0 {
@@ -364,32 +402,80 @@ impl FeedView {
     }
     self.continuation = feed.continuation;
     self.state = State::Loaded;
-    match (self.shape, old_count) {
-      // The row that held the last video may take more cards now, then come the new rows.
-      (Some(shape), Some(old_count)) if more => {
-        let shown = if shape.shorts { before_shorts } else { before };
-        let first = shape.lead + shown / shape.per_item();
-        self
-          .list
-          .splice(first..old_count, self.item_count(shape) - first);
+    match self.shape {
+      // From the first item that changed, or the last row (it may take more cards now): the
+      // new rows and shelves.
+      Some(shape) if more => {
+        let slots = self.layout(shape);
+        let changed = self
+          .slots
+          .iter()
+          .zip(&slots)
+          .position(|(a, b)| a != b)
+          .unwrap_or(self.slots.len().min(slots.len()));
+        let last_row = self
+          .slots
+          .iter()
+          .rposition(|s| matches!(s, Slot::Row(_)))
+          .unwrap_or(0);
+        let first = changed.min(last_row);
+        let old = self.slots.len();
+        self.list.splice(first..old, slots.len() - first);
+        self.slots = slots;
       }
       // A new first page: the next render rebuilds the list.
       _ => self.shape = None,
     }
   }
 
-  /// List items for `shape`: the header, the rows (or the placeholder), then the end of the
-  /// list.
-  fn item_count(&self, shape: Shape) -> usize {
+  /// The list's items for `shape`: the header, the rows (or the placeholder) with the Shorts
+  /// shelves between them, each before the row that starts at or after its card, then the end.
+  /// A shelf past the loaded cards waits for them, unless there is no next page.
+  fn layout(&self, shape: Shape) -> Vec<Slot> {
+    let mut slots = Vec::new();
+    if shape.lead > 0 {
+      slots.push(Slot::Header);
+    }
     if shape.placeholder {
-      return shape.lead + 1;
+      slots.push(Slot::Placeholder);
+      return slots;
     }
     let count = if shape.shorts {
       self.shorts.len()
     } else {
       self.cards.len()
     };
-    shape.lead + count.div_ceil(shape.per_item()) + 1
+    let per = shape.per_item();
+    let rows = count.div_ceil(per);
+    let shelves: Vec<(usize, usize)> = if shape.shelves {
+      self
+        .shelves
+        .iter()
+        .enumerate()
+        .map(|(i, (at, _))| (at.div_ceil(per), i))
+        .collect()
+    } else {
+      Vec::new()
+    };
+    for row in 0..rows {
+      slots.extend(
+        shelves
+          .iter()
+          .filter(|(before, _)| *before == row)
+          .map(|(_, i)| Slot::Shelf(*i)),
+      );
+      slots.push(Slot::Row(row));
+    }
+    if self.continuation.is_none() {
+      slots.extend(
+        shelves
+          .iter()
+          .filter(|(before, _)| *before >= rows)
+          .map(|(_, i)| Slot::Shelf(*i)),
+      );
+    }
+    slots.push(Slot::End);
+    slots
   }
 
   /// Whether a channel's Shorts show (its "Shorts" tab, no search).
@@ -648,16 +734,29 @@ impl FeedView {
     if self.shape == Some(shape) {
       return;
     }
-    // The first video in view, if the list was scrolled past its header (a channel's): a new
-    // page, or one still showing its header, stays at its top.
+    // The first card in view, if the list was scrolled past its top (a channel's header): a
+    // new page, or one still showing its top, stays there.
     let first = self.shape.and_then(|old| {
       let top = self.list.logical_scroll_top().item_ix;
-      (top >= old.lead && top > 0).then(|| (top - old.lead) * old.per_item())
+      self.slots[top.min(self.slots.len())..]
+        .iter()
+        .find_map(|s| match s {
+          Slot::Row(row) => Some(row * old.per_item()),
+          _ => None,
+        })
+        .filter(|_| top > 0)
     });
     self.shape = Some(shape);
-    self.list.reset(self.item_count(shape));
+    self.slots = self.layout(shape);
+    self.list.reset(self.slots.len());
+    let ix = first
+      .and_then(|first| {
+        let row = first / shape.per_item();
+        self.slots.iter().position(|s| *s == Slot::Row(row))
+      })
+      .unwrap_or(0);
     self.list.scroll_to(ListOffset {
-      item_ix: first.map_or(0, |first| shape.lead + first / shape.per_item()),
+      item_ix: ix,
       offset_in_item: px(0.),
     });
   }
@@ -668,7 +767,10 @@ impl FeedView {
     let Some(shape) = self.shape else {
       return div().into_any_element();
     };
-    if ix < shape.lead {
+    let Some(slot) = self.slots.get(ix).copied() else {
+      return div().into_any_element();
+    };
+    if slot == Slot::Header {
       // Not faded: it stays as it is while a tab loads under it.
       return div()
         .px_8()
@@ -676,7 +778,7 @@ impl FeedView {
         .children(self.channel_header(window, cx))
         .into_any_element();
     }
-    if shape.placeholder {
+    if slot == Slot::Placeholder {
       return div()
         .px_8()
         .pb_6()
@@ -684,8 +786,14 @@ impl FeedView {
         .into_any_element();
     }
     let first_row = ix == shape.lead;
-    let ix = ix - shape.lead;
-    let start = ix * shape.per_item();
+    if let Slot::Shelf(shelf) = slot {
+      return self.shelf(shelf, ix, first_row, window, cx);
+    }
+    let row = match slot {
+      Slot::Row(row) => row,
+      _ => usize::MAX,
+    };
+    let start = row.saturating_mul(shape.per_item());
     let total = if shape.shorts {
       self.shorts.len()
     } else {
@@ -761,6 +869,82 @@ impl FeedView {
       .when(first_row, |el| el.pt(px(TOP_ROOM)))
       .opacity(self.fade)
       .child(row)
+      .into_any_element()
+  }
+
+  /// Shorts shelf `n`, list item `ix`: its title with the Shorts icon, then a row of 9:16
+  /// cards as wide as the page's Shorts grid; "Show more" unfolds the others, wrapped.
+  fn shelf(
+    &self,
+    n: usize,
+    ix: usize,
+    first: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let Some((_, shelf)) = self.shelves.get(n) else {
+      return div().into_any_element();
+    };
+    let (columns, width) = grid_of(MIN_SHORT_WIDTH, window, cx);
+    let expanded = self.expanded_shelves.contains(&n);
+    let shown = if expanded {
+      shelf.shorts.len()
+    } else {
+      columns
+    };
+    let toggle = (shelf.shorts.len() > columns).then(|| {
+      Button::new(("shelf-toggle", n))
+        .ghost()
+        .label(if expanded {
+          t("Show less", "Afficher moins")
+        } else {
+          t("Show more", "Afficher plus")
+        })
+        .on_click(cx.listener(move |this, _, _, cx| {
+          if !this.expanded_shelves.remove(&n) {
+            this.expanded_shelves.insert(n);
+          }
+          // Measured again at its new height.
+          this.list.splice(ix..ix + 1, 1);
+          cx.notify();
+        }))
+    });
+    div()
+      .px_8()
+      .pb_8()
+      .when(first, |el| el.pt(px(TOP_ROOM)))
+      .opacity(self.fade)
+      .child(
+        v_flex()
+          .gap_4()
+          .child(
+            h_flex()
+              .gap_2()
+              .items_center()
+              .child(gpui_component::Icon::new(Icon::Shorts).size(px(20.)))
+              .child(
+                div()
+                  .text_lg()
+                  .font_weight(gpui::FontWeight::SEMIBOLD)
+                  .child(shelf.title.clone()),
+              ),
+          )
+          .child(
+            h_flex()
+              .flex_wrap()
+              .items_start()
+              .gap_x_4()
+              .gap_y_6()
+              .children(
+                shelf
+                  .shorts
+                  .iter()
+                  .take(shown)
+                  .map(|short| short_card(short, width, &self.nav, window, cx)),
+              ),
+          )
+          .children(toggle.map(|b| h_flex().justify_center().child(b))),
+      )
       .into_any_element()
   }
 
@@ -1152,12 +1336,15 @@ impl Render for FeedView {
     let loaded = matches!(self.state, State::Loaded) && self.has_items();
     // A channel's page is always its list: its header first, the videos or the placeholder.
     let body = if loaded || lead > 0 {
+      let shelves = matches!(self.source, Source::Home | Source::Subscriptions)
+        && Settings::get(cx).feed_shorts;
       self.set_shape(Shape {
         list: list_mode,
         columns: if list_mode { 1 } else { columns },
         shorts,
         lead,
         placeholder: !loaded,
+        shelves,
       });
       div()
         .size_full()
@@ -1193,6 +1380,7 @@ impl Render for FeedView {
         shorts,
         lead,
         placeholder: true,
+        shelves: false,
       };
       let content = self.placeholder(shape, cx);
       div()

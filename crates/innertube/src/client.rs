@@ -146,6 +146,16 @@ impl Client {
     self.feed(&response).await
   }
 
+  /// The whole `browse` answer for `browse_id` (with `params` if any), for the examples'
+  /// fixtures (`home --save`).
+  pub async fn browse_response(&self, browse_id: &str, params: Option<&str>) -> Result<Value> {
+    let mut body = json!({ "browseId": browse_id });
+    if let Some(params) = params {
+      body["params"] = json!(params);
+    }
+    self.web("browse", body, true).await
+  }
+
   /// Latest videos of the subscribed channels. Needs cookies.
   pub async fn subscriptions(&self) -> Result<Feed> {
     self.require_session()?;

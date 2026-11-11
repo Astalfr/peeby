@@ -97,6 +97,17 @@ pub fn part(
         )
         .into_any_element(),
         row(
+          t("Shorts in the feeds", "Shorts dans les flux"),
+          t(
+            "The rows of Shorts YouTube puts between the videos of Home and the subscriptions.",
+            "Les rangées de Shorts que YouTube place entre les vidéos de l'accueil et des abonnements.",
+          ),
+          toggle("feed-shorts", settings.feed_shorts, |on, cx| {
+            Settings::update(cx, |s| s.feed_shorts = on)
+          }),
+        )
+        .into_any_element(),
+        row(
           t("Default quality", "Qualité par défaut"),
           t(
             "Highest quality when a video starts; the player's menu changes it at any time. \

@@ -100,6 +100,8 @@ pub struct Settings {
   pub max_height: u32,
   /// YouTube's titles in the videos' own language, not translated into `language`.
   pub original_titles: bool,
+  /// YouTube's Shorts shelves between the videos of Home and the subscriptions.
+  pub feed_shorts: bool,
   /// Player volume, 0–100, kept when `player.remember_volume` is on.
   pub volume: f64,
   /// Player muted.
@@ -491,6 +493,7 @@ impl Default for Settings {
       region: "FR".into(),
       max_height: 1080,
       original_titles: true,
+      feed_shorts: true,
       volume: 100.0,
       muted: false,
       subscriptions_layout: FeedLayout::Grid,

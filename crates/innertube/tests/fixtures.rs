@@ -485,6 +485,27 @@ fn channel_header_signed_in() {
 }
 
 #[test]
+fn feed_short_shelves() {
+  // A signed-in Home page (captured 2026-11-11), trimmed to three videos, a mix and two Shorts
+  // shelves of two Shorts each, without the menus: both shelves after two videos (the mix
+  // between them counts among the playlists, not the videos).
+  let feed = parse_feed(&fixture("home_shorts_shelves.json"));
+  assert_eq!(feed.items.len(), 3);
+  assert_eq!(feed.playlists.len(), 1);
+  let shelves: Vec<_> = feed
+    .short_shelves
+    .iter()
+    .map(|(at, shelf)| (*at, shelf.title.as_str(), shelf.shorts.len()))
+    .collect();
+  assert_eq!(shelves, [(2, "Shorts", 2), (2, "Shorts", 2)]);
+  assert!(feed.short_shelves[0].1.shorts[0].sequence.is_some());
+  // The subscriptions' shelf, after the videos of its grid (the others shelves left out).
+  let subscriptions = innertube::parse_subscriptions(&fixture("subscriptions_feed_shelves.json"));
+  assert_eq!(subscriptions.short_shelves.len(), 1);
+  assert_eq!(subscriptions.short_shelves[0].1.title, "Shorts");
+}
+
+#[test]
 fn channel_shorts_and_playlists() {
   // Squeezie's "Shorts" and "Playlists" tabs, anonymous, captured 2026-11-11, trimmed to two
   // cards each.

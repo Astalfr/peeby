@@ -55,9 +55,9 @@ pub use models::{
   LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
   NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
   PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, SearchSuggestion,
-  ShortItem, ShortsPage, SponsorCategory, SponsorSegment, Storyboard, StoryboardFrame, Stream,
-  Subscription, SuggestedChannel, TextLink, Thumbnail, Tracking, VideoItem, Votes, WatchPage,
-  Watchtime,
+  ShortItem, ShortShelf, ShortsPage, SponsorCategory, SponsorSegment, Storyboard, StoryboardFrame,
+  Stream, Subscription, SuggestedChannel, TextLink, Thumbnail, Tracking, VideoItem, Votes,
+  WatchPage, Watchtime,
 };
 pub use parse::{
   is_mix, parse_account_handle, parse_captions, parse_channel_search, parse_channels,

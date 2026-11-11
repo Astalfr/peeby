@@ -65,6 +65,8 @@ shows at once on top (its answer's renderer).
 
 ### 7. Shorts shelves on Home and the subscriptions
 
+Done (2026-11-11), checked by the user in the app.
+
 The `shortsLockupViewModel` shelves YouTube puts between the videos (the backlog's item): a row of
 vertical cards opening the Shorts page on that Short. A setting turns them off ("Show Shorts in the
 feeds", `[youtube]`, on by default).

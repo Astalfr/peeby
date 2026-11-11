@@ -19,7 +19,7 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Lint (must pass): `cargo clippy --workspace --all-targets -- -D warnings`
 - Format: `cargo fmt --all` (2-space indent, see rustfmt.toml)
 - Tests: `cargo test --workspace` · single test: `cargo test -p <crate> <test_name>`
-- Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt] [subscriptions]`
+- Home feed from the terminal: `cargo run -p innertube --example home -- [cookies.txt] [subscriptions] [--save <file>]`
   (the jar is encrypted, ADR 0022: give the examples a plain copy from `cargo run -p peeby -- --export-cookies > copy.txt`
   (`peeby.exe` for the release profile's), never committed nor logged; both write the rotated cookies back)
 - Jellyfin live tests (ignored by default): set `$env:PEEBY_TEST_SERVER`, `PEEBY_TEST_USER`, `PEEBY_TEST_PASSWORD`,

@@ -73,7 +73,44 @@ fn feed(response: &Value, shelves: bool) -> Feed {
     chips: parse_chips(response),
     header: parse_channel_header(response),
     shorts: parse_short_items(response),
+    short_shelves: short_shelves(response, shelves),
   }
+}
+
+/// The Shorts shelves of a grid (`richSectionRenderer`s holding `shortsLockupViewModel`s),
+/// each after the videos counted before it the way [`feed`] collects them (`shelves`: the
+/// videos of other shelves count), in the first page's grid or a next page's items.
+fn short_shelves(response: &Value, shelves: bool) -> Vec<(usize, crate::models::ShortShelf)> {
+  let mut lists = Vec::new();
+  find_all(response, "richGridRenderer", &mut lists);
+  let mut lists: Vec<&Value> = lists.into_iter().map(|grid| &grid["contents"]).collect();
+  let mut appended = Vec::new();
+  find_all(response, "appendContinuationItemsAction", &mut appended);
+  lists.extend(appended.into_iter().map(|a| &a["continuationItems"]));
+  let mut out = Vec::new();
+  let mut videos = 0;
+  for element in lists
+    .into_iter()
+    .flat_map(|l| l.as_array().into_iter().flatten())
+  {
+    if let Some(section) = element.get("richSectionRenderer") {
+      let shorts = parse_short_items(section);
+      if !shorts.is_empty() {
+        let title = find_key(section, "richShelfRenderer")
+          .map(|shelf| text(&shelf["title"]))
+          .unwrap_or_default();
+        out.push((videos, crate::models::ShortShelf { title, shorts }));
+        continue;
+      }
+    }
+    let mut cards = Vec::new();
+    collect_lockups(element, shelves, &mut cards);
+    videos += cards
+      .iter()
+      .filter(|c| matches!(c, Related::Video(_)))
+      .count();
+  }
+  out
 }
 
 /// A channel page's header (`pageHeaderViewModel`, with the page's `channelMetadataRenderer`):

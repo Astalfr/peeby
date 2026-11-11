@@ -100,7 +100,19 @@ pub struct Feed {
   /// A channel's page: its header (name, banner, counts, tabs). `None` elsewhere and on a next
   /// page.
   pub header: Option<ChannelHeader>,
-  /// The Shorts of the page (a channel's "Shorts" tab), in display order.
+  /// The Shorts of the page (a channel's "Shorts" tab, a feed's shelves), in display order.
+  pub shorts: Vec<ShortItem>,
+  /// The feed's Shorts shelves (Home, the subscriptions), each after the number of
+  /// [`Self::items`] that come before it, as [`Self::playlists`].
+  pub short_shelves: Vec<(usize, ShortShelf)>,
+}
+
+/// A shelf of Shorts between a feed's videos.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShortShelf {
+  /// Its title, in YouTube's language (`Shorts`).
+  pub title: String,
+  /// Its Shorts, in order.
   pub shorts: Vec<ShortItem>,
 }
 

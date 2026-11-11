@@ -1,6 +1,7 @@
 //! Prints the Home feed, or the subscriptions one. Replaces the poc-home prototype.
 //!
-//! `cargo run -p innertube --example home -- [cookies.txt] [subscriptions]`
+//! `cargo run -p innertube --example home -- [cookies.txt] [subscriptions] [--save <file>]`
+//! (`--save` writes the whole response, account data included: trim it before a fixture)
 //! Without cookies the feed is empty (YouTube shows no anonymous recommendations). With cookies
 //! it fails loudly if YouTube answers as signed out.
 
@@ -27,7 +28,27 @@ async fn main() {
   if let Err(e) = client.refresh_client_version().await {
     eprintln!("warning: {e}");
   }
-  let feed = if std::env::args().nth(2).as_deref() == Some("subscriptions") {
+  let args: Vec<String> = std::env::args().collect();
+  let subscriptions = args.get(2).map(String::as_str) == Some("subscriptions");
+  if let Some(file) = args
+    .iter()
+    .position(|a| a == "--save")
+    .and_then(|i| args.get(i + 1))
+  {
+    let id = if subscriptions {
+      "FEsubscriptions"
+    } else {
+      "FEwhat_to_watch"
+    };
+    let response = client
+      .browse_response(id, None)
+      .await
+      .unwrap_or_else(|e| fail(&e.to_string()));
+    let json = serde_json::to_string_pretty(&response).unwrap_or_else(|e| fail(&e.to_string()));
+    std::fs::write(file, json).unwrap_or_else(|e| fail(&format!("{file}: {e}")));
+    println!("saved to {file}");
+  }
+  let feed = if subscriptions {
     client.subscriptions().await
   } else {
     client.home().await
