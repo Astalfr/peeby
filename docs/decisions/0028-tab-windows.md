@@ -125,7 +125,8 @@ five steps, each one shippable:
    - The handovers are deferred: `SetCapture` tells the window losing it at once, and a window
      hides, neither from inside its own event.
    - A maximized window is not carried: its only tab detaches as a copy over the window, and can
-     still be dropped on another window's bar (32 px reach).
+     still be dropped on another window's bar (32 px reach). Superseded by step 6: Windows' move
+     loop restores it (2026-11-11).
 6. **A carried window snaps, as one dragged by its title bar** (done). Placing the window
    ourselves at each move, Windows never saw a window being moved, so neither the top of a screen
    (maximize, Snap layouts) nor its sides did anything: the tabs are no title bar. From the
@@ -145,6 +146,10 @@ five steps, each one shippable:
    - The loop swallows the button's release, so the tab's mouse listeners never see it: the end
      of the loop (`Shell::end_os_move`) drops the tab, and the listeners leave a drag in the loop
      alone. Without a Win32 handle, the window is still placed by hand, without Snap.
+   - A maximized window's only tab carries it too (2026-11-11, docs/features-plan.md item 11):
+     not placed by hand, the move loop starts at once, and Windows restores the window under the
+     pointer as when its title bar is dragged (its restored size, the pointer at the same place
+     along its width), then Snap applies.
 
 ## Consequences
 

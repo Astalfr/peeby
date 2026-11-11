@@ -7,7 +7,7 @@
 //! leaves its window, which hides, and slides into that bar where the pointer is, still held:
 //! moved along it, it changes places; pulled off it, it tears out again (into the hidden window).
 //! Released, it stays where it is: in a bar, or in its window, which comes to the front. A
-//! maximized window is not carried: its only tab detaches as a copy over the window.
+//! maximized window's only tab restores it and carries it, as its title bar would.
 //!
 //! A carried window is moved by Windows' own move loop (`desktop::sys::drag_move`), as when
 //! dragged by its title bar: Windows snaps it (the top of a screen maximizes it, Snap layouts,
@@ -185,7 +185,7 @@ impl Shell {
       }
     }
     let Some(drag) = self.tab_drag else { return };
-    let only_tab = self.tabs.len() == 1 && !window.is_maximized();
+    let only_tab = self.tabs.len() == 1;
     if drag.carry.is_some() || only_tab {
       self.carry_window(position, window, cx);
       return;
@@ -219,16 +219,21 @@ impl Shell {
     let screen = bounds.origin + position;
     let (from, corner) = *drag.carry.get_or_insert((screen, bounds.origin));
     let drag = *drag;
-    // Moved only: its size stays as it is.
-    windows::place(
-      self.window,
-      Bounds::new(corner + (screen - from), bounds.size),
-      window.scale_factor(),
-      false,
-      cx,
-    );
-    if self.slide_into_bar(drag, screen, px(JOIN), cx) {
-      return;
+    // A maximized window is not moved here: Windows' move loop restores it under the pointer,
+    // as when its title bar is dragged.
+    let maximized = window.is_maximized();
+    if !maximized {
+      // Moved only: its size stays as it is.
+      windows::place(
+        self.window,
+        Bounds::new(corner + (screen - from), bounds.size),
+        window.scale_factor(),
+        false,
+        cx,
+      );
+      if self.slide_into_bar(drag, screen, px(JOIN), cx) {
+        return;
+      }
     }
     // From here, Windows' move loop carries it, and snaps it. Placed first (the tasks run in
     // order), the window keeps the tab under the pointer where it was held.

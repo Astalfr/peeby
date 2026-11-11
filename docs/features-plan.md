@@ -102,6 +102,8 @@ route saves, how a space parses it back).
 
 ### 11. Dragging a maximized window's only tab
 
+Done (2026-11-11), checked by the user in the app.
+
 As with a title bar: pulling the only tab of a maximized window restores it, under the pointer
 where the tab was held, and carries it (Windows' move loop, ADR 0028 step 6), Snap included.
 Today its tab only detaches as a copy over the window.
