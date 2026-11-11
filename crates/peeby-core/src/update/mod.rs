@@ -4,10 +4,14 @@
 //! bar show the green update button. A click starts the installer silently and quits; the
 //! installer replaces the files and starts Peeby again.
 //!
+//! Before Peeby opens, a newer release is installed at once (`startup`); a failed check opens
+//! Peeby as usual.
+//!
 //! Only a copy installed by the installer checks (not `cargo run`, not a debug build).
 
 mod github;
 mod release;
+mod startup;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -19,14 +23,18 @@ use ui::i18n::t;
 use ui::runtime;
 
 use crate::settings::Settings;
+use github::Progress;
 pub use release::Version;
 use release::{Release, Status};
+pub use startup::startup;
 
 /// The first check, once the startup's own requests are done.
 const FIRST_CHECK: Duration = Duration::from_secs(20);
 /// Then one check every few hours: Peeby stays in the notification area for days. GitHub allows
 /// 60 anonymous requests an hour.
 const CHECK_EVERY: Duration = Duration::from_secs(4 * 3600);
+/// How long a periodic check may wait for GitHub's answer.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The update's state, and the task that checks. Observed by the title bar and the settings page.
 pub struct Updater {
@@ -73,18 +81,27 @@ pub enum State {
   Installing(Version),
 }
 
-/// Starts the checks, if this copy can update itself.
-pub fn init(cx: &mut App) {
+/// The update client and the download folder, if this copy can update itself: a release build
+/// installed by the installer.
+fn available() -> Option<(reqwest::Client, PathBuf)> {
   if cfg!(debug_assertions) {
-    return;
+    return None;
   }
   let installed = std::env::current_exe().is_ok_and(|exe| github::installed_by_setup(&exe));
   if !installed {
     tracing::info!("updates: not an installed copy, no checks");
-    return;
+    return None;
   }
   let (Some(dir), Ok(http)) = (downloads_dir(), github::http()) else {
     tracing::warn!("updates: no download folder or HTTP client");
+    return None;
+  };
+  Some((http, dir))
+}
+
+/// Starts the checks, if this copy can update itself. After [`startup`], which already checked.
+pub fn init(cx: &mut App) {
+  let Some((http, dir)) = available() else {
     return;
   };
   // Old installers go at once, before a check from the settings page can download a new one.
@@ -153,7 +170,12 @@ fn downloads_dir() -> Option<PathBuf> {
 async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp) -> Outcome {
   let fetch = {
     let http = http.clone();
-    cx.update(|cx| runtime::spawn(cx, async move { github::latest(&http).await }))
+    cx.update(|cx| {
+      runtime::spawn(
+        cx,
+        async move { github::latest(&http, CHECK_TIMEOUT).await },
+      )
+    })
   };
   let latest: Release = match fetch.await {
     Some(Ok(Some(release))) => release,
@@ -181,10 +203,9 @@ async fn check(http: &reqwest::Client, dir: &std::path::Path, cx: &mut AsyncApp)
   let download = {
     let (http, dir) = (http.clone(), dir.to_path_buf());
     cx.update(|cx| {
-      runtime::spawn(
-        cx,
-        async move { github::download(&http, &latest, &dir).await },
-      )
+      runtime::spawn(cx, async move {
+        github::download(&http, &latest, &dir, &Progress::default()).await
+      })
     })
   };
   let (status, outcome) = match download.await {
@@ -251,7 +272,7 @@ pub fn install(window: &mut Window, cx: &mut App) {
         if let Err(e) = settings.save_now() {
           tracing::warn!("cannot save the settings: {e}");
         }
-        github::launch_installer(&installer)
+        github::launch_installer(&installer, false)
       })
       .await;
     match launched {

@@ -18,7 +18,7 @@ A release is built by CI from a version tag.
    does not match `Cargo.toml` fails the `release` job.
 
 Within 4 hours (at once with "Check for updates" in the settings), every installed copy downloads the installer, checks its SHA-256 and shows the
-green **Update** button in the title bar.
+green **Update** button in the title bar. A copy that starts installs it before it opens.
 
 Never publish a release by hand with another asset name or without GitHub's digest: the updater
 looks for exactly `peeby-setup-<tag version>-x64.exe` and refuses an installer without a digest.

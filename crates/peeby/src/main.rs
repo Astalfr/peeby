@@ -114,134 +114,148 @@ fn main() {
       cx.set_global(prefs);
       settings::Settings::update(cx, |s| s.jellyfin.device_id = device_id);
       desktop::init(cx);
-      // An installed copy checks GitHub's releases (ADR 0027).
-      update::init(cx);
-      match innertube::Client::new(None, None, &hl, &gl) {
-        Ok(anonymous) => {
-          images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);
-          prefetch::init(anonymous, cx);
+      // An installed copy installs a newer release before it opens, and opens as usual when
+      // GitHub cannot say (ADR 0027).
+      let startup = update::startup(background, cx);
+      let open = move |cx: &mut App| {
+        // Then it checks GitHub's releases every few hours.
+        update::init(cx);
+        match innertube::Client::new(None, None, &hl, &gl) {
+          Ok(anonymous) => {
+            images::init(Arc::new(convert::ImageFetch(anonymous.clone())), cx);
+            prefetch::init(anonymous, cx);
+          }
+          Err(e) => tracing::error!("cannot create the HTTP client: {e}"),
         }
-        Err(e) => tracing::error!("cannot create the HTTP client: {e}"),
-      }
 
-      // Current WEB client version and a visitorData, in the background.
-      // yt-dlp (the fallback) keeps up with YouTube's changes.
-      cx.background_executor()
-        .spawn(async { tools::update_ytdlp() })
-        .detach();
+        // Current WEB client version and a visitorData, in the background.
+        // yt-dlp (the fallback) keeps up with YouTube's changes.
+        cx.background_executor()
+          .spawn(async { tools::update_ytdlp() })
+          .detach();
 
-      let warmup = client.clone();
-      drop(runtime::spawn(cx, async move {
-        if let Err(e) = warmup.refresh_client_version().await {
-          tracing::warn!("ytcfg: {e}");
-        }
-      }));
+        let warmup = client.clone();
+        drop(runtime::spawn(cx, async move {
+          if let Err(e) = warmup.refresh_client_version().await {
+            tracing::warn!("ytcfg: {e}");
+          }
+        }));
 
-      // The last session's windows and tabs (ADR 0035), unless the command line asks for a page.
-      let session = (restore_tabs && initial_videos.is_empty() && twitch_page.is_none())
-        .then(shell::session::load)
-        .flatten()
-        .filter(|session| !session.windows.is_empty());
-      let placement = session
-        .as_ref()
-        .and_then(|session| session.windows.first())
-        .and_then(|window| window.placement(cx));
-      let options = match placement {
-        Some((bounds, display)) => shell::windows::options_for(bounds, display, !background, cx),
-        None => {
-          let display = chosen_display(cx);
-          let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
-          shell::windows::options(bounds, display, !background, cx)
-        }
-      };
-      // The opening animation, unless something opens right away (a video, a live).
-      let splash = initial_videos.is_empty() && twitch_page.is_none() && !background;
-      let mut launches = None;
-      let opened = cx.open_window(options, |window, cx| {
-        let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, cx));
-        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, jellyfin_vpn, cx));
-        let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
-        let twitch = twitch_auth
-          .map(|auth| cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx)));
-        if let Some(twitch) = &twitch {
-          spaces.push(Rc::new(twitch.clone()));
-        }
-        launches = Some(Launches {
-          youtube: youtube.downgrade(),
-          twitch: twitch.as_ref().map(Entity::downgrade),
-        });
-        // Before any space emits (a live opened at startup, once the shell is up).
-        shell::windows::route_events(&spaces, cx);
-        cx.set_global(shell::windows::Spaces(spaces.clone()));
-        // The spaces' startup tabs give way to the session's, once one of these came back.
-        let startup: Vec<_> = spaces
-          .iter()
-          .flat_map(|space| {
-            space
-              .tabs(cx)
-              .into_iter()
-              .map(move |tab| (space.clone(), tab))
-          })
-          .collect();
-        let restored = session
+        // The last session's windows and tabs (ADR 0035), unless the command line asks for a page.
+        let session = (restore_tabs && initial_videos.is_empty() && twitch_page.is_none())
+          .then(shell::session::load)
+          .flatten()
+          .filter(|session| !session.windows.is_empty());
+        let placement = session
           .as_ref()
           .and_then(|session| session.windows.first())
-          .and_then(|saved| saved.restore(&spaces, cx));
-        let shell = match restored {
-          Some(restored) => {
-            for (space, tab) in startup {
-              space.close_tab(tab, cx);
-            }
-            cx.new(|cx| Shell::restored(spaces, restored, window, cx))
-          }
-          None => cx.new(|cx| Shell::new(spaces, splash, window, cx)),
-        };
-        desktop::attach(window, shell.downgrade(), cx);
-        cx.new(|cx| Root::new(shell, window, cx))
-      });
-      if let Err(e) = opened {
-        tracing::error!("cannot open the main window: {e:#}");
-        cx.quit();
-        return;
-      }
-      // The session's other windows.
-      if let Some(session) = &session
-        && let Some(spaces) = cx
-          .try_global::<shell::windows::Spaces>()
-          .map(|s| s.0.clone())
-      {
-        for saved in session.windows.iter().skip(1) {
-          let Some(restored) = saved.restore(&spaces, cx) else {
-            continue;
-          };
-          let (bounds, display) = saved.placement(cx).unwrap_or_else(|| {
+          .and_then(|window| window.placement(cx));
+        let options = match placement {
+          Some((bounds, display)) => shell::windows::options_for(bounds, display, !background, cx),
+          None => {
             let display = chosen_display(cx);
             let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
-            (gpui::WindowBounds::Windowed(bounds), display)
+            shell::windows::options(bounds, display, !background, cx)
+          }
+        };
+        // The opening animation, unless something opens right away (a video, a live).
+        let splash = initial_videos.is_empty() && twitch_page.is_none() && !background;
+        let mut launches = None;
+        let opened = cx.open_window(options, |window, cx| {
+          let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, cx));
+          let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, jellyfin_vpn, cx));
+          let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
+          let twitch = twitch_auth
+            .map(|auth| cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx)));
+          if let Some(twitch) = &twitch {
+            spaces.push(Rc::new(twitch.clone()));
+          }
+          launches = Some(Launches {
+            youtube: youtube.downgrade(),
+            twitch: twitch.as_ref().map(Entity::downgrade),
           });
-          shell::windows::open_restored(restored, bounds, display, !background, cx);
-        }
-      }
-      shell::session::keep_saving(cx);
-      // The app ends when one of its windows closes: they only hide, unless it is the last one
-      // and Peeby does not stay in the notification area (ADR 0028). Not with the mini-player's.
-      cx.on_window_closed(move |cx, closed| {
-        if shell::windows::get(closed, cx).is_some() {
-          tracing::info!("a window closed: quitting");
+          // Before any space emits (a live opened at startup, once the shell is up).
+          shell::windows::route_events(&spaces, cx);
+          cx.set_global(shell::windows::Spaces(spaces.clone()));
+          // The spaces' startup tabs give way to the session's, once one of these came back.
+          let startup: Vec<_> = spaces
+            .iter()
+            .flat_map(|space| {
+              space
+                .tabs(cx)
+                .into_iter()
+                .map(move |tab| (space.clone(), tab))
+            })
+            .collect();
+          let restored = session
+            .as_ref()
+            .and_then(|session| session.windows.first())
+            .and_then(|saved| saved.restore(&spaces, cx));
+          let shell = match restored {
+            Some(restored) => {
+              for (space, tab) in startup {
+                space.close_tab(tab, cx);
+              }
+              cx.new(|cx| Shell::restored(spaces, restored, window, cx))
+            }
+            None => cx.new(|cx| Shell::new(spaces, splash, window, cx)),
+          };
+          desktop::attach(window, shell.downgrade(), cx);
+          cx.new(|cx| Root::new(shell, window, cx))
+        });
+        if let Err(e) = opened {
+          tracing::error!("cannot open the main window: {e:#}");
           cx.quit();
+          return;
+        }
+        // The session's other windows.
+        if let Some(session) = &session
+          && let Some(spaces) = cx
+            .try_global::<shell::windows::Spaces>()
+            .map(|s| s.0.clone())
+        {
+          for saved in session.windows.iter().skip(1) {
+            let Some(restored) = saved.restore(&spaces, cx) else {
+              continue;
+            };
+            let (bounds, display) = saved.placement(cx).unwrap_or_else(|| {
+              let display = chosen_display(cx);
+              let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
+              (gpui::WindowBounds::Windowed(bounds), display)
+            });
+            shell::windows::open_restored(restored, bounds, display, !background, cx);
+          }
+        }
+        shell::session::keep_saving(cx);
+        // The app ends when one of its windows closes: they only hide, unless it is the last one
+        // and Peeby does not stay in the notification area (ADR 0028). Not with the mini-player's.
+        cx.on_window_closed(move |cx, closed| {
+          if shell::windows::get(closed, cx).is_some() {
+            tracing::info!("a window closed: quitting");
+            cx.quit();
+          }
+        })
+        .detach();
+        if let (Some(listener), Some(launches)) = (listener, launches) {
+          desktop::listen(
+            listener,
+            move |args, window, cx| launches.open(&args, window, cx),
+            cx,
+          );
+        }
+        if !background {
+          cx.activate(true);
+        }
+      };
+      cx.spawn(async move |cx| {
+        if startup.await {
+          tracing::info!("updates: the installer started, quitting");
+          cx.update(|cx| cx.quit());
+        } else {
+          cx.update(open);
         }
       })
       .detach();
-      if let (Some(listener), Some(launches)) = (listener, launches) {
-        desktop::listen(
-          listener,
-          move |args, window, cx| launches.open(&args, window, cx),
-          cx,
-        );
-      }
-      if !background {
-        cx.activate(true);
-      }
     });
 }
 

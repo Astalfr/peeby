@@ -4,6 +4,7 @@
 use std::io::Write as _;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context as _, bail};
@@ -83,11 +84,12 @@ pub fn http() -> anyhow::Result<reqwest::Client> {
 
 /// The latest published release; `None` when there is none yet (or only a draft or a
 /// pre-release).
-pub async fn latest(http: &reqwest::Client) -> anyhow::Result<Option<Release>> {
+pub async fn latest(http: &reqwest::Client, timeout: Duration) -> anyhow::Result<Option<Release>> {
   let response = http
     .get(format!("{API}/repos/{REPOSITORY}/releases/latest"))
     .header("accept", "application/vnd.github+json")
     .header("x-github-api-version", "2022-11-28")
+    .timeout(timeout)
     .send()
     .await
     .map_err(|e| e.without_url())?;
@@ -102,17 +104,35 @@ pub async fn latest(http: &reqwest::Client) -> anyhow::Result<Option<Release>> {
   parse_latest(&body)
 }
 
+/// How far a download got, for the startup update's window.
+#[derive(Default)]
+pub struct Progress {
+  /// Bytes written.
+  pub done: AtomicU64,
+  /// The installer's size, once GitHub's answer gives it (0 before).
+  pub total: AtomicU64,
+}
+
+impl Progress {
+  /// From 0 to 1; `None` while the size is unknown.
+  pub fn fraction(&self) -> Option<f32> {
+    let total = self.total.load(Ordering::Relaxed);
+    (total > 0).then(|| (self.done.load(Ordering::Relaxed) as f64 / total as f64).min(1.) as f32)
+  }
+}
+
 /// Downloads `release`'s installer into `dir`, checks its digest and returns its path. A failed
 /// or corrupt download leaves nothing behind.
 pub async fn download(
   http: &reqwest::Client,
   release: &Release,
   dir: &Path,
+  progress: &Progress,
 ) -> anyhow::Result<PathBuf> {
   std::fs::create_dir_all(dir)?;
   let path = dir.join(&release.installer.name);
   let partial = path.with_extension("exe.part");
-  if let Err(e) = write_installer(http, release, &partial).await {
+  if let Err(e) = write_installer(http, release, &partial, progress).await {
     std::fs::remove_file(&partial).ok();
     return Err(e);
   }
@@ -125,6 +145,7 @@ async fn write_installer(
   http: &reqwest::Client,
   release: &Release,
   partial: &Path,
+  progress: &Progress,
 ) -> anyhow::Result<()> {
   let mut response = http
     .get(&release.installer.url)
@@ -134,14 +155,32 @@ async fn write_installer(
   if !response.status().is_success() {
     bail!("GitHub answered {}", response.status().as_u16());
   }
+  if let Some(total) = response.content_length() {
+    progress.total.store(total, Ordering::Relaxed);
+  }
   let mut file = std::fs::File::create(partial)?;
   let mut hasher = sha2::Sha256::new();
   while let Some(chunk) = response.chunk().await.map_err(|e| e.without_url())? {
     hasher.update(&chunk);
     file.write_all(&chunk)?;
+    progress
+      .done
+      .fetch_add(chunk.len() as u64, Ordering::Relaxed);
   }
   file.sync_all()?;
   check_digest(&hasher.finalize(), &release.sha256)
+}
+
+/// `release`'s installer if an earlier session already downloaded it into `dir` and it still
+/// matches its digest. Blocking (hashes the file).
+pub fn downloaded(release: &Release, dir: &Path) -> Option<PathBuf> {
+  let path = dir.join(&release.installer.name);
+  let mut file = std::fs::File::open(&path).ok()?;
+  let mut hasher = sha2::Sha256::new();
+  std::io::copy(&mut file, &mut hasher).ok()?;
+  check_digest(&hasher.finalize(), &release.sha256)
+    .is_ok()
+    .then_some(path)
 }
 
 fn check_digest(actual: &[u8], expected: &Sha256) -> anyhow::Result<()> {
@@ -171,8 +210,9 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 
 /// Starts the installer without its wizard (a progress window only). It closes what is left of
 /// Peeby, keeps the install folder, and starts Peeby again (`/relaunch=1`, see
-/// `installer/peeby.iss`). Peeby quits right after.
-pub fn launch_installer(path: &Path) -> anyhow::Result<()> {
+/// `installer/peeby.iss`). Peeby quits right after. `background`: Peeby comes back in the
+/// notification area only (`/background=1`: an update at a start with Windows).
+pub fn launch_installer(path: &Path, background: bool) -> anyhow::Result<()> {
   std::process::Command::new(path)
     .args([
       "/SILENT",
@@ -181,6 +221,7 @@ pub fn launch_installer(path: &Path) -> anyhow::Result<()> {
       "/CLOSEAPPLICATIONS",
       "/relaunch=1",
     ])
+    .args(background.then_some("/background=1"))
     .creation_flags(DETACHED_PROCESS)
     .spawn()
     .map(drop)

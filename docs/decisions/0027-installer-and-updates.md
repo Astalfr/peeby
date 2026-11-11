@@ -51,11 +51,21 @@ use, the uninstall entry). Inno Setup run silently does it all.
   settings, starts the installer (`/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
   /relaunch=1`) and quits; the installer replaces the files and starts Peeby again. Old installers
   are deleted at the start.
+- **At startup** (`update::startup`, the user asked, 2026-11-11): before any window opens, the
+  same check, cut after 5 s. A newer release is installed at once: an installer an earlier
+  session downloaded is reused if it still matches its digest, else it is downloaded while a
+  small window shows its progress (none at a start with Windows); then the settings are written,
+  the installer starts and Peeby quits. Started with Windows, it passes `/background=1`, and the
+  installer starts Peeby again with `--background`. Anything failing (no network, GitHub slow or
+  down, a corrupt download) opens Peeby as usual, and the periodic checks carry on.
 
 ## Consequences
 
 - A release is a version bump in `Cargo.toml` and a pushed tag (docs/release.md); every installed
-  copy offers it within 4 hours.
+  copy offers it within 4 hours, and installs it at its next start.
+- A start that finds a newer release waits for its download (about 100 MB) before opening; a
+  start without network waits up to 5 s.
+- `/background=1` needs the new installer's script: it holds from the release after 1.5.1 on.
 - The repository must stay public: the check is anonymous. A private one would need a token in
   every installed copy.
 - The installer is not signed: SmartScreen warns on the first install (not on silent updates

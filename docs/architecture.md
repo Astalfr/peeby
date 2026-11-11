@@ -60,8 +60,9 @@ The Twitch space's playback path:
 
 1. `peeby --login <service>` runs the sign-in window only and exits, before anything below (ADR 0017).
 1. Before the UI starts: `settings::load_cookies()` reads and decrypts `%APPDATA%\peeby\cookies.dat` (or `PEEBY_COOKIES`; DPAPI, [ADR 0022](decisions/0022-encrypted-cookie-jar.md)), and `jellyfin::session::restore` reads the Jellyfin token from the Credential Manager (both blocking, both small).
-2. In the background: `Client::refresh_client_version()` reads the current WEB `clientVersion` and a `visitorData` from the page's ytcfg; yt-dlp updates itself.
-3. YouTube's Home loads `FEwhat_to_watch` (its response also carries a `visitorData`, kept for the stream resolver); Jellyfin's Home loads if a session was restored, else its tab shows the login page.
+2. An installed release build asks GitHub for a newer release (at most 5 s): one is installed before any window opens, and Peeby quits for its installer ([ADR 0027](decisions/0027-installer-and-updates.md)). Otherwise, or when the check fails:
+3. In the background: `Client::refresh_client_version()` reads the current WEB `clientVersion` and a `visitorData` from the page's ytcfg; yt-dlp updates itself.
+4. YouTube's Home loads `FEwhat_to_watch` (its response also carries a `visitorData`, kept for the stream resolver); Jellyfin's Home loads if a session was restored, else its tab shows the login page.
 
 ## Watch page
 

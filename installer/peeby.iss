@@ -89,7 +89,7 @@ Root: HKCU; Subkey: "Software\Classes\AppUserModelId\Peeby.Peeby"; ValueType: no
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 ; An update started from Peeby runs silently and asks for Peeby back.
-Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: Relaunch
+Filename: "{app}\{#AppExe}"; Parameters: "{code:RelaunchParameters}"; Flags: nowait runasoriginaluser; Check: Relaunch
 
 [UninstallDelete]
 ; What yt-dlp's own update leaves next to it.
@@ -104,4 +104,14 @@ Type: filesandordirs; Name: "{app}\tools"
 function Relaunch: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:relaunch|0}') = '1');
+end;
+
+// /background=1: the update ran at a start with Windows, so Peeby comes back in the notification
+// area only (crates/peeby-core/src/update/startup.rs).
+function RelaunchParameters(Param: String): String;
+begin
+  if ExpandConstant('{param:background|0}') = '1' then
+    Result := '--background'
+  else
+    Result := '';
 end;
