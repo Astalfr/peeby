@@ -9,15 +9,21 @@
 //!
 //! In the field, a known emote's code followed by a space (picked or typed) shows as its image: an
 //! atomic token whose text stays the code, so that what is sent is unchanged. Emoji are text.
+//!
+//! Completion ([`crate::chat::complete`]): typing `@` and a letter lists the chatters seen, `:`
+//! and a letter the emotes; Tab lists both for any word (one match goes in at once). Over
+//! the field, the arrows move through the list, Tab, Enter or a click puts the one picked in
+//! (and a space), Escape closes it. The keys are taken before the field (which binds them) only
+//! while it has the focus and, but for Tab, while the list shows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyElement, AnyView, Context, ElementId, Entity, FontWeight, SharedString, Subscription,
-  Window, div, px, uniform_list,
+  Anchor, AnyElement, AnyView, Context, ElementId, Entity, Focusable, FontWeight, MouseButton,
+  SharedString, Subscription, Window, deferred, div, px, uniform_list,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{
@@ -29,6 +35,7 @@ use gpui_component::{Disableable, Sizable, h_flex, v_flex};
 
 use super::{ChatPanel, emote_stack};
 use crate::assets::Icon;
+use crate::chat::complete::{self, Candidate};
 use crate::chat::{EMOTE_HEIGHT, Emote, emoji};
 use crate::i18n::t;
 use crate::images::Images;
@@ -166,7 +173,20 @@ pub(super) struct Composer {
   hovered: Option<SharedString>,
   /// The picker is open (the popover follows it: a pick closes it).
   picker_open: bool,
+  /// The suggestions for the word before the cursor, while they show.
+  completion: Option<Completion>,
+  /// The field's next change is a completion's, not typing.
+  completing: bool,
   _subscriptions: Vec<Subscription>,
+}
+
+/// The suggestions shown over the field ([`complete::candidates`]).
+struct Completion {
+  /// The word they would replace, in the field's text (bytes).
+  range: Range<usize>,
+  items: Vec<Candidate>,
+  /// The one the arrows are on.
+  highlighted: usize,
 }
 
 impl Composer {
@@ -184,6 +204,8 @@ impl Composer {
       rows: Vec::new(),
       hovered: None,
       picker_open: false,
+      completion: None,
+      completing: false,
       _subscriptions: Vec::new(),
     }
   }
@@ -409,6 +431,200 @@ impl ChatPanel {
     cx.notify();
   }
 
+  /// The chatters whose lines show, the most recent first, each once.
+  fn recent_authors(&self) -> Vec<SharedString> {
+    let mut seen = HashSet::new();
+    self
+      .messages
+      .iter()
+      .rev()
+      .filter_map(|m| m.author.as_ref())
+      .filter(|author| seen.insert(author.name.clone()))
+      .map(|author| author.name.clone())
+      .take(100)
+      .collect()
+  }
+
+  /// The suggestions for the word before the cursor: shown by themselves for `@x` or `:x`, or
+  /// for any word on Tab (`by_tab`). Whether some show.
+  fn update_completion(&mut self, by_tab: bool, cx: &mut Context<Self>) -> bool {
+    let authors = self.recent_authors();
+    let Some(composer) = &mut self.composer else {
+      return false;
+    };
+    let Some(input) = &composer.input else {
+      return false;
+    };
+    let (text, cursor) = {
+      let state = input.read(cx);
+      (state.value(), state.cursor())
+    };
+    composer.completion = complete::word_before(&text, cursor)
+      .filter(|(_, word)| by_tab || complete::opens_by_itself(word))
+      .and_then(|(range, word)| {
+        let items = complete::candidates(word, composer.known.keys(), &authors);
+        (!items.is_empty()).then_some(Completion {
+          range,
+          items,
+          highlighted: 0,
+        })
+      });
+    cx.notify();
+    composer.completion.is_some()
+  }
+
+  /// A key over the field, for the completion; whether it took it.
+  fn completion_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    let Some(composer) = &mut self.composer else {
+      return false;
+    };
+    let open = composer.completion.as_ref().map(|c| c.items.len());
+    match (key, open) {
+      ("tab" | "enter", Some(_)) => {
+        self.accept_completion(None, window, cx);
+        true
+      }
+      ("tab", None) => {
+        if !self.update_completion(true, cx) {
+          return false;
+        }
+        // A single match goes in at once.
+        let single = self
+          .composer
+          .as_ref()
+          .and_then(|c| c.completion.as_ref())
+          .is_some_and(|c| c.items.len() == 1);
+        if single {
+          self.accept_completion(None, window, cx);
+        }
+        true
+      }
+      ("down" | "up", Some(count)) => {
+        if let Some(completion) = &mut composer.completion {
+          completion.highlighted = if key == "down" {
+            (completion.highlighted + 1) % count
+          } else {
+            (completion.highlighted + count - 1) % count
+          };
+        }
+        cx.notify();
+        true
+      }
+      ("escape", Some(_)) => {
+        composer.completion = None;
+        cx.notify();
+        true
+      }
+      _ => false,
+    }
+  }
+
+  /// Puts suggestion `index` (the highlighted one when `None`) in place of its word, then a
+  /// space; an emote's code shows as its image.
+  fn accept_completion(
+    &mut self,
+    index: Option<usize>,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let Some(composer) = &mut self.composer else {
+      return;
+    };
+    let (Some(completion), Some(input)) = (composer.completion.take(), composer.input.clone())
+    else {
+      return;
+    };
+    let Some(item) = completion
+      .items
+      .get(index.unwrap_or(completion.highlighted))
+    else {
+      return;
+    };
+    composer.completing = true;
+    let text = format!("{} ", item.text());
+    input.update(cx, |state, cx| {
+      state.set_selected_range(completion.range.clone(), cx);
+      state.replace(text, window, cx);
+    });
+    self.show_emotes(window, cx);
+    cx.notify();
+  }
+
+  /// The suggestions over the field, the highlighted one on a tint; a click puts one in.
+  fn completion_list(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let composer = self.composer.as_ref()?;
+    let completion = composer.completion.as_ref()?;
+    let known = composer.known.clone();
+    let scale = window.scale_factor();
+    let images = cx.try_global::<Images>().cloned();
+    let rows: Vec<AnyElement> = completion
+      .items
+      .iter()
+      .enumerate()
+      .map(|(i, item)| {
+        let (picture, label) = match item {
+          Candidate::Emote(code) => (
+            known.get(code).map(|emote| {
+              emote_stack(
+                std::iter::once(emote),
+                20.,
+                |picture: &Picture, effects, w, h| {
+                  super::store_image(images.as_ref(), picture, effects, (w, h), scale, cx)
+                },
+              )
+              .into_any_element()
+            }),
+            code.to_string(),
+          ),
+          Candidate::User(_) => (None, item.text()),
+        };
+        h_flex()
+          .id(("chat-completion", i))
+          .px_2()
+          .py_1()
+          .gap_2()
+          .items_center()
+          .rounded(theme::RADIUS)
+          .cursor_pointer()
+          .text_sm()
+          .when(i == completion.highlighted, |el| {
+            el.bg(theme::surface_hover())
+          })
+          .hover(|s| s.bg(theme::surface_hover()))
+          .children(picture)
+          .child(div().min_w_0().truncate().child(label))
+          .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, _, window, cx| {
+              cx.stop_propagation();
+              this.accept_completion(Some(i), window, cx);
+            }),
+          )
+          .into_any_element()
+      })
+      .collect();
+    Some(
+      deferred(
+        v_flex()
+          .id("chat-completion")
+          .occlude()
+          .absolute()
+          .bottom_full()
+          .left_0()
+          .right_0()
+          .mb_1()
+          .p_1()
+          .rounded(theme::RADIUS_LG)
+          .border_1()
+          .border_color(theme::border())
+          .bg(theme::background())
+          .shadow_lg()
+          .children(rows),
+      )
+      .into_any_element(),
+    )
+  }
+
   /// Inserts a picked emote's code or an emoji in the field, at the cursor.
   fn pick(&mut self, item: SharedString, window: &mut Window, cx: &mut Context<Self>) {
     let Some(input) = self.composer.as_ref().and_then(|c| c.input.clone()) else {
@@ -501,6 +717,8 @@ impl ChatPanel {
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<AnyElement> {
+    // The suggestions over the field (none before it is made).
+    let completion = self.completion_list(window, cx);
     let composer = self.composer.as_mut()?;
     if composer.input.is_none() {
       let input = cx.new(|cx| {
@@ -517,11 +735,38 @@ impl ChatPanel {
           InputEvent::PressEnter { .. } => this.submit(window, cx),
           InputEvent::Change => {
             this.show_emotes(window, cx);
+            let completing = this
+              .composer
+              .as_mut()
+              .is_some_and(|c| std::mem::take(&mut c.completing));
+            if !completing {
+              this.update_completion(false, cx);
+            }
             cx.notify();
           }
           _ => {}
         },
       ));
+      // Completion's keys, before the field's own bindings.
+      let (panel, field) = (cx.entity().downgrade(), input.clone());
+      composer
+        ._subscriptions
+        .push(cx.intercept_keystrokes(move |event, window, cx| {
+          let keystroke = &event.keystroke;
+          let key = keystroke.key.as_str();
+          if keystroke.modifiers.modified()
+            || !matches!(key, "tab" | "up" | "down" | "enter" | "escape")
+            || !field.focus_handle(cx).is_focused(window)
+          {
+            return;
+          }
+          let handled = panel
+            .update(cx, |this, cx| this.completion_key(key, window, cx))
+            .unwrap_or(false);
+          if handled {
+            cx.stop_propagation();
+          }
+        }));
       let search = cx.new(|cx| InputState::new(window, cx).placeholder(t("Search", "Rechercher")));
       composer._subscriptions.push(cx.subscribe_in(
         &search,
@@ -646,7 +891,8 @@ impl ChatPanel {
                 .pr(px(PICKER_BUTTON))
                 .disabled(off),
             )
-            .child(div().absolute().top_1().right_1().child(picker)),
+            .child(div().absolute().top_1().right_1().child(picker))
+            .children(completion),
         )
         .child(
           h_flex()

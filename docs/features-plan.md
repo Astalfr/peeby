@@ -145,6 +145,8 @@ marked as history (dimmed until the first live line), and the moderation events 
 
 ### T2. Completion in the chat's field
 
+Done (2026-11-11), checked by the user in the app (`:` and a single letter list the emotes).
+
 In `ui::chat`'s composer, generic (YouTube's live chat gets it too): Tab completes the word before
 the cursor with the emotes (the channel's, 7TV, BTTV, FFZ, the user's own) and the chatters seen,
 Tab again cycles; `@` opens a list of the chatters seen (most recent first), `:` a list of the

@@ -178,6 +178,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Twitch space
 
+- Chat completion (2026-11-11, the user's request, docs/features-plan.md T2, branch `dev`): in `ui::chat`'s field (Twitch's and the fake chat's), `@` lists the chatters seen, `:` the emotes (one letter after either), Tab both for any word; arrows, Tab, Enter, click, Escape (a keystroke interceptor, as the YouTube search's). 4 new tests (`ui::chat::complete`). Checked by the user in the app (2026-11-11).
 - Chat history (2026-11-11, the user's request, docs/features-plan.md T1, [ADR 0036](decisions/0036-twitch-chat-history.md), branch `dev`): a live's chat opens with its last 100 messages from robotty's recent-messages, parsed as live lines, shown with the channel's emotes, then a notice line before the live ones; the setting "Messages précédents" (Chat, on) turns it off. 1 new test, 1 fixture (`recent_messages.json`, chatters renamed). Checked by the user in the app (2026-11-11).
 - Multistream (2026-11-08, the user's request, [ADR 0033](decisions/0033-twitch-multistream.md),
   docs/twitch.md "Multistream"): the sidebar's "Multistream" plays up to four lives, the main one

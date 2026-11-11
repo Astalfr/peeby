@@ -8,6 +8,7 @@
 //! mirrors what it gets to the merged one ([`ChatPanel::set_mirror`]), every line marked with
 //! its [`ChatSource`].
 
+mod complete;
 mod emoji;
 pub mod fake;
 mod layout;
