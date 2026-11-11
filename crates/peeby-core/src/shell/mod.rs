@@ -212,20 +212,39 @@ impl Shell {
     }));
     // An update's installer is ready: the title bar shows its button (ADR 0027).
     subscriptions.push(cx.observe_global::<crate::update::Updater>(|_, cx| cx.notify()));
-    // F5 and Ctrl+R refresh the page, as in a browser. Observed after dispatch, so they work
-    // whatever has the focus (or nothing); only in this window, and not in fullscreen, which
-    // belongs to the player.
+    // A browser's keys: F5 and Ctrl+R refresh the page; Ctrl+T opens a tab of the shown tab's
+    // space, Ctrl+W closes the tab (the window's only one closes the window, as a middle click
+    // does), Ctrl+Tab and Ctrl+Shift+Tab show the next and the previous tab, Ctrl+1 to 8 that
+    // tab, Ctrl+9 the last one. Observed after dispatch, so they work whatever has the focus
+    // (or nothing); only in this window, and not in fullscreen, which belongs to the player.
     let main = window.window_handle().window_id();
     subscriptions.push(cx.observe_keystrokes(move |shell, event, window, cx| {
+      if window.window_handle().window_id() != main || window.is_fullscreen() {
+        return;
+      }
       let keystroke = &event.keystroke;
       let m = &keystroke.modifiers;
-      let refresh = match keystroke.key.as_str() {
-        "f5" => !m.control && !m.alt && !m.shift && !m.platform,
-        "r" => m.control && !m.alt && !m.shift && !m.platform,
-        _ => false,
-      };
-      if refresh && window.window_handle().window_id() == main && !window.is_fullscreen() {
-        shell.reload(cx);
+      let ctrl = m.control && !m.alt && !m.platform;
+      match keystroke.key.as_str() {
+        "f5" if !m.control && !m.alt && !m.shift && !m.platform => shell.reload(cx),
+        "r" if ctrl && !m.shift => shell.reload(cx),
+        "t" if ctrl && !m.shift => {
+          let space = shell.active.map_or(0, |tab| tab.space);
+          shell.new_tab(space, window, cx);
+        }
+        "w" if ctrl && !m.shift => {
+          if let Some(tab) = shell.active {
+            shell.middle_click_tab(tab.id, cx);
+          }
+        }
+        "tab" if ctrl => shell.cycle_tab(if m.shift { -1 } else { 1 }, window, cx),
+        key if ctrl && !m.shift => {
+          if let Some(index) = tab_shortcut(key, shell.tabs.len()) {
+            let id = shell.tabs[index].id;
+            shell.activate(id, window, cx);
+          }
+        }
+        _ => {}
       }
     }));
     let startup = tabs.is_none();
@@ -485,6 +504,23 @@ impl Shell {
     };
     let id = handle.new_tab(cx);
     self.tabs.push(TabRef { space, id });
+    self.activate(id, window, cx);
+  }
+
+  /// Shows the tab `step` places after the shown one (before, negative), around the bar.
+  fn cycle_tab(&mut self, step: isize, window: &mut Window, cx: &mut Context<Self>) {
+    let count = self.tabs.len();
+    let Some(current) = self
+      .active
+      .and_then(|tab| self.tabs.iter().position(|t| *t == tab))
+    else {
+      return;
+    };
+    if count < 2 {
+      return;
+    }
+    let next = (current as isize + step).rem_euclid(count as isize) as usize;
+    let id = self.tabs[next].id;
     self.activate(id, window, cx);
   }
 
@@ -2079,4 +2115,29 @@ fn update_button(cx: &App) -> Option<Button> {
         });
       }),
   )
+}
+
+/// The tab Ctrl+`key` shows among `count`: `1` to `8` that one (when there is), `9` the last.
+fn tab_shortcut(key: &str, count: usize) -> Option<usize> {
+  match key.parse::<usize>().ok()? {
+    9 => count.checked_sub(1),
+    n @ 1..=8 => (n <= count).then(|| n - 1),
+    _ => None,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::tab_shortcut;
+
+  #[test]
+  fn ctrl_digits_pick_a_tab_and_nine_the_last() {
+    assert_eq!(tab_shortcut("1", 3), Some(0));
+    assert_eq!(tab_shortcut("3", 3), Some(2));
+    assert_eq!(tab_shortcut("4", 3), None);
+    assert_eq!(tab_shortcut("9", 3), Some(2));
+    assert_eq!(tab_shortcut("9", 0), None);
+    assert_eq!(tab_shortcut("0", 3), None);
+    assert_eq!(tab_shortcut("t", 3), None);
+  }
 }

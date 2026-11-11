@@ -83,6 +83,8 @@ listing the channels, each with its own subscribe state, as youtube.com does (ea
 
 ### 9. Tab shortcuts
 
+Done (2026-11-11), checked by the user in the app.
+
 Ctrl+T (a new tab of the shown space), Ctrl+W (close the tab; the window's last one closes the
 window, as the middle click), Ctrl+Tab and Ctrl+Shift+Tab (next and previous tab), Ctrl+1 to 8
 (that tab), Ctrl+9 (the last one). Not while a text field has the focus where the key means
