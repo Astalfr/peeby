@@ -51,8 +51,8 @@ pub use live::LiveProxy;
 pub use models::{
   Caption, Channel, ChannelHeader, ChannelNotifications, ChannelTab, ChannelTabKind, Chapter,
   ChatAction, ChatBadge, ChatBadgeKind, ChatMessage, ChatRun, Collaborator, Comment,
-  CommentActions, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget, Live,
-  LiveChatPage, LiveFormat, NotInterested, Notification, NotificationKind, NotificationLevel,
+  CommentActions, CommentPage, CommentSort, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget,
+  Live, LiveChatPage, LiveFormat, NotInterested, Notification, NotificationKind, NotificationLevel,
   NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
   Related, SearchPage, SearchResult, SearchSuggestion, ShortItem, ShortsPage, SponsorCategory,
   SponsorSegment, Storyboard, StoryboardFrame, Stream, Subscription, SuggestedChannel, TextLink,

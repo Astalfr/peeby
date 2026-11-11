@@ -28,13 +28,15 @@ use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::PlayerView;
-use ui::widgets::{loading_more, near_scroll_end};
+use ui::widgets::{loading_more, near_scroll_end, sort_choices};
 use ui::{runtime, tf, theme};
 
 #[derive(Default)]
 struct Comments {
   items: Vec<Comment>,
   count: Option<String>,
+  /// The orders the header offers, from the first page.
+  sorts: Vec<innertube::CommentSort>,
   continuation: Option<String>,
   loading: bool,
   /// Whether the first page was asked for.
@@ -126,6 +128,35 @@ impl CommentSection {
   /// Loads the first page from `token` (the watch page's); `None` when the video has none.
   pub fn start(&mut self, token: Option<String>, cx: &mut Context<Self>) {
     self.first = token;
+    self.load_comments(cx);
+    cx.notify();
+  }
+
+  /// The comments again from the first page of the order whose token is `token`: the list
+  /// empties, the total and the orders stay until the new page brings its own.
+  fn set_sort(&mut self, token: String, cx: &mut Context<Self>) {
+    if self
+      .comments
+      .sorts
+      .iter()
+      .any(|s| s.selected && s.token == token)
+    {
+      return;
+    }
+    for sort in &mut self.comments.sorts {
+      sort.selected = sort.token == token;
+    }
+    self.first = Some(token);
+    let (count, sorts) = (
+      self.comments.count.take(),
+      std::mem::take(&mut self.comments.sorts),
+    );
+    self.comments = Comments {
+      count,
+      sorts,
+      ..Comments::default()
+    };
+    self.replies.clear();
     self.load_comments(cx);
     cx.notify();
   }
@@ -368,6 +399,9 @@ impl CommentSection {
               if page.count.is_some() {
                 comments.count = page.count;
               }
+              if !page.sorts.is_empty() {
+                comments.sorts = page.sorts;
+              }
             }
             Some(Err(e)) => {
               tracing::warn!("comments: {e}");
@@ -388,6 +422,29 @@ impl CommentSection {
     cx: &mut Context<Self>,
   ) -> impl IntoElement + use<> {
     let comments = &self.comments;
+    let view = cx.weak_entity();
+    let sorts = (comments.sorts.len() > 1).then(|| {
+      sort_choices(
+        "comment-sort",
+        comments
+          .sorts
+          .iter()
+          .map(|sort| {
+            let (token, view) = (sort.token.clone(), view.clone());
+            let on_click: ui::form::OnClick = Box::new(move |_, cx| {
+              view
+                .update(cx, |this, cx| this.set_sort(token.clone(), cx))
+                .ok();
+            });
+            (
+              SharedString::from(sort.label.clone()),
+              sort.selected,
+              on_click,
+            )
+          })
+          .collect::<Vec<_>>(),
+      )
+    });
     let header = h_flex()
       .gap_2()
       .items_center()
@@ -399,7 +456,9 @@ impl CommentSection {
             .clone()
             .unwrap_or_else(|| t("Comments", "Commentaires").into()),
         ),
-      );
+      )
+      .child(div().flex_1())
+      .children(sorts);
     let items: Vec<_> = comments
       .items
       .iter()

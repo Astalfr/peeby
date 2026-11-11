@@ -49,6 +49,8 @@ Debounced, and the request never logs the query at info level.
 
 ### 5. Comment sort
 
+Done (2026-11-11), checked by the user in the app.
+
 "Top comments" / "Newest first" over the comments, as on youtube.com: the comments header's sort
 menu carries a continuation per order (fixture of the header first).
 

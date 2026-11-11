@@ -127,6 +127,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Done (2026-11-11, the user's request, docs/features-plan.md item 4, branch `dev`): the search page's field shows YouTube's suggestions while typing (`Client::search_suggestions`: `suggestqueries-clients6.youtube.com/complete/search`, anonymous, `oe=utf-8` or the answer is Latin-1; a script whose argument is the JSON), a channel's with its avatar opening its page; arrows, Enter, Escape, click (a keystroke interceptor, since the field binds the arrows). The query never reaches the log. 1 new test, 1 fixture (`search_suggestions.txt`). Checked by the user in the app (2026-11-11).
 
+## YouTube comment sort
+
+- Done (2026-11-11, the user's request, docs/features-plan.md item 5, branch `dev`): the comments' header offers YouTube's orders (`CommentPage::sorts`, from the header's `sortFilterSubMenuRenderer`, each with its first page's token), right of the total, in the accent style shared with the channel page's sort (`ui::widgets::sort_choices`); a click reloads the comments in that order (watch page and Shorts panel). 1 new test (`comments.json` already had the menu). Checked by the user in the app (2026-11-11).
+
 ## YouTube chapters
 
 - Chapters of YouTube videos (2026-11-02): `WatchPage::chapters` from the `next` response's player bar markers (the description's, else YouTube's generated ones), given to the player with `set_chapters`. The shared seek bar now splits into one piece per chapter with gaps, the hovered one thicker (Jellyfin's chapters too); the hover title, the chapters menu and Page Up / Page Down work on them. 1 new test on a trimmed fixture (`next_chapters.json`). Verified: clippy, tests, and the seek bar's pieces on a screenshot of `cargo run -p ui --example player` (which now has chapters). Seen in the app, with the user's agreement: `rfscVS0vtbw` plays with its 35 chapters as pieces of the seek bar and the chapters button. The thickening on hover and the hovered piece's growth are eased (150 ms). **Not verified:** the hovered piece growing and its animation, the chapters menu clicked, Page Up / Page Down pressed.

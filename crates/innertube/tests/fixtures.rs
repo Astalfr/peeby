@@ -503,6 +503,23 @@ fn channel_shorts_and_playlists() {
 }
 
 #[test]
+fn comment_sorts() {
+  // The first comments page's header offers both orders, the popular one shown.
+  let page = innertube::parse_comments(&fixture("comments.json"));
+  let sorts: Vec<_> = page
+    .sorts
+    .iter()
+    .map(|s| (s.label.as_str(), s.selected))
+    .collect();
+  assert_eq!(
+    sorts,
+    [("Les plus populaires", true), ("Les plus récents", false)]
+  );
+  assert!(page.sorts.iter().all(|s| !s.token.is_empty()));
+  assert_ne!(page.sorts[0].token, page.sorts[1].token);
+}
+
+#[test]
 fn search_suggestions() {
   // The search box's suggestions for "squeezie", anonymous, in French, captured 2026-11-11:
   // the first names the channel.

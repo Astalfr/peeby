@@ -36,7 +36,7 @@ use ui::card::{skeleton_card, skeleton_row};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::image_fill;
-use ui::widgets::{loading_more, notice, page_title};
+use ui::widgets::{loading_more, notice, page_title, sort_choices};
 use ui::{motion, runtime, tf, theme};
 
 /// Narrowest card, logical pixels: a row holds as many cards as fit at this width, then they
@@ -1052,35 +1052,26 @@ fn skeleton(list: bool, card_width: f32) -> AnyElement {
 }
 
 fn sort_switch(chips: &[FeedChip], cx: &mut Context<FeedView>) -> impl IntoElement {
-  h_flex()
-    .p_0p5()
-    .gap_0p5()
-    .rounded(theme::RADIUS)
-    .border_1()
-    .border_color(theme::border())
-    .children(chips.iter().enumerate().map(|(ix, chip)| {
-      let token = chip.token.clone();
-      // The chosen order in the accent, on a tint of it; the others muted, brighter while
-      // hovered; no grey background.
-      div()
-        .id(("sort", ix))
-        .px_3()
-        .py_1()
-        .rounded(theme::RADIUS)
-        .cursor_pointer()
-        .text_sm()
-        .when(chip.selected, |el| {
-          el.bg(theme::accent().opacity(0.16))
-            .text_color(theme::accent())
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-        })
-        .when(!chip.selected, |el| {
-          el.text_color(theme::muted())
-            .hover(|s| s.text_color(theme::foreground()))
-        })
-        .child(chip.label.clone())
-        .on_click(cx.listener(move |this, _, _, cx| this.set_sort(token.clone(), cx)))
-    }))
+  let view = cx.weak_entity();
+  sort_choices(
+    "sort",
+    chips
+      .iter()
+      .map(|chip| {
+        let (token, view) = (chip.token.clone(), view.clone());
+        let on_click: ui::form::OnClick = Box::new(move |_, cx| {
+          view
+            .update(cx, |this, cx| this.set_sort(token.clone(), cx))
+            .ok();
+        });
+        (
+          SharedString::from(chip.label.clone()),
+          chip.selected,
+          on_click,
+        )
+      })
+      .collect::<Vec<_>>(),
+  )
 }
 
 /// Cards per row of the grid and their width, from the window: the content panel is the window

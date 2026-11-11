@@ -961,6 +961,19 @@ pub struct CommentPage {
   pub continuation: Option<String>,
   /// Localized total, e.g. `2,3 M commentaires` (first page only).
   pub count: Option<String>,
+  /// The header's sort orders ("Les plus populaires", "Les plus récents"), first page only.
+  pub sorts: Vec<CommentSort>,
+}
+
+/// A sort order of a video's comments.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentSort {
+  /// Its label, in YouTube's language.
+  pub label: String,
+  /// Whether the page is in this order.
+  pub selected: bool,
+  /// Token of the first page in this order, for [`crate::Client::comments`].
+  pub token: String,
 }
 
 /// Like and dislike counts from Return YouTube Dislike (dislikes are its estimate).

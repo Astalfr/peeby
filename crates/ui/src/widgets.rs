@@ -1,5 +1,5 @@
-//! Small shared pieces: page title, centered notices, the loader, list-end helpers and the
-//! flash that shows where a request led.
+//! Small shared pieces: page title, centered notices, the loader, list-end helpers, the sort
+//! choices and the flash that shows where a request led.
 
 use gpui::prelude::*;
 use std::time::{Duration, Instant};
@@ -10,6 +10,46 @@ use gpui::{
 use gpui_component::{IconNamed, h_flex, v_flex};
 
 use crate::theme;
+
+/// A group of sort orders (a channel's videos, the comments), in a bordered frame: the chosen
+/// one in the accent on a tint of it, the others muted, brighter while hovered; no grey
+/// background. Each option is its label, whether it is chosen, and its click.
+pub fn sort_choices(
+  id: &str,
+  options: impl IntoIterator<Item = (SharedString, bool, crate::form::OnClick)>,
+) -> impl IntoElement {
+  h_flex()
+    .p_0p5()
+    .gap_0p5()
+    .rounded(theme::RADIUS)
+    .border_1()
+    .border_color(theme::border())
+    .children(
+      options
+        .into_iter()
+        .enumerate()
+        .map(|(ix, (label, selected, on_click))| {
+          div()
+            .id(ElementId::Name(format!("{id}-{ix}").into()))
+            .px_3()
+            .py_1()
+            .rounded(theme::RADIUS)
+            .cursor_pointer()
+            .text_sm()
+            .when(selected, |el| {
+              el.bg(theme::accent().opacity(0.16))
+                .text_color(theme::accent())
+                .font_weight(FontWeight::SEMIBOLD)
+            })
+            .when(!selected, |el| {
+              el.text_color(theme::muted())
+                .hover(|s| s.text_color(theme::foreground()))
+            })
+            .child(label)
+            .on_click(move |_, window, cx| on_click(window, cx))
+        }),
+    )
+}
 
 /// Page title.
 pub fn page_title(text: impl Into<SharedString>) -> impl IntoElement {

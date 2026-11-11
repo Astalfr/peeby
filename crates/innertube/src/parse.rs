@@ -1415,6 +1415,7 @@ pub fn parse_comments(response: &Value) -> CommentPage {
   for item in items {
     if let Some(header) = item.get("commentsHeaderRenderer") {
       page.count = non_empty(text(&header["countText"]));
+      page.sorts = comment_sorts(header);
     } else if let Some(cont) = item.get("continuationItemRenderer") {
       page.continuation =
         find_key(cont, "continuationCommand").and_then(|c| c["token"].as_str().map(str::to_owned));
@@ -1511,6 +1512,28 @@ pub fn parse_search_suggestions(body: &str) -> Vec<crate::models::SearchSuggesti
           avatar: extra["zai"].as_str().map(str::to_owned),
         });
       Some(crate::models::SearchSuggestion { text, channel })
+    })
+    .collect()
+}
+
+/// The comments header's sort menu (`sortFilterSubMenuRenderer`): each order's title, whether
+/// it is the page's, and the token of its first page. An order without a token is skipped.
+fn comment_sorts(header: &Value) -> Vec<crate::models::CommentSort> {
+  let Some(menu) = find_key(&header["sortMenu"], "sortFilterSubMenuRenderer") else {
+    return Vec::new();
+  };
+  menu["subMenuItems"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|item| {
+      Some(crate::models::CommentSort {
+        label: item["title"].as_str()?.to_owned(),
+        selected: item["selected"] == true,
+        token: find_key(&item["serviceEndpoint"], "continuationCommand")?["token"]
+          .as_str()?
+          .to_owned(),
+      })
     })
     .collect()
 }
