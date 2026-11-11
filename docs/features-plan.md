@@ -92,6 +92,8 @@ something there.
 
 ### 10. Restoring the tabs at startup
 
+Done (2026-11-11, [ADR 0035](decisions/0035-restore-tabs.md)), checked by the user in the app.
+
 At quit, each window's tabs (their space, their history's routes, the shown one) and its bounds
 (and maximized state, its display) are saved; at startup they come back, built only when shown
 (ADR 0019), no video playing until clicked. A setting turns it off ("Restore tabs at startup",

@@ -189,6 +189,17 @@ fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
       )
       .into_any_element(),
       row(
+        t("Restore tabs", "Restaurer les onglets"),
+        t(
+          "At startup, the windows and their tabs come back as they were when Peeby quit (their pages, not playing: a video waits for a click). Off, the startup tabs below open instead.",
+          "Au démarrage, les fenêtres et leurs onglets reviennent tels qu'ils étaient quand Peeby a quitté (leurs pages, sans lecture : une vidéo attend un clic). Désactivé, les onglets au démarrage ci-dessous s'ouvrent à la place.",
+        ),
+        toggle("restore-tabs", settings.restore_tabs, |on, cx| {
+          Settings::update(cx, |s| s.restore_tabs = on)
+        }),
+      )
+      .into_any_element(),
+      row(
         t("Startup tabs", "Onglets au démarrage"),
         t(
           "The services that open a tab when Peeby starts.",

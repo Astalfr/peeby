@@ -11,6 +11,7 @@ mod bell;
 pub mod lives;
 mod mini_player;
 mod output_volume;
+pub mod session;
 mod settings_page;
 pub mod space;
 mod space_tabs;
@@ -147,6 +148,27 @@ impl Shell {
     cx: &mut Context<Self>,
   ) -> Self {
     Self::with_tabs(spaces, None, splash, window, cx)
+  }
+
+  /// A shell over `spaces` holding `tabs`, made again from the last session
+  /// ([`session::SavedWindow::restore`]), `active` the one shown.
+  pub fn restored(
+    spaces: Vec<SpaceHandle>,
+    restored: session::RestoredTabs,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    let session::RestoredTabs { tabs, active } = restored;
+    let mut shell = Self::with_tabs(spaces, Some(tabs), false, window, cx);
+    if let Some(&tab) = shell.tabs.get(active)
+      && shell.active != Some(tab)
+    {
+      shell.active = Some(tab);
+      let space = &shell.spaces[tab.space];
+      space.show_tab(tab.id, shell.window, cx);
+      theme::set_accent(shell.window, space.info(cx).accent, cx);
+    }
+    shell
   }
 
   /// A shell over `spaces` holding `tabs` (a tab moved to a new window), or the tabs the

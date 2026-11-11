@@ -45,7 +45,9 @@ use channels::ChannelsView;
 use feed::{FeedView, Source};
 use peeby_core::settings;
 use peeby_core::settings::{Settings, StartPage};
-use peeby_core::shell::space::{Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs};
+use peeby_core::shell::space::{
+  Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, route_key, route_parts,
+};
 use playlists::{Kind, PlaylistView, PlaylistsView};
 use queue::Queue;
 use search::SearchView;
@@ -120,6 +122,54 @@ impl Route {
       (Self::Playlist { id: a, .. }, Self::Playlist { id: b, .. }) => a == b,
       _ => self == other,
     }
+  }
+
+  /// The page's key for the next start (ADR 0035).
+  fn key(&self) -> String {
+    match self {
+      Self::Home => route_key(&["home"]),
+      Self::Subscriptions => route_key(&["subscriptions"]),
+      Self::Shorts => route_key(&["shorts"]),
+      Self::Short { id, sequence } => {
+        route_key(&["short", id, sequence.as_deref().unwrap_or_default()])
+      }
+      Self::History => route_key(&["history"]),
+      Self::Channels => route_key(&["channels"]),
+      Self::Channel { id, name } => route_key(&["channel", id, name]),
+      Self::Playlists => route_key(&["playlists"]),
+      Self::Mixes => route_key(&["mixes"]),
+      Self::Playlist { id, title } => route_key(&["playlist", id, title]),
+      Self::Search => route_key(&["search"]),
+      Self::Watch(id) => route_key(&["watch", id]),
+    }
+  }
+
+  /// The page of a key from [`Route::key`].
+  fn from_key(key: &str) -> Option<Self> {
+    Some(match route_parts(key).as_slice() {
+      ["home"] => Self::Home,
+      ["subscriptions"] => Self::Subscriptions,
+      ["shorts"] => Self::Shorts,
+      ["short", id, sequence] => Self::Short {
+        id: (*id).to_owned(),
+        sequence: (!sequence.is_empty()).then(|| (*sequence).to_owned()),
+      },
+      ["history"] => Self::History,
+      ["channels"] => Self::Channels,
+      ["channel", id, name] => Self::Channel {
+        id: (*id).to_owned(),
+        name: (*name).to_owned(),
+      },
+      ["playlists"] => Self::Playlists,
+      ["mixes"] => Self::Mixes,
+      ["playlist", id, title] => Self::Playlist {
+        id: (*id).to_owned(),
+        title: (*title).to_owned(),
+      },
+      ["search"] => Self::Search,
+      ["watch", id] => Self::Watch((*id).to_owned()),
+      _ => return None,
+    })
   }
 
   /// Pages with a player: a sidebar page opened after them drops their view.
@@ -592,6 +642,18 @@ impl Space for YouTubeSpace {
     }
   }
 
+  fn route_key(&self, route: &Route) -> Option<String> {
+    Some(route.key())
+  }
+
+  fn route_from_key(&self, key: &str) -> Option<Route> {
+    Route::from_key(key)
+  }
+
+  fn route_plays(&self, route: &Route) -> bool {
+    route.plays()
+  }
+
   fn tabs(&self) -> Vec<TabId> {
     self.tabs.ids()
   }
@@ -787,5 +849,45 @@ mod tests {
     }
     assert_eq!(video_id("hello"), None);
     assert_eq!(video_id("https://www.youtube.com/"), None);
+  }
+
+  #[test]
+  fn every_page_comes_back_from_its_key() {
+    use super::Route;
+    let routes = [
+      Route::Home,
+      Route::Subscriptions,
+      Route::Shorts,
+      Route::Short {
+        id: "Xvl0tzKzeLM".into(),
+        sequence: Some("GukPIAFC".into()),
+      },
+      Route::Short {
+        id: "Xvl0tzKzeLM".into(),
+        sequence: None,
+      },
+      Route::History,
+      Route::Channels,
+      Route::Channel {
+        id: "UCWeg2Pkate69NFdBeuRFTAw".into(),
+        name: "SQUEEZIE: le retour".into(),
+      },
+      Route::Playlists,
+      Route::Mixes,
+      Route::Playlist {
+        id: "WL".into(),
+        title: "À regarder plus tard".into(),
+      },
+      Route::Search,
+      Route::Watch("dQw4w9WgXcQ".into()),
+    ];
+    for route in routes {
+      assert_eq!(
+        Route::from_key(&route.key()),
+        Some(route.clone()),
+        "{route:?}"
+      );
+    }
+    assert_eq!(Route::from_key("gone"), None);
   }
 }

@@ -135,6 +135,9 @@ pub struct Settings {
   pub startup_tabs: Vec<String>,
   /// How the tab bar offers a new tab.
   pub new_tab_style: NewTabStyle,
+  /// The windows and their tabs come back at startup as they were at quit (ADR 0035);
+  /// `startup_tabs` applies otherwise.
+  pub restore_tabs: bool,
   /// YouTube's SponsorBlock segments.
   pub sponsorblock: SponsorBlock,
 }
@@ -510,6 +513,7 @@ impl Default for Settings {
       start_with_windows: false,
       startup_tabs: vec!["youtube".into()],
       new_tab_style: NewTabStyle::OnHover,
+      restore_tabs: true,
       sponsorblock: SponsorBlock::default(),
     }
   }
@@ -614,8 +618,16 @@ fn settings_path() -> Option<PathBuf> {
   dirs::config_dir().map(|d| d.join(PROFILE).join("settings.toml"))
 }
 
+/// The windows and tabs kept for the next start (ADR 0035), beside the settings.
+pub(crate) fn session_path() -> Option<PathBuf> {
+  dirs::config_dir().map(|d| d.join(PROFILE).join("session.json"))
+}
+
 /// Writes next to `path` then renames, so a crash never leaves a truncated file.
-fn write_atomically(path: &std::path::Path, text: impl AsRef<[u8]>) -> std::io::Result<()> {
+pub(crate) fn write_atomically(
+  path: &std::path::Path,
+  text: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
   if let Some(dir) = path.parent() {
     std::fs::create_dir_all(dir)?;
   }

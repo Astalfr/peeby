@@ -103,6 +103,13 @@ pub fn used(window: WindowId, cx: &mut App) {
   cx.default_global::<Windows>().last = Some(window);
 }
 
+/// Every window in use (shown or hidden in the notification area), in the order they opened.
+pub fn in_use(cx: &App) -> Vec<Target> {
+  cx.try_global::<Windows>()
+    .map(|w| w.in_use().map(Target::from).collect())
+    .unwrap_or_default()
+}
+
 /// The window used last (shown or hidden in the notification area).
 pub fn last(cx: &App) -> Option<Target> {
   cx.try_global::<Windows>()?.last().map(Target::from)
@@ -217,8 +224,19 @@ pub fn options(
   show: bool,
   cx: &mut App,
 ) -> WindowOptions {
+  options_for(WindowBounds::Windowed(bounds), display, show, cx)
+}
+
+/// [`options`] for a window opened at `bounds`, maximized or not (a window of the last
+/// session).
+pub fn options_for(
+  bounds: WindowBounds,
+  display: Option<DisplayId>,
+  show: bool,
+  cx: &mut App,
+) -> WindowOptions {
   WindowOptions {
-    window_bounds: Some(WindowBounds::Windowed(bounds)),
+    window_bounds: Some(bounds),
     display_id: display,
     window_min_size: Some(size(px(MIN_SIZE.0), px(MIN_SIZE.1))),
     window_background: theme::window_background(cx),
@@ -316,6 +334,30 @@ pub(super) fn open_with(
       tracing::error!("cannot open a window: {e:#}");
       None
     }
+  }
+}
+
+/// Opens a window of the last session at `bounds` on `display`, holding its `restored` tabs
+/// (ADR 0035), shown unless Peeby starts in the notification area.
+pub fn open_restored(
+  restored: super::session::RestoredTabs,
+  bounds: WindowBounds,
+  display: Option<DisplayId>,
+  show: bool,
+  cx: &mut App,
+) {
+  let Some(spaces) = cx.try_global::<Spaces>().map(|s| s.0.clone()) else {
+    return;
+  };
+  let mut options = options_for(bounds, display, show, cx);
+  options.focus = false;
+  let opened = cx.open_window(options, |window, cx| {
+    let shell = cx.new(|cx| Shell::restored(spaces, restored, window, cx));
+    desktop::attach(window, shell.downgrade(), cx);
+    cx.new(|cx| Root::new(shell, window, cx))
+  });
+  if let Err(e) = opened {
+    tracing::error!("cannot open a window: {e:#}");
   }
 }
 

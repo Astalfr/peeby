@@ -70,7 +70,7 @@ pub fn attach(window: &mut Window, shell: WeakEntity<Shell>, cx: &mut App) {
   };
   windows::register(window, hwnd, shell.clone(), cx);
   let id = Window::window_handle(window).window_id();
-  window.on_window_should_close(cx, move |_, cx| {
+  window.on_window_should_close(cx, move |window, cx| {
     if windows::others_in_use(id, cx) {
       shell.update(cx, |shell, cx| shell.close_all(cx)).ok();
       windows::set_spare(id, cx);
@@ -81,6 +81,8 @@ pub fn attach(window: &mut Window, shell: WeakEntity<Shell>, cx: &mut App) {
     }
     let tray = cx.try_global::<TrayShown>().is_some_and(|t| t.0);
     if !tray || !Settings::get(cx).close_to_tray {
+      // Peeby quits once the window closes: its tabs are kept while it still holds them.
+      crate::shell::session::save_closing(window, cx);
       return true;
     }
     hide_last(cx);

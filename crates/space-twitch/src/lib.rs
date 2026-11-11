@@ -65,6 +65,7 @@ use multistream::MultistreamView;
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::{
   Avatar, HoverCard, LiveEntry, Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
+  route_key, route_parts,
 };
 use search::SearchView;
 use session::Secrets;
@@ -1160,6 +1161,50 @@ impl Space for TwitchSpace {
     } else if let Some(player) = self.top_player(tab, cx) {
       player.update(cx, |player, _| player.set_covered(covered));
     }
+  }
+
+  fn route_key(&self, route: &Route) -> Option<String> {
+    Some(match route {
+      Route::Following => route_key(&["following"]),
+      Route::Browse => route_key(&["browse"]),
+      Route::Category { id, name } => route_key(&["category", id, name]),
+      Route::Search => route_key(&["search"]),
+      Route::Multistream => route_key(&["multistream"]),
+      Route::Channel(login) => route_key(&["channel", login]),
+      Route::Watch(login) => route_key(&["watch", login]),
+      Route::Vod { id, start } => {
+        route_key(&["vod", id, &start.map(|s| s.to_string()).unwrap_or_default()])
+      }
+      Route::Clip(slug) => route_key(&["clip", slug]),
+      // A debug page.
+      #[cfg(debug_assertions)]
+      Route::FakeChat => return None,
+    })
+  }
+
+  fn route_from_key(&self, key: &str) -> Option<Route> {
+    Some(match route_parts(key).as_slice() {
+      ["following"] => Route::Following,
+      ["browse"] => Route::Browse,
+      ["category", id, name] => Route::Category {
+        id: (*id).to_owned(),
+        name: (*name).to_owned(),
+      },
+      ["search"] => Route::Search,
+      ["multistream"] => Route::Multistream,
+      ["channel", login] => Route::Channel((*login).to_owned()),
+      ["watch", login] => Route::Watch((*login).to_owned()),
+      ["vod", id, start] => Route::Vod {
+        id: (*id).to_owned(),
+        start: start.parse().ok(),
+      },
+      ["clip", slug] => Route::Clip((*slug).to_owned()),
+      _ => return None,
+    })
+  }
+
+  fn route_plays(&self, route: &Route) -> bool {
+    route.plays()
   }
 
   fn tabs(&self) -> Vec<TabId> {

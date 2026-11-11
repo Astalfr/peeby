@@ -68,6 +68,7 @@ fn main() {
     }
   );
   let (hl, gl) = (prefs.language.clone(), prefs.region.clone());
+  let restore_tabs = prefs.restore_tabs;
   // The Jellyfin session, with its token from the Credential Manager (a blocking call). A first
   // run makes this installation's id, saved once the UI is up.
   let device_id = match prefs.jellyfin.device_id.as_str() {
@@ -134,9 +135,23 @@ fn main() {
         }
       }));
 
-      let display = chosen_display(cx);
-      let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
-      let options = shell::windows::options(bounds, display, !background, cx);
+      // The last session's windows and tabs (ADR 0035), unless the command line asks for a page.
+      let session = (restore_tabs && initial_videos.is_empty() && twitch_page.is_none())
+        .then(shell::session::load)
+        .flatten()
+        .filter(|session| !session.windows.is_empty());
+      let placement = session
+        .as_ref()
+        .and_then(|session| session.windows.first())
+        .and_then(|window| window.placement(cx));
+      let options = match placement {
+        Some((bounds, display)) => shell::windows::options_for(bounds, display, !background, cx),
+        None => {
+          let display = chosen_display(cx);
+          let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
+          shell::windows::options(bounds, display, !background, cx)
+        }
+      };
       // The opening animation, unless something opens right away (a video, a live).
       let splash = initial_videos.is_empty() && twitch_page.is_none() && !background;
       let mut launches = None;
@@ -156,7 +171,29 @@ fn main() {
         // Before any space emits (a live opened at startup, once the shell is up).
         shell::windows::route_events(&spaces, cx);
         cx.set_global(shell::windows::Spaces(spaces.clone()));
-        let shell = cx.new(|cx| Shell::new(spaces, splash, window, cx));
+        // The spaces' startup tabs give way to the session's, once one of these came back.
+        let startup: Vec<_> = spaces
+          .iter()
+          .flat_map(|space| {
+            space
+              .tabs(cx)
+              .into_iter()
+              .map(move |tab| (space.clone(), tab))
+          })
+          .collect();
+        let restored = session
+          .as_ref()
+          .and_then(|session| session.windows.first())
+          .and_then(|saved| saved.restore(&spaces, cx));
+        let shell = match restored {
+          Some(restored) => {
+            for (space, tab) in startup {
+              space.close_tab(tab, cx);
+            }
+            cx.new(|cx| Shell::restored(spaces, restored, window, cx))
+          }
+          None => cx.new(|cx| Shell::new(spaces, splash, window, cx)),
+        };
         desktop::attach(window, shell.downgrade(), cx);
         cx.new(|cx| Root::new(shell, window, cx))
       });
@@ -165,6 +202,25 @@ fn main() {
         cx.quit();
         return;
       }
+      // The session's other windows.
+      if let Some(session) = &session
+        && let Some(spaces) = cx
+          .try_global::<shell::windows::Spaces>()
+          .map(|s| s.0.clone())
+      {
+        for saved in session.windows.iter().skip(1) {
+          let Some(restored) = saved.restore(&spaces, cx) else {
+            continue;
+          };
+          let (bounds, display) = saved.placement(cx).unwrap_or_else(|| {
+            let display = chosen_display(cx);
+            let bounds = Bounds::centered(display, size(px(1440.), px(900.)), cx);
+            (gpui::WindowBounds::Windowed(bounds), display)
+          });
+          shell::windows::open_restored(restored, bounds, display, !background, cx);
+        }
+      }
+      shell::session::keep_saving(cx);
       // The app ends when one of its windows closes: they only hide, unless it is the last one
       // and Peeby does not stay in the notification area (ADR 0028). Not with the mini-player's.
       cx.on_window_closed(move |cx, closed| {

@@ -129,6 +129,7 @@ youtube.com reads its inbox with `browse` (`FEnotifications_inbox`): sections (`
 | Data | Location |
 |---|---|
 | Settings: the interface language (`interface_language`, `ui::i18n`), YouTube's (start page, content language, region, original titles, quality, layouts, theater), the volume, `[player]` (shared player settings, the audio output picked in the top bar), `[jellyfin]` (server, user, device id, playback, home) | `%APPDATA%\peeby\settings.toml`, `settings::Settings` global |
+| The windows and their tabs for the next start (ADR 0035): each window's bounds, maximized, tab shown, and tabs (space, route keys, title, plays) | `%APPDATA%\peeby\session.json`, `shell::session`, written every 30 s and at quit |
 | YouTube session cookies | `%APPDATA%\peeby\cookies.dat`, encrypted with DPAPI ([ADR 0004](decisions/0004-cookie-session.md), [ADR 0022](decisions/0022-encrypted-cookie-jar.md)) |
 | Jellyfin access token | Windows Credential Manager, service `peeby`, account `<server URL>\|<user id>` ([ADR 0009](decisions/0009-jellyfin-12-single-account.md)) |
 | Image cache | `%LOCALAPPDATA%\peeby\images\` |

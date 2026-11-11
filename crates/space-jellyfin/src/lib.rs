@@ -37,7 +37,7 @@ use library::LibraryView;
 use login::{LoggedIn, LoginView};
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::{
-  Avatar, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
+  Avatar, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, route_key, route_parts,
 };
 use play::PlayView;
 use search::SearchView;
@@ -550,6 +550,38 @@ impl Space for JellyfinSpace {
 
   fn history_mut(&mut self) -> &mut Tabs<Route> {
     &mut self.tabs
+  }
+
+  fn route_key(&self, route: &Route) -> Option<String> {
+    Some(match route {
+      Route::Home => route_key(&["home"]),
+      Route::Search => route_key(&["search"]),
+      Route::Library(id) => route_key(&["library", id.as_str()]),
+      Route::Item { id, season } => route_key(&[
+        "item",
+        id.as_str(),
+        season.as_ref().map(ItemId::as_str).unwrap_or_default(),
+      ]),
+      Route::Play(id) => route_key(&["play", id.as_str()]),
+    })
+  }
+
+  fn route_from_key(&self, key: &str) -> Option<Route> {
+    Some(match route_parts(key).as_slice() {
+      ["home"] => Route::Home,
+      ["search"] => Route::Search,
+      ["library", id] => Route::Library((*id).into()),
+      ["item", id, season] => Route::Item {
+        id: (*id).into(),
+        season: (!season.is_empty()).then(|| (*season).into()),
+      },
+      ["play", id] => Route::Play((*id).into()),
+      _ => return None,
+    })
+  }
+
+  fn route_plays(&self, route: &Route) -> bool {
+    matches!(route, Route::Play(_))
   }
 
   fn tabs(&self) -> Vec<TabId> {

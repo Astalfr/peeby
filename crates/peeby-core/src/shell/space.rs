@@ -678,6 +678,23 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
   /// The tabs the space opened by itself at startup.
   fn tabs(&self) -> Vec<TabId>;
 
+  /// `route` as a key kept until the next start (ADR 0035, [`route_key`]); `None` for a page
+  /// not kept (a debug page).
+  fn route_key(&self, _route: &Self::Route) -> Option<String> {
+    None
+  }
+
+  /// The route a key of [`Space::route_key`] stands for, if it still does.
+  fn route_from_key(&self, _key: &str) -> Option<Self::Route> {
+    None
+  }
+
+  /// Whether `route`'s page plays (a watch page): a tab restored on it is not the one shown at
+  /// startup, so that nothing plays before a click.
+  fn route_plays(&self, _route: &Self::Route) -> bool {
+    false
+  }
+
   /// Opens a tab on the space's first page (built when it shows).
   fn new_tab(&mut self, cx: &mut Context<Self>) -> TabId;
 
@@ -815,6 +832,35 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
 /// What the shell does with a space's [`SpaceEvent`]s.
 pub type EventHandler = dyn Fn(&SpaceEvent, &mut App);
 
+/// The separator of a route key's parts: a control character no id or title holds.
+const KEY_SEPARATOR: char = '\u{1f}';
+
+/// A route's key ([`Space::route_key`]) from its parts: its kind, then its fields.
+pub fn route_key(parts: &[&str]) -> String {
+  parts.join(&KEY_SEPARATOR.to_string())
+}
+
+/// The parts of a route key ([`route_key`]).
+pub fn route_parts(key: &str) -> Vec<&str> {
+  key.split(KEY_SEPARATOR).collect()
+}
+
+/// A tab kept for the next start (ADR 0035): its space, its pages up to the one shown (their
+/// keys, oldest first), the title shown, and whether that page plays.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SavedTab {
+  /// [`SpaceInfo::id`].
+  pub space: String,
+  /// [`Space::route_key`]s, the last one shown.
+  pub routes: Vec<String>,
+  /// The tab's label (a video's title).
+  #[serde(default)]
+  pub title: Option<String>,
+  /// The page shown plays ([`Space::route_plays`]).
+  #[serde(default)]
+  pub plays: bool,
+}
+
 /// A space whatever its type, as the shell holds it.
 pub trait AnySpace {
   /// The space's entity as a view (the page on top of the tab it shows).
@@ -878,9 +924,54 @@ pub trait AnySpace {
   fn observe(&self, cx: &mut App, on_change: Box<dyn Fn(&mut App)>) -> Subscription;
   /// Calls `on_event` with what the space asks of the shell.
   fn on_event(&self, cx: &mut App, on_event: Box<EventHandler>) -> Subscription;
+  /// Tab `tab` as kept for the next start; `None` for one with nothing to keep (the settings'
+  /// own tab, pages without keys).
+  fn save_tab(&self, tab: TabId, cx: &App) -> Option<SavedTab>;
+  /// A tab of the space made again from `saved` (built when it shows); `None` when none of its
+  /// pages is known any more.
+  fn restore_tab(&self, saved: &SavedTab, cx: &mut App) -> Option<TabId>;
 }
 
 impl<T: Space> AnySpace for Entity<T> {
+  fn save_tab(&self, tab: TabId, cx: &App) -> Option<SavedTab> {
+    let space = self.read(cx);
+    let history = space.history().get(tab)?;
+    let pages: Vec<&Page<T::Route>> = history.behind().collect();
+    let routes: Vec<String> = pages
+      .iter()
+      .rev()
+      .filter_map(|page| space.route_key(&page.route))
+      .collect();
+    if routes.is_empty() {
+      return None;
+    }
+    let shown = pages.first()?;
+    Some(SavedTab {
+      space: space.info().id.to_owned(),
+      routes,
+      title: shown.title.as_ref().map(ToString::to_string),
+      plays: space.route_plays(&shown.route),
+    })
+  }
+
+  fn restore_tab(&self, saved: &SavedTab, cx: &mut App) -> Option<TabId> {
+    self.update(cx, |space, cx| {
+      let routes: Vec<T::Route> = saved
+        .routes
+        .iter()
+        .filter_map(|key| space.route_from_key(key))
+        .collect();
+      if routes.is_empty() {
+        return None;
+      }
+      let id = space
+        .history_mut()
+        .add(routes, saved.title.clone().map(Into::into));
+      cx.notify();
+      Some(id)
+    })
+  }
+
   fn view(&self) -> AnyView {
     self.clone().into()
   }
