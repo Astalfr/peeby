@@ -1,0 +1,117 @@
+{
+  "feedbackResponses": [
+    {
+      "followUpDialog": {
+        "dismissalFollowUpRenderer": {
+          "cancelButton": {
+            "buttonRenderer": {
+              "isDisabled": false,
+              "size": "SIZE_DEFAULT",
+              "style": "STYLE_TEXT",
+              "text": {
+                "runs": [
+                  {
+                    "text": "Annuler"
+                  }
+                ]
+              },
+              "trackingParams": "CAMQ8FsiEwi6w-DFm4CYAxVdBwYAHZtoMpM="
+            }
+          },
+          "dismissalReasonsPrompt": {
+            "accessibility": {
+              "accessibilityData": {
+                "label": "Vos motifs"
+              }
+            },
+            "runs": [
+              {
+                "text": "Vos motifs"
+              }
+            ]
+          },
+          "dismissalViewStyle": "DISMISSAL_VIEW_STYLE_COMPACT_TALL",
+          "reasons": [
+            {
+              "dismissalReasonTextRenderer": {
+                "feedbackToken": "AB9zfpLHemSVeqCTYXmV_WpgSzl2ZFPNKT1KiPokageevNU1km_XZ4zqOghDXdCChgY8RKN0b3vBElSrwQnQaVhipAk5T2PfOMpysQIP9lVKzJfiH7gHI47owN-EmWhlgdfYlTGQ2PIL",
+                "text": {
+                  "runs": [
+                    {
+                      "text": "J'ai déjà regardé cette vidéo."
+                    }
+                  ]
+                },
+                "trackingParams": "CAUQsYoBGAAiEwi6w-DFm4CYAxVdBwYAHZtoMpM="
+              }
+            },
+            {
+              "dismissalReasonTextRenderer": {
+                "feedbackToken": "AB9zfpJBaCmYvsuwPecLnsDvP-4dyqZv7i9bZELFvCkXtfWgNx6F5KAZW8GqeMvhgCd_HJAqj08IKFIaOpcDGQZB5WBKawyiOQSSIHGEUWcwERfe0pbVqWq42MoP6YzSfDTtSpSw1QTU",
+                "text": {
+                  "runs": [
+                    {
+                      "text": "Je n'aime pas cette vidéo."
+                    }
+                  ]
+                },
+                "trackingParams": "CAQQsYoBGAEiEwi6w-DFm4CYAxVdBwYAHZtoMpM="
+              }
+            }
+          ],
+          "submitButton": {
+            "buttonRenderer": {
+              "isDisabled": true,
+              "size": "SIZE_DEFAULT",
+              "style": "STYLE_PRIMARY",
+              "text": {
+                "runs": [
+                  {
+                    "text": "Envoyer"
+                  }
+                ]
+              },
+              "trackingParams": "CAIQ8FsiEwi6w-DFm4CYAxVdBwYAHZtoMpM="
+            }
+          },
+          "submitFeedbackEndpoint": {
+            "clickTrackingParams": "CAEQsIoBIhMIusPgxZuAmAMVXQcGAB2baDKTygEEj1qcMQ==",
+            "commandMetadata": {
+              "webCommandMetadata": {
+                "apiUrl": "/youtubei/v1/feedback",
+                "sendPost": true
+              }
+            },
+            "signalServiceEndpoint": {
+              "signal": "SUBMIT_FEEDBACK"
+            }
+          },
+          "trackingParams": "CAEQsIoBIhMIusPgxZuAmAMVXQcGAB2baDKT"
+        }
+      },
+      "isProcessed": true
+    }
+  ],
+  "responseContext": {
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "service": "GUIDED_HELP",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "1"
+          }
+        ]
+      }
+    ]
+  }
+}

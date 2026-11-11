@@ -13,6 +13,7 @@
 //! so the thumbnails' shortcut shows a check on those already in it.
 
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
@@ -392,9 +393,18 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl In
     })
 }
 
+/// What a card's menu item does, given by the page showing the card.
+pub type CardAction = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// The "⋮" button of a card, faded in by `t`: a menu with "Watch later" and "Add to a
-/// playlist", which turns into the list of playlists.
-pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
+/// playlist", which turns into the list of playlists, then "Not interested" when the page
+/// gives `not_interested` (a recommendation, signed in).
+pub fn menu_button(
+  id: &str,
+  video_id: &str,
+  t: f32,
+  not_interested: Option<CardAction>,
+) -> impl IntoElement {
   let key = format!("{id}-menu");
   let video_id = video_id.to_owned();
   div()
@@ -413,7 +423,10 @@ pub fn menu_button(id: &str, video_id: &str, t: f32) -> impl IntoElement {
             .icon(Icon::More)
             .tooltip(ui::i18n::t("More actions", "Plus d'actions")),
         )
-        .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Card, window, cx)),
+        .content(move |_, window, cx| {
+          let menu = Menu::Card(not_interested.clone());
+          picker_content(&key, &video_id, menu, window, cx)
+        }),
     )
 }
 
@@ -434,10 +447,10 @@ pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
 }
 
 /// Which "⋮" menu a popover shows.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone)]
 enum Menu {
-  /// A card's: "Watch later" and "Add to a playlist".
-  Card,
+  /// A card's: "Watch later", "Add to a playlist" and, given, "Not interested".
+  Card(Option<CardAction>),
   /// The watch page's: "Save to a playlist" and "Copy video link".
   Watch,
 }
@@ -481,13 +494,18 @@ fn picker_content(
       .child(label)
   };
   let save_label = match menu {
-    Menu::Card => t("Add to a playlist", "Ajouter à une playlist"),
+    Menu::Card(_) => t("Add to a playlist", "Ajouter à une playlist"),
     Menu::Watch => t("Save to a playlist", "Enregistrer dans une playlist"),
+  };
+  let (card, watch) = (matches!(menu, Menu::Card(_)), matches!(menu, Menu::Watch));
+  let not_interested = match menu {
+    Menu::Card(action) => action,
+    Menu::Watch => None,
   };
   v_flex()
     .w(px(220.))
     .gap_0p5()
-    .when(menu == Menu::Card, |el| {
+    .when(card, |el| {
       el.child(
         if in_watch_later(&video_id, cx) {
           item(
@@ -512,7 +530,20 @@ fn picker_content(
         picker.update(cx, |picker, cx| picker.load(cx));
       }),
     )
-    .when(menu == Menu::Watch, |el| {
+    .when_some(not_interested, |el, action| {
+      el.child(
+        item(
+          "menu-not-interested",
+          Icon::Hide,
+          t("Not interested", "Pas intéressé"),
+        )
+        .on_click(cx.listener(move |state, _, window, cx| {
+          state.dismiss(window, cx);
+          action(window, cx);
+        })),
+      )
+    })
+    .when(watch, |el| {
       el.child(
         item(
           "menu-copy-link",

@@ -18,8 +18,8 @@ use crate::models::{
 use crate::parse::{
   find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
   parse_channels, parse_comment_action, parse_comment_translation, parse_comments, parse_feed,
-  parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
-  parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
+  parse_feedback, parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix,
+  parse_mixes, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
   parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
   parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
   parse_watch, tracking_param,
@@ -558,6 +558,34 @@ impl Client {
       .web("notification/record_interactions", body, true)
       .await?;
     Ok(())
+  }
+
+  /// Sends a feedback token (`feedback`), as youtube.com's "Not interested" does
+  /// ([`crate::NotInterested::token`]), or the undo token of its notice
+  /// ([`crate::NotInterested::undo`]). Needs cookies; it writes to the account's
+  /// recommendations. The answer's `feedbackResponses` must say `isProcessed`.
+  pub async fn send_feedback(&self, token: &str) -> Result<()> {
+    let response = self.send_feedback_response(token).await?;
+    if parse_feedback(&response) {
+      Ok(())
+    } else {
+      Err(Error::Parse {
+        endpoint: "feedback",
+        detail: "not processed".to_owned(),
+      })
+    }
+  }
+
+  /// The whole answer behind [`Client::send_feedback`], for the `not_interested` example's
+  /// fixtures.
+  pub async fn send_feedback_response(&self, token: &str) -> Result<Value> {
+    self.require_session()?;
+    let body = json!({
+      "feedbackTokens": [token],
+      "isFeedbackTokenUnencrypted": false,
+      "shouldMerge": false,
+    });
+    self.web("feedback", body, true).await
   }
 
   /// Likes and estimated dislikes from Return YouTube Dislike.

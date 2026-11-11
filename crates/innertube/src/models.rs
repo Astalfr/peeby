@@ -48,6 +48,17 @@ pub struct VideoItem {
   pub set_video_id: Option<String>,
   /// How much of it the user watched, signed in.
   pub progress: Option<Progress>,
+  /// Its menu's "Not interested", signed in (recommendations: Home).
+  pub not_interested: Option<NotInterested>,
+}
+
+/// A recommendation's "Not interested": the tokens [`crate::Client::send_feedback`] sends.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotInterested {
+  /// Hides the video from the recommendations.
+  pub token: String,
+  /// Undoes it (the "Undo" of youtube.com's notice in the card's place).
+  pub undo: Option<String>,
 }
 
 /// A card of a list: a video or a playlist (a watch page's related list, a feed's grid).

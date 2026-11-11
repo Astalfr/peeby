@@ -397,6 +397,18 @@ fn comments_signed_in() {
 }
 
 #[test]
+fn feedback() {
+  // `feedback` answers, signed in, captured 2026-11-11 (`not_interested` example): a Home
+  // video marked "Not interested", then its undo; trimmed to `logged_in`.
+  for name in ["feedback_not_interested.json", "feedback_undo.json"] {
+    assert!(innertube::parse_feedback(&fixture(name)), "{name}");
+  }
+  let refused = serde_json::json!({ "feedbackResponses": [{ "isProcessed": false }] });
+  assert!(!innertube::parse_feedback(&refused));
+  assert!(!innertube::parse_feedback(&serde_json::json!({})));
+}
+
+#[test]
 fn comment_action() {
   // `comment/perform_comment_action` answers, liking then removing a dislike: the like's has a
   // `feedback` and an attestation command, the undislike's only its status.
@@ -670,6 +682,15 @@ fn home_mixes() {
   // The feed keeps the video, and the mix after it.
   let feed = parse_feed(&response);
   assert_eq!(feed.items.len(), 1);
+  // The video's "⋮" has "Not interested", with the undo of its notice.
+  let not_interested = feed.items[0].not_interested.as_ref().unwrap();
+  assert!(not_interested.token.starts_with("AB9zfpKLZ2G-"));
+  assert!(
+    not_interested
+      .undo
+      .as_deref()
+      .is_some_and(|u| u.starts_with("AB9zfpIxCPAl"))
+  );
   assert_eq!(feed.playlists.len(), 1);
   assert_eq!(feed.playlists[0].0, 1);
   assert_eq!(feed.playlists[0].1.id, "RDVUmovBRfVQI");

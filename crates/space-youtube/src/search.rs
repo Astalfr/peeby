@@ -298,7 +298,7 @@ impl Render for SearchView {
           .clone()
           .iter()
           .map(|result| match result {
-            SearchResult::Video(video) => video_row(video, &self.nav, window, cx),
+            SearchResult::Video(video) => video_row(video, &self.nav, None, window, cx),
             SearchResult::Channel(channel) => self.channel_row(channel, window, cx),
             SearchResult::Playlist(playlist) => {
               playlist_result_row(playlist, &self.nav, window, cx)

@@ -8,6 +8,9 @@
 //! The videos are a virtual list (GPUI's `list`): each item is a row of cards (or one list row),
 //! and only the items in view are built on a frame, so scrolling a long feed stays smooth.
 
+use std::collections::HashSet;
+use std::rc::Rc;
+
 use gpui::prelude::*;
 use gpui::{
   AnyElement, Context, Entity, ListAlignment, ListOffset, ListState, Pixels, ScrollHandle,
@@ -15,12 +18,14 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::notification::Notification;
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::{IconName, Selectable, h_flex, v_flex};
+use gpui_component::{IconName, Selectable, WindowExt, h_flex, v_flex};
 use innertube::{Client, Error, Feed, FeedChip, PlaylistSummary, Related, VideoItem};
 
 use crate::cards::{playlist_grid_card, playlist_result_row, video_card, video_row};
 use crate::convert::error_text;
+use crate::save::CardAction;
 use crate::{Nav, Route};
 use peeby_core::settings::{FeedLayout, Settings};
 use ui::assets::Icon;
@@ -28,7 +33,7 @@ use ui::card::{skeleton_card, skeleton_row};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::widgets::{loading_more, notice, page_title};
-use ui::{motion, runtime, theme};
+use ui::{motion, runtime, tf, theme};
 
 /// Narrowest card, logical pixels: a row holds as many cards as fit at this width, then they
 /// widen to fill it.
@@ -39,6 +44,8 @@ const CARD_GAP: f32 = 16.;
 const PAGE_MARGIN: f32 = 32.;
 /// Space above the first row, for a hovered card's rise (4 px), ring and shadow.
 const TOP_ROOM: f32 = 8.;
+/// Height of the notice in the place of a list row marked "Not interested".
+const DISMISSED_ROW_HEIGHT: f32 = 96.;
 /// Height built beyond the visible part of the list, above and below.
 const OVERDRAW: Pixels = px(800.);
 
@@ -114,6 +121,9 @@ pub struct FeedView {
   /// Counts the first-page loads, so the answer of an older one (another sort, another search)
   /// is dropped.
   generation: u32,
+  /// The videos marked "Not interested" (their menu's): each shows a notice in its place, with
+  /// "Undo", until the page loads again.
+  dismissed: HashSet<String>,
   _search_subscription: Option<Subscription>,
 }
 
@@ -167,6 +177,7 @@ impl FeedView {
       query: None,
       search,
       generation: 0,
+      dismissed: HashSet::new(),
       _search_subscription: search_subscription,
     };
     view.load(None, cx);
@@ -279,6 +290,7 @@ impl FeedView {
     );
     if !more {
       self.cards.clear();
+      self.dismissed.clear();
       self.logged_in = feed.logged_in;
       self.message = feed.message;
       // A search's results have no chips: the sort orders stay for when it ends.
@@ -357,7 +369,13 @@ impl FeedView {
     let cards = &self.cards[start..(start + shape.per_item()).min(self.cards.len())];
     let row = if shape.list {
       div().pb_2().child(match &cards[0] {
-        Related::Video(video) => video_row(video, &self.nav, window, cx),
+        Related::Video(video) if self.dismissed.contains(&video.id) => {
+          self.dismissed_notice(video, None, cx)
+        }
+        Related::Video(video) => {
+          let not_interested = self.not_interested_action(video, cx);
+          video_row(video, &self.nav, not_interested, window, cx)
+        }
         Related::Playlist(playlist) => playlist_result_row(playlist, &self.nav, window, cx),
       })
     } else {
@@ -368,7 +386,20 @@ impl FeedView {
         .items_start()
         .gap_x_4()
         .children(cards.iter().map(|card| match card {
-          Related::Video(video) => video_card(video, self.card_width, &self.nav, window, cx),
+          Related::Video(video) if self.dismissed.contains(&video.id) => {
+            self.dismissed_notice(video, Some(self.card_width), cx)
+          }
+          Related::Video(video) => {
+            let not_interested = self.not_interested_action(video, cx);
+            video_card(
+              video,
+              self.card_width,
+              &self.nav,
+              not_interested,
+              window,
+              cx,
+            )
+          }
           Related::Playlist(playlist) => {
             playlist_grid_card(playlist, self.card_width, &self.nav, window, cx)
           }
@@ -380,6 +411,129 @@ impl FeedView {
       .when(ix == 0, |el| el.pt(px(TOP_ROOM)))
       .opacity(self.fade)
       .child(row)
+      .into_any_element()
+  }
+
+  /// The "Not interested" of `video`'s menu, when YouTube offers it (a recommendation, signed
+  /// in).
+  fn not_interested_action(&self, video: &VideoItem, cx: &mut Context<Self>) -> Option<CardAction> {
+    video.not_interested.as_ref()?;
+    let (view, id) = (cx.weak_entity(), video.id.clone());
+    Some(Rc::new(move |window: &mut Window, cx: &mut gpui::App| {
+      view
+        .update(cx, |this, cx| {
+          this.set_not_interested(&id, true, window, cx)
+        })
+        .ok();
+    }))
+  }
+
+  /// Marks video `id` "Not interested" (`dismiss`), or undoes it, as youtube.com's menu and
+  /// notice do: its card turns into the notice (or back) at once, and back again if YouTube
+  /// refuses, with an error toast.
+  fn set_not_interested(
+    &mut self,
+    id: &str,
+    dismiss: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let tokens = self.cards.iter().find_map(|card| match card {
+      Related::Video(video) if video.id == id => video.not_interested.clone(),
+      _ => None,
+    });
+    let Some(tokens) = tokens else { return };
+    let token = if dismiss {
+      Some(tokens.token)
+    } else {
+      tokens.undo
+    };
+    let Some(token) = token else { return };
+    let changed = if dismiss {
+      self.dismissed.insert(id.to_owned())
+    } else {
+      self.dismissed.remove(id)
+    };
+    if !changed {
+      return;
+    }
+    cx.notify();
+    let client = self.client.clone();
+    let task = runtime::spawn(cx, async move { client.send_feedback(&token).await });
+    let (handle, id) = (window.window_handle(), id.to_owned());
+    cx.spawn(async move |this, cx| {
+      let Some(Err(e)) = task.await else { return };
+      tracing::warn!("not interested: {e}");
+      let note = Notification::error(if dismiss {
+        tf!(
+          "Cannot hide the video. {}",
+          "Impossible d'ignorer la vidéo. {}",
+          error_text(&e)
+        )
+      } else {
+        tf!(
+          "Cannot bring the video back. {}",
+          "Impossible de rétablir la vidéo. {}",
+          error_text(&e)
+        )
+      });
+      cx.update(|cx| {
+        this
+          .update(cx, |this, cx| {
+            if dismiss {
+              this.dismissed.remove(&id);
+            } else {
+              this.dismissed.insert(id.clone());
+            }
+            cx.notify();
+          })
+          .ok();
+        handle
+          .update(cx, |_, window, cx| window.push_notification(note, cx))
+          .ok();
+      });
+    })
+    .detach();
+  }
+
+  /// In the place of a video marked "Not interested", as on youtube.com: "Video removed" and
+  /// "Undo" (when YouTube gave its token), a grid card's size (`width`), or a list row's.
+  fn dismissed_notice(
+    &self,
+    video: &VideoItem,
+    width: Option<f32>,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let id = video.id.clone();
+    let undo = video
+      .not_interested
+      .as_ref()
+      .is_some_and(|n| n.undo.is_some());
+    v_flex()
+      .id(SharedString::from(format!("dismissed-{id}")))
+      .flex_none()
+      .map(|el| match width {
+        Some(width) => el.w(px(width)).h(px(width * 9. / 16.)),
+        None => el.w_full().h(px(DISMISSED_ROW_HEIGHT)),
+      })
+      .gap_2()
+      .items_center()
+      .justify_center()
+      .rounded(theme::RADIUS)
+      .bg(theme::surface())
+      .text_sm()
+      .text_color(theme::muted())
+      .child(t("Video removed", "Vidéo supprimée"))
+      .when(undo, |el| {
+        el.child(
+          Button::new(SharedString::from(format!("undo-{id}")))
+            .ghost()
+            .label(t("Undo", "Annuler"))
+            .on_click(cx.listener(move |this, _, window, cx| {
+              this.set_not_interested(&id, false, window, cx)
+            })),
+        )
+      })
       .into_any_element()
   }
 
@@ -745,6 +899,7 @@ mod tests {
       avatar: Vec::new(),
       set_video_id: None,
       progress: None,
+      not_interested: None,
     }
   }
 

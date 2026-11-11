@@ -35,10 +35,10 @@ use std::collections::HashMap;
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentActions, CommentPage, Feed, FeedChip, LikeParams,
-  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, Notification, NotificationKind,
-  NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage, Storyboard,
-  Subscription, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
+  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
+  NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
+  PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
+  Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -721,6 +721,7 @@ fn parse_video_renderer(video: &Value) -> Option<VideoItem> {
     ),
     set_video_id: None,
     progress: renderer_progress(video),
+    not_interested: None,
   })
 }
 
@@ -1110,6 +1111,7 @@ fn parse_playlist_video(r: &Value) -> Option<VideoItem> {
     avatar: Vec::new(),
     set_video_id: removable_entry(r),
     progress: renderer_progress(r),
+    not_interested: None,
   })
 }
 
@@ -1247,6 +1249,15 @@ pub fn parse_comments(response: &Value) -> CommentPage {
     }
   }
   page
+}
+
+/// Whether YouTube took a `feedback` request ("Not interested", its undo): each of its
+/// `feedbackResponses` says `isProcessed`. The "Not interested" one also has a
+/// `followUpDialog` (the reasons youtube.com asks for after it), which the app does not show.
+pub fn parse_feedback(response: &Value) -> bool {
+  response["feedbackResponses"]
+    .as_array()
+    .is_some_and(|r| !r.is_empty() && r.iter().all(|r| r["isProcessed"] == true))
 }
 
 /// The status of a `comment/perform_comment_action` answer: its first `actionResults` entry's,
@@ -1490,7 +1501,33 @@ fn parse_lockup(lockup: &Value) -> Option<VideoItem> {
     avatar: thumbnails(&avatar["avatar"]["avatarViewModel"]["image"]["sources"]),
     set_video_id: None,
     progress: lockup_progress(lockup),
+    not_interested: lockup_not_interested(lockup),
   })
+}
+
+/// The "Not interested" item of a video lockup's "⋮" menu (a `listItemViewModel` with the
+/// `HIDE` image, on recommendations, signed in): its `feedbackEndpoint`'s token, and the undo
+/// token of the notice youtube.com puts in the card's place (`undoFeedbackEndpoint`).
+fn lockup_not_interested(lockup: &Value) -> Option<NotInterested> {
+  let mut items = Vec::new();
+  find_all(&lockup["metadata"], "listItemViewModel", &mut items);
+  let item = items.into_iter().find(|item| {
+    item["leadingImage"]["sources"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .any(|s| s["clientResource"]["imageName"] == "HIDE")
+  })?;
+  let endpoint =
+    &item["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]["feedbackEndpoint"];
+  let token = endpoint["feedbackToken"].as_str()?.to_owned();
+  let mut undo = Vec::new();
+  find_all(&endpoint["actions"], "undoFeedbackEndpoint", &mut undo);
+  let undo = undo
+    .first()
+    .and_then(|u| u["undoToken"].as_str())
+    .map(str::to_owned);
+  Some(NotInterested { token, undo })
 }
 
 /// The red bar of a video lockup (`thumbnailOverlayProgressBarViewModel`) and where its click

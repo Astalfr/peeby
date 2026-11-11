@@ -60,11 +60,13 @@ fn card(id: &str, hover: Hover, video: &VideoItem) -> MediaCard {
   .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, hovered, cx))
 }
 
-/// Grid card, `width` wide, with the channel avatar and the save buttons.
+/// Grid card, `width` wide, with the channel avatar and the save buttons; its menu has "Not
+/// interested" when the page gives `not_interested`.
 pub fn video_card(
   video: &VideoItem,
   width: f32,
   nav: &Nav,
+  not_interested: Option<save::CardAction>,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement {
@@ -74,7 +76,7 @@ pub fn video_card(
   card(&id, hover, video)
     .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
-    .trailing(save::menu_button(&id, &video.id, t))
+    .trailing(save::menu_button(&id, &video.id, t, not_interested))
     .on_click(open_video(video, nav))
     .on_middle_click(open_video_in_new_tab(video, nav))
     .grid(width, window, cx)
@@ -93,15 +95,22 @@ pub fn compact_card(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut 
 }
 
 /// List row (subscriptions in list mode, as YouTube showed them until about 2023), with the
-/// channel avatar and the save buttons.
-pub fn video_row(video: &VideoItem, nav: &Nav, window: &mut Window, cx: &mut App) -> AnyElement {
+/// channel avatar and the save buttons; its menu has "Not interested" when the page gives
+/// `not_interested`.
+pub fn video_row(
+  video: &VideoItem,
+  nav: &Nav,
+  not_interested: Option<save::CardAction>,
+  window: &mut Window,
+  cx: &mut App,
+) -> AnyElement {
   let id = format!("row-{}", video.id);
   let hover = Hover::new(&id, window, cx);
   let t = hover.t;
   card(&id, hover, video)
     .avatar(Some(convert::picture(&video.avatar)))
     .overlay(save::watch_later_button(&id, &video.id, t, cx))
-    .trailing(save::menu_button(&id, &video.id, t))
+    .trailing(save::menu_button(&id, &video.id, t, not_interested))
     .on_click(open_video(video, nav))
     .on_middle_click(open_video_in_new_tab(video, nav))
     .row(window, cx)

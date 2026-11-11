@@ -51,16 +51,16 @@ pub use live::LiveProxy;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
   ChatMessage, ChatRun, Comment, CommentActions, CommentPage, Feed, FeedChip, LikeParams,
-  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, Notification, NotificationKind,
-  NotificationLevel, NotificationPage, NotificationSection, Playlist, PlaylistChoice,
-  PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage, Storyboard,
-  StoryboardFrame, Stream, Subscription, TextLink, Thumbnail, Tracking, VideoItem, Votes,
-  WatchPage, Watchtime,
+  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
+  NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
+  PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
+  Storyboard, StoryboardFrame, Stream, Subscription, TextLink, Thumbnail, Tracking, VideoItem,
+  Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   is_mix, parse_account_handle, parse_captions, parse_channel_search, parse_channels,
-  parse_comment_action, parse_comment_translation, parse_comments, parse_feed, parse_live,
-  parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
+  parse_comment_action, parse_comment_translation, parse_comments, parse_feed, parse_feedback,
+  parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
   parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
   parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
   parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,

@@ -109,6 +109,7 @@ icons! {
   Multistream => "layout-panel-top",
   Merge => "merge",
   Close => "close",
+  Hide => "eye-off",
 }
 
 macro_rules! files {
