@@ -214,3 +214,20 @@ fn schedule() {
     serde_json::from_str(include_str!("fixtures/gql_schedule_none.json")).unwrap();
   assert_eq!(twitch::catalog::parse_schedule(&none).unwrap(), None);
 }
+
+#[test]
+fn clips_by_period() {
+  // The channel page's filter: GQL's `ClipsPeriod` values (checked 2026-11-11, anonymous).
+  use twitch::catalog::ClipPeriod;
+  for (period, name) in [
+    (ClipPeriod::Day, "LAST_DAY"),
+    (ClipPeriod::Week, "LAST_WEEK"),
+    (ClipPeriod::Month, "LAST_MONTH"),
+    (ClipPeriod::All, "ALL_TIME"),
+  ] {
+    let request = catalog::clips_request("1", 3, period);
+    let query = request["query"].as_str().unwrap();
+    assert!(query.contains(&format!("period: {name}")), "{query}");
+  }
+  assert_eq!(ClipPeriod::default(), ClipPeriod::Week);
+}

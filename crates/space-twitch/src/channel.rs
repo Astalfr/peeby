@@ -10,7 +10,7 @@ use gpui::prelude::*;
 use gpui::{Context, FontWeight, Task, Window, div, px};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex};
-use twitch::catalog::{Catalog, Schedule};
+use twitch::catalog::{Catalog, ClipPeriod, Schedule};
 use twitch::gql::{self, Channel};
 use twitch::helix::{Clip, User, Video};
 use ui::i18n::t;
@@ -51,10 +51,16 @@ struct Loaded {
 
 pub struct ChannelView {
   nav: Nav,
+  catalog: Catalog,
   login: String,
   tab: Tab,
   loaded: Option<Result<Loaded, String>>,
+  /// Over what time the clips are the most viewed (twitch.tv's filter).
+  clip_period: ClipPeriod,
+  /// The clips of another period are being asked for.
+  clips_loading: bool,
   _load: Task<()>,
+  _clips: Task<()>,
 }
 
 impl ChannelView {
@@ -71,7 +77,7 @@ impl ChannelView {
     let task = load(
       cx,
       {
-        let login = login.clone();
+        let (login, catalog) = (login.clone(), catalog.clone());
         async move {
           let user = catalog.user(&login).await?;
           // The header's live and the lists are optional: their errors leave them out.
@@ -86,7 +92,10 @@ impl ChannelView {
             tracing::warn!("Twitch VOD chapters: {e}");
             HashMap::new()
           });
-          let clips = catalog.clips(&user.id, LIST).await.unwrap_or_default();
+          let clips = catalog
+            .clips(&user.id, LIST, ClipPeriod::default())
+            .await
+            .unwrap_or_default();
           let schedule = catalog.schedule(&login).await.unwrap_or_else(|e| {
             tracing::warn!("Twitch schedule: {e}");
             None
@@ -110,11 +119,85 @@ impl ChannelView {
     );
     Self {
       nav,
+      catalog,
       login,
       tab: Tab::Videos,
       loaded: None,
+      clip_period: ClipPeriod::default(),
+      clips_loading: false,
       _load: task,
+      _clips: Task::ready(()),
     }
+  }
+
+  /// Shows the most viewed clips of `period`, asked for again.
+  fn set_clip_period(&mut self, period: ClipPeriod, cx: &mut Context<Self>) {
+    if period == self.clip_period {
+      return;
+    }
+    let Some(Ok(loaded)) = &self.loaded else {
+      return;
+    };
+    self.clip_period = period;
+    self.clips_loading = true;
+    cx.notify();
+    let (catalog, user_id) = (self.catalog.clone(), loaded.user.id.clone());
+    let fetch = ui::runtime::spawn(
+      cx,
+      async move { catalog.clips(&user_id, LIST, period).await },
+    );
+    self._clips = cx.spawn(async move |this, cx| {
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          // A newer period's answer wins.
+          if this.clip_period != period {
+            return;
+          }
+          this.clips_loading = false;
+          match result {
+            Some(Ok(clips)) => {
+              if let Some(Ok(loaded)) = &mut this.loaded {
+                loaded.clips = clips;
+              }
+            }
+            Some(Err(e)) => tracing::warn!("Twitch clips: {e}"),
+            None => {}
+          }
+          cx.notify();
+        })
+        .ok();
+    });
+  }
+
+  /// The clips' periods, as twitch.tv's filter: "24 h", "7 days", "30 days", "All time".
+  fn clip_periods(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let view = cx.weak_entity();
+    ui::widgets::sort_choices(
+      "twitch-clip-period",
+      ClipPeriod::ALL
+        .into_iter()
+        .map(|period| {
+          let label = match period {
+            ClipPeriod::Day => t("24 h", "24 h"),
+            ClipPeriod::Week => t("7 days", "7 jours"),
+            ClipPeriod::Month => t("30 days", "30 jours"),
+            ClipPeriod::All => t("All time", "Depuis toujours"),
+          };
+          let view = view.clone();
+          let on_click: ui::form::OnClick = Box::new(move |_, cx| {
+            view
+              .update(cx, |this, cx| this.set_clip_period(period, cx))
+              .ok();
+          });
+          (
+            gpui::SharedString::from(label),
+            period == self.clip_period,
+            on_click,
+          )
+        })
+        .collect::<Vec<_>>(),
+    )
   }
 
   fn tab_button(&self, tab: Tab, label: &'static str, cx: &mut Context<Self>) -> Button {
@@ -231,9 +314,12 @@ impl Render for ChannelView {
           .collect(),
       )
       .into_any_element(),
-      Tab::Clips if loaded.clips.is_empty() => {
-        cards::note(t("No clips.", "Aucun clip.")).into_any_element()
-      }
+      Tab::Clips if self.clips_loading => ui::widgets::loading_more().into_any_element(),
+      Tab::Clips if loaded.clips.is_empty() => cards::note(t(
+        "No clips over this period.",
+        "Aucun clip sur cette période.",
+      ))
+      .into_any_element(),
       Tab::Clips => cards::wrap(
         loaded
           .clips
@@ -296,6 +382,9 @@ impl Render for ChannelView {
           .child(self.tab_button(Tab::Clips, t("Clips", "Clips"), cx))
           .when(has_schedule, |el| {
             el.child(self.tab_button(Tab::Schedule, t("Schedule", "Planning"), cx))
+          })
+          .when(self.tab == Tab::Clips, |el| {
+            el.child(div().flex_1()).child(self.clip_periods(cx))
           }),
       )
       .child(list)

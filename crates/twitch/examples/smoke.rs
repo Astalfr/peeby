@@ -99,7 +99,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "videos",
         catalog.videos(&user.id, 40).await.map(|v| v.len()),
       );
-      count("clips", catalog.clips(&user.id, 40).await.map(|c| c.len()));
+      count(
+        "clips",
+        catalog
+          .clips(&user.id, 40, twitch::catalog::ClipPeriod::Week)
+          .await
+          .map(|c| c.len()),
+      );
       count(
         "channel badges",
         catalog.channel_badges(&user.id).await.map(|b| b.len()),

@@ -194,15 +194,57 @@ pub fn video_request(id: &str) -> Value {
 }
 
 /// Channel `user_id`'s most viewed clips.
-pub fn clips_request(user_id: &str, first: u32) -> Value {
+pub fn clips_request(user_id: &str, first: u32, period: ClipPeriod) -> Value {
+  let period = period.gql();
   request(
     "ChannelClips",
     format!(
       "query ChannelClips($id: ID!) {{ user(id: $id) {{ clips(first: {first}, criteria: {{ \
-       period: ALL_TIME, sort: VIEWS_DESC }}) {{ edges {{ node {{ {CLIP_FIELDS} }} }} }} }} }}"
+       period: {period}, sort: VIEWS_DESC }}) {{ edges {{ node {{ {CLIP_FIELDS} }} }} }} }} }}"
     ),
     json!({ "id": user_id }),
   )
+}
+
+/// Over what time a channel's most viewed clips are taken, as twitch.tv's channel page filters
+/// them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ClipPeriod {
+  /// The last 24 hours.
+  Day,
+  /// The last 7 days (twitch.tv's default).
+  #[default]
+  Week,
+  /// The last 30 days.
+  Month,
+  /// Ever.
+  All,
+}
+
+impl ClipPeriod {
+  /// Every period, shortest first.
+  pub const ALL: [Self; 4] = [Self::Day, Self::Week, Self::Month, Self::All];
+
+  /// GQL's `ClipsPeriod` value (checked 2026-11-11, anonymous).
+  pub fn gql(self) -> &'static str {
+    match self {
+      Self::Day => "LAST_DAY",
+      Self::Week => "LAST_WEEK",
+      Self::Month => "LAST_MONTH",
+      Self::All => "ALL_TIME",
+    }
+  }
+
+  /// How long it reaches back, `None` for ever (Helix's `started_at`).
+  pub fn length(self) -> Option<std::time::Duration> {
+    let day = std::time::Duration::from_secs(86_400);
+    match self {
+      Self::Day => Some(day),
+      Self::Week => Some(day * 7),
+      Self::Month => Some(day * 30),
+      Self::All => None,
+    }
+  }
 }
 
 /// A clip by slug.
@@ -641,11 +683,27 @@ impl Catalog {
   }
 
   /// Channel `user_id`'s `first` most viewed clips.
-  pub async fn clips(&self, user_id: &str, first: u32) -> Result<Vec<Clip>> {
-    let request = clips_request(user_id, first);
+  pub async fn clips(&self, user_id: &str, first: u32, period: ClipPeriod) -> Result<Vec<Clip>> {
+    let request = clips_request(user_id, first, period);
     self
       .or_helix(request, parse_clips, |h| async move {
-        Ok(h.clips(user_id, None).await?.items)
+        // Helix filters by creation: the clips newer than the period's start.
+        let since = period
+          .length()
+          .and_then(|length| std::time::SystemTime::now().checked_sub(length));
+        let clips = h.clips(user_id, None).await?.items;
+        Ok(match since {
+          Some(since) => {
+            let since = since
+              .duration_since(std::time::UNIX_EPOCH)
+              .map_or(0, |d| d.as_millis() as i64);
+            clips
+              .into_iter()
+              .filter(|c| c.created_at.is_some_and(|at| at >= since))
+              .collect()
+          }
+          None => clips,
+        })
       })
       .await
   }

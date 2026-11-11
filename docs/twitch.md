@@ -373,6 +373,10 @@ Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the
   fixtures `gql_catalog_*.json` (`twitch_capture -- catalog`), counts in `smoke`. The same image
   templates as Helix's (`{width}x{height}`), the same badge URLs (`/1`, `/2`, `/3`), and
   `users(ids:)` takes the 97 ids of a category's first page at once.
+- **A channel's clips by period** (checked 2026-11-11, anonymous): `user(id:) { clips(first:,
+  criteria: { period: LAST_DAY | LAST_WEEK | LAST_MONTH | ALL_TIME, sort: VIEWS_DESC }) }`, the
+  channel page's filter (`ClipPeriod`, the week by default as twitch.tv); Helix's backup keeps
+  the clips created since the period's start.
 - **A channel's schedule** (checked 2026-11-11, anonymous): `user(login:) { channel { schedule {
   segments { id startAt endAt title isCancelled categories { id name boxArtURL } } interruption { startAt
   endAt } } } }`. `segments` takes no argument (`first`, `from`, `startAt` are refused) and answers

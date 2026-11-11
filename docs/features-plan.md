@@ -187,3 +187,8 @@ channel); a click plays it at once (docs/player/playback-ux.md, "Up next").
 Done (2026-11-11), checked by the user in the app (with autoplay off, a playlist's video now ends there). The shared player's control bar has an autoplay
 switch wherever something comes next (YouTube's playlists, Jellyfin's episodes); it keeps the
 player setting "Lire la suite automatiquement".
+
+### P3. A Twitch channel's clips by period
+
+Done (2026-11-11), checked by the user in the app. "24 h", "7 jours", "30 jours", "Depuis toujours"
+over a channel's clips, as twitch.tv's filter (GQL's `ClipsPeriod`), the week by default.

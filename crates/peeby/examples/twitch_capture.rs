@@ -736,7 +736,10 @@ async fn capture_catalog() -> Result<(), Box<dyn std::error::Error>> {
     ),
     ("videos", catalog::videos_request(CHANNEL, 4)),
     ("video", catalog::video_request("2915878235")),
-    ("clips", catalog::clips_request(CHANNEL, 3)),
+    (
+      "clips",
+      catalog::clips_request(CHANNEL, 3, catalog::ClipPeriod::All),
+    ),
     ("clip", catalog::clip_request("OpenRenownedNewtPMSTwin")),
     (
       "search_channels",
