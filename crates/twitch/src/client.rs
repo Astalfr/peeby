@@ -297,6 +297,12 @@ impl Client {
     crate::bttv::channel(&self.http, user_id).await
   }
 
+  /// The last lines of `login`'s chat from before joining, oldest first, from robotty's
+  /// recent-messages service (ADR 0036; it learns which channel's chat opens).
+  pub async fn recent_chat(&self, login: &str) -> Result<Vec<crate::chat::Event>> {
+    crate::chat::history::recent(&self.http, login).await
+  }
+
   /// BTTV's global emotes.
   pub async fn bttv_global(&self) -> Result<Vec<crate::bttv::Emote>> {
     crate::bttv::global(&self.http).await

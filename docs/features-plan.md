@@ -132,6 +132,8 @@ personal emotes, T6, followed categories, and T7, highlighted words, were left o
 
 ### T1. The chat's history on joining
 
+Done (2026-11-11, [ADR 0036](decisions/0036-twitch-chat-history.md)), checked by the user in the app.
+
 A live's chat opens with its last messages instead of empty, as twitch.tv's does. IRC sends no
 history: the usual source is a third-party service, robotty's
 [recent-messages](https://recent-messages.robotty.de) (anonymous, by channel login, IRC lines

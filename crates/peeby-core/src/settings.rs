@@ -292,6 +292,9 @@ pub struct Twitch {
   /// Height of the multistream's row of secondary lives, logical pixels (its bar's drag); 140
   /// when unset.
   pub multistream_row_height: Option<u32>,
+  /// A live's chat opens with its last messages, from robotty's recent-messages service
+  /// (ADR 0036); on when unset.
+  pub chat_history: Option<bool>,
 }
 
 /// `[player]`: how the player behaves, in every space.

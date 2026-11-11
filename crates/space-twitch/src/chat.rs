@@ -52,6 +52,8 @@ pub(super) const BATCH: usize = 200;
 /// How long a live's first messages wait for the channel's emotes and badges ([`load_extras`])
 /// before they show without them: 7TV or BTTV may hang, the chat must not.
 const EXTRAS_WAIT: Duration = Duration::from_secs(5);
+/// How long the chat waits for its history (ADR 0036) before going on without it.
+const HISTORY_WAIT: Duration = Duration::from_secs(3);
 
 /// The id of the gear's "Reload 7TV emotes" option.
 pub(super) const RELOAD_SEVENTV: &str = "reload-7tv";
@@ -107,6 +109,15 @@ pub fn start(
   let (mut updates, run) = twitch::chat::connect(login);
   // The connection runs on the network runtime and ends when `updates` is dropped.
   drop(runtime::spawn(cx, run));
+  // The messages from before joining, asked for at once (ADR 0036).
+  let history = peeby_core::settings::Settings::get(cx)
+    .twitch
+    .chat_history
+    .unwrap_or(true)
+    .then(|| {
+      let (client, login) = (client.clone(), login.to_owned());
+      runtime::spawn(cx, async move { client.recent_chat(&login).await })
+    });
   let panel = panel.downgrade();
   let handle = ChatExtras::default();
   let shared = handle.clone();
@@ -114,9 +125,25 @@ pub fn start(
     let extras = shared.extras.clone();
     let mut room = RoomState::default();
     let mut extras_asked = false;
+    // The history first, waited for a moment: it goes before what the connection says.
+    let mut history_len = 0;
+    let mut first_held = Vec::new();
+    if let Some(history) = history {
+      let deadline = cx.background_executor().timer(HISTORY_WAIT);
+      match first_of(history, deadline).await {
+        Some(Some(Ok(events))) => {
+          tracing::debug!("chat: {} earlier messages", events.len());
+          history_len = events.len();
+          first_held.extend(events.into_iter().map(Update::Event));
+        }
+        Some(Some(Err(e))) => tracing::warn!("chat history: {e}"),
+        Some(None) => {}
+        None => tracing::info!("chat history: too late, the chat opens without it"),
+      }
+    }
     // What the connection said before the channel's extras were loaded, `None` once they are:
     // the chat opens with its 7TV and BTTV emotes and badges rather than their plain words.
-    let mut held: Option<Vec<Update>> = Some(Vec::new());
+    let mut held: Option<Vec<Update>> = Some(first_held);
     // The extras' load and its deadline, while the messages wait for it.
     let mut loading: Option<(Task<()>, Task<()>)> = None;
     let mut _seventv_live: Option<Task<()>> = None;
@@ -158,12 +185,17 @@ pub fn start(
             })
           }));
           let known = extras.borrow().clone();
-          let mut events: Vec<ChatEvent> = held
-            .take()
-            .into_iter()
-            .flatten()
-            .filter_map(|update| event(update, &mut room, &known))
-            .collect();
+          let mut events: Vec<ChatEvent> = Vec::new();
+          for (i, update) in held.take().into_iter().flatten().enumerate() {
+            if i == history_len && history_len > 0 {
+              events.push(joined_line());
+            }
+            events.extend(event(update, &mut room, &known));
+          }
+          // Only the history came before the extras.
+          if history_len > 0 && !events.iter().any(is_joined_line) {
+            events.push(joined_line());
+          }
           // The status said the emotes were loading: the connection is up.
           events.push(ChatEvent::Status(None));
           while !events.is_empty() {
@@ -944,6 +976,44 @@ pub(super) fn event(update: Update, room: &mut RoomState, extras: &Extras) -> Op
 }
 
 /// A line of Twitch itself in the chat, with `text`.
+/// The line between a chat's history and its live messages.
+fn joined_line() -> ChatEvent {
+  notice_line(
+    JOINED,
+    t(
+      "Messages from before you joined above",
+      "Au-dessus, les messages d'avant votre arrivée",
+    )
+    .into(),
+  )
+}
+
+/// The id of [`joined_line`]'s line.
+const JOINED: &str = "history-end";
+
+fn is_joined_line(event: &ChatEvent) -> bool {
+  matches!(event, ChatEvent::Message(m) if m.id.as_ref() == format!("notice-{JOINED}"))
+}
+
+/// `future`'s output, or `None` once `deadline` passed first.
+async fn first_of<T>(
+  future: impl Future<Output = T>,
+  deadline: impl Future<Output = ()>,
+) -> Option<T> {
+  let mut future = std::pin::pin!(future);
+  let mut deadline = std::pin::pin!(deadline);
+  std::future::poll_fn(|ctx| {
+    if let Poll::Ready(value) = future.as_mut().poll(ctx) {
+      return Poll::Ready(Some(value));
+    }
+    if deadline.as_mut().poll(ctx).is_ready() {
+      return Poll::Ready(None);
+    }
+    Poll::Pending
+  })
+  .await
+}
+
 pub(super) fn notice_line(id: &str, text: String) -> ChatEvent {
   let mut notice = ChatMessage::new(format!("notice-{id}"), None, Vec::new());
   notice.kind = MessageKind::Notice(text.into());

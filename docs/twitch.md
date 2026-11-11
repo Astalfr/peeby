@@ -133,6 +133,11 @@ Two credentials, for different things. Both are secrets, under the same rules as
   - `CAP REQ :twitch.tv/tags twitch.tv/commands`, then `PASS`, `NICK`, `JOIN #login`.
   - Answer every `PING` with `PONG :tmi.twitch.tv`.
   - Handle `PRIVMSG`, `CLEARCHAT`, `CLEARMSG`, `USERNOTICE` and `ROOMSTATE`.
+- **History on joining** ([ADR 0036](decisions/0036-twitch-chat-history.md)): IRC sends none.
+  `GET https://recent-messages.robotty.de/api/v2/recent-messages/<login>?limit=100` (anonymous)
+  answers `{"messages": [raw IRC lines], "error", "error_code"}`, the lines as Twitch sent them
+  plus `historical=1` and `rm-received-ts` (checked 2026-11-11): parsed by the live parser. The
+  chat waits for it 3 s at most; setting `[twitch] chat_history`.
 - **Sending**, checked on 2026-11-04 (`twitch_capture -- chat-login`, nothing sent): the web
   `auth-token` signs in to IRC as `PASS oauth:<auth-token>`, `NICK <login>` (the login from
   `currentUser`); Twitch answers the welcome and the `JOIN`. A refused token gets

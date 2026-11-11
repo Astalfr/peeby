@@ -423,6 +423,31 @@ fn playback_section(max_height: u32, low_latency: bool, catch_up: bool) -> AnyEl
   section(t("Playback", "Lecture"), rows).into_any_element()
 }
 
+/// The chat's history on joining.
+fn chat_section(history: bool) -> AnyElement {
+  section(
+    t("Chat", "Chat"),
+    vec![
+      row(
+        t("Earlier messages", "Messages précédents"),
+        t(
+          "A live's chat opens with its last messages from before you joined, as twitch.tv's \
+           does. They come from recent-messages.robotty.de, a service outside Twitch, which then \
+           learns which channel's chat you open. From the next chat opened.",
+          "Le chat d'un live s'ouvre avec ses derniers messages d'avant votre arrivée, comme sur \
+           twitch.tv. Ils viennent de recent-messages.robotty.de, un service extérieur à Twitch, \
+           qui apprend alors quel chat vous ouvrez. Au prochain chat ouvert.",
+        ),
+        toggle("twitch-chat-history", history, |on, cx| {
+          Settings::update(cx, |s| s.twitch.chat_history = Some(on))
+        }),
+      )
+      .into_any_element(),
+    ],
+  )
+  .into_any_element()
+}
+
 /// The bonus chest's claim.
 fn points_section(auto_claim: bool) -> AnyElement {
   section(
@@ -459,6 +484,7 @@ impl Render for SettingsView {
     let low_latency = Settings::get(cx).twitch.low_latency.unwrap_or(true);
     let catch_up = Settings::get(cx).twitch.catch_up.unwrap_or(true);
     let auto_claim = Settings::get(cx).twitch.auto_claim_bonus.unwrap_or(true);
+    let chat_history = Settings::get(cx).twitch.chat_history.unwrap_or(true);
     let flash = self
       .nav
       .upgrade()
@@ -469,6 +495,7 @@ impl Render for SettingsView {
       self.followed_section(cx),
       notifications_section(self.nav.clone(), cx),
       playback_section(max_height, low_latency, catch_up),
+      chat_section(chat_history),
       points_section(auto_claim),
     ];
     v_flex().gap_8().children(sections)

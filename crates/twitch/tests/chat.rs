@@ -158,3 +158,24 @@ fn pings_and_reconnections_are_events() {
   );
   assert_eq!(parse(":tmi.twitch.tv 001 justinfan1 :Welcome, GLHF!"), None);
 }
+
+#[test]
+fn recent_messages() {
+  // robotty's recent-messages for a busy channel (captured 2026-11-11, anonymous), trimmed to
+  // eight lines, its chatters renamed with names of the same length: Twitch's own lines,
+  // `historical=1`, read as the live ones, their send time kept.
+  let body: serde_json::Value =
+    serde_json::from_str(include_str!("fixtures/recent_messages.json")).unwrap();
+  let events = twitch::chat::parse_recent(&body);
+  assert_eq!(events.len(), 8);
+  let first = message(&events, 0);
+  assert_eq!(first.display_name, "viewer4x");
+  assert!(first.text.starts_with("@viewer1xxxxxx "));
+  assert!(first.sent.is_some());
+  assert!(
+    events
+      .iter()
+      .all(|e| matches!(e, Event::Message(_) | Event::Notice(_)))
+  );
+  assert!(twitch::chat::parse_recent(&serde_json::json!({ "messages": [] })).is_empty());
+}
