@@ -15,7 +15,7 @@ use ui::{runtime, tf, theme};
 
 use super::JellyfinSpace;
 use super::session::device_name;
-use super::vpn::VpnView;
+use super::vpn::{Vpn, VpnView};
 use peeby_core::settings::{JellyfinHome, JellyfinPlayback, Settings};
 
 /// Audio languages offered (ISO 639-2), after "the server's".
@@ -53,6 +53,8 @@ pub struct SettingsView {
   vpn: Entity<VpnView>,
   nav: WeakEntity<JellyfinSpace>,
   server: Option<PublicSystemInfo>,
+  /// The server's info was asked for.
+  asked: bool,
 }
 
 impl SettingsView {
@@ -63,8 +65,26 @@ impl SettingsView {
     cx: &mut Context<Self>,
   ) -> Self {
     cx.observe_global::<Settings>(|_, cx| cx.notify()).detach();
+    let mut view = Self {
+      client,
+      vpn,
+      nav,
+      server: None,
+      asked: false,
+    };
+    view.ask_server(cx);
+    view
+  }
+
+  /// Asks the server's name and version once, unless that opens the VPN: the settings page
+  /// alone does not connect it (ADR 0037); it is asked once the tunnel is up for another reason.
+  fn ask_server(&mut self, cx: &mut Context<Self>) {
+    if self.asked || !self.reachable(cx) {
+      return;
+    }
+    self.asked = true;
     let info = runtime::spawn(cx, {
-      let client = client.clone();
+      let client = self.client.clone();
       async move { client.public_system_info().await }
     });
     cx.spawn(async move |this, cx| {
@@ -78,12 +98,17 @@ impl SettingsView {
       }
     })
     .detach();
-    Self {
-      client,
-      vpn,
-      nav,
-      server: None,
-    }
+  }
+
+  /// Whether a request now leaves without opening the VPN: straight to the server, or through a
+  /// session already open.
+  fn reachable(&self, cx: &App) -> bool {
+    self.client.proxy().is_none()
+      || self
+        .nav
+        .upgrade()
+        .and_then(|nav| nav.read(cx).vpn().map(Vpn::connected))
+        .unwrap_or(false)
   }
 }
 
@@ -303,7 +328,12 @@ impl SettingsView {
         info.server_name.clone().unwrap_or_default(),
         info.version.clone().unwrap_or_default()
       ),
-      None => "…".to_owned(),
+      None if self.asked => "…".to_owned(),
+      None => t(
+        "Not asked while the VPN is on standby",
+        "Non demandé tant que le VPN est en veille",
+      )
+      .to_owned(),
     };
     let user = self
       .nav
@@ -357,6 +387,8 @@ impl SettingsView {
 
 impl Render for SettingsView {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    // Behind a VPN on standby, once its session opened.
+    self.ask_server(cx);
     let jellyfin = Settings::get(cx).jellyfin.clone();
     let (p, h) = (jellyfin.playback, jellyfin.home);
     let sections: Vec<AnyElement> = vec![

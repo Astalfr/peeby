@@ -84,24 +84,40 @@ async fn carries_only_its_allowed_ips() {
   assert!(answer.starts_with("HTTP/1.1 502"), "{answer}");
 }
 
-#[tokio::test]
-async fn sends_a_handshake_and_ends_its_connections_when_dropped() {
-  let (tunnel, peer) = tunnel().await;
-  // The first handshake initiation (148 bytes, type 1).
+/// Waits for the first handshake initiation (148 bytes, type 1).
+async fn handshake(peer: &UdpSocket) {
   let mut datagram = [0; 2048];
   let n = tokio::time::timeout(Duration::from_secs(5), peer.recv(&mut datagram))
     .await
     .unwrap()
     .unwrap();
   assert_eq!((n, datagram[0]), (148, 1));
-  assert_eq!(tunnel.status().handshake, None);
+}
 
-  // A connection inside the routes waits for a peer that never answers...
+/// Opens a connection to 10.8.0.1:443 through the proxy.
+async fn connect(tunnel: &wireguard::Tunnel) -> TcpStream {
   let (address, credentials) = split(tunnel.proxy_url());
   let mut stream = TcpStream::connect(&address).await.unwrap();
   let request =
     format!("CONNECT 10.8.0.1:443 HTTP/1.1\r\nProxy-Authorization: Basic {credentials}\r\n\r\n");
   stream.write_all(request.as_bytes()).await.unwrap();
+  stream
+}
+
+#[tokio::test]
+async fn sends_a_handshake_and_ends_its_connections_when_dropped() {
+  let (tunnel, peer) = tunnel().await;
+  // Nothing reaches the VPN server before a connection needs it.
+  let mut datagram = [0; 2048];
+  let early = tokio::time::timeout(Duration::from_millis(500), peer.recv(&mut datagram)).await;
+  assert!(early.is_err(), "the session opened unused");
+  assert_eq!(tunnel.status().connected, None);
+
+  // A connection inside the routes opens it, and waits for a peer that never answers...
+  let mut stream = connect(&tunnel).await;
+  handshake(&peer).await;
+  assert!(tunnel.status().connected.is_some());
+  assert_eq!(tunnel.status().handshake, None);
   let mut answer = [0; 64];
   let waiting = tokio::time::timeout(Duration::from_millis(500), stream.read(&mut answer)).await;
   assert!(waiting.is_err(), "answered before the peer did");
@@ -111,4 +127,49 @@ async fn sends_a_handshake_and_ends_its_connections_when_dropped() {
   let mut rest = Vec::new();
   let ended = tokio::time::timeout(Duration::from_secs(20), stream.read_to_end(&mut rest)).await;
   assert!(ended.is_ok(), "still open after the tunnel stopped");
+}
+
+#[tokio::test]
+async fn closes_its_session_unused_and_opens_it_again() {
+  let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+  let text = format!(
+    "[Interface]\nPrivateKey = {PRIVATE}\nAddress = 10.8.0.2/24\n\n[Peer]\nPublicKey = {PEER}\n\
+     Endpoint = {}\nAllowedIPs = 10.8.0.0/24\n",
+    peer.local_addr().unwrap()
+  );
+  let config = wireguard::Config::parse(&text).unwrap();
+  let idle = Duration::from_millis(500);
+  let tunnel =
+    wireguard::Tunnel::start_with_idle(config, &tokio::runtime::Handle::current(), idle).unwrap();
+
+  let stream = connect(&tunnel).await;
+  handshake(&peer).await;
+  assert!(tunnel.status().connected.is_some());
+  // Open while a connection goes through it, even silent.
+  tokio::time::sleep(idle * 2).await;
+  assert!(
+    tunnel.status().connected.is_some(),
+    "closed under a connection"
+  );
+
+  // Without one, it closes after `idle`: here once the connection the peer never answered gives
+  // up (the tunnel's TCP timeout, 20 s)...
+  drop(stream);
+  let closed = tokio::time::timeout(Duration::from_secs(30), async {
+    while tunnel.status().connected.is_some() {
+      tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+  })
+  .await;
+  assert!(closed.is_ok(), "still open unused");
+
+  // ...and the next connection opens it again, with a new handshake.
+  let mut datagram = [0; 2048];
+  while tokio::time::timeout(Duration::from_millis(100), peer.recv(&mut datagram))
+    .await
+    .is_ok()
+  {}
+  let _stream = connect(&tunnel).await;
+  handshake(&peer).await;
+  assert!(tunnel.status().connected.is_some());
 }

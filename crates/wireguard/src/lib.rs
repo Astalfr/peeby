@@ -6,6 +6,8 @@
 //! absolute URLs for plain HTTP, so that an HTTP client (reqwest) and mpv (`http-proxy`) only
 //! need to be pointed at it. The proxy listens on the loopback only, asks for a secret of its own
 //! (in the URL's credentials), and carries only the addresses the peer's `AllowedIPs` route.
+//! The proxy is always there, the VPN only when used: the session with the peer (UDP, handshakes,
+//! keepalives) opens at the first connection and closes after [`IDLE`] without one.
 //!
 //! The configuration is a wg-quick file ([`Config::parse`]): its keys are secrets, never in a log
 //! or an error message, and so is the proxy's URL (it holds the proxy's secret).
@@ -15,7 +17,7 @@ mod proxy;
 mod tunnel;
 
 pub use config::{Config, ConfigError};
-pub use tunnel::{Status, Tunnel};
+pub use tunnel::{IDLE, Status, Tunnel};
 
 /// A tunnel that cannot start.
 #[derive(Debug, thiserror::Error)]

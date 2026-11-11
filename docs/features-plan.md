@@ -198,5 +198,6 @@ over a channel's clips, as twitch.tv's filter (GQL's `ClipsPeriod`), the week by
 On `feat/jellyfin-vpn` (2026-11-11), not checked by the user yet. A WireGuard configuration
 (`.conf`) imported in the Jellyfin settings (also when signed out): while it is on, every request
 and every video of the space go through a userspace tunnel (no driver, no administrator rights),
-and the rest of the PC does not. The spike measured 300 to 400 Mb/s and round trips of 1 to 2 ms
+and the rest of the PC does not. The VPN connects only when Jellyfin needs it (not at launch)
+and disconnects after 5 minutes unused. The spike measured 300 to 400 Mb/s and round trips of 1 to 2 ms
 on the user's LAN ([ADR 0037](decisions/0037-jellyfin-wireguard.md)).

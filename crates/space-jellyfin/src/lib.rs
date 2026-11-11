@@ -128,6 +128,9 @@ struct Signed {
   client: Client,
   libraries: Vec<BaseItem>,
   user: Option<User>,
+  /// The libraries and the user were asked for: at the space's first render, not at sign-in, so
+  /// that a server behind a VPN is not reached before Jellyfin shows (ADR 0037).
+  loaded: bool,
 }
 
 /// The space's id in the settings (`SpaceInfo::id`).
@@ -301,6 +304,7 @@ impl JellyfinSpace {
       client,
       libraries: Vec::new(),
       user: None,
+      loaded: false,
     });
     self.login = None;
     self.login_message = None;
@@ -309,6 +313,16 @@ impl JellyfinSpace {
       tab.reset(vec![Route::Home]);
     }
     cx.notify();
+  }
+
+  /// Asks for the sidebar's libraries and user once per session, when the space first shows.
+  fn load_once(&mut self, cx: &mut Context<Self>) {
+    let Some(signed) = &mut self.signed else {
+      return;
+    };
+    if std::mem::replace(&mut signed.loaded, true) {
+      return;
+    }
     self.load_libraries(cx);
     self.load_user(cx);
   }
@@ -835,6 +849,7 @@ impl Render for JellyfinSpace {
     let Some(tab) = self.tabs.shown_in(window.window_handle().window_id()) else {
       return div().size_full().into_any_element();
     };
+    self.load_once(cx);
     // A tab opened in the background, a page reached with "back" or "forward", signing in: the
     // page shown is built now.
     if let Some(route) = self.tabs.get(tab).and_then(|t| t.unbuilt()).cloned()

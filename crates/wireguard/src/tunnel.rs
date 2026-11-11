@@ -2,7 +2,9 @@
 //! (smoltcp) whose TCP connections the proxy hands out as [`VirtualStream`]s.
 //!
 //! One task drives everything: it polls the stack, seals what the stack sends and opens what the
-//! peer sends. The streams change their sockets under the same lock and wake the task. Two
+//! peer sends. The session with the peer (the UDP socket, its handshakes and keepalives) opens
+//! only when the stack has something to send, and closes after [`IDLE`] without a connection or
+//! a packet: the VPN is not kept up while nothing uses it. The streams change their sockets under the same lock and wake the task. Two
 //! things make the throughput (ADR 0037): large receive buffers (the TCP window, scaled, is what
 //! one round trip can carry: 64 KB caps a 40 ms tunnel at 15 Mb/s), and no timer in the data's
 //! path (ACKs at once, no Nagle: Windows' timers tick every 15.6 ms).
@@ -46,6 +48,9 @@ const RESOLVE_RETRY: Duration = Duration::from_secs(5);
 const DNS_KEPT: Duration = Duration::from_secs(300);
 /// Queries to the tunnel's name server at once.
 const DNS_QUERIES: usize = 8;
+/// Without a connection through the tunnel nor a packet for this long, the session with the peer
+/// closes; the next connection opens it again (the endpoint's name, a handshake: a round trip).
+pub const IDLE: Duration = Duration::from_secs(5 * 60);
 
 /// A running tunnel and its local proxy. Dropping it stops both.
 pub struct Tunnel {
@@ -64,21 +69,31 @@ pub struct Status {
   pub error: Option<String>,
   /// The endpoint's address, once its name resolved.
   pub endpoint: Option<SocketAddr>,
-  /// How long the tunnel has run.
-  pub running: Duration,
+  /// How long the session with the peer has been open; `None` while it is closed (nothing went
+  /// through the tunnel yet, or nothing for [`IDLE`]).
+  pub connected: Option<Duration>,
 }
 
 impl Tunnel {
   /// Starts the tunnel on `runtime`. Its proxy's address is known at once (its socket opens
-  /// here); the peer's handshake and the endpoint's name follow in the background, and connections
-  /// made before them wait for them.
+  /// here); the session with the peer opens at the first connection (the endpoint's name, a
+  /// handshake), which waits for it, and closes after [`IDLE`] unused.
   pub fn start(config: Config, runtime: &tokio::runtime::Handle) -> Result<Self, Error> {
+    Self::start_with_idle(config, runtime, IDLE)
+  }
+
+  /// [`Tunnel::start`], its session closing after `idle` unused.
+  pub fn start_with_idle(
+    config: Config,
+    runtime: &tokio::runtime::Handle,
+    idle: Duration,
+  ) -> Result<Self, Error> {
     let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
     listener.set_nonblocking(true)?;
     let port = listener.local_addr()?.port();
     let secret = uuid::Uuid::new_v4().simple().to_string();
     let proxy_url = format!("http://{}:{secret}@127.0.0.1:{port}", crate::proxy::USER);
-    let shared = Arc::new(Shared::new(&config));
+    let shared = Arc::new(Shared::new(&config, idle));
     let tasks = vec![
       runtime.spawn(drive(config.clone(), shared.clone())),
       runtime.spawn(crate::proxy::serve(
@@ -108,7 +123,7 @@ impl Tunnel {
       handshake: status.handshake.map(|at| at.elapsed()),
       error: status.error.clone(),
       endpoint: status.endpoint,
-      running: self.shared.started.elapsed(),
+      connected: status.since.map(|at| at.elapsed()),
     }
   }
 }
@@ -131,7 +146,8 @@ pub(crate) struct Shared {
   status: Mutex<StatusInner>,
   /// Set when the tunnel is dropped.
   stop: tokio::sync::watch::Sender<bool>,
-  started: Instant,
+  /// How long the session stays open unused.
+  idle: Duration,
   /// Names resolved through the tunnel, and when.
   names: Mutex<HashMap<String, (IpAddr, Instant)>>,
 }
@@ -141,6 +157,8 @@ struct StatusInner {
   handshake: Option<Instant>,
   error: Option<String>,
   endpoint: Option<SocketAddr>,
+  /// When the session opened, while it is open.
+  since: Option<Instant>,
 }
 
 /// The TCP/IP stack.
@@ -161,7 +179,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Shared {
-  fn new(config: &Config) -> Self {
+  fn new(config: &Config, idle: Duration) -> Self {
     let mut device = Queues {
       mtu: usize::from(config.mtu),
       ..Queues::default()
@@ -211,7 +229,7 @@ impl Shared {
       }),
       wake: Notify::new(),
       stop: tokio::sync::watch::Sender::new(false),
-      started: Instant::now(),
+      idle,
       names: Mutex::new(HashMap::new()),
       status: Mutex::new(StatusInner::default()),
     }
@@ -318,10 +336,56 @@ impl Net {
       .map(|d| Duration::from_micros(d.total_micros()));
     (std::mem::take(&mut self.device.tx), delay)
   }
+
+  /// Whether a TCP connection goes through the tunnel (open, or still closing).
+  fn connections(&self) -> bool {
+    self
+      .sockets
+      .iter()
+      .any(|(handle, _)| Some(handle) != self.dns)
+  }
 }
 
-/// Drives the tunnel until it is dropped.
+/// Drives the tunnel until it is dropped: the stack alone while nothing goes through it, a
+/// session with the peer while something does.
 async fn drive(config: Config, shared: Arc<Shared>) {
+  loop {
+    let first = traffic(&shared).await;
+    session(&config, &shared, first).await;
+    let mut status = lock(&shared.status);
+    status.since = None;
+    status.handshake = None;
+    drop(status);
+    tracing::debug!("WireGuard: the session closed, unused");
+  }
+}
+
+/// Runs the stack without a session until it sends something (a connection, a name to
+/// resolve): returns those packets.
+async fn traffic(shared: &Shared) -> VecDeque<Vec<u8>> {
+  loop {
+    let (outgoing, delay) = lock(&shared.net).poll();
+    if !outgoing.is_empty() {
+      return outgoing;
+    }
+    match delay {
+      Some(delay) => {
+        tokio::select! {
+          () = shared.wake.notified() => {}
+          () = tokio::time::sleep(delay) => {}
+        }
+      }
+      None => shared.wake.notified().await,
+    }
+  }
+}
+
+/// One session with the peer, from `first` (the packets that open it) until nothing used it for
+/// [`Shared::idle`].
+async fn session(config: &Config, shared: &Shared, first: VecDeque<Vec<u8>>) {
+  let mut used = Instant::now();
+  lock(&shared.status).since = Some(used);
+  tracing::debug!("WireGuard: the session opens");
   let udp = loop {
     match bind(&config.endpoint).await {
       Ok(udp) => {
@@ -335,6 +399,14 @@ async fn drive(config: Config, shared: Arc<Shared>) {
         tracing::warn!("WireGuard endpoint: {e}");
         shared.set_error(Some(e.to_string()));
         tokio::time::sleep(RESOLVE_RETRY).await;
+        // Meanwhile the connections waiting may give up (what they send is sent again).
+        let mut net = lock(&shared.net);
+        net.poll();
+        if net.connections() {
+          used = Instant::now();
+        } else if used.elapsed() >= shared.idle {
+          return;
+        }
       }
     }
   };
@@ -348,19 +420,34 @@ async fn drive(config: Config, shared: Arc<Shared>) {
   );
   let mut out = vec![0; MAX_DATAGRAM + 64];
   let mut datagram = vec![0; MAX_DATAGRAM];
-  // The first handshake now, rather than at the first packet.
-  if let TunnResult::WriteToNetwork(packet) = tunn.format_handshake_initiation(&mut out, false) {
-    send(&udp, packet).await;
-  }
+  // Queued by boringtun until the handshake ends, which the first one starts.
+  let mut pending = Some(first);
   let mut ticked = Instant::now();
   loop {
-    let (outgoing, delay) = lock(&shared.net).poll();
+    let (mut outgoing, delay) = {
+      let mut net = lock(&shared.net);
+      let polled = net.poll();
+      if net.connections() {
+        used = Instant::now();
+      }
+      polled
+    };
+    if let Some(mut first) = pending.take() {
+      first.append(&mut outgoing);
+      outgoing = first;
+    }
+    if !outgoing.is_empty() {
+      used = Instant::now();
+    }
     for packet in outgoing {
       match tunn.encapsulate(&packet, &mut out) {
         TunnResult::WriteToNetwork(sealed) => send(&udp, sealed).await,
         TunnResult::Err(e) => tracing::debug!("WireGuard: cannot seal a packet: {e:?}"),
         _ => {}
       }
+    }
+    if used.elapsed() >= shared.idle {
+      return;
     }
     if ticked.elapsed() >= TIMER_TICK {
       ticked = Instant::now();
@@ -388,6 +475,7 @@ async fn drive(config: Config, shared: Arc<Shared>) {
             }
           }
           if !inbound.is_empty() {
+            used = Instant::now();
             lock(&shared.net).device.rx.extend(inbound);
           }
         }

@@ -61,6 +61,15 @@ impl Vpn {
     self.tunnel = None;
   }
 
+  /// Whether the session with the VPN server is open now (something used it lately): a request
+  /// then costs no new connection.
+  pub fn connected(&self) -> bool {
+    self
+      .tunnel
+      .as_ref()
+      .is_some_and(|tunnel| tunnel.status().connected.is_some())
+  }
+
   /// The tunnel's local proxy while it runs. It holds a secret: never log it.
   pub fn proxy(&self) -> Option<&str> {
     self.tunnel.as_ref().map(Tunnel::proxy_url)
@@ -170,6 +179,14 @@ impl VpnView {
       return t("Off.", "Désactivé.").to_owned();
     };
     let status = tunnel.status();
+    let Some(connected) = status.connected else {
+      let minutes = wireguard::IDLE.as_secs() / 60;
+      return tf!(
+        "On standby: connects when Jellyfin needs it, disconnects after {minutes} min unused.",
+        "En veille : se connecte quand Jellyfin en a besoin, se déconnecte après {minutes} min \
+         sans usage."
+      );
+    };
     match (status.handshake, status.error) {
       (Some(age), _) => {
         let age = ago(age);
@@ -183,7 +200,7 @@ impl VpnView {
         "Le serveur VPN est injoignable : {e}"
       ),
       // A handshake takes a round trip: this long without one, the server is not answering.
-      (None, None) if status.running > NO_ANSWER => tf!(
+      (None, None) if connected > NO_ANSWER => tf!(
         "The VPN server does not answer. Check its Endpoint (a name behind a proxy such as          Cloudflare's does not carry WireGuard), its UDP port and the keys.",
         "Le serveur VPN ne répond pas. Vérifiez son Endpoint (un nom derrière un proxy comme          celui de Cloudflare ne transporte pas WireGuard), son port UDP et les clés."
       ),

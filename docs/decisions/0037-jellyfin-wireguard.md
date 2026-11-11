@@ -41,8 +41,13 @@ Options considered:
   search domains and the `Pre`/`Post` commands are ignored), `Tunnel::start` runs it on the
   network runtime:
   - boringtun's `Tunn` over a UDP socket connected to the endpoint (its name resolved by
-    Windows, IPv4 first, tried again every 5 s), WireGuard's timers every 250 ms, a first
-    handshake at once;
+    Windows, IPv4 first, tried again every 5 s), WireGuard's timers every 250 ms;
+  - the VPN only while used (the user asked, 2026-11-11): the proxy and the stack are always
+    there (the loopback only), the session with the peer (the UDP socket, its handshakes and
+    keepalives) opens when the stack first sends something (a connection's SYN, a DNS query) and
+    closes after `wireguard::IDLE` (5 minutes) without a TCP connection through the tunnel nor a
+    packet. A connection kept open counts as use: mpv's, while a video is open even paused;
+    reqwest's idle pooled ones close after 90 s on their own;
   - smoltcp (IP medium, default routes to the peer) with 4 MB receive and 512 KB send buffers per
     connection, no Nagle, ACKs at once; one task drives the stack and the tunnel, and the
     connections' streams change their sockets under the same lock and wake it;
@@ -61,7 +66,12 @@ Options considered:
   Credential Manager (`jellyfin|wireguard`, rewritten without comments or ignored keys:
   `Config::to_wg_quick`), never in the settings file. `[jellyfin] vpn` turns it on or off. A change
   restarts the tunnel and rebuilds the session's client: the pages reload on Home. The section
-  shows the endpoint, the addresses, the routes and the last handshake.
+  shows the endpoint, the addresses, the routes and the last handshake, or "on standby" while the
+  session is closed.
+- Nothing reaches the server before Jellyfin is used, so that launching Peeby does not connect
+  the VPN: the sidebar's libraries and user are asked at the space's first render, not at
+  sign-in, and the settings page asks the server's name and version only when that opens no
+  session (direct, or the session already open).
 - The keys, the stored text and the proxy's URL (its secret) never reach a log or an error
   message; `Config`'s and `Client`'s `Debug` leave them out.
 
@@ -76,6 +86,8 @@ Options considered:
   random per launch and the proxy listens on the loopback only.
 - Measured on a LAN. Over the Internet the server's upload and the tunnel's round trip set the
   throughput. With 4 MB windows, a 100 ms tunnel still carries over 300 Mb/s.
+- The first request after a launch or a standby pays the session's opening: the endpoint's name,
+  then a handshake (one round trip), before its TCP connection.
 - A connection opened before the first handshake waits for it (boringtun queues its packets).
   The first answer took about 1 s in some runs: either the system's name lookup or a lost SYN
   sent again by smoltcp after 1 s.
