@@ -397,6 +397,33 @@ fn comments_signed_in() {
 }
 
 #[test]
+fn watch_page_collaboration() {
+  // A video signed by two channels, anonymous, captured 2026-11-11, trimmed to its title and
+  // owner (the dialog listing the channels, without their subscribe buttons).
+  let page = parse_watch("x7jO42vp2A8", &fixture("next_collaboration.json"));
+  let names: Vec<_> = page.collaborators.iter().map(|c| c.name.as_str()).collect();
+  assert_eq!(names, ["Hackoru", "CosmosZR"]);
+  let second = &page.collaborators[1];
+  assert_eq!(
+    second.channel_id.as_deref(),
+    Some("UCx6-QwsBu7-p2khs-4jEs1A")
+  );
+  assert_eq!(second.handle.as_deref(), Some("@CosmosZR"));
+  assert!(!second.avatar.is_empty());
+  // The page's channel is the uploader, the first one.
+  assert_eq!(page.channel.as_deref(), Some("Hackoru"));
+  assert_eq!(page.channel_id.as_deref(), Some("UCyvHPV3h__QRHP9R83jDpkw"));
+  assert_eq!(page.channel_handle.as_deref(), Some("@Hackoru"));
+  assert!(!page.channel_avatar.is_empty());
+  // One channel: no collaborators.
+  assert!(
+    parse_watch("dQw4w9WgXcQ", &fixture("next.json"))
+      .collaborators
+      .is_empty()
+  );
+}
+
+#[test]
 fn feedback() {
   // `feedback` answers, signed in, captured 2026-11-11 (`not_interested` example): a Home
   // video marked "Not interested", then its undo; trimmed to `logged_in`.

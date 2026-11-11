@@ -1,0 +1,235 @@
+{
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "title": {
+                  "runs": [
+                    {
+                      "text": "Nouvel arc narratif de la Fédération : ça va être dingue ! | Réaction à la présentation du résona..."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "videoSecondaryInfoRenderer": {
+                "owner": {
+                  "videoOwnerRenderer": {
+                    "attributedTitle": {
+                      "content": "Hackoru et CosmosZR",
+                      "commandRuns": [
+                        {
+                          "startIndex": 0,
+                          "length": 19,
+                          "onTap": {
+                            "innertubeCommand": {
+                              "showDialogCommand": {
+                                "panelLoadingStrategy": {
+                                  "inlineContent": {
+                                    "dialogViewModel": {
+                                      "header": {
+                                        "dialogHeaderViewModel": {
+                                          "headline": {
+                                            "content": "Collaborateurs"
+                                          }
+                                        }
+                                      },
+                                      "customContent": {
+                                        "listViewModel": {
+                                          "listItems": [
+                                            {
+                                              "listItemViewModel": {
+                                                "title": {
+                                                  "content": "Hackoru",
+                                                  "commandRuns": [
+                                                    {
+                                                      "length": 7,
+                                                      "onTap": {
+                                                        "innertubeCommand": {
+                                                          "browseEndpoint": {
+                                                            "browseId": "UCyvHPV3h__QRHP9R83jDpkw",
+                                                            "canonicalBaseUrl": "/channel/UCyvHPV3h__QRHP9R83jDpkw"
+                                                          },
+                                                          "clickTrackingParams": "CIoCEOE5IhMI4-2g05yAmAMVUs9WAx282wQ-ygEEfX8BOA==",
+                                                          "commandMetadata": {
+                                                            "webCommandMetadata": {
+                                                              "apiUrl": "/youtubei/v1/browse",
+                                                              "rootVe": 3611,
+                                                              "url": "/channel/UCyvHPV3h__QRHP9R83jDpkw",
+                                                              "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      "startIndex": 0
+                                                    }
+                                                  ]
+                                                },
+                                                "subtitle": {
+                                                  "content": "‎⁨@Hackoru⁩ • ⁨133 k abonnés⁩"
+                                                },
+                                                "leadingAccessory": {
+                                                  "avatarViewModel": {
+                                                    "image": {
+                                                      "processor": {
+                                                        "borderImageProcessor": {
+                                                          "circular": true
+                                                        }
+                                                      },
+                                                      "sources": [
+                                                        {
+                                                          "url": "https://yt3.ggpht.com/VPM7bSjIJsoV5F5as4Eta6Ysl3zmBb14t9m5LHHdxqa-B2exdv4KPJyHfY_WZiSJphHY9q46Yw=s88-c-k-c0x00ffffff-no-rj"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "endpoint": {
+                                                      "innertubeCommand": {
+                                                        "browseEndpoint": {
+                                                          "browseId": "UCyvHPV3h__QRHP9R83jDpkw",
+                                                          "canonicalBaseUrl": "/@Hackoru"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            {
+                                              "listItemViewModel": {
+                                                "title": {
+                                                  "content": "CosmosZR",
+                                                  "commandRuns": [
+                                                    {
+                                                      "length": 8,
+                                                      "onTap": {
+                                                        "innertubeCommand": {
+                                                          "browseEndpoint": {
+                                                            "browseId": "UCx6-QwsBu7-p2khs-4jEs1A",
+                                                            "canonicalBaseUrl": "/channel/UCx6-QwsBu7-p2khs-4jEs1A"
+                                                          },
+                                                          "clickTrackingParams": "CIoCEOE5IhMI4-2g05yAmAMVUs9WAx282wQ-ygEEfX8BOA==",
+                                                          "commandMetadata": {
+                                                            "webCommandMetadata": {
+                                                              "apiUrl": "/youtubei/v1/browse",
+                                                              "rootVe": 3611,
+                                                              "url": "/channel/UCx6-QwsBu7-p2khs-4jEs1A",
+                                                              "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      "startIndex": 0
+                                                    }
+                                                  ]
+                                                },
+                                                "subtitle": {
+                                                  "content": "‎⁨@CosmosZR⁩ • ⁨153 k abonnés⁩"
+                                                },
+                                                "leadingAccessory": {
+                                                  "avatarViewModel": {
+                                                    "image": {
+                                                      "processor": {
+                                                        "borderImageProcessor": {
+                                                          "circular": true
+                                                        }
+                                                      },
+                                                      "sources": [
+                                                        {
+                                                          "url": "https://yt3.ggpht.com/zD8q53nnh3krzLy4tVeMYioRFIse_1DFTyIw6icMSXwr3UmMVRziOtOAwTrlMvWD1hTAbIb4ug=s88-c-k-c0x00ffffff-no-rj"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "endpoint": {
+                                                      "innertubeCommand": {
+                                                        "browseEndpoint": {
+                                                          "browseId": "UCx6-QwsBu7-p2khs-4jEs1A",
+                                                          "canonicalBaseUrl": "/@CosmosZR"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "avatarStack": {
+                      "avatarStackViewModel": {
+                        "avatarClusterSize": "AVATAR_SIZE_S",
+                        "avatars": [
+                          {
+                            "avatarViewModel": {
+                              "image": {
+                                "processor": {
+                                  "borderImageProcessor": {
+                                    "circular": true
+                                  }
+                                },
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/VPM7bSjIJsoV5F5as4Eta6Ysl3zmBb14t9m5LHHdxqa-B2exdv4KPJyHfY_WZiSJphHY9q46Yw=s88-c-k-c0x00ffffff-no-rj"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "avatarViewModel": {
+                              "image": {
+                                "processor": {
+                                  "borderImageProcessor": {
+                                    "circular": true
+                                  }
+                                },
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/zD8q53nnh3krzLy4tVeMYioRFIse_1DFTyIw6icMSXwr3UmMVRziOtOAwTrlMvWD1hTAbIb4ug=s88-c-k-c0x00ffffff-no-rj"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        "layoutType": "AVATAR_STACK_LAYOUT_CLUSTER",
+                        "rendererContext": {
+                          "accessibilityContext": {
+                            "label": "Chaînes de collaboration"
+                          },
+                          "loggingContext": {
+                            "loggingDirectives": {
+                              "trackingParams": "CJ8CEPyeECITCOPtoNOcgJgDFVLPVgMdvNsEPg==",
+                              "visibility": {
+                                "types": "12"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "subscriptionButton": {
+                      "type": "FREE"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

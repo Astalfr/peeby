@@ -49,6 +49,12 @@ use ui::player::{PlayerEvent, PlayerView, Prefs};
 use ui::{runtime, theme};
 
 /// Width of the related videos column.
+/// Side of a collaborator's avatar on the watch page, its 2 px ring included.
+const COLLABORATOR_AVATAR: f32 = 40.;
+/// How far each collaborator's avatar slides over the previous one.
+const COLLABORATOR_OVERLAP: f32 = 14.;
+/// Avatars shown at most for a collaboration (YouTube's cluster shows two).
+const COLLABORATOR_AVATARS: usize = 3;
 const RELATED_WIDTH: f32 = 400.;
 /// Width of a thumbnail in the queue panel.
 const QUEUE_THUMB: f32 = 100.;
@@ -676,24 +682,127 @@ impl WatchView {
       .children(attribution)
   }
 
+  /// A collaboration's avatars, overlapping from left to right as on youtube.com, each ringed
+  /// with the page's background.
+  fn collaborator_avatars(
+    &self,
+    page: &WatchPage,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> impl IntoElement + use<> {
+    h_flex().flex_none().children(
+      page
+        .collaborators
+        .iter()
+        .take(COLLABORATOR_AVATARS)
+        .enumerate()
+        .map(|(i, collaborator)| {
+          div()
+            .size(px(COLLABORATOR_AVATAR))
+            .flex_none()
+            .rounded_full()
+            .border_2()
+            .border_color(theme::background())
+            .when(i > 0, |el| el.ml(px(-COLLABORATOR_OVERLAP)))
+            .child(image_fill(
+              &convert::picture(&collaborator.avatar),
+              COLLABORATOR_AVATAR - 4.,
+              1.,
+              px(COLLABORATOR_AVATAR / 2.),
+              window,
+              cx,
+            ))
+        }),
+    )
+  }
+
+  /// A collaboration's channel names, "A and B" ("A, B and C"), each a link to its channel (a
+  /// middle click opens it in a new tab).
+  fn collaborator_names(&self, page: &WatchPage) -> impl IntoElement + use<> {
+    let count = page.collaborators.len();
+    h_flex()
+      .flex_wrap()
+      .font_weight(FontWeight::SEMIBOLD)
+      .children(
+        page
+          .collaborators
+          .iter()
+          .enumerate()
+          .flat_map(|(i, collaborator)| {
+            let separator = match count - i {
+              1 => None,
+              2 => Some(t(" and ", " et ")),
+              _ => Some(", "),
+            };
+            let route = collaborator.channel_id.clone().map(|id| Route::Channel {
+              id,
+              name: collaborator.name.clone(),
+            });
+            let link = div()
+              .id(SharedString::from(format!("collaborator-{i}")))
+              .child(collaborator.name.clone())
+              .when_some(route, |el, route| {
+                let nav = self.nav.clone();
+                el.cursor_pointer()
+                  .hover(|s| s.text_color(theme::accent_hover()))
+                  .on_aux_click(middle_click({
+                    let (nav, route) = (nav.clone(), route.clone());
+                    move |cx| nav.open_in_new_tab(route.clone(), None, cx)
+                  }))
+                  .on_click(move |_, window, cx| nav.open(route.clone(), window, cx))
+              })
+              .into_any_element();
+            std::iter::once(link)
+              .chain(separator.map(|s| div().whitespace_nowrap().child(s).into_any_element()))
+          }),
+      )
+  }
+
   fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
       return skeleton_details();
     };
-    let avatar = (!page.channel_avatar.is_empty()).then(|| {
-      div().size(px(40.)).flex_none().child(image_fill(
-        &convert::picture(&page.channel_avatar),
-        40.,
-        1.,
-        px(20.),
-        window,
-        cx,
-      ))
-    });
-    let channel = page.channel_id.clone().map(|id| Route::Channel {
-      id,
-      name: page.channel.clone().unwrap_or_default(),
-    });
+    let collaboration = !page.collaborators.is_empty();
+    let avatar = if collaboration {
+      Some(
+        self
+          .collaborator_avatars(page, window, cx)
+          .into_any_element(),
+      )
+    } else {
+      (!page.channel_avatar.is_empty()).then(|| {
+        div()
+          .size(px(40.))
+          .flex_none()
+          .child(image_fill(
+            &convert::picture(&page.channel_avatar),
+            40.,
+            1.,
+            px(20.),
+            window,
+            cx,
+          ))
+          .into_any_element()
+      })
+    };
+    // A collaboration's names are links of their own, each to its channel.
+    let channel = page
+      .channel_id
+      .clone()
+      .filter(|_| !collaboration)
+      .map(|id| Route::Channel {
+        id,
+        name: page.channel.clone().unwrap_or_default(),
+      });
+    let name = if collaboration {
+      self.collaborator_names(page).into_any_element()
+    } else {
+      div()
+        .font_weight(FontWeight::SEMIBOLD)
+        .group_hover("channel", |s| s.text_color(theme::accent_hover()))
+        .child(page.channel.clone().unwrap_or_default())
+        .into_any_element()
+    };
     let stats = [page.views.clone(), page.date.clone()]
       .into_iter()
       .flatten()
@@ -787,19 +896,12 @@ impl WatchView {
               })
               .children(avatar)
               .child(
-                v_flex()
-                  .child(
-                    div()
-                      .font_weight(FontWeight::SEMIBOLD)
-                      .group_hover("channel", |s| s.text_color(theme::accent_hover()))
-                      .child(page.channel.clone().unwrap_or_default()),
-                  )
-                  .child(
-                    div()
-                      .text_sm()
-                      .text_color(theme::muted())
-                      .child(page.subscribers.clone().unwrap_or_default()),
-                  ),
+                v_flex().child(name).child(
+                  div()
+                    .text_sm()
+                    .text_color(theme::muted())
+                    .child(page.subscribers.clone().unwrap_or_default()),
+                ),
               ),
           )
           .children(

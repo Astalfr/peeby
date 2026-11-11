@@ -50,8 +50,8 @@ pub use error::Error;
 pub use live::LiveProxy;
 pub use models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentActions, CommentPage, Feed, FeedChip, LikeParams,
-  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
+  ChatMessage, ChatRun, Collaborator, Comment, CommentActions, CommentPage, Feed, FeedChip,
+  LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
   NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
   PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
   Storyboard, StoryboardFrame, Stream, Subscription, TextLink, Thumbnail, Tracking, VideoItem,

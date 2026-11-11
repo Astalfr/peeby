@@ -34,8 +34,8 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Comment, CommentActions, CommentPage, Feed, FeedChip, LikeParams,
-  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
+  ChatMessage, ChatRun, Collaborator, Comment, CommentActions, CommentPage, Feed, FeedChip,
+  LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
   NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
   PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
   Storyboard, Subscription, TextLink, Thumbnail, Tracking, VideoItem, WatchPage,
@@ -138,6 +138,13 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     .unwrap_or(&Value::Null);
   let owner = &secondary["owner"]["videoOwnerRenderer"];
   let owner_run = &owner["title"]["runs"][0];
+  // A collaboration's owner has no `title` nor picture: its channels are in a dialog.
+  let collaborators = if owner_run.is_null() {
+    parse_collaborators(owner)
+  } else {
+    Vec::new()
+  };
+  let first = collaborators.first();
 
   // The comments section is the item section whose only content is a continuation.
   let comments_continuation = contents
@@ -170,10 +177,14 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
   WatchPage {
     id: video_id.to_owned(),
     title: text(&primary["title"]),
-    channel: owner_run["text"].as_str().map(str::to_owned),
+    channel: owner_run["text"]
+      .as_str()
+      .map(str::to_owned)
+      .or_else(|| first.map(|c| c.name.clone())),
     channel_id: owner_run["navigationEndpoint"]["browseEndpoint"]["browseId"]
       .as_str()
-      .map(str::to_owned),
+      .map(str::to_owned)
+      .or_else(|| first.and_then(|c| c.channel_id.clone())),
     // The name's link or, when it goes to `/channel/UC…`, the owner's own.
     channel_handle: [
       &owner_run["navigationEndpoint"],
@@ -182,8 +193,12 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     .into_iter()
     .filter_map(|e| e["browseEndpoint"]["canonicalBaseUrl"].as_str())
     .find_map(|url| url.strip_prefix('/').filter(|h| h.starts_with('@')))
-    .map(str::to_owned),
-    channel_avatar: thumbnails(&owner["thumbnail"]["thumbnails"]),
+    .map(str::to_owned)
+    .or_else(|| first.and_then(|c| c.handle.clone())),
+    channel_avatar: match first {
+      Some(first) => first.avatar.clone(),
+      None => thumbnails(&owner["thumbnail"]["thumbnails"]),
+    },
     subscribers: non_empty(text(&owner["subscriberCountText"])),
     views: non_empty(text(
       &primary["viewCount"]["videoViewCountRenderer"]["viewCount"],
@@ -205,7 +220,41 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     notifications: parse_notification_bell(&secondary["subscribeButton"]),
     live_chat,
     chapters: parse_chapters(response),
+    collaborators: if collaborators.len() > 1 {
+      collaborators
+    } else {
+      Vec::new()
+    },
   }
+}
+
+/// The channels of a collaboration (several channels sign the video): the owner's
+/// `attributedTitle` ("A et B") opens a dialog listing them, the uploader first, each a
+/// `listItemViewModel` with its name, and its avatar linking to the channel.
+fn parse_collaborators(owner: &Value) -> Vec<Collaborator> {
+  let mut lists = Vec::new();
+  find_all(&owner["attributedTitle"], "listViewModel", &mut lists);
+  lists
+    .first()
+    .and_then(|list| list["listItems"].as_array())
+    .into_iter()
+    .flatten()
+    .filter_map(|item| {
+      let item = &item["listItemViewModel"];
+      let avatar = &item["leadingAccessory"]["avatarViewModel"];
+      let browse = &avatar["endpoint"]["innertubeCommand"]["browseEndpoint"];
+      Some(Collaborator {
+        name: item["title"]["content"].as_str()?.to_owned(),
+        channel_id: browse["browseId"].as_str().map(str::to_owned),
+        handle: browse["canonicalBaseUrl"]
+          .as_str()
+          .and_then(|url| url.strip_prefix('/'))
+          .filter(|h| h.starts_with('@'))
+          .map(str::to_owned),
+        avatar: thumbnails(&avatar["image"]["sources"]),
+      })
+    })
+    .collect()
 }
 
 /// The chapters of the player bar's markers: the description's (`DESCRIPTION_CHAPTERS`) when

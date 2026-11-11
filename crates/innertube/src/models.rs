@@ -110,6 +110,19 @@ pub struct FeedChip {
   pub token: String,
 }
 
+/// One of the channels of a collaboration, as its watch page lists them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Collaborator {
+  /// Channel name.
+  pub name: String,
+  /// Channel id (`UC…`).
+  pub channel_id: Option<String>,
+  /// Channel handle (`@name`).
+  pub handle: Option<String>,
+  /// Avatar sizes.
+  pub avatar: Vec<Thumbnail>,
+}
+
 /// Metadata of the watch page.
 #[derive(Clone, Debug, Default)]
 pub struct WatchPage {
@@ -117,12 +130,14 @@ pub struct WatchPage {
   pub id: String,
   /// Title.
   pub title: String,
-  /// Channel name.
+  /// Channel name. For a collaboration, the first channel's (the uploader's).
   pub channel: Option<String>,
   /// Channel id (`UC…`).
   pub channel_id: Option<String>,
   /// Channel handle (`@name`), from its link: what its live chat shows and mentions.
   pub channel_handle: Option<String>,
+  /// A collaboration's channels, the uploader first (two or more); empty for one channel.
+  pub collaborators: Vec<Collaborator>,
   /// Channel avatar sizes.
   pub channel_avatar: Vec<Thumbnail>,
   /// Localized subscriber count, e.g. `4,55 M d'abonnés`.
