@@ -10,8 +10,8 @@ use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::time::Duration;
 
 use windows::Win32::Foundation::{
-  E_INVALIDARG, ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, HWND, LocalFree, POINT,
-  RECT,
+  E_INVALIDARG, ERROR_ACCESS_DENIED, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, HWND, LPARAM, LocalFree,
+  POINT, RECT, WPARAM,
 };
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use windows::Win32::Graphics::Gdi::{ClientToScreen, MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
@@ -29,11 +29,11 @@ use windows::Win32::System::Pipes::{
   PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, SetCapture};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-  GetClientRect, GetWindowRect, HWND_TOP, IsIconic, SW_HIDE, SW_RESTORE, SW_SHOW,
-  SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
-  ShowWindow,
+  GetClientRect, GetCursorPos, GetWindowRect, HTCAPTION, HWND_TOP, IsIconic, SC_MOVE, SW_HIDE,
+  SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+  SendMessageW, SetWindowPos, ShowWindow, WM_CANCELMODE, WM_SYSCOMMAND,
 };
 use windows::core::{HSTRING, PCWSTR};
 
@@ -83,6 +83,56 @@ pub fn capture(hwnd: isize) {
   unsafe {
     let _ = SetCapture(HWND(hwnd as *mut _));
   }
+}
+
+/// Hands the window `hwnd` to Windows' own move loop, as if dragged by its title bar, with the
+/// left button held: it follows the pointer, and Windows snaps it (to the top of a screen to
+/// maximize it, its Snap layouts, a side) as it does any window (ADR 0028). Returns when the
+/// button is released, the move is cancelled (Escape) or [`end_move`] ends it.
+///
+/// The loop pumps the thread's messages meanwhile: GPUI keeps drawing and running its tasks
+/// (its `WM_ENTERSIZEMOVE` timer), and `WM_MOVE` reaches its window as the window moves. Call
+/// it from a task, never from inside an update of the app, whose handlers would find it
+/// borrowed.
+pub fn drag_move(hwnd: isize) {
+  let hwnd = HWND(hwnd as *mut _);
+  let mut cursor = POINT::default();
+  // SAFETY: `GetCursorPos` writes the local it is given; `ReleaseCapture` takes no arguments
+  // (the loop captures the mouse itself); `SendMessageW` accepts any value (an `hwnd` that is no
+  // longer a window only fails) and `SC_MOVE | HTCAPTION` with the pointer's position is the
+  // title bar drag's command (the low bits of `SC_MOVE` give the hit-test area).
+  unsafe {
+    if GetCursorPos(&mut cursor).is_err() {
+      return;
+    }
+    let _ = ReleaseCapture();
+    let point = (cursor.x as u16 as u32) | ((cursor.y as u16 as u32) << 16);
+    SendMessageW(
+      hwnd,
+      WM_SYSCOMMAND,
+      Some(WPARAM((SC_MOVE | HTCAPTION) as usize)),
+      Some(LPARAM(point as isize)),
+    );
+  }
+}
+
+/// Ends the move loop of [`drag_move`] on the window `hwnd`, the button still held: its tab
+/// slides into another window's bar, which takes the mouse.
+pub fn end_move(hwnd: isize) {
+  // SAFETY: as in `hide`, any value is accepted; `WM_CANCELMODE` ends the loop, which loses
+  // the mouse's capture.
+  unsafe {
+    SendMessageW(HWND(hwnd as *mut _), WM_CANCELMODE, None, None);
+  }
+}
+
+/// The pointer's position on the screen, in physical pixels.
+pub fn cursor() -> Option<(i32, i32)> {
+  let mut cursor = POINT::default();
+  // SAFETY: `GetCursorPos` only writes the local it is given.
+  unsafe { GetCursorPos(&mut cursor) }
+    .ok()
+    .map(|()| (cursor.x, cursor.y))
 }
 
 /// Places the client area of the window `hwnd` (physical pixels, the screen's coordinates) at

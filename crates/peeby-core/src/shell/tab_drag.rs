@@ -9,6 +9,12 @@
 //! Released, it stays where it is: in a bar, or in its window, which comes to the front. A
 //! maximized window is not carried: its only tab detaches as a copy over the window.
 //!
+//! A carried window is moved by Windows' own move loop (`desktop::sys::drag_move`), as when
+//! dragged by its title bar: Windows snaps it (the top of a screen maximizes it, Snap layouts,
+//! the sides). The loop takes the mouse: the window's moves (`WM_MOVE`) tell when the pointer
+//! is over another window's bar, and there the loop ends, the button still held, for the tab to
+//! slide into that bar.
+//!
 //! The window that holds the tab (in its bar, or as its only tab) drives the drag, with the
 //! mouse: a tab torn out or slid into another bar hands the drag and the mouse's capture to the
 //! window that takes it (`windows::tear`, `windows::hand_over`). A torn-out window opens without
@@ -29,6 +35,7 @@ use gpui::{
 
 use super::space::TabId;
 use super::{Shell, windows};
+use crate::desktop;
 
 /// How far the pointer moves, held, before the tab follows it: less is still a click.
 const THRESHOLD: f32 = 4.;
@@ -103,6 +110,11 @@ pub(super) struct TabDrag {
   /// The window's only tab, carrying its window: where the pointer was on the screen and the
   /// window's top left corner when the window started following it.
   carry: Option<(Point<Pixels>, Point<Pixels>)>,
+  /// The carried window is in Windows' move loop, which has the mouse.
+  os_move: bool,
+  /// That loop is being ended over another window's bar, the button held: the tab slides into
+  /// it once the loop is over.
+  joining: bool,
 }
 
 impl Shell {
@@ -120,6 +132,8 @@ impl Shell {
       grab: position - bounds.origin,
       width: bounds.size.width,
       carry: None,
+      os_move: false,
+      joining: false,
     });
     // Drawn again, to listen to the window while the button is held.
     cx.notify();
@@ -144,6 +158,8 @@ impl Shell {
       moving: true,
       detached: false,
       carry: corner.map(|corner| (screen, corner)),
+      os_move: false,
+      joining: false,
       ..drag
     });
     self.reorder_dragged(cx);
@@ -195,6 +211,10 @@ impl Shell {
     let Some(drag) = &mut self.tab_drag else {
       return;
     };
+    if drag.os_move {
+      // Windows moves it.
+      return;
+    }
     let bounds = window.bounds();
     let screen = bounds.origin + position;
     let (from, corner) = *drag.carry.get_or_insert((screen, bounds.origin));
@@ -207,12 +227,93 @@ impl Shell {
       false,
       cx,
     );
-    // Over another window's bar: the tab slides into it, still held, and this window hides.
-    let Some((target, index)) = windows::bar_at(screen, &[self.window], px(JOIN), cx) else {
+    if self.slide_into_bar(drag, screen, px(JOIN), cx) {
+      return;
+    }
+    // From here, Windows' move loop carries it, and snaps it. Placed first (the tasks run in
+    // order), the window keeps the tab under the pointer where it was held.
+    let Some(hwnd) = windows::get(self.window, cx).and_then(|w| w.hwnd) else {
       return;
     };
-    let Some(tab) = self.detach_tab(drag.tab, false, cx) else {
+    if let Some(drag) = &mut self.tab_drag {
+      drag.os_move = true;
+    }
+    cx.spawn_in(window, async move |shell, cx| {
+      // Returns at the release (or once ended over another bar), the messages pumped meanwhile.
+      desktop::sys::drag_move(hwnd);
+      shell
+        .update_in(cx, |shell, window, cx| shell.end_os_move(window, cx))
+        .ok();
+    })
+    .detach();
+  }
+
+  /// The carried window moved, in Windows' move loop: over another window's bar, the loop ends,
+  /// the button still held, for the tab to slide into it ([`Self::end_os_move`]).
+  pub(super) fn os_moved(&mut self, window: &Window, cx: &mut Context<Self>) {
+    if !self.tab_drag.is_some_and(|d| d.os_move && !d.joining) {
       return;
+    }
+    let Some(screen) = pointer(window) else {
+      return;
+    };
+    if windows::bar_at(screen, &[self.window], px(JOIN), cx).is_none() {
+      return;
+    }
+    let Some(hwnd) = windows::get(self.window, cx).and_then(|w| w.hwnd) else {
+      return;
+    };
+    if let Some(drag) = &mut self.tab_drag {
+      drag.joining = true;
+    }
+    // As a task: this window is being updated (its move), and the loop's end may move it.
+    cx.foreground_executor()
+      .spawn(async move { desktop::sys::end_move(hwnd) })
+      .detach();
+  }
+
+  /// Windows' move loop is over. Ended over another window's bar, the tab slides into it, still
+  /// held; else the button was released (or the move cancelled): the tab stays in its window,
+  /// maximized or snapped if Windows did, which comes to the front with the focus, unless it was
+  /// released over another window's bar.
+  fn end_os_move(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let Some(drag) = self.tab_drag.filter(|d| d.os_move) else {
+      return;
+    };
+    let screen = pointer(window);
+    if drag.joining
+      && let Some(screen) = screen
+      && self.slide_into_bar(drag, screen, px(DETACH), cx)
+    {
+      return;
+    }
+    self.tab_drag = None;
+    cx.notify();
+    window.activate_window();
+    if window.is_maximized() {
+      return;
+    }
+    if let Some(screen) = screen
+      && let Some((target, index)) = windows::bar_at(screen, &[self.window], px(DETACH), cx)
+    {
+      self.join(drag.tab, target, index, cx);
+    }
+  }
+
+  /// The carried window's tab, held at `screen`, slides into the bar of another window there
+  /// (within `reach` above or below it), still held, and this window hides: whether it did.
+  fn slide_into_bar(
+    &mut self,
+    drag: TabDrag,
+    screen: Point<Pixels>,
+    reach: Pixels,
+    cx: &mut Context<Self>,
+  ) -> bool {
+    let Some((target, index)) = windows::bar_at(screen, &[self.window], reach, cx) else {
+      return false;
+    };
+    let Some(tab) = self.detach_tab(drag.tab, false, cx) else {
+      return false;
     };
     let (emptied, this) = (self.tabs.is_empty(), self.window);
     // Deferred: the capture moves (Windows tells this window at once), and this one hides.
@@ -222,6 +323,7 @@ impl Shell {
         windows::retire(this, cx);
       }
     });
+    true
   }
 
   /// The dragged tab leaves this window for one of its own under the pointer (a spare one if
@@ -318,6 +420,10 @@ impl Shell {
   /// that window; elsewhere, it opens in a window of its own under the pointer (not the window's
   /// only tab, which stays: there would be nothing left to close).
   fn drop_tab(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    if self.tab_drag.is_some_and(|d| d.os_move) {
+      // Windows' move loop has the mouse: its end drops the tab (`end_os_move`).
+      return;
+    }
     let Some(drag) = self.tab_drag.take() else {
       return;
     };
@@ -465,6 +571,13 @@ fn slot(others: impl Iterator<Item = Option<Pixels>>, middle: Pixels) -> usize {
 /// it, or out of the window (`viewport`).
 fn off_bar(row: Bounds<Pixels>, viewport: Bounds<Pixels>, at: Point<Pixels>) -> bool {
   at.y < row.top() - px(DETACH) || at.y > row.bottom() + px(DETACH) || !viewport.contains(&at)
+}
+
+/// The pointer on the screen, in `window`'s logical pixels (as its bounds are).
+fn pointer(window: &Window) -> Option<Point<Pixels>> {
+  let (x, y) = desktop::sys::cursor()?;
+  let scale = window.scale_factor();
+  Some(point(px(x as f32 / scale), px(y as f32 / scale)))
 }
 
 /// The display under `screen`: a window opened there must name it (Windows checks the bounds

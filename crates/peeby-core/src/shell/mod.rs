@@ -173,6 +173,10 @@ impl Shell {
     }
     // The window used last takes what has no window of its own. The accent is each window's
     // own (its tab's space), whichever is in front.
+    // A window carried by its only tab moves in Windows' move loop (`tab_drag`).
+    subscriptions.push(cx.observe_window_bounds(window, |shell, window, cx| {
+      shell.os_moved(window, cx);
+    }));
     subscriptions.push(cx.observe_window_activation(window, |shell, window, cx| {
       if window.is_window_active() {
         windows::used(shell.window, cx);

@@ -126,6 +126,25 @@ five steps, each one shippable:
      hides, neither from inside its own event.
    - A maximized window is not carried: its only tab detaches as a copy over the window, and can
      still be dropped on another window's bar (32 px reach).
+6. **A carried window snaps, as one dragged by its title bar** (done). Placing the window
+   ourselves at each move, Windows never saw a window being moved, so neither the top of a screen
+   (maximize, Snap layouts) nor its sides did anything: the tabs are no title bar. From the
+   window's first carried move, Windows' own move loop carries it instead
+   (`desktop::sys::drag_move`: `ReleaseCapture`, then `WM_SYSCOMMAND` `SC_MOVE | HTCAPTION` with
+   the pointer's position, as Chrome's tab drag does), until the release or Escape.
+   - The loop has the mouse and pumps the messages (GPUI draws and runs its tasks on its
+     `WM_ENTERSIZEMOVE` timer), so it runs from a task, outside any update. Each `WM_MOVE` reaches
+     the shell through `observe_window_bounds` (`Shell::os_moved`), which reads the pointer
+     (`GetCursorPos`, in the window's logical pixels): within 8 px of another window's bar, it ends
+     the loop (`desktop::sys::end_move`, `WM_CANCELMODE`, from a task) and, once the loop has
+     returned, the tab slides into that bar still held, as before. Handing over after the loop
+     keeps it from releasing the capture the other window just took.
+   - At the release the window keeps the place (or the maximized, snapped state) Windows gave it,
+     and takes the focus; released within 32 px of another window's bar (not maximized), the tab
+     joins it.
+   - The loop swallows the button's release, so the tab's mouse listeners never see it: the end
+     of the loop (`Shell::end_os_move`) drops the tab, and the listeners leave a drag in the loop
+     alone. Without a Win32 handle, the window is still placed by hand, without Snap.
 
 ## Consequences
 
