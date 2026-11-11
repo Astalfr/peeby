@@ -50,6 +50,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 ## Index
 
 - [roadmap.md](roadmap.md): milestones and status
+- [features-plan.md](features-plan.md): the next features the user picked (2026-11-11), not started
 - [release.md](release.md): making a release (version bump, tag, CI), building the installer locally
 - [refactor-plan.md](refactor-plan.md): the move to Peeby, a multi-space app (YouTube, Jellyfin, Twitch), with its checklists
 - [architecture.md](architecture.md): crates, threads, data flow
