@@ -24,9 +24,9 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Anchor, AnyView, App, Context, Entity, FontWeight, ImageSource, MouseButton, NavigationDirection,
-  ObjectFit, SharedString, Subscription, Task, Window, WindowHandle, WindowId, anchored, canvas,
-  deferred, div, img, px,
+  Anchor, AnyView, App, Context, DispatchPhase, Entity, FontWeight, ImageSource, MouseButton,
+  MouseUpEvent, NavigationDirection, ObjectFit, SharedString, Subscription, Task, Window,
+  WindowHandle, WindowId, anchored, canvas, deferred, div, img, px,
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::menu::{ContextMenuExt, PopupMenuItem};
@@ -973,14 +973,18 @@ impl Shell {
         .child(h_flex().occlude().child(back).child(forward).child(reload))
         .child(mark(window, cx))
         // The bar's empty part, right of "+", still drags the window: a flex row, so the occluding
-        // wrapper is as wide as the tabs (a block child would stretch over the whole part).
+        // wrapper is as wide as the tabs (a block child would stretch over the whole part). A
+        // middle click there opens a tab of the shown tab's space, as in a browser: a window
+        // listener (an element's would take the part from the window's drag area).
         .child(
           h_flex()
+            .relative()
             .flex_1()
             .min_w_0()
             .h_full()
             .ml_4()
-            .child(div().occlude().min_w_0().child(self.tabs(window, cx))),
+            .child(div().occlude().min_w_0().child(self.tabs(window, cx)))
+            .child(self.empty_bar_listener(cx)),
         )
         .child(
           h_flex()
@@ -1014,6 +1018,35 @@ impl Shell {
             ),
         ),
     )
+  }
+
+  /// Listens, while painted over the bar's empty part, for a middle click there (not on the
+  /// tabs nor "+"): it opens a tab of the shown tab's space.
+  fn empty_bar_listener(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    let (shell, layout) = (cx.weak_entity(), self.tab_layout.clone());
+    canvas(
+      |_, _, _| {},
+      move |bounds, _, window, _| {
+        let (shell, layout) = (shell.clone(), layout.clone());
+        window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+          if phase != DispatchPhase::Bubble
+            || event.button != MouseButton::Middle
+            || !bounds.contains(&event.position)
+            || layout.row.get().contains(&event.position)
+          {
+            return;
+          }
+          shell
+            .update(cx, |this, cx| {
+              let space = this.active.map_or(0, |tab| tab.space);
+              this.new_tab(space, window, cx);
+            })
+            .ok();
+        });
+      },
+    )
+    .absolute()
+    .inset_0()
   }
 
   /// The open tabs: the service's logo and the page's title; the shown one has a light

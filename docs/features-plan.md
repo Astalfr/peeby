@@ -110,6 +110,8 @@ Today its tab only detaches as a copy over the window.
 
 ### 12. Middle click on the tab bar's empty part
 
+Done (2026-11-11), checked by the user in the app.
+
 Opens a new tab of the shown space, as in Chrome (a double click there keeps maximizing the
 window, as a title bar does).
 
