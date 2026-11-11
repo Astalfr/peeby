@@ -87,16 +87,32 @@ pub struct Segment {
 }
 
 impl Segment {
-  /// Its color on the seek bar, if it is marked.
+  /// Its color on the seek bar, if it is marked: its hue, softened (see [`soften`]).
   pub fn mark_color(&self) -> Option<Hsla> {
     self
       .mark
       .or_else(|| (self.kind == SegmentKind::Muted).then(crate::theme::muted_audio))
+      .map(soften)
   }
 
   /// Whether the segment is credits or a preview: nothing of the story.
   pub fn is_tail(&self) -> bool {
     matches!(self.kind, SegmentKind::Outro | SegmentKind::Preview)
+  }
+}
+
+/// Highest saturation of a mark on the seek bar.
+const MARK_SATURATION: f32 = 0.45;
+/// Lightness of every mark on the seek bar, so that none stands out more than another.
+const MARK_LIGHTNESS: f32 = 0.62;
+
+/// A mark's color as the seek bar draws it: SponsorBlock's colors (pure green, yellow, cyan…)
+/// and the muted red keep their hue but lose their glare over the video, at one lightness.
+fn soften(color: Hsla) -> Hsla {
+  Hsla {
+    s: color.s.min(MARK_SATURATION),
+    l: MARK_LIGHTNESS,
+    ..color
   }
 }
 

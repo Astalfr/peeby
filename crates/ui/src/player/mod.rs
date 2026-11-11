@@ -2525,7 +2525,7 @@ impl PlayerView {
           .map(|&(a, b, color)| (local(a), local(b), color))
           .filter(|(a, b, _)| b > a)
           .flat_map(|(a, b, color)| {
-            let ahead = (b > played).then(|| band(a.max(played), b, color.opacity(0.6)));
+            let ahead = (b > played).then(|| band(a.max(played), b, color.opacity(0.45)));
             let behind = (played > a).then(|| band(a, b.min(played), color));
             ahead.into_iter().chain(behind)
           })

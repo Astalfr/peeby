@@ -18,8 +18,8 @@ Peeby looks like a Windows 11 app with a neutral dark theme. It takes peeby's vi
 | `accent` | `#FF0000` (YouTube), `#00A4DC` (Jellyfin) | Primary buttons, progress, selection, play buttons, active item |
 | `accent_hover` | `#FF3333`, `#33B6E3` | Hovered accent elements and titles |
 | `accent_soft` | the accent at 14 % | Notice discs, step numbers, selected rows |
-| `muted_audio` | `#E5484D` (any space) | Muted parts of a Twitch VOD on the seek bar: full where played, at 60 % ahead; "Son coupé" in the hover preview |
-| SponsorBlock colors | sponsor `#00D400`, self-promotion `#FFFF00`, reminder `#CC00FF`, intro `#00FFFF`, end cards `#0202ED`, preview `#008FD6`, hook `#395699`, tangent `#7300FF`, non-music `#FF9900` (the extension's) | A YouTube video's SponsorBlock segments on the seek bar, as the muted parts (full where played, 60 % ahead), their category's name in the hover preview; one skipped on its own shows "<catégorie> passé" in the player's message ([ADR 0034](decisions/0034-sponsorblock.md)) |
+| `muted_audio` | `#E5484D` (any space) | Muted parts of a Twitch VOD on the seek bar, softened as every mark (saturation at most 45 %, lightness 62 %, `segments::soften`): full where played, at 45 % ahead; "Son coupé" in the hover preview |
+| SponsorBlock colors | sponsor `#00D400`, self-promotion `#FFFF00`, reminder `#CC00FF`, intro `#00FFFF`, end cards `#0202ED`, preview `#008FD6`, hook `#395699`, tangent `#7300FF`, non-music `#FF9900` (the extension's, softened on the bar as the muted parts: their hue only) | A YouTube video's SponsorBlock segments on the seek bar, as the muted parts (full where played, 45 % ahead), their category's name in the hover preview; one skipped on its own shows "<catégorie> passé" in the player's message ([ADR 0034](decisions/0034-sponsorblock.md)) |
 
 The backgrounds and surfaces (`base`, the Mica veil, `background`, `surface`, `surface_hover`) take 5 % of the open space's accent, so each space has its own faint hue and hovered rows match it; borders stay neutral, and so does the opening animation's background (`neutral_background`), which belongs to no space.
 
