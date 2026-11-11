@@ -503,6 +503,39 @@ fn channel_shorts_and_playlists() {
 }
 
 #[test]
+fn search_suggestions() {
+  // The search box's suggestions for "squeezie", anonymous, in French, captured 2026-11-11:
+  // the first names the channel.
+  let path = format!(
+    "{}/tests/fixtures/search_suggestions.txt",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let body = std::fs::read_to_string(path).unwrap();
+  let suggestions = innertube::parse_search_suggestions(&body);
+  assert!(suggestions.len() >= 10, "{}", suggestions.len());
+  assert_eq!(suggestions[0].text, "squeezie");
+  let channel = suggestions[0].channel.as_ref().expect("the channel");
+  assert_eq!(channel.id, "UCWeg2Pkate69NFdBeuRFTAw");
+  assert_eq!(channel.name, "Squeezie");
+  assert_eq!(channel.handle.as_deref(), Some("@Squeezie"));
+  assert!(
+    channel
+      .avatar
+      .as_deref()
+      .is_some_and(|a| a.contains("=s88"))
+  );
+  assert_eq!(suggestions[1].text, "squeezie gaming");
+  assert!(suggestions[1].channel.is_none());
+  // Escapes decoded.
+  assert!(
+    suggestions
+      .iter()
+      .any(|s| s.text == "squeezie qui est l'imposteur")
+  );
+  assert!(innertube::parse_search_suggestions("not a script").is_empty());
+}
+
+#[test]
 fn sponsor_segments() {
   // SponsorBlock's answer for the hash prefix `5f6b` (dQw4w9WgXcQ's), anonymous, captured
   // 2026-11-11, trimmed to three videos (one with only a `mute` segment).

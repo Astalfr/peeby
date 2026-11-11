@@ -205,6 +205,28 @@ pub struct FeedChip {
   pub token: String,
 }
 
+/// A suggestion of YouTube's search box for what is typed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchSuggestion {
+  /// The query it suggests.
+  pub text: String,
+  /// The channel it names, when YouTube shows one (its avatar beside it).
+  pub channel: Option<SuggestedChannel>,
+}
+
+/// A channel among the search box's suggestions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SuggestedChannel {
+  /// Channel id (`UC…`).
+  pub id: String,
+  /// Channel name.
+  pub name: String,
+  /// Handle (`@name`).
+  pub handle: Option<String>,
+  /// Avatar URL.
+  pub avatar: Option<String>,
+}
+
 /// A SponsorBlock category ([sponsor.ajay.app](https://wiki.sponsor.ajay.app/w/Segment_Categories)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SponsorCategory {

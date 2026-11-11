@@ -1,16 +1,22 @@
 //! Search (opened from the top bar): a query run on Enter, then the videos and channels found,
 //! as list rows, with the next pages loaded while scrolling.
+//!
+//! While typing, YouTube's suggestions show under the field, as on youtube.com
+//! (`Client::search_suggestions`, asked once the typing pauses): the arrows move through them,
+//! Enter or a click runs the one picked (a channel's opens its page), Escape closes them.
 
 use gpui::prelude::*;
+use std::time::Duration;
+
 use gpui::{
-  AppContext, Context, Entity, FontWeight, ScrollHandle, SharedString, Subscription, Window, div,
-  px,
+  AppContext, Context, Entity, Focusable, FontWeight, MouseButton, ScrollHandle, SharedString,
+  Subscription, Task, Window, deferred, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::{h_flex, v_flex};
-use innertube::{Channel, Client, Error, SearchResult};
+use innertube::{Channel, Client, Error, SearchResult, SearchSuggestion, Thumbnail};
 
 use crate::cards::{playlist_result_row, video_row};
 use crate::convert::{self, error_text};
@@ -26,6 +32,12 @@ use ui::{runtime, theme};
 
 /// Side of a channel's avatar in the results.
 const CHANNEL_AVATAR: f32 = 136.;
+/// How long the typing pauses before the suggestions are asked for.
+const SUGGEST_DELAY: Duration = Duration::from_millis(150);
+/// Suggestions shown at most.
+const MAX_SUGGESTIONS: usize = 10;
+/// Width of the search field and of its suggestions.
+const FIELD_WIDTH: f32 = 640.;
 
 enum State {
   /// Nothing searched yet.
@@ -49,7 +61,20 @@ pub struct SearchView {
   /// Counts the searches, so the answer of an older one is dropped.
   generation: u32,
   scroll: ScrollHandle,
+  /// YouTube's suggestions for what is typed.
+  suggestions: Vec<SearchSuggestion>,
+  /// The suggestion the arrows are on.
+  highlighted: Option<usize>,
+  /// The suggestions show under the field.
+  suggestions_open: bool,
+  /// Counts the edits, so the suggestions of an older text are dropped.
+  suggest_generation: u32,
+  /// The next change of the field is the program's (a suggestion picked), not typing.
+  ignore_change: bool,
+  _suggest_task: Option<Task<()>>,
+  _close_task: Option<Task<()>>,
   _input_subscription: Subscription,
+  _keys: Subscription,
 }
 
 impl SearchView {
@@ -61,10 +86,61 @@ impl SearchView {
       InputState::new(window, cx).placeholder(t("Search YouTube", "Rechercher sur YouTube"))
     });
     input.update(cx, |state, cx| state.focus(window, cx));
-    let subscription = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
-      if matches!(event, InputEvent::PressEnter { .. }) {
-        this.search(cx);
+    let subscription =
+      cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
+        match event {
+          InputEvent::PressEnter { .. } => match this.highlighted_suggestion() {
+            Some(suggestion) => this.pick(suggestion, window, cx),
+            None => {
+              this.close_suggestions(cx);
+              this.search(cx);
+            }
+          },
+          InputEvent::Change if this.ignore_change => this.ignore_change = false,
+          InputEvent::Change => this.suggest(cx),
+          InputEvent::Focus if !this.suggestions.is_empty() => {
+            this.suggestions_open = true;
+            cx.notify();
+          }
+          // Later: a click on a suggestion takes the focus before it lands.
+          InputEvent::Blur => {
+            this._close_task = Some(cx.spawn(async move |this, cx| {
+              cx.background_executor().timer(SUGGEST_DELAY).await;
+              this.update(cx, |this, cx| this.close_suggestions(cx)).ok();
+            }));
+          }
+          InputEvent::Focus => {}
+        }
+      });
+    // The arrows and Escape move through the suggestions before the field (which binds them)
+    // sees them, while it has the focus and they show.
+    let view = cx.weak_entity();
+    let keys = cx.intercept_keystrokes(move |event, window, cx| {
+      let key = event.keystroke.key.as_str();
+      if !matches!(key, "up" | "down" | "escape") || event.keystroke.modifiers.modified() {
+        return;
       }
+      view
+        .update(cx, |this, cx| {
+          let focused = this.input.read(cx).focus_handle(cx).is_focused(window);
+          if !focused || !this.suggestions_open || this.suggestions.is_empty() {
+            return;
+          }
+          let count = this.suggestions.len();
+          this.highlighted = match (key, this.highlighted) {
+            ("down", None) => Some(0),
+            ("down", Some(i)) => Some((i + 1) % count),
+            ("up", None | Some(0)) => Some(count - 1),
+            ("up", Some(i)) => Some(i - 1),
+            _ => {
+              this.suggestions_open = false;
+              None
+            }
+          };
+          cx.stop_propagation();
+          cx.notify();
+        })
+        .ok();
     });
     Self {
       client,
@@ -75,8 +151,195 @@ impl SearchView {
       more_failed: false,
       generation: 0,
       scroll: ScrollHandle::new(),
+      suggestions: Vec::new(),
+      highlighted: None,
+      suggestions_open: false,
+      suggest_generation: 0,
+      ignore_change: false,
+      _suggest_task: None,
+      _close_task: None,
       _input_subscription: subscription,
+      _keys: keys,
     }
+  }
+
+  /// The field changed: its suggestions once the typing pauses (none for an empty field).
+  fn suggest(&mut self, cx: &mut Context<Self>) {
+    self.suggest_generation += 1;
+    let generation = self.suggest_generation;
+    let text = self.input.read(cx).value().trim().to_owned();
+    if text.is_empty() {
+      self._suggest_task = None;
+      self.suggestions.clear();
+      self.close_suggestions(cx);
+      return;
+    }
+    self._suggest_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(SUGGEST_DELAY).await;
+      let fetch = this
+        .update(cx, |this, cx| {
+          let client = this.client.clone();
+          (this.suggest_generation == generation)
+            .then(|| runtime::spawn(cx, async move { client.search_suggestions(&text).await }))
+        })
+        .ok()
+        .flatten();
+      let Some(fetch) = fetch else { return };
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| {
+          if this.suggest_generation != generation {
+            return;
+          }
+          match result {
+            Some(Ok(suggestions)) => {
+              this.suggestions = suggestions.into_iter().take(MAX_SUGGESTIONS).collect();
+              this.highlighted = None;
+              this.suggestions_open = !this.suggestions.is_empty();
+              cx.notify();
+            }
+            // The typed query never reaches the log.
+            Some(Err(e)) => tracing::debug!("search suggestions: {e}"),
+            None => {}
+          }
+        })
+        .ok();
+    }));
+  }
+
+  fn highlighted_suggestion(&self) -> Option<SearchSuggestion> {
+    let i = self.highlighted.filter(|_| self.suggestions_open)?;
+    self.suggestions.get(i).cloned()
+  }
+
+  fn close_suggestions(&mut self, cx: &mut Context<Self>) {
+    if self.suggestions_open || self.highlighted.is_some() {
+      self.suggestions_open = false;
+      self.highlighted = None;
+      cx.notify();
+    }
+  }
+
+  /// Runs `suggestion`: a channel's opens its page, any other is searched for, written in the
+  /// field.
+  fn pick(&mut self, suggestion: SearchSuggestion, window: &mut Window, cx: &mut Context<Self>) {
+    self.close_suggestions(cx);
+    if let Some(channel) = suggestion.channel {
+      self.nav.open(
+        Route::Channel {
+          id: channel.id,
+          name: channel.name,
+        },
+        window,
+        cx,
+      );
+      return;
+    }
+    self.ignore_change = true;
+    self.suggest_generation += 1;
+    self
+      .input
+      .update(cx, |input, cx| input.set_value(suggestion.text, window, cx));
+    self.search(cx);
+  }
+
+  /// The suggestions under the field, over the page: a search icon (a channel's avatar) and
+  /// the text (the channel's name and handle), the one the arrows are on highlighted.
+  fn suggestion_list(
+    &self,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<impl IntoElement> {
+    if !self.suggestions_open || self.suggestions.is_empty() {
+      return None;
+    }
+    let rows: Vec<_> = self
+      .suggestions
+      .iter()
+      .enumerate()
+      .map(|(i, suggestion)| {
+        let icon = match &suggestion.channel {
+          Some(channel) => {
+            let picture = convert::picture(&[Thumbnail {
+              url: channel.avatar.clone().unwrap_or_default(),
+              width: 88,
+              height: 88,
+            }]);
+            avatar(&picture, 24., window, cx)
+          }
+          None => div()
+            .size(px(24.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(theme::muted())
+            .child(gpui_component::Icon::new(Icon::Search).size(px(16.)))
+            .into_any_element(),
+        };
+        let text = match &suggestion.channel {
+          Some(channel) => h_flex()
+            .gap_2()
+            .min_w_0()
+            .child(
+              div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(channel.name.clone()),
+            )
+            .children(
+              channel
+                .handle
+                .clone()
+                .map(|h| div().text_color(theme::muted()).child(h)),
+            )
+            .into_any_element(),
+          None => div()
+            .min_w_0()
+            .truncate()
+            .child(suggestion.text.clone())
+            .into_any_element(),
+        };
+        let picked = suggestion.clone();
+        h_flex()
+          .id(("suggestion", i))
+          .px_3()
+          .py_1p5()
+          .gap_3()
+          .items_center()
+          .rounded(theme::RADIUS)
+          .cursor_pointer()
+          .when(self.highlighted == Some(i), |el| {
+            el.bg(theme::surface_hover())
+          })
+          .hover(|s| s.bg(theme::surface_hover()))
+          .child(icon)
+          .child(text)
+          .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, _, window, cx| {
+              cx.stop_propagation();
+              this.pick(picked.clone(), window, cx);
+            }),
+          )
+      })
+      .collect();
+    Some(deferred(
+      v_flex()
+        .id("search-suggestions")
+        .occlude()
+        .absolute()
+        .top_full()
+        .left_0()
+        .right_0()
+        .mt_1()
+        .p_1()
+        .rounded(theme::RADIUS_LG)
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::background())
+        .shadow_lg()
+        .text_sm()
+        .children(rows),
+    ))
   }
 
   /// Runs the typed query (Enter).
@@ -272,6 +535,9 @@ fn failure(error: &Error) -> SharedString {
 impl Render for SearchView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.load_more_if_near_end(cx);
+    let suggestions = self
+      .suggestion_list(window, cx)
+      .map(IntoElement::into_any_element);
     let body = match &self.state {
       State::Idle => div().into_any_element(),
       State::Loading => v_flex()
@@ -344,7 +610,13 @@ impl Render for SearchView {
               .gap_6()
               .max_w(px(1200.))
               .child(page_title(t("Search", "Recherche")))
-              .child(div().max_w(px(640.)).child(Input::new(&self.input)))
+              .child(
+                div()
+                  .relative()
+                  .max_w(px(FIELD_WIDTH))
+                  .child(Input::new(&self.input))
+                  .children(suggestions),
+              )
               .child(body),
           ),
       )

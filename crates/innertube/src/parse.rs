@@ -1480,6 +1480,41 @@ pub fn parse_sponsor_segments(video_id: &str, response: &Value) -> Vec<SponsorSe
   segments
 }
 
+/// The search box's suggestions (`complete/search?client=youtube`), a script calling
+/// `window.google.ac.h([query, [[text, 0, [...], {channel}], ...], {...}])`: the array between
+/// the call's parentheses. A channel's suggestion carries its id (`zav`), name (`zao`), handle
+/// (`zaf`) and avatar (`zai`).
+pub fn parse_search_suggestions(body: &str) -> Vec<crate::models::SearchSuggestion> {
+  let (Some(start), Some(end)) = (body.find('('), body.rfind(')')) else {
+    return Vec::new();
+  };
+  let Some(Ok(value)) = body.get(start + 1..end).map(serde_json::from_str::<Value>) else {
+    return Vec::new();
+  };
+  value[1]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter_map(|item| {
+      let text = item[0]
+        .as_str()
+        .filter(|t| !t.trim().is_empty())?
+        .to_owned();
+      let extra = &item[3];
+      let channel = extra["zav"]
+        .as_str()
+        .zip(extra["zao"].as_str())
+        .map(|(id, name)| crate::models::SuggestedChannel {
+          id: id.to_owned(),
+          name: name.to_owned(),
+          handle: extra["zaf"].as_str().map(str::to_owned),
+          avatar: extra["zai"].as_str().map(str::to_owned),
+        });
+      Some(crate::models::SearchSuggestion { text, channel })
+    })
+    .collect()
+}
+
 /// Whether YouTube took a `feedback` request ("Not interested", its undo): each of its
 /// `feedbackResponses` says `isProcessed`. The "Not interested" one also has a
 /// `followUpDialog` (the reasons youtube.com asks for after it), which the app does not show.

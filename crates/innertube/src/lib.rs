@@ -54,16 +54,16 @@ pub use models::{
   CommentActions, CommentPage, Feed, FeedChip, LikeParams, LikeStatus, LinkTarget, Live,
   LiveChatPage, LiveFormat, NotInterested, Notification, NotificationKind, NotificationLevel,
   NotificationPage, NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress,
-  Related, SearchPage, SearchResult, ShortItem, ShortsPage, SponsorCategory, SponsorSegment,
-  Storyboard, StoryboardFrame, Stream, Subscription, TextLink, Thumbnail, Tracking, VideoItem,
-  Votes, WatchPage, Watchtime,
+  Related, SearchPage, SearchResult, SearchSuggestion, ShortItem, ShortsPage, SponsorCategory,
+  SponsorSegment, Storyboard, StoryboardFrame, Stream, Subscription, SuggestedChannel, TextLink,
+  Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   is_mix, parse_account_handle, parse_captions, parse_channel_search, parse_channels,
   parse_comment_action, parse_comment_translation, parse_comments, parse_feed, parse_feedback,
   parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix, parse_mixes,
   parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_sponsor_segments, parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking,
-  parse_unseen_count, parse_watch,
+  parse_playlist_page, parse_playlists, parse_search, parse_search_suggestions, parse_shorts_seed,
+  parse_shorts_sequence, parse_sponsor_segments, parse_storyboard, parse_subscribed,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch,
 };

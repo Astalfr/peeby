@@ -41,6 +41,8 @@ Today the channel page is its "Videos" grid (sort and search).
 
 ### 4. Search suggestions
 
+Done (2026-11-11), checked by the user in the app.
+
 Suggestions under the search field while typing, as on youtube.com (YouTube's completion
 endpoint, the client's language), with the arrow keys and Enter; recent searches are not kept.
 Debounced, and the request never logs the query at info level.

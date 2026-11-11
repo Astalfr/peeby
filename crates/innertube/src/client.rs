@@ -656,6 +656,39 @@ impl Client {
     Ok(crate::parse::parse_sponsor_segments(video_id, &value))
   }
 
+  /// What YouTube's search box suggests for `query`, in the client's language and region
+  /// (`complete/search`, anonymous: no cookies go with it). Asked in UTF-8 (`oe`); the answer
+  /// is a script, not JSON.
+  pub async fn search_suggestions(&self, query: &str) -> Result<Vec<crate::SearchSuggestion>> {
+    let (hl, gl) = &*self.language;
+    let url = reqwest::Url::parse_with_params(
+      "https://suggestqueries-clients6.youtube.com/complete/search",
+      &[
+        ("client", "youtube"),
+        ("ds", "yt"),
+        ("hl", hl.as_str()),
+        ("gl", gl.as_str()),
+        ("oe", "utf-8"),
+        ("q", query),
+      ],
+    )
+    .map_err(|e| Error::Parse {
+      endpoint: "complete/search",
+      detail: e.to_string(),
+    })?;
+    let response = self.http.get(url).send().await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "complete/search",
+      });
+    }
+    let body = response.bytes().await?;
+    Ok(crate::parse::parse_search_suggestions(
+      &String::from_utf8_lossy(&body),
+    ))
+  }
+
   /// Videos and channels matching `query`.
   pub async fn search(&self, query: &str) -> Result<SearchPage> {
     let response = self.web("search", json!({ "query": query }), true).await?;
