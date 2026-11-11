@@ -8,6 +8,7 @@
 //! bar (`tab_drag`, ADR 0028).
 
 mod bell;
+pub mod drop;
 pub mod lives;
 mod mini_player;
 mod output_volume;
@@ -2024,6 +2025,8 @@ impl Render for Shell {
           }
         }),
       )
+      // A link dragged from a browser, or an Internet shortcut, opens its video or live.
+      .on_drop(|paths: &gpui::ExternalPaths, window, cx| drop::open(paths, window, cx))
       .bg(theme::chrome(cx))
       .text_color(theme::foreground());
     // The settings page is made each time it shows (its cache size measured again).

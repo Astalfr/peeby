@@ -236,12 +236,24 @@ fn main() {
           }
         })
         .detach();
-        if let (Some(listener), Some(launches)) = (listener, launches) {
-          desktop::listen(
-            listener,
-            move |args, window, cx| launches.open(&args, window, cx),
+        // A next launch's arguments, and the links dropped on a window, open the same way.
+        if let Some(launches) = launches.map(Rc::new) {
+          let opener = launches.clone();
+          shell::drop::set_opener(
+            Rc::new(
+              move |args: Vec<String>, window: &mut Window, cx: &mut App| {
+                opener.open(&args, window, cx)
+              },
+            ),
             cx,
           );
+          if let Some(listener) = listener {
+            desktop::listen(
+              listener,
+              move |args, window, cx| launches.open(&args, window, cx),
+              cx,
+            );
+          }
         }
         if !background {
           cx.activate(true);

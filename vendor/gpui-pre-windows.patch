@@ -424,3 +424,69 @@
  pub(crate) struct WindowsWindow(pub Rc<WindowsWindowInner>);
  
  impl std::ops::Deref for WindowsWindow {
+@@ -1202,6 +1242,24 @@
+                     paths: ExternalPaths(paths),
+                 });
+                 self.handle_drag_drop(input);
++            } else if let Some(text) = dropped_text(&idata_obj) {
++                // PEEBY PATCH: a link dragged from a browser carries text, not files. It is
++                // handed over as the drop's only "path" (never a real one: no drive, no `\\`).
++                *pdweffect = DROPEFFECT_COPY;
++                let mut cursor_position = cursor_position;
++                ScreenToClient(self.0.hwnd, &mut cursor_position)
++                    .ok()
++                    .log_err();
++                let scale_factor = self.0.state.scale_factor.get();
++                let input = PlatformInput::FileDrop(FileDropEvent::Entered {
++                    position: logical_point(
++                        cursor_position.x as f32,
++                        cursor_position.y as f32,
++                        scale_factor,
++                    ),
++                    paths: ExternalPaths(SmallVec::from_elem(PathBuf::from(text), 1)),
++                });
++                self.handle_drag_drop(input);
+             } else {
+                 *pdweffect = DROPEFFECT_NONE;
+             }
+@@ -1286,6 +1344,40 @@
+     }
+ }
+ 
++/// PEEBY PATCH: the text a drag carries (`CF_UNICODETEXT`), trimmed; `None` without text.
++fn dropped_text(data: &IDataObject) -> Option<String> {
++    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
++    let config = FORMATETC {
++        cfFormat: CF_UNICODETEXT.0,
++        ptd: std::ptr::null_mut() as _,
++        dwAspect: DVASPECT_CONTENT.0,
++        lindex: -1,
++        tymed: TYMED_HGLOBAL.0 as _,
++    };
++    // SAFETY: `data` is the drag's live object; the memory is read only between its lock and
++    // unlock, within the size Windows gives, and the medium is released once.
++    unsafe {
++        if data.QueryGetData(&config as _) != S_OK {
++            return None;
++        }
++        let mut medium = data.GetData(&config as _).log_err()?;
++        let global = medium.u.hGlobal;
++        let mut text = None;
++        if !global.is_invalid() {
++            let units = GlobalSize(global) / 2;
++            let ptr = GlobalLock(global) as *const u16;
++            if !ptr.is_null() {
++                let wide = std::slice::from_raw_parts(ptr, units);
++                let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
++                text = String::from_utf16(&wide[..end]).ok();
++                GlobalUnlock(global).ok();
++            }
++        }
++        ReleaseStgMedium(&mut medium);
++        text.map(|t| t.trim().to_owned()).filter(|t| !t.is_empty())
++    }
++}
++
+ #[derive(Debug, Clone)]
+ pub(crate) struct ClickState {
+     button: Cell<MouseButton>,

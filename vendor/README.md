@@ -22,6 +22,8 @@ It draws **external D3D11 textures** without copying them. Peeby uses this for z
 
 **Hover on leave:** in `events.rs`, `WM_MOUSELEAVE` also dispatches a last `MouseMove` at (-1, -1), outside every hitbox, then `MouseExited`. Upstream only clears the window's hovered flag, and GPUI keeps the last position inside the window, so `.hover()` styles and `on_hover` stayed on when the pointer left quickly (to another screen, or onto the mini-player). It is skipped while a button holds the mouse capture, and while the cursor is still over the window: going between the client area and the title bar also sends a leave.
 
+**Dragged text:** GPUI's drop target takes files only (`CF_HDROP`). In `window.rs`, `DragEnter` also accepts a drag that carries `CF_UNICODETEXT` (a link dragged from a browser): its text is handed over as the drop's only `ExternalPaths` entry, so that GPUI's `on_drop::<ExternalPaths>` gets it. Peeby's shell opens the links among them (`shell::drop`); a real path never starts with `http`.
+
 The polychrome sprite shader derives UVs from `GetDimensions` of the bound texture, so no shader change is needed.
 
 ### Updating GPUI

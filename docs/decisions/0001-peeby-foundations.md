@@ -45,6 +45,7 @@ PeebTube additions to `gpui-video`:
 PeebTube additions to the GPUI patch (`vendor/gpui-pre-windows`):
 - `set_window_bounds` (`window.rs`): moves and resizes a window without activating it, for the mini-player's edges (ADR 0008).
 - hover cleared on leave (`events.rs`): on `WM_MOUSELEAVE`, when the cursor is no longer over the window, a last mouse move outside it, then `MouseExited`; without it, `.hover()` styles stayed on after the pointer left for another screen or window.
+- dragged text (`window.rs`, `dropped_text`): a drag without files but with `CF_UNICODETEXT` (a link dragged from a browser) is accepted, its text handed over as the drop's only `ExternalPaths` entry (never a real path: it starts with `http`); `shell::drop` opens it as a next launch's argument.
 
 Additions to `jellyfin-api` (copied at step 5 of the refactor, ADR 0009):
 - live tests read their credentials from the environment (no `dotenvy`);
