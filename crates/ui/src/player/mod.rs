@@ -251,6 +251,8 @@ pub struct Prefs {
   pub autoplay_next: bool,
   /// Length of that countdown, seconds.
   pub autoplay_countdown: u32,
+  /// The control bar has the sleep timer's button.
+  pub sleep_timer: bool,
 }
 
 impl Default for Prefs {
@@ -263,6 +265,7 @@ impl Default for Prefs {
       seek_step_large: 60,
       autoplay_next: true,
       autoplay_countdown: 10,
+      sleep_timer: false,
     }
   }
 }
@@ -275,6 +278,21 @@ enum Menu {
   Audio,
   Subtitles,
   Chapters,
+  Sleep,
+}
+
+/// The sleep timer's lengths offered, minutes.
+const SLEEP_MINUTES: [u64; 5] = [15, 30, 45, 60, 90];
+/// The on-screen message says the pause is coming this long before it.
+const SLEEP_WARNING: Duration = Duration::from_secs(10);
+
+/// When the sleep timer pauses the player.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Sleep {
+  /// At this instant.
+  At(Instant),
+  /// At the end of what plays (before the next item, a Short's loop).
+  EndOfVideo,
 }
 
 /// What is held down for the 2× speed ([`HOLD_DELAY`]).
@@ -429,6 +447,9 @@ pub struct PlayerView {
   /// 1, 2… since the streams carry none).
   captions_added: Vec<String>,
   menu: Option<Menu>,
+  /// The sleep timer, not kept across launches.
+  sleep: Option<Sleep>,
+  _sleep_task: Option<Task<()>>,
   /// Playing a queue: whether it has a previous and a next video (buttons, P and N keys).
   queue: Option<(bool, bool)>,
   /// Viewers and start time next to the live badge, and the task redrawing the uptime.
@@ -561,6 +582,8 @@ impl PlayerView {
       caption: None,
       captions_added: Vec::new(),
       menu: None,
+      sleep: None,
+      _sleep_task: None,
       queue: None,
       live_info: None,
       live_tick: None,
@@ -1119,6 +1142,85 @@ impl PlayerView {
     self.with_player(|p| p.set_paused(true));
   }
 
+  /// Sets the sleep timer: a pause after `minutes`, at the end of the video (`Some(0)`), or none.
+  fn set_sleep(&mut self, minutes: Option<u64>, cx: &mut Context<Self>) {
+    self._sleep_task = None;
+    self.sleep = match minutes {
+      None => None,
+      Some(0) => Some(Sleep::EndOfVideo),
+      Some(minutes) => {
+        let length = Duration::from_secs(minutes * 60);
+        let warning = length.saturating_sub(SLEEP_WARNING);
+        self._sleep_task = Some(cx.spawn(async move |this, cx| {
+          cx.background_executor().timer(warning).await;
+          this
+            .update(cx, |this, cx| {
+              this.show_osd(t("Pausing in 10 s", "Pause dans 10 s").into(), cx);
+            })
+            .ok();
+          cx.background_executor()
+            .timer(length.min(SLEEP_WARNING))
+            .await;
+          this.update(cx, |this, cx| this.sleep_now(cx)).ok();
+        }));
+        Some(Sleep::At(Instant::now() + length))
+      }
+    };
+    let message = match (minutes, self.sleep) {
+      (_, None) => t("Sleep timer off", "Minuterie désactivée").to_owned(),
+      (_, Some(Sleep::EndOfVideo)) => t(
+        "Pausing at the end of the video",
+        "Pause à la fin de la vidéo",
+      )
+      .to_owned(),
+      (Some(minutes), Some(Sleep::At(_))) => {
+        tf!("Pausing in {minutes} min", "Pause dans {minutes} min")
+      }
+      (None, Some(Sleep::At(_))) => String::new(),
+    };
+    self.menu = None;
+    self.show_osd(message.into(), cx);
+  }
+
+  /// The sleep timer's time: the player pauses, the timer goes.
+  fn sleep_now(&mut self, cx: &mut Context<Self>) {
+    self.sleep = None;
+    self._sleep_task = None;
+    self.pause();
+    self.show_osd(t("Sleep timer: paused", "Minuterie : en pause").into(), cx);
+  }
+
+  /// "At the end of the video": the end (a Short loops there) is near.
+  fn sleep_at_end(&mut self, cx: &mut Context<Self>) {
+    if self.sleep == Some(Sleep::EndOfVideo)
+      && self.duration > 0.
+      && !self.is_live()
+      && self.position >= self.duration - 0.5
+    {
+      self.sleep_now(cx);
+    }
+  }
+
+  /// The sleep timer's state in its menu: the minutes left, or the end of the video.
+  fn sleep_left(&self) -> Option<String> {
+    match self.sleep? {
+      Sleep::EndOfVideo => Some(
+        t(
+          "Pausing at the end of the video",
+          "Pause à la fin de la vidéo",
+        )
+        .to_owned(),
+      ),
+      Sleep::At(at) => {
+        let minutes = at
+          .saturating_duration_since(Instant::now())
+          .as_secs()
+          .div_ceil(60);
+        Some(tf!("Pausing in {minutes} min", "Pause dans {minutes} min"))
+      }
+    }
+  }
+
   /// Becomes the player that plays in its window, pausing the one that played there before: one
   /// sound at a time per window, other windows' videos play on.
   fn take_over(&self, cx: &mut Context<Self>) {
@@ -1522,6 +1624,7 @@ impl PlayerView {
         self.update_up_next(cx);
         self.tell_muted(cx);
         self.auto_skip(cx);
+        self.sleep_at_end(cx);
         self.watch_video_stopped(cx);
       }
       Event::Position(_) => {}
@@ -2972,6 +3075,15 @@ impl PlayerView {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Subtitles, cx))),
         )
       })
+      .when(self.prefs.sleep_timer, |row| {
+        row.child(
+          self
+            .control_button_lit("sleep-menu", self.sleep.is_some(), cx)
+            .icon(Icon::Timer)
+            .tooltip(t("Sleep timer", "Minuterie de mise en veille"))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Sleep, cx))),
+        )
+      })
       .when(!self.is_live() && self.speed_offered, |row| {
         row.child(
           self
@@ -3118,7 +3230,17 @@ impl PlayerView {
   /// light background, so the hovered button stands out over the video. gpui-component's
   /// buttons keep one foreground for every state, so the view tracks the hovered button itself.
   fn control_button(&self, id: &'static str, cx: &mut Context<Self>) -> ControlButton {
-    let foreground = if self.hovered_control == Some(id) {
+    self.control_button_lit(id, false, cx)
+  }
+
+  /// [`Self::control_button`], in the accent while `lit` (a sleep timer set) as while hovered.
+  fn control_button_lit(
+    &self,
+    id: &'static str,
+    lit: bool,
+    cx: &mut Context<Self>,
+  ) -> ControlButton {
+    let foreground = if lit || self.hovered_control == Some(id) {
       cx.theme().primary
     } else {
       gpui::white()

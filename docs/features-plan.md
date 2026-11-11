@@ -119,6 +119,8 @@ window, as a title bar does).
 
 ### 13. Sleep timer
 
+Done (2026-11-11), checked by the user in the app; behind a player setting, off by default.
+
 In the player's settings menu: pause after 15, 30, 45, 60 or 90 minutes, or at the end of the
 video (or of the episode, the playlist); the time left shows in the menu, and a notice a few
 seconds before the pause. For every space (`ui::player`); not kept across launches.

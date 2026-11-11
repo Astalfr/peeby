@@ -110,6 +110,7 @@ icons! {
   Merge => "merge",
   Close => "close",
   Hide => "eye-off",
+  Timer => "timer",
 }
 
 macro_rules! files {

@@ -146,6 +146,10 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 
 - Done (2026-11-11, the user's request, docs/features-plan.md item 8, branch `dev`): a collaboration's watch page, signed in, has one subscribe button ("S'abonner", "Abonné", "Abonné 1/2") opening the list of its channels, each with its own subscribe button and bell (`Collaborator::subscription`, `notifications`: each channel's `subscribeButtonViewModel` in the owner's dialog, its state from the page's `subscriptionStateEntity`; the channel header's parser now shares it). 1 new test, 1 fixture (`next_collaboration_signed_in.json`, read-only capture), `Client::watch_response`. Checked by the user in the app (2026-11-11).
 
+## Sleep timer
+
+- Done (2026-11-11, the user's request, docs/features-plan.md item 13, branch `dev`): the shared player's control bar has a sleep timer (15 to 90 min, or the end of the video, which also keeps "up next" from playing), a message 10 s before the pause, the button in the accent while set (docs/player/playback-ux.md, "Sleep timer"); shown only with the player setting "Minuterie de mise en veille" on (off by default, the user's request). Checked by the user in the app (2026-11-11).
+
 ## YouTube chapters
 
 - Chapters of YouTube videos (2026-11-02): `WatchPage::chapters` from the `next` response's player bar markers (the description's, else YouTube's generated ones), given to the player with `set_chapters`. The shared seek bar now splits into one piece per chapter with gaps, the hovered one thicker (Jellyfin's chapters too); the hover title, the chapters menu and Page Up / Page Down work on them. 1 new test on a trimmed fixture (`next_chapters.json`). Verified: clippy, tests, and the seek bar's pieces on a screenshot of `cargo run -p ui --example player` (which now has chapters). Seen in the app, with the user's agreement: `rfscVS0vtbw` plays with its 35 chapters as pieces of the seek bar and the chapters button. The thickening on hover and the hovered piece's growth are eased (150 ms). **Not verified:** the hovered piece growing and its animation, the chapters menu clicked, Page Up / Page Down pressed.

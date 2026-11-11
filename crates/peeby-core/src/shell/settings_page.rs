@@ -338,6 +338,17 @@ fn player_section(p: &Player) -> AnyElement {
       )
       .into_any_element(),
       row(
+        t("Sleep timer", "Minuterie de mise en veille"),
+        t(
+          "A button of the player's control bar that pauses it after a while (15 to 90 min) or at the end of the video. Applies to the next video.",
+          "Un bouton de la barre du lecteur qui le met en pause au bout d'un moment (15 à 90 min) ou à la fin de la vidéo. S'applique à la vidéo suivante.",
+        ),
+        toggle("sleep-timer", p.sleep_timer, |v, cx| {
+          set_player(cx, |p| p.sleep_timer = v)
+        }),
+      )
+      .into_any_element(),
+      row(
         t("Remember the volume", "Mémoriser le volume"),
         t(
           "Keep the volume and the mute from one video to the next.",

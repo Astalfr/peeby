@@ -331,6 +331,11 @@ impl PlayerView {
   /// Asks the page for the next item.
   pub(super) fn play_next(&mut self, cx: &mut Context<Self>) {
     self.countdown_task = None;
+    // The sleep timer's "end of the video": no next item.
+    if self.sleep == Some(super::Sleep::EndOfVideo) {
+      self.up_next = UpNext::Dismissed;
+      return self.sleep_now(cx);
+    }
     cx.emit(PlayerEvent::Next);
   }
 

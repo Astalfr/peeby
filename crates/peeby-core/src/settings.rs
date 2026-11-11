@@ -313,6 +313,8 @@ pub struct Player {
   /// Audio output (`player::AudioDevice::name`), picked from the top bar; `None` follows
   /// Windows' default.
   pub audio_device: Option<String>,
+  /// The control bar's sleep timer button (off by default).
+  pub sleep_timer: bool,
   /// Write each mpv's log to [`logs_dir`] (troubleshooting). Off by default: the log holds
   /// stream URLs, which carry the user's IP.
   pub mpv_log: bool,
@@ -328,6 +330,7 @@ impl Default for Player {
       seek_step_large: 60,
       hardware_acceleration: true,
       audio_device: None,
+      sleep_timer: false,
       mpv_log: false,
     }
   }
@@ -347,6 +350,7 @@ impl Player {
       seek_step_large: player.seek_step_large,
       autoplay_next: player.autoplay_next,
       autoplay_countdown: player.autoplay_countdown,
+      sleep_timer: player.sleep_timer,
     }
   }
 

@@ -85,6 +85,10 @@ The volume shows no number. Hovering the mute button opens a horizontal slider r
 
 After the track, the slider has a small "Boost" button: on, it lets the volume go up to 200 % for quiet videos (mpv amplifies the sound: its `volume-max` is 200, `player::VOLUME_MAX`; mpv's volume is cubic, so 200 % is about +18 dB, and loud sources clip). The track then doubles in length so that 100 % stays where it was, a mark shows 100 %, and the boosted part of the fill and the knob take the warning color; the keys and the wheel go up to 200 % too. Off again, a louder volume comes down to 100 %. The boost is never remembered: each player starts without it, and the volume kept for the next videos is 100 % at most.
 
+## Sleep timer
+
+With the player setting "Minuterie de mise en veille" on (off by default, `[player] sleep_timer`, for the next video), the control bar's `timer` button (left of the speed) opens a menu: "Désactivée", 15, 30, 45, 60 or 90 min, and "Fin de la vidéo" (not for a live). Set, the button stays in the accent and the menu's first line says what is left ("Pause dans 23 min"); the choice shows briefly at the top. Ten seconds before the time, "Pause dans 10 s" shows; then the player pauses ("Minuterie : en pause") and the timer goes. "Fin de la vidéo" pauses in the last half second (before a Short loops) and keeps "up next" from playing the next item. The timer belongs to the player of the page: it goes with it, and is not kept across launches.
+
 ## Mouse and keyboard
 
 - Click the picture to play or pause. Double-click toggles fullscreen and undoes the pause from the first click.

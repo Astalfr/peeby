@@ -214,6 +214,46 @@ impl PlayerView {
         }
         list = list.child(self.delay_line());
       }
+      Menu::Sleep => {
+        if let Some(left) = self.sleep_left() {
+          list = list.child(
+            div()
+              .px_3()
+              .pb_1()
+              .text_xs()
+              .text_color(gpui::white().opacity(0.6))
+              .child(left),
+          );
+        }
+        list = list.child(
+          entry(
+            "sleep-off".into(),
+            t("Off", "Désactivée").into(),
+            self.sleep.is_none(),
+          )
+          .on_click(cx.listener(|this, _, _, cx| this.set_sleep(None, cx))),
+        );
+        for minutes in super::SLEEP_MINUTES {
+          list = list.child(
+            entry(
+              format!("sleep-{minutes}").into(),
+              tf!("{minutes} min", "{minutes} min"),
+              false,
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.set_sleep(Some(minutes), cx))),
+          );
+        }
+        if !self.is_live() {
+          list = list.child(
+            entry(
+              "sleep-end".into(),
+              t("End of the video", "Fin de la vidéo").into(),
+              self.sleep == Some(super::Sleep::EndOfVideo),
+            )
+            .on_click(cx.listener(|this, _, _, cx| this.set_sleep(Some(0), cx))),
+          );
+        }
+      }
       Menu::Chapters => {
         let current = self.chapter_at(self.position + 0.5);
         let items: Vec<ChapterItem> = (0..self.chapters.len())
@@ -249,11 +289,13 @@ impl PlayerView {
       .right_4()
       .bottom(px(84.))
       .max_h(px(380.))
-      .min_w(px(if matches!(menu, Menu::Quality | Menu::Speed) {
-        200.
-      } else {
-        240.
-      }))
+      .min_w(px(
+        if matches!(menu, Menu::Quality | Menu::Speed | Menu::Sleep) {
+          200.
+        } else {
+          240.
+        },
+      ))
       .overflow_y_scroll()
       .p_2()
       .rounded_lg()
