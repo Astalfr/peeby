@@ -1,6 +1,6 @@
 [package]
 name = "spike-jellyfin-wg"
-description = "Spike: reach a Jellyfin server through a userspace WireGuard tunnel (onetun), with timings and throughput."
+description = "Spike: reach a Jellyfin server through the userspace WireGuard tunnel (the `wireguard` crate), with timings and throughput."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-onetun = { version = "0.3.10", default-features = false }
+wireguard = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json"] }
 serde_json = "1"
+# The tunnel's logs (`RUST_LOG=wireguard=debug`), as in the app.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # `--peeby`: the debug profile's Jellyfin session (settings and Credential Manager), as the app reads it.
 keyring = "4"
 toml = "1"
-# onetun's logs, printed.
-log = "0.4"
 
 [lints]
 workspace = true

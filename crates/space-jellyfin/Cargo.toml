@@ -19,6 +19,7 @@ serde_json = "1"
 tracing = "0.1"
 ui = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
+wireguard = { workspace = true }
 
 [lints]
 workspace = true

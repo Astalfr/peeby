@@ -32,12 +32,37 @@ impl fmt::Debug for Session {
 }
 
 /// Jellyfin client for one server.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Client {
   http: reqwest::Client,
   base: Url,
   info: ClientInfo,
   session: Option<Session>,
+  /// The proxy every request goes through (a VPN's, ADR 0037). It may hold a secret: never in
+  /// `Debug` or a log.
+  proxy: Option<String>,
+}
+
+impl fmt::Debug for Client {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("Client")
+      .field("base", &self.base.as_str())
+      .field("info", &self.info)
+      .field("session", &self.session)
+      .field("proxy", &self.proxy.as_ref().map(|_| "<redacted>"))
+      .finish()
+  }
+}
+
+/// The HTTP client, through `proxy` when given.
+fn http(proxy: Option<&str>) -> Result<reqwest::Client> {
+  let mut builder = reqwest::Client::builder()
+    .connect_timeout(Duration::from_secs(10))
+    .timeout(Duration::from_secs(30));
+  if let Some(proxy) = proxy {
+    builder = builder.proxy(reqwest::Proxy::all(proxy)?);
+  }
+  Ok(builder.build()?)
 }
 
 impl Client {
@@ -50,16 +75,27 @@ impl Client {
     }
     base.set_query(None);
     base.set_fragment(None);
-    let http = reqwest::Client::builder()
-      .connect_timeout(Duration::from_secs(10))
-      .timeout(Duration::from_secs(30))
-      .build()?;
     Ok(Self {
-      http,
+      http: http(None)?,
       base,
       info,
       session: None,
+      proxy: None,
     })
+  }
+
+  /// The same client with every request going through `proxy` (`http://user:secret@host:port`,
+  /// HTTPS through `CONNECT`), or straight to the server (`None`). The session stays.
+  pub fn with_proxy(mut self, proxy: Option<&str>) -> Result<Self> {
+    self.http = http(proxy)?;
+    self.proxy = proxy.map(str::to_owned);
+    Ok(self)
+  }
+
+  /// The proxy requests go through, for the player's own connections (mpv's `http-proxy`).
+  /// It may hold a secret: never log it.
+  pub fn proxy(&self) -> Option<&str> {
+    self.proxy.as_deref()
   }
 
   /// Server base URL, always ending with `/`.

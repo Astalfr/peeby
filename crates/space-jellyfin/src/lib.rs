@@ -13,6 +13,7 @@ mod search;
 pub mod session;
 mod settings_page;
 mod tracks;
+mod vpn;
 
 use std::collections::HashMap;
 
@@ -21,6 +22,7 @@ use gpui::{
   Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter,
   SharedString, Subscription, Window, div, ease_out_quint, px, rgb,
 };
+use gpui_component::v_flex;
 use jellyfin_api::models::{BaseItem, CollectionType, User};
 use jellyfin_api::{Client, Error, ItemId};
 use ui::assets::Icon;
@@ -43,6 +45,7 @@ use play::PlayView;
 use search::SearchView;
 use settings_page::SettingsView;
 use tracks::TrackPrefs;
+use vpn::{Vpn, VpnView};
 
 /// A page of the space.
 #[derive(Clone, Debug, PartialEq)]
@@ -145,6 +148,10 @@ pub struct JellyfinSpace {
   /// The player went fullscreen by itself: leave fullscreen once another page shows.
   leave_fullscreen: bool,
   _login_subscription: Option<Subscription>,
+  /// The imported WireGuard configuration and its tunnel (ADR 0037).
+  vpn: Option<Vpn>,
+  /// The settings' VPN section, signed in or out.
+  vpn_view: Option<Entity<VpnView>>,
 }
 
 impl JellyfinSpace {
@@ -158,8 +165,9 @@ impl JellyfinSpace {
   }
 
   /// The space on the saved session (`client`, restored before the UI started), else on the
-  /// login page; with one tab when the settings open one at startup.
-  pub fn new(client: Option<Client>, cx: &mut Context<Self>) -> Self {
+  /// login page; with one tab when the settings open one at startup. `vpn`: the saved WireGuard
+  /// configuration (`session::load_vpn`), its tunnel started when it is on.
+  pub fn new(client: Option<Client>, vpn: Option<String>, cx: &mut Context<Self>) -> Self {
     // Avatars and the pages' images arrive through the image store.
     if let Some(images) = cx.try_global::<Images>().cloned() {
       cx.observe(&images.0, |this, _, cx| {
@@ -178,15 +186,107 @@ impl JellyfinSpace {
       track_prefs: HashMap::new(),
       leave_fullscreen: false,
       _login_subscription: None,
+      vpn: vpn.and_then(|text| match wireguard::Config::parse(&text) {
+        Ok(config) => Some(Vpn::new(config)),
+        Err(e) => {
+          tracing::warn!("the saved WireGuard configuration: {e}");
+          None
+        }
+      }),
+      vpn_view: None,
     };
+    if Settings::get(cx).jellyfin.vpn
+      && let Some(vpn) = &mut space.vpn
+    {
+      vpn.start(cx);
+    }
     if Settings::get(cx).opens_at_startup(ID) {
       let first = space.tabs.add(Vec::new(), None);
       space.tabs.remember(first);
     }
     if let Some(client) = client {
+      let client = space.through_vpn(client);
       space.sign_in(client, cx);
     }
     space
+  }
+
+  /// The imported WireGuard configuration, if any.
+  pub fn vpn(&self) -> Option<&Vpn> {
+    self.vpn.as_ref()
+  }
+
+  /// The tunnel's proxy while it runs. It holds a secret: never log it.
+  fn proxy(&self) -> Option<&str> {
+    self.vpn.as_ref()?.proxy()
+  }
+
+  /// `client` through the tunnel while it runs, else straight to the server.
+  fn through_vpn(&self, client: Client) -> Client {
+    match client.clone().with_proxy(self.proxy()) {
+      Ok(client) => client,
+      Err(e) => {
+        tracing::warn!("cannot route the Jellyfin client through WireGuard: {e}");
+        client
+      }
+    }
+  }
+
+  /// Imports a wg-quick file: saved in the Credential Manager, then turned on.
+  pub fn import_vpn(
+    &mut self,
+    text: &str,
+    cx: &mut Context<Self>,
+  ) -> Result<(), wireguard::ConfigError> {
+    let config = wireguard::Config::parse(text)?;
+    session::store_vpn(Some(config.to_wg_quick()), cx);
+    self.vpn = Some(Vpn::new(config));
+    Settings::update(cx, |s| s.jellyfin.vpn = true);
+    self.apply_vpn(cx);
+    Ok(())
+  }
+
+  /// Forgets the WireGuard configuration: the server is reached directly again.
+  pub fn remove_vpn(&mut self, cx: &mut Context<Self>) {
+    session::store_vpn(None, cx);
+    self.vpn = None;
+    Settings::update(cx, |s| s.jellyfin.vpn = false);
+    self.apply_vpn(cx);
+  }
+
+  /// Turns the tunnel on or off.
+  pub fn set_vpn_enabled(&mut self, on: bool, cx: &mut Context<Self>) {
+    Settings::update(cx, |s| s.jellyfin.vpn = on);
+    self.apply_vpn(cx);
+  }
+
+  /// Starts or stops the tunnel as the settings say, then the session's client follows it: the
+  /// pages reload on Home, the login page is made again.
+  fn apply_vpn(&mut self, cx: &mut Context<Self>) {
+    let on = Settings::get(cx).jellyfin.vpn;
+    if let Some(vpn) = &mut self.vpn {
+      if on {
+        vpn.start(cx);
+      } else {
+        vpn.stop();
+      }
+    }
+    self.login = None;
+    self._login_subscription = None;
+    if let Some(signed) = self.signed.take() {
+      let client = self.through_vpn(signed.client);
+      self.sign_in(client, cx);
+    }
+    cx.notify();
+  }
+
+  /// The settings' VPN section.
+  fn vpn_view(&mut self, cx: &mut Context<Self>) -> Entity<VpnView> {
+    let nav = cx.weak_entity();
+    self
+      .vpn_view
+      .get_or_insert_with(|| cx.new(|cx| VpnView::new(nav, cx)))
+      .clone()
   }
 
   /// The signed-in client.
@@ -512,7 +612,8 @@ impl JellyfinSpace {
     let settings = Settings::get(cx).jellyfin.clone();
     let info = session::client_info(&settings.device_id);
     let message = self.login_message.take();
-    let login = cx.new(|cx| LoginView::new(info, settings.server_url, message, window, cx));
+    let proxy = self.proxy().map(str::to_owned);
+    let login = cx.new(|cx| LoginView::new(info, proxy, settings.server_url, message, window, cx));
     self._login_subscription = Some(cx.subscribe_in(
       &login,
       window,
@@ -696,22 +797,24 @@ impl Space for JellyfinSpace {
   }
 
   fn settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    let vpn = self.vpn_view(cx);
     let Some(client) = self.client().cloned() else {
+      // A server behind a VPN needs its tunnel to sign in.
       return Some(
-        div()
-          .text_sm()
-          .text_color(theme::muted())
-          .child(t(
+        v_flex()
+          .gap_8()
+          .child(div().text_sm().text_color(theme::muted()).child(t(
             "Sign in to your server from the Jellyfin tab.",
             "Connectez-vous à votre serveur depuis l'onglet Jellyfin.",
-          ))
+          )))
+          .child(vpn)
           .into_any_element(),
       );
     };
     let nav = cx.weak_entity();
     let view = self
       .settings
-      .get_or_insert_with(|| cx.new(|cx| SettingsView::new(client, nav, cx)))
+      .get_or_insert_with(|| cx.new(|cx| SettingsView::new(client, vpn, nav, cx)))
       .clone();
     Some(view.into_any_element())
   }

@@ -261,6 +261,8 @@ impl PlayView {
       fonts_dir,
       subtitle_scale: (self.prefs.subtitle_scale != 1.0).then_some(self.prefs.subtitle_scale),
       buffer_mb: Some(self.prefs.network_buffer_mb),
+      // Through the WireGuard tunnel, as the client's requests (ADR 0037).
+      http_proxy: self.client.proxy().map(str::to_owned),
       ..Default::default()
     };
     Settings::get(cx).player.apply(&mut options);

@@ -20,6 +20,11 @@ pub fn init(cx: &mut App) -> std::io::Result<()> {
   Ok(())
 }
 
+/// The network runtime, for what spawns its own tasks on it (a tunnel, a local proxy).
+pub fn handle(cx: &App) -> tokio::runtime::Handle {
+  cx.global::<NetRuntime>().0.handle().clone()
+}
+
 /// Runs `future` on the network runtime. The returned future can be awaited from GPUI tasks
 /// (`cx.spawn`); it resolves to `None` only if the runtime shut down before finishing.
 pub fn spawn<T, F>(cx: &App, future: F) -> impl Future<Output = Option<T>> + use<T, F>

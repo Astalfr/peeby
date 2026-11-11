@@ -20,6 +20,7 @@ space-jellyfin = { path = "crates/space-jellyfin" }
 space-twitch = { path = "crates/space-twitch" }
 space-youtube = { path = "crates/space-youtube" }
 twitch = { path = "crates/twitch" }
+wireguard = { path = "crates/wireguard" }
 ui = { path = "crates/ui" }
 
 [workspace.lints.rust]

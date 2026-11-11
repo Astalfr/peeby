@@ -45,6 +45,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBY_RESOLVER=ytdl` for yt-dlp)
+- Jellyfin through WireGuard (ADR 0037): `cargo run -p spike-jellyfin-wg --release -- <wg.conf> [server-url] [--peeby]`
+  (first answer, round trips, a file's throughput and a seek; `--peeby` reads the debug profile's session, read only)
 - Twitch live check (counts only): `cargo run -p twitch --example smoke -- [login]`
 - Twitch Helix fixtures: `cargo run -p peeby --example twitch_capture` (the user's session from the Credential
   Manager; spends the refresh token and saves its successor: never while Peeby runs; replaces the account's data; `-- badges` saves only the chat badges; `-- master <login>` prints a live's
@@ -144,7 +146,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - Jellyfin (ADR 0009): the token lives in the Credential Manager (blocking calls: before the UI or in the background),
   never in a URL or a log; its images go through `images::route` with the `Authorization` header. Playing anything
   writes to the user's account (reports: last played date, play count, resume position, watched flag): ask the
-  user before a playback test.
+  user before a playback test. A server behind WireGuard (ADR 0037): the `wireguard` crate's userspace tunnel,
+  the client (`Client::with_proxy`) and mpv (`http-proxy`) through its local proxy; the configuration lives in
+  the Credential Manager (`jellyfin|wireguard`); its keys and the proxy's URL (a secret) never reach a log.
 - Notifications (ADR 0020): a space decides what to announce and checks its kinds' `[notifications]`
   delivery (bell, Windows); `desktop::toast` only shows. Toast images are local PNGs
   (`ui::images::local_png`). Closing the last window hides it in the notification area and pauses

@@ -79,6 +79,8 @@ fn main() {
     device_id: device_id.clone(),
     ..prefs.jellyfin.clone()
   });
+  // Its WireGuard configuration (Credential Manager, blocking), when one was imported (ADR 0037).
+  let jellyfin_vpn = session::load_vpn();
   // Twitch's secrets (Credential Manager, blocking), and its sign-in client.
   let twitch_secrets = space_twitch::session::restore();
   let twitch_auth = match twitch::auth::Auth::new(prefs.twitch.client_id.clone()) {
@@ -157,7 +159,7 @@ fn main() {
       let mut launches = None;
       let opened = cx.open_window(options, |window, cx| {
         let youtube = cx.new(|cx| YouTubeSpace::new(client, initial_videos, cx));
-        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, cx));
+        let jellyfin = cx.new(|cx| JellyfinSpace::new(jellyfin_client, jellyfin_vpn, cx));
         let mut spaces: Vec<SpaceHandle> = vec![Rc::new(youtube.clone()), Rc::new(jellyfin)];
         let twitch = twitch_auth
           .map(|auth| cx.new(|cx| TwitchSpace::new(auth, twitch_secrets, twitch_page, cx)));

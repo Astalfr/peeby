@@ -31,6 +31,7 @@ PeebTube additions to `player`:
 - `Player::set_speed` (`speed`), for the 2× speed while Space or the left button is held;
 - `Event::Cached` (`demuxer-cache-time`, observed), for the loaded part drawn on the seek bar;
 - `StartOptions::audio_device`, `Player::set_audio_device` and `audio_devices` (an mpv without render context, `sys::RenderBackend::None`), for the top bar's audio output menu;
+- `StartOptions::http_proxy` (`http-proxy`), for a Jellyfin server behind a WireGuard tunnel (ADR 0037);
 - `play_wav` (`sys::play_wav`: Windows' `PlaySoundW` from winmm.dll, loaded at runtime like libmpv), for the opening animation's sound;
 - the GPU ring is recreated at once after a quiet spell, else once a resize settles (60 ms), and the replaced ring lives until the next one (no black video while the mini-player is resized, ADR 0008).
 
@@ -47,7 +48,8 @@ PeebTube additions to the GPUI patch (`vendor/gpui-pre-windows`):
 
 Additions to `jellyfin-api` (copied at step 5 of the refactor, ADR 0009):
 - live tests read their credentials from the environment (no `dotenvy`);
-- `jellyfin_api::Url` re-exports `url::Url`, the type of the client's URLs, so the app needs no `url` dependency.
+- `jellyfin_api::Url` re-exports `url::Url`, the type of the client's URLs, so the app needs no `url` dependency;
+- `Client::with_proxy` and `Client::proxy`: every request through a local proxy, a WireGuard tunnel's (ADR 0037); `Client`'s `Debug` is written by hand to keep the proxy's secret out.
 
 The app's `player_view.rs` adapts peeby's `player_page.rs` (seek bar, volume slider, control buttons, auto-hide, OSD, shortcuts) without its Jellyfin parts.
 

@@ -93,6 +93,9 @@ pub struct StartOptions {
   pub log_file: Option<PathBuf>,
   /// Audio output, an [`AudioDevice::name`] (`audio-device`); `None` follows Windows' default.
   pub audio_device: Option<String>,
+  /// HTTP proxy for the stream and its subtitles (`http-proxy`, HTTPS through `CONNECT`), e.g. a
+  /// VPN tunnel's (ADR 0037). It may hold a secret: never log it.
+  pub http_proxy: Option<String>,
 }
 
 /// An audio output mpv can play to.
@@ -649,6 +652,9 @@ fn mpv_options(options: &StartOptions, backend: Backend) -> Vec<(&'static str, S
   }
   if let Some(device) = &options.audio_device {
     opts.push(("audio-device", device.clone()));
+  }
+  if let Some(proxy) = &options.http_proxy {
+    opts.push(("http-proxy", proxy.clone()));
   }
   if let Some(path) = &options.log_file {
     // mpv does not create it, and this runs off the UI thread.

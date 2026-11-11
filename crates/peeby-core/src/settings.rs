@@ -432,6 +432,9 @@ pub struct Jellyfin {
   pub user_id: Option<String>,
   /// Stable id of this installation, sent to the server with every request.
   pub device_id: String,
+  /// Reach the server through the WireGuard tunnel (ADR 0037), when one is imported: its
+  /// configuration lives in the Credential Manager (`space_jellyfin::session`), never here.
+  pub vpn: bool,
   /// Playback preferences.
   pub playback: JellyfinPlayback,
   /// Home page preferences.

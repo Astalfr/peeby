@@ -25,6 +25,8 @@ struct QuickConnect {
 
 pub struct LoginView {
   info: ClientInfo,
+  /// The WireGuard tunnel's proxy, while it is on (ADR 0037). It holds a secret: never log it.
+  proxy: Option<String>,
   server: Entity<InputState>,
   username: Entity<InputState>,
   password: Entity<InputState>,
@@ -41,6 +43,7 @@ impl LoginView {
   /// session expired).
   pub fn new(
     info: ClientInfo,
+    proxy: Option<String>,
     server_url: Option<String>,
     error: Option<SharedString>,
     window: &mut Window,
@@ -85,6 +88,7 @@ impl LoginView {
     focus.update(cx, |state, cx| state.focus(window, cx));
     Self {
       info,
+      proxy,
       server,
       username,
       password,
@@ -112,7 +116,9 @@ impl LoginView {
     } else {
       format!("https://{raw}")
     };
-    Client::new(&url, self.info.clone()).map_err(|e| describe(&e))
+    Client::new(&url, self.info.clone())
+      .and_then(|client| client.with_proxy(self.proxy.as_deref()))
+      .map_err(|e| describe(&e))
   }
 
   fn submit(&mut self, _window: &mut Window, cx: &mut Context<Self>) {

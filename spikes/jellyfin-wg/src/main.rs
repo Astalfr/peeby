@@ -1,118 +1,68 @@
-//! Spike: a Jellyfin server reached through a userspace WireGuard tunnel (onetun: boringtun and
-//! smoltcp, no driver, no system route), with timings and throughput, to decide whether Peeby
-//! can carry its Jellyfin traffic this way (docs/features-plan.md, P4).
+//! Spike: a Jellyfin server reached through a userspace WireGuard tunnel (the `wireguard` crate:
+//! boringtun and smoltcp behind a local proxy, no driver, no system route), with timings and
+//! throughput (docs/features-plan.md, P4; ADR 0037). Its first version used onetun, whose 64 KB
+//! TCP buffers capped it at about 15 Mb/s.
 //!
-//! `cargo run -p spike-jellyfin-wg --release -- <wg.conf> <server-ip:port in the tunnel> [--https <host>] [--peeby]`
+//! `cargo run -p spike-jellyfin-wg --release -- <wg.conf> [server-url] [--peeby]`
 //! with `PEEBY_TEST_USER` and `PEEBY_TEST_PASSWORD` set (the account's name and password), or
 //! `--peeby`: the debug profile's saved session (`%APPDATA%\peeby-dev\settings.toml`, its token in
-//! the Credential Manager), which signs in nothing.
+//! the Credential Manager, its server when none is given), which signs in nothing.
 //!
-//! What it does: reads the WireGuard file (`[Interface]` PrivateKey, Address; `[Peer]` PublicKey,
-//! PresharedKey, Endpoint, PersistentKeepalive), starts the tunnel with a local port forwarded to
-//! the server, signs in (this adds a device to the account's sessions), then measures: the
-//! first answer (the handshake included), the API's latency, the throughput of 64 MB of a
-//! random movie or episode served as is (`/Videos/{id}/stream?static=true`: Direct Play's file),
-//! and how fast a range from its middle starts (a seek). It plays nothing and reports no
-//! playback. The token and the keys are never printed.
+//! What it does: starts the tunnel, points a reqwest client at its proxy, signs in (this adds a
+//! device to the account's sessions) or takes the saved session, then measures: the first answer
+//! (the handshake included), the API's latency, the throughput of 64 MB of a random movie or
+//! episode served as is (`/Videos/{id}/stream?static=true`: Direct Play's file), and how fast a
+//! range from its middle starts (a seek). It plays nothing and reports no playback. The token, the
+//! keys and the proxy's URL are never printed.
 
 // A spike prints on purpose.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use onetun::config::{Config, PortForwardConfig, PortProtocol, PublicKey, StaticSecret};
-use onetun::events::Bus;
-
-/// The local end of the forward.
-const LOCAL: &str = "127.0.0.1:18096";
 /// Bytes read to measure the throughput.
 const SAMPLE: u64 = 64 * 1024 * 1024;
 
 type Error = Box<dyn std::error::Error>;
 
-/// onetun's logs on stderr (its handshakes, its connections).
-struct Logger;
-
-impl log::Log for Logger {
-  fn enabled(&self, metadata: &log::Metadata) -> bool {
-    metadata.level() <= log::Level::Debug && metadata.target().starts_with("onetun")
-  }
-
-  fn log(&self, record: &log::Record) {
-    if self.enabled(record.metadata()) {
-      eprintln!("[{} {}] {}", record.level(), record.target(), record.args());
-    }
-  }
-
-  fn flush(&self) {}
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-  log::set_logger(&Logger).ok();
-  log::set_max_level(if std::env::var_os("PEEBY_WG_LOG").is_some() {
-    log::LevelFilter::Debug
-  } else {
-    log::LevelFilter::Info
-  });
+  tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .with_writer(std::io::stderr)
+    .init();
   let args: Vec<String> = std::env::args().skip(1).collect();
-  let (Some(conf), Some(server)) = (args.first(), args.get(1)) else {
-    return Err("usage: spike-jellyfin-wg <wg.conf> <server-ip:port> [--https <host>]".into());
-  };
-  let https = args
-    .iter()
-    .position(|a| a == "--https")
-    .and_then(|i| args.get(i + 1))
-    .cloned();
   let saved = args.iter().any(|a| a == "--peeby");
-  let server: SocketAddr = server.parse()?;
-  let config = config(&std::fs::read_to_string(conf)?, server)?;
-  println!(
-    "tunnel: endpoint {}, local {LOCAL} -> {server}",
-    config.endpoint_addr
-  );
-  let started = Instant::now();
-  onetun::start_tunnels(config, Bus::default())
-    .await
-    .map_err(|e| format!("tunnel: {e:#}"))?;
-
-  // The client: plain HTTP to the forward, or HTTPS with the server's name resolved to it.
-  let local: SocketAddr = LOCAL.parse()?;
-  let (base, client) = match &https {
-    Some(host) => (
-      format!("https://{host}:{}", local.port()),
-      reqwest::Client::builder().resolve(host, local).build()?,
-    ),
-    None => (format!("http://{LOCAL}"), reqwest::Client::new()),
+  let mut positional = args.iter().filter(|a| !a.starts_with("--"));
+  let Some(conf) = positional.next() else {
+    return Err("usage: spike-jellyfin-wg <wg.conf> [server-url] [--peeby]".into());
   };
-  let device = "MediaBrowser Client=\"Peeby spike\", Device=\"Peeby WG spike\", \
-                DeviceId=\"peeby-wg-spike\", Version=\"0.1\"";
+  let session = saved.then(peeby_session).transpose()?;
+  let base = match (positional.next(), &session) {
+    (Some(url), _) => url.trim_end_matches('/').to_owned(),
+    (None, Some(session)) => session.server.trim_end_matches('/').to_owned(),
+    (None, None) => return Err("no server URL".into()),
+  };
+  let config = wireguard::Config::parse(&std::fs::read_to_string(conf)?)?;
+  println!("tunnel: {config:?}");
+  let started = Instant::now();
+  let tunnel = wireguard::Tunnel::start(config, &tokio::runtime::Handle::current())?;
+  let client = reqwest::Client::builder()
+    .proxy(reqwest::Proxy::all(tunnel.proxy_url())?)
+    .build()?;
+  let device = "MediaBrowser Client=\"Peeby spike\", Device=\"Peeby WG spike\",                 DeviceId=\"peeby-wg-spike\", Version=\"0.1\"";
 
   // The first answer through the tunnel: the handshake and a TCP connection.
-  // onetun drops a connection made before its handshake is done: tried again until it answers.
-  let mut tries = 0;
-  let info = loop {
-    tries += 1;
-    match client
-      .get(format!("{base}/System/Info/Public"))
-      .timeout(Duration::from_secs(5))
-      .send()
-      .await
-    {
-      Ok(info) => break info,
-      Err(e) if started.elapsed() < Duration::from_secs(20) => {
-        eprintln!("try {tries}: {e}");
-        tokio::time::sleep(Duration::from_millis(250)).await;
-      }
-      Err(e) => return Err(e.into()),
-    }
-  };
+  let info = client
+    .get(format!("{base}/System/Info/Public"))
+    .timeout(Duration::from_secs(20))
+    .send()
+    .await?;
   println!(
-    "first answer: {:?} after {:.0} ms",
+    "first answer: {:?} after {:.0} ms ({:?})",
     info.status(),
-    started.elapsed().as_secs_f64() * 1000.
+    started.elapsed().as_secs_f64() * 1000.,
+    tunnel.status()
   );
   let info: serde_json::Value = info.json().await?;
   println!(
@@ -136,13 +86,16 @@ async fn main() -> Result<(), Error> {
   println!("API round trips: {times:.0?} ms");
 
   // The session: Peeby's saved one, or a sign-in.
-  let (authorization, user_id) = if saved {
-    let (device_id, user_id, token) = peeby_session()?;
+  let (authorization, user_id) = if let Some(session) = session {
     let device = std::env::var("COMPUTERNAME").unwrap_or_default();
     let device = format!(
-      "MediaBrowser Client=\"Peeby\", Device=\"{device}\", DeviceId=\"{device_id}\", Version=\"1.4.2\""
+      "MediaBrowser Client=\"Peeby\", Device=\"{device}\", DeviceId=\"{}\", Version=\"1.4.2\"",
+      session.device_id
     );
-    (format!("{device}, Token=\"{token}\""), user_id)
+    (
+      format!("{device}, Token=\"{}\"", session.token),
+      session.user_id,
+    )
   } else {
     let user = std::env::var("PEEBY_TEST_USER")?;
     let password = std::env::var("PEEBY_TEST_PASSWORD")?;
@@ -163,8 +116,8 @@ async fn main() -> Result<(), Error> {
   // A random movie or episode, with its file's size.
   let items: serde_json::Value = client
     .get(format!(
-      "{base}/Users/{user_id}/Items?IncludeItemTypes=Movie,Episode&Recursive=true&Limit=1\
-       &SortBy=Random&Fields=MediaSources"
+      "{base}/Users/{user_id}/Items?IncludeItemTypes=Movie,Episode&Recursive=true&Limit=20\
+       &SortBy=Random&Fields=MediaSources&IsMissing=false"
     ))
     .header("Authorization", &authorization)
     .send()
@@ -172,7 +125,14 @@ async fn main() -> Result<(), Error> {
     .error_for_status()?
     .json()
     .await?;
-  let item = &items["Items"][0];
+  let item = items["Items"]
+    .as_array()
+    .and_then(|items| {
+      items
+        .iter()
+        .find(|item| item["MediaSources"][0]["Size"].as_u64().unwrap_or(0) > 0)
+    })
+    .ok_or("no item with a file")?;
   let id = item["Id"].as_str().ok_or("no item")?;
   let size = item["MediaSources"][0]["Size"].as_u64().unwrap_or(0);
   let bitrate = item["MediaSources"][0]["Bitrate"].as_u64().unwrap_or(0);
@@ -239,11 +199,33 @@ async fn main() -> Result<(), Error> {
       at.elapsed().as_secs_f64() * 1000.
     );
   }
+
+  // What the proxy refuses: an address the tunnel does not route.
+  let outside = client
+    .get("https://example.com/")
+    .timeout(Duration::from_secs(10))
+    .send()
+    .await;
+  println!(
+    "outside AllowedIPs: {}",
+    match outside {
+      Ok(response) => format!("answered {} (should not)", response.status()),
+      Err(e) => format!("refused (connect error: {})", e.is_connect()),
+    }
+  );
+  println!("tunnel at the end: {:?}", tunnel.status());
   Ok(())
 }
 
-/// The debug profile's Jellyfin session: its device id, user id and token (never printed).
-fn peeby_session() -> Result<(String, String, String), Error> {
+/// The debug profile's Jellyfin session (its token never printed).
+struct Saved {
+  server: String,
+  user_id: String,
+  device_id: String,
+  token: String,
+}
+
+fn peeby_session() -> Result<Saved, Error> {
   let dir = std::env::var("APPDATA")?;
   let text = std::fs::read_to_string(format!(r"{dir}\peeby-dev\settings.toml"))?;
   let settings: toml::Value = toml::from_str(&text)?;
@@ -255,115 +237,12 @@ fn peeby_session() -> Result<(String, String, String), Error> {
       .map(str::to_owned)
       .ok_or(format!("no jellyfin.{name} in the settings"))
   };
-  let (server, user, device) = (field("server_url")?, field("user_id")?, field("device_id")?);
-  let token = keyring::Entry::new("peeby-dev", &format!("{server}|{user}"))?.get_password()?;
-  Ok((device, user, token))
-}
-
-/// onetun's configuration from a wg-quick file, forwarding [`LOCAL`] to `server`.
-fn config(text: &str, server: SocketAddr) -> Result<Config, Error> {
-  let mut section = "";
-  let (mut private, mut public, mut preshared) = (None, None, None);
-  let (mut address, mut endpoint, mut keepalive) = (None, None, None);
-  for line in text.lines() {
-    let line = line.split('#').next().unwrap_or_default().trim();
-    if line.starts_with('[') {
-      section = line;
-      continue;
-    }
-    let Some((key, value)) = line.split_once('=') else {
-      continue;
-    };
-    let (key, value) = (key.trim().to_ascii_lowercase(), value.trim());
-    match (section, key.as_str()) {
-      ("[Interface]", "privatekey") => private = Some(key32(value)?),
-      ("[Interface]", "address") => {
-        // The first address, without its prefix length.
-        let first = value.split(',').next().unwrap_or_default().trim();
-        address = Some(
-          first
-            .split('/')
-            .next()
-            .unwrap_or_default()
-            .parse::<IpAddr>()?,
-        );
-      }
-      ("[Peer]", "publickey") => public = Some(key32(value)?),
-      ("[Peer]", "presharedkey") => preshared = Some(key32(value)?),
-      ("[Peer]", "endpoint") => {
-        endpoint = std::net::ToSocketAddrs::to_socket_addrs(value)?.next();
-      }
-      ("[Peer]", "persistentkeepalive") => keepalive = value.parse().ok(),
-      _ => {}
-    }
-  }
-  Ok(Config {
-    port_forwards: vec![PortForwardConfig {
-      source: LOCAL.parse()?,
-      destination: server,
-      protocol: PortProtocol::Tcp,
-      remote: false,
-    }],
-    remote_port_forwards: Vec::new(),
-    private_key: Arc::new(StaticSecret::from(private.ok_or("no PrivateKey")?)),
-    endpoint_public_key: Arc::new(PublicKey::from(public.ok_or("no peer PublicKey")?)),
-    preshared_key: preshared,
-    endpoint_addr: endpoint.ok_or("no peer Endpoint")?,
-    endpoint_bind_addr: "0.0.0.0:0".parse()?,
-    source_peer_ip: address.ok_or("no Interface Address")?,
-    keepalive_seconds: keepalive.or(Some(25)),
-    max_transmission_unit: 1420,
-    log: "info".into(),
-    warnings: Vec::new(),
-    pcap_file: None,
+  let (server, user_id, device_id) = (field("server_url")?, field("user_id")?, field("device_id")?);
+  let token = keyring::Entry::new("peeby-dev", &format!("{server}|{user_id}"))?.get_password()?;
+  Ok(Saved {
+    server,
+    user_id,
+    device_id,
+    token,
   })
-}
-
-/// A 32-byte WireGuard key from its base64.
-fn key32(text: &str) -> Result<[u8; 32], Error> {
-  let bytes = base64(text).ok_or("a key is not base64")?;
-  bytes.try_into().map_err(|_| "a key is not 32 bytes".into())
-}
-
-/// Standard base64, padded or not.
-fn base64(text: &str) -> Option<Vec<u8>> {
-  let value = |c: u8| -> Option<u32> {
-    Some(match c {
-      b'A'..=b'Z' => u32::from(c - b'A'),
-      b'a'..=b'z' => u32::from(c - b'a') + 26,
-      b'0'..=b'9' => u32::from(c - b'0') + 52,
-      b'+' => 62,
-      b'/' => 63,
-      _ => return None,
-    })
-  };
-  let digits: Vec<u32> = text
-    .trim()
-    .trim_end_matches('=')
-    .bytes()
-    .map(value)
-    .collect::<Option<_>>()?;
-  let mut out = Vec::new();
-  for chunk in digits.chunks(4) {
-    let n = chunk
-      .iter()
-      .enumerate()
-      .fold(0u32, |n, (i, d)| n | (d << (18 - 6 * i)));
-    let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
-    out.extend_from_slice(&bytes[..chunk.len().saturating_sub(1)]);
-  }
-  Some(out)
-}
-
-#[cfg(test)]
-mod tests {
-  use super::base64;
-
-  #[test]
-  fn base64_decodes_a_key() {
-    assert_eq!(base64("TWFu").unwrap(), b"Man");
-    assert_eq!(base64("TWE=").unwrap(), b"Ma");
-    assert_eq!(base64("TQ==").unwrap(), b"M");
-    assert_eq!(base64(&"A".repeat(43)).unwrap().len(), 32);
-  }
 }

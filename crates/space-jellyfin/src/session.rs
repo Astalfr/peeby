@@ -106,6 +106,42 @@ fn delete_token(server_url: &str, user: &UserId) {
   }
 }
 
+/// The WireGuard configuration's entry (ADR 0037): the whole wg-quick file, keys included.
+fn vpn_entry() -> keyring::Result<keyring::Entry> {
+  keyring::Entry::new(KEYRING_SERVICE, "jellyfin|wireguard")
+}
+
+/// The saved WireGuard configuration, if one was imported. Blocking (the Credential Manager):
+/// call it before the UI starts. Its text holds keys: never log it.
+pub fn load_vpn() -> Option<String> {
+  match vpn_entry().and_then(|entry| entry.get_password()) {
+    Ok(text) => Some(text),
+    Err(keyring::Error::NoEntry) => None,
+    Err(e) => {
+      tracing::warn!("cannot read the saved WireGuard configuration: {e}");
+      None
+    }
+  }
+}
+
+/// Saves the WireGuard configuration (`Some`), or forgets it, in the background.
+pub fn store_vpn(text: Option<String>, cx: &mut App) {
+  cx.background_executor()
+    .spawn(async move {
+      let result = vpn_entry().and_then(|entry| match &text {
+        Some(text) => entry.set_password(text),
+        None => match entry.delete_credential() {
+          Err(keyring::Error::NoEntry) => Ok(()),
+          other => other,
+        },
+      });
+      if let Err(e) = result {
+        tracing::warn!("cannot save the WireGuard configuration: {e}");
+      }
+    })
+    .detach();
+}
+
 /// Downloads the server's images (posters, trickplay tiles) with the session's `Authorization`
 /// header, never with a token in the URL.
 struct ImageFetch(Client);

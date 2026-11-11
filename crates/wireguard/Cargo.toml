@@ -1,0 +1,27 @@
+[package]
+name = "wireguard"
+description = "A userspace WireGuard tunnel (boringtun and smoltcp) behind a local HTTP proxy, for a server reachable only through a VPN (ADR 0037)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Keys of the wg-quick file and the proxy's Basic credentials (already in the tree through boringtun).
+base64 = "0.22"
+# WireGuard's protocol, without its device (no TUN, no admin rights): agreed with the user on 2026-11-11.
+boringtun = { version = "0.7.1", default-features = false }
+# The TCP/IP stack inside the tunnel, agreed with the user on 2026-11-11.
+smoltcp = { version = "0.14", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "proto-dns", "socket-dns", "async"] }
+thiserror = "2"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+tracing = "0.1"
+# The proxy's secret and the tunnel's session index.
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+
+[lints]
+workspace = true

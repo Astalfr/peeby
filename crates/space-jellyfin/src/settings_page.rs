@@ -1,10 +1,10 @@
 //! Jellyfin's part of the settings page (behind the gear): its own playback options, the
-//! languages, the home page, and the server, user and sign-out. Each control edits
+//! languages, the home page, the server, user and sign-out, and the VPN (`vpn.rs`). Each control edits
 //! `Settings::jellyfin`, saved at once; most apply to the next video or the next visit of Home.
 //! The player's shared options are the shell's ("Player").
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, Context, WeakEntity, Window, div, px};
+use gpui::{AnyElement, App, Context, Entity, WeakEntity, Window, div, px};
 use gpui_component::button::Button;
 use gpui_component::{Sizable, h_flex, v_flex};
 use jellyfin_api::Client;
@@ -15,6 +15,7 @@ use ui::{runtime, tf, theme};
 
 use super::JellyfinSpace;
 use super::session::device_name;
+use super::vpn::VpnView;
 use peeby_core::settings::{JellyfinHome, JellyfinPlayback, Settings};
 
 /// Audio languages offered (ISO 639-2), after "the server's".
@@ -48,12 +49,19 @@ fn language_options(codes: &[&str]) -> impl Iterator<Item = (Option<String>, Str
 
 pub struct SettingsView {
   client: Client,
+  /// The VPN section (the space's: it also shows signed out).
+  vpn: Entity<VpnView>,
   nav: WeakEntity<JellyfinSpace>,
   server: Option<PublicSystemInfo>,
 }
 
 impl SettingsView {
-  pub fn new(client: Client, nav: WeakEntity<JellyfinSpace>, cx: &mut Context<Self>) -> Self {
+  pub fn new(
+    client: Client,
+    vpn: Entity<VpnView>,
+    nav: WeakEntity<JellyfinSpace>,
+    cx: &mut Context<Self>,
+  ) -> Self {
     cx.observe_global::<Settings>(|_, cx| cx.notify()).detach();
     let info = runtime::spawn(cx, {
       let client = client.clone();
@@ -72,6 +80,7 @@ impl SettingsView {
     .detach();
     Self {
       client,
+      vpn,
       nav,
       server: None,
     }
@@ -352,6 +361,7 @@ impl Render for SettingsView {
     let (p, h) = (jellyfin.playback, jellyfin.home);
     let sections: Vec<AnyElement> = vec![
       self.account_section(cx).into_any_element(),
+      self.vpn.clone().into_any_element(),
       self.playback_section(&p).into_any_element(),
       self.languages_section(&p).into_any_element(),
       self.home_section(&h, cx).into_any_element(),
