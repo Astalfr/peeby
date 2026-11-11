@@ -320,6 +320,7 @@ impl PlayView {
         self.send_report(ReportKind::Progress, cx);
       }
       PlayerEvent::Sound { volume, muted } => Player::save_sound(*volume, *muted, cx),
+      PlayerEvent::Autoplay(on) => Player::save_autoplay(*on, cx),
       PlayerEvent::Ended => {
         self.finish(true, cx);
         self.close(cx);

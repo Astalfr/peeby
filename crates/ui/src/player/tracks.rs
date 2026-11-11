@@ -274,6 +274,9 @@ impl PlayerView {
 
   /// When "up next" appears: where the credits start, else a few seconds before the end.
   pub(super) fn up_next_at(&self) -> f64 {
+    if self.up_next_item.as_ref().is_some_and(|i| i.until_end) {
+      return (self.duration - super::UP_NEXT_BEFORE_END).max(0.0);
+    }
     segments::tail_start(&self.segments, self.duration)
       .unwrap_or(self.duration - UP_NEXT_LEAD_SECONDS)
       .max(0.0)
@@ -282,11 +285,17 @@ impl PlayerView {
   /// Shows, counts down or hides the "up next" card as the position moves.
   pub(super) fn update_up_next(&mut self, cx: &mut Context<Self>) {
     // A DVR live's duration is its edge, not an end.
-    if self.up_next_title.is_none() || self.duration <= 0.0 || self.is_live() {
+    if self.up_next_item.is_none() || self.duration <= 0.0 || self.is_live() {
       return;
     }
     let at = self.up_next_at();
     match self.up_next {
+      // A playlist's next video: the card counts the video's own end down; the end plays it.
+      UpNext::Hidden
+        if self.position >= at && self.up_next_item.as_ref().is_some_and(|i| i.until_end) =>
+      {
+        self.up_next = UpNext::Offered(None);
+      }
       UpNext::Hidden if self.position >= at => {
         if self.prefs.autoplay_next {
           self.up_next = UpNext::Offered(Some(self.prefs.autoplay_countdown));
@@ -344,7 +353,7 @@ impl PlayerView {
     let segment = segments::active(&self.segments, self.position)?;
     let in_tail = segments::tail_start(&self.segments, self.duration)
       .is_some_and(|start| segment.start >= start);
-    if in_tail && self.up_next_title.is_some() {
+    if in_tail && self.up_next_item.is_some() {
       return Some((t("Next episode", "Épisode suivant"), SkipAction::Next));
     }
     let label = match segment.kind {
@@ -402,9 +411,36 @@ impl PlayerView {
   /// Offers the next item (title shown in the card) near the end, and plays it after the
   /// countdown when autoplay is on. `None`: no next item.
   pub fn set_up_next(&mut self, title: Option<SharedString>, cx: &mut Context<Self>) {
-    self.up_next_title = title;
-    self.up_next = UpNext::Hidden;
-    self.countdown_task = None;
+    let item = title.map(|title| super::UpNextItem {
+      title,
+      author: None,
+      picture: None,
+      until_end: false,
+    });
+    self.set_up_next_item(item, cx);
+  }
+
+  /// Whether something comes next ([`Self::set_up_next`]): the player then plays it itself at the
+  /// end, or not (autoplay off, its card hidden), and its [`super::PlayerEvent::Ended`] says the
+  /// page should not.
+  pub fn offers_up_next(&self) -> bool {
+    self.up_next_item.is_some()
+  }
+
+  /// [`Self::set_up_next`] with the item's author and picture, and when it shows
+  /// ([`super::UpNextItem::until_end`]). The card stays as it is when only the item's details
+  /// change.
+  pub fn set_up_next_item(&mut self, item: Option<super::UpNextItem>, cx: &mut Context<Self>) {
+    let same = match (&self.up_next_item, &item) {
+      (Some(a), Some(b)) => a.title == b.title && a.until_end == b.until_end,
+      (None, None) => true,
+      _ => false,
+    };
+    self.up_next_item = item;
+    if !same {
+      self.up_next = UpNext::Hidden;
+      self.countdown_task = None;
+    }
     cx.notify();
   }
 

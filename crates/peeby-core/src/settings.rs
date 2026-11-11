@@ -357,6 +357,11 @@ impl Player {
     }
   }
 
+  /// Keeps the player's autoplay switch for the next videos ("Autoplay next").
+  pub fn save_autoplay(on: bool, cx: &mut App) {
+    Settings::update(cx, |s| s.player.autoplay_next = on);
+  }
+
   /// Keeps the player's volume for the next videos, when the setting asks for it.
   pub fn save_sound(volume: f64, muted: bool, cx: &mut App) {
     if Settings::get(cx).player.remember_volume {

@@ -125,6 +125,17 @@ impl Queue {
     }
   }
 
+  /// The video Next plays, when known: the following one, or the first again with repeat on
+  /// (not shuffled: its next order is drawn then). `None` at the end, or before the next page.
+  pub fn next_video(&self) -> Option<&VideoItem> {
+    let place = match self.order.get(self.next_place()) {
+      Some(_) => self.next_place(),
+      None if self.repeat && !self.shuffle && self.continuation.is_none() => 0,
+      None => return None,
+    };
+    self.items.get(*self.order.get(place)?)
+  }
+
   pub fn current_video(&self) -> Option<&VideoItem> {
     self.items.get(self.current()?)
   }

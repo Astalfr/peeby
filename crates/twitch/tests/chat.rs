@@ -198,7 +198,10 @@ fn shared_chat_lines() {
     .map(|(set, _)| set.as_str())
     .collect();
   assert_eq!(badges, ["moderator", "founder", "bingbonglove"]);
-  assert_eq!(message(&events, 4).source_room.as_deref(), Some("506823694"));
+  assert_eq!(
+    message(&events, 4).source_room.as_deref(),
+    Some("506823694")
+  );
   // A room's own line has no source.
   assert!(lines().iter().all(|event| match event {
     Event::Message(line) | Event::Notice(line) => line.source_room.is_none(),

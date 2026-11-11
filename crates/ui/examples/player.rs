@@ -249,6 +249,7 @@ fn describe(event: &PlayerEvent) -> String {
     PlayerEvent::Next => "next".into(),
     PlayerEvent::Previous => "previous".into(),
     PlayerEvent::Theater => "theater".into(),
+    PlayerEvent::Autoplay(on) => format!("autoplay={on}"),
     PlayerEvent::Sound { volume, muted } => format!("sound {volume} muted={muted}"),
     PlayerEvent::Started => "started".into(),
     PlayerEvent::Paused(paused) => format!("paused={paused}"),

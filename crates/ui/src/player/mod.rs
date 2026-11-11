@@ -128,6 +128,9 @@ pub enum PlayerEvent {
   /// The user asked to switch theater mode (button or T): the page saves it, lays itself out
   /// again and calls [`PlayerView::set_theater`].
   Theater,
+  /// The control bar's autoplay switch was flipped: the next item plays on its own (`true`) or
+  /// not, from now on; the page keeps it for the next videos.
+  Autoplay(bool),
   /// The volume or the mute changed, to keep for the next videos.
   Sound {
     /// 0 to 100.
@@ -281,6 +284,24 @@ enum Menu {
   Sleep,
 }
 
+/// What plays next, for the "up next" card ([`PlayerView::set_up_next_item`]).
+#[derive(Clone)]
+pub struct UpNextItem {
+  /// Its title.
+  pub title: SharedString,
+  /// Who made it (a video's channel), under the title.
+  pub author: Option<SharedString>,
+  /// Its thumbnail (16:9), left of the text; with one the whole card plays it.
+  pub picture: Option<crate::picture::Picture>,
+  /// The card shows [`UP_NEXT_BEFORE_END`] before the end, saying how long is left, and the item
+  /// plays at the end (a playlist's next video); else it shows at the credits, or 20 s before
+  /// the end, and plays after the countdown (an episode).
+  pub until_end: bool,
+}
+
+/// How long before a video's end a playlist's next one shows ([`UpNextItem::until_end`]).
+const UP_NEXT_BEFORE_END: f64 = 10.0;
+
 /// The sleep timer's lengths offered, minutes.
 const SLEEP_MINUTES: [u64; 5] = [15, 30, 45, 60, 90];
 /// The on-screen message says the pause is coming this long before it.
@@ -347,7 +368,7 @@ pub struct PlayerView {
   /// The start of the muted segment playing, told once on entering it.
   muted_at: Option<f64>,
   /// The next item, offered in the "up next" card near the end.
-  up_next_title: Option<SharedString>,
+  up_next_item: Option<UpNextItem>,
   up_next: UpNext,
   countdown_task: Option<Task<()>>,
   /// The shortcut help is open.
@@ -413,6 +434,8 @@ pub struct PlayerView {
   controls_visible: bool,
   /// Counts the controls' show/hide changes, so each one starts a new fade.
   controls_animation: u32,
+  /// When the controls last started showing or hiding (`controls_animation`'s last change).
+  controls_changed: Option<Instant>,
   /// Removes the controls once their fade-out is over; they are drawn until then.
   controls_fade_task: Option<Task<()>>,
   over_controls: bool,
@@ -524,7 +547,7 @@ impl PlayerView {
       segments: Vec::new(),
       auto_skipped: std::collections::HashSet::new(),
       muted_at: None,
-      up_next_title: None,
+      up_next_item: None,
       up_next: UpNext::Hidden,
       countdown_task: None,
       help: false,
@@ -563,6 +586,7 @@ impl PlayerView {
       osd_task: None,
       controls_visible: true,
       controls_animation: 0,
+      controls_changed: None,
       controls_fade_task: None,
       over_controls: false,
       volume_hover: (false, false),
@@ -1142,6 +1166,26 @@ impl PlayerView {
     self.with_player(|p| p.set_paused(true));
   }
 
+  /// The autoplay switch: the next item plays on its own or not, from now on (a countdown under
+  /// way stops); the page keeps the choice ([`PlayerEvent::Autoplay`]).
+  fn set_autoplay(&mut self, on: bool, cx: &mut Context<Self>) {
+    self.prefs.autoplay_next = on;
+    if !on && let UpNext::Offered(Some(_)) = self.up_next {
+      self.up_next = UpNext::Offered(None);
+      self.countdown_task = None;
+    }
+    self.show_osd(
+      if on {
+        t("Autoplay on", "Lecture automatique activée")
+      } else {
+        t("Autoplay off", "Lecture automatique désactivée")
+      }
+      .into(),
+      cx,
+    );
+    cx.emit(PlayerEvent::Autoplay(on));
+  }
+
   /// Sets the sleep timer: a pause after `minutes`, at the end of the video (`Some(0)`), or none.
   fn set_sleep(&mut self, minutes: Option<u64>, cx: &mut Context<Self>) {
     self._sleep_task = None;
@@ -1688,7 +1732,7 @@ impl PlayerView {
       Event::EndReached if self.ended_early() => self.reload_after_early_end(cx),
       Event::EndReached => {
         self.position = self.position.max(self.duration);
-        let autoplay = self.up_next_title.is_some()
+        let autoplay = self.up_next_item.is_some()
           && self.prefs.autoplay_next
           && self.up_next != UpNext::Dismissed;
         if autoplay {
@@ -2055,6 +2099,7 @@ impl PlayerView {
       // Also cuts a running fade-out short: the fade-in starts over from transparent.
       self.controls_visible = true;
       self.controls_animation = self.controls_animation.wrapping_add(1);
+      self.controls_changed = Some(Instant::now());
       self.controls_fade_task = None;
     }
     cx.notify();
@@ -2073,6 +2118,7 @@ impl PlayerView {
           if !busy {
             this.controls_visible = false;
             this.controls_animation = this.controls_animation.wrapping_add(1);
+            this.controls_changed = Some(Instant::now());
             this.controls_fade_task = Some(cx.spawn(async move |this, cx| {
               cx.background_executor().timer(CONTROLS_FADE).await;
               this
@@ -3045,6 +3091,31 @@ impl PlayerView {
             ),
         )
       })
+      // Where something comes next (a playlist's video, an episode): the autoplay switch.
+      .when(self.up_next_item.is_some(), |row| {
+        let on = self.prefs.autoplay_next;
+        row.child(
+          div()
+            .id("autoplay")
+            .px_2()
+            .flex()
+            .items_center()
+            .tooltip(move |window, cx| {
+              Tooltip::new(if on {
+                t("Autoplay is on", "Lecture automatique activée")
+              } else {
+                t("Autoplay is off", "Lecture automatique désactivée")
+              })
+              .build(window, cx)
+            })
+            .child(
+              gpui_component::switch::Switch::new("autoplay-switch")
+                .checked(on)
+                .small()
+                .on_click(cx.listener(|this, on: &bool, _, cx| this.set_autoplay(*on, cx))),
+            ),
+        )
+      })
       .when(!self.chapters.is_empty(), |row| {
         row.child(
           self
@@ -3654,7 +3725,7 @@ impl Render for PlayerView {
       return root.child(self.render_error(error, cx));
     }
     // Skip and "up next" stay visible when the other controls hide.
-    let up_next = self.render_up_next(cx);
+    let up_next = self.render_up_next(window, cx);
     let skip = if up_next.is_none() {
       self.render_skip(show_ui, cx)
     } else {

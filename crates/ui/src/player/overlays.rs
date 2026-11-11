@@ -3,6 +3,7 @@
 //! skip button, the "up next" card, the shortcut help and the error panel. From peeby's player
 //! page.
 
+use gpui::AnimationExt as _;
 use gpui::prelude::*;
 use gpui::{
   AnyElement, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea, div,
@@ -94,6 +95,16 @@ pub fn format_step(seconds: u32) -> String {
     (m, s) => tf!("{m} min {s} sec", "{m} min {s} s"),
   }
 }
+
+/// A playlist's next video's thumbnail on its card, width and height (16:9).
+const UP_NEXT_THUMB: (f32, f32) = (104., 58.5);
+/// The card's distance from the player's bottom edge: with the controls hidden, then shown
+/// (above the control bar).
+const UP_NEXT_BOTTOM: (f32, f32) = (24., 110.);
+/// The card's distance from the player's right edge.
+const UP_NEXT_RIGHT: f32 = 24.;
+/// How far from the right the card slides in.
+const UP_NEXT_SLIDE: f32 = 24.;
 
 impl PlayerView {
   /// The open menu above the control bar.
@@ -486,11 +497,19 @@ impl PlayerView {
   }
 
   /// The "up next" card, with its countdown when autoplay is on.
-  pub(super) fn render_up_next(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+  pub(super) fn render_up_next(
+    &self,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
     let UpNext::Offered(left) = self.up_next else {
       return None;
     };
-    let title = self.up_next_title.clone()?;
+    let item = self.up_next_item.clone()?;
+    if item.picture.is_some() || item.until_end {
+      return Some(self.render_up_next_video(item, window, cx));
+    }
+    let title = item.title.clone();
     let theme = cx.theme();
     let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
     let status = match left {
@@ -537,6 +556,133 @@ impl PlayerView {
         )
         .into_any_element(),
     )
+  }
+
+  /// A playlist's next video, at the bottom right: its thumbnail, "Next video in 7 s" (the time
+  /// left in this one, while autoplay is on), its title and channel, and a chevron; a click
+  /// anywhere plays it now, the "×" in its corner hides the card. It slides in from the right
+  /// as it fades in (at once with reduced motion), low over the picture, and moves up above the
+  /// control bar while it shows.
+  fn render_up_next_video(
+    &self,
+    item: super::UpNextItem,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let theme = cx.theme();
+    let (popover, border, muted) = (theme.popover, theme.border, theme.muted_foreground);
+    let left = (self.duration - self.position).ceil().max(0.0) as u64;
+    let status = if self.prefs.autoplay_next {
+      tf!("Next video in {left} s", "Vidéo suivante dans {left} s")
+    } else {
+      t("Up next", "À suivre").to_owned()
+    };
+    let thumbnail = item.picture.as_ref().map(|picture| {
+      div()
+        .w(px(UP_NEXT_THUMB.0))
+        .h(px(UP_NEXT_THUMB.1))
+        .flex_none()
+        .child(crate::picture::image_fill(
+          picture,
+          UP_NEXT_THUMB.0,
+          UP_NEXT_THUMB.0 / UP_NEXT_THUMB.1,
+          px(4.),
+          window,
+          cx,
+        ))
+    });
+    let card = h_flex()
+      .id("up-next")
+      .occlude()
+      .relative()
+      .w(px(320.))
+      .p_2()
+      .pr_1()
+      .gap_2p5()
+      .items_center()
+      .rounded_lg()
+      .bg(popover)
+      .border_1()
+      .border_color(border)
+      .cursor_pointer()
+      .hover(|s| s.border_color(gpui::white().opacity(0.4)))
+      .on_click(cx.listener(|this, _, _, cx| this.play_next(cx)))
+      .children(thumbnail)
+      .child(
+        v_flex()
+          .flex_1()
+          .min_w_0()
+          .child(div().text_xs().text_color(muted).child(status))
+          .child(
+            div()
+              .text_sm()
+              .line_height(px(18.))
+              .font_weight(FontWeight::SEMIBOLD)
+              .line_clamp(2)
+              .child(item.title.clone()),
+          )
+          .children(
+            item
+              .author
+              .clone()
+              .map(|author| div().text_xs().text_color(muted).truncate().child(author)),
+          ),
+      )
+      .child(
+        div()
+          .flex_none()
+          .text_color(muted)
+          .child(gpui_component::Icon::new(Icon::ChevronRight).size(px(20.))),
+      )
+      .child(
+        div().absolute().top(px(2.)).right(px(2.)).child(
+          Button::new("up-next-cancel")
+            .ghost()
+            .xsmall()
+            .icon(Icon::Close)
+            .tooltip(t("Hide", "Masquer"))
+            .on_click(cx.listener(|this, _, _, cx| {
+              cx.stop_propagation();
+              this.dismiss_up_next(cx);
+            })),
+        ),
+      );
+    // Low over the picture, pushed up above the control bar while it shows: moved with the
+    // bar's own fade (its animation, its length, its curve), so that both go together.
+    let (low, high) = UP_NEXT_BOTTOM;
+    let reduced = cx.reduce_motion();
+    // How far the bar's fade is, 0 to 1, from when it started (its own length and curve);
+    // drawn again at each frame meanwhile.
+    let progress = self.controls_changed.map_or(1., |at| {
+      (at.elapsed().as_secs_f32() / super::CONTROLS_FADE.as_secs_f32()).min(1.)
+    });
+    let progress = if reduced { 1. } else { progress };
+    if progress < 1. {
+      window.request_animation_frame();
+    }
+    let ease = gpui::ease_out_quint();
+    let shown = ease(if self.controls_visible {
+      progress
+    } else {
+      1. - progress
+    });
+    let card = if reduced {
+      card.into_any_element()
+    } else {
+      card
+        .with_animation(
+          SharedString::from(format!("up-next-in-{}", item.title)),
+          gpui::Animation::new(crate::theme::NORMAL).with_easing(gpui::ease_out_quint()),
+          |el, t| el.opacity(t).left(px(UP_NEXT_SLIDE * (1. - t))),
+        )
+        .into_any_element()
+    };
+    div()
+      .absolute()
+      .right(px(UP_NEXT_RIGHT))
+      .bottom(px(low + (high - low) * shown))
+      .child(card)
+      .into_any_element()
   }
 
   /// The keyboard shortcuts (?).

@@ -171,3 +171,19 @@ carries that channel's avatar (as twitch.tv shows it) and its badges are the oth
 session's participants show over the chat. IRC tags the lines (`source-room-id`,
 `source-badges`…): a captured Shared Chat session is saved as a fixture first (chatters renamed);
 duplicates of a line (sent once per room) are dropped. Moderation applies to the line's own room.
+
+## Added after the plan
+
+The user's requests once the plan was done (2026-11-11), on `dev` as well.
+
+### P1. A playlist's next video in the player
+
+Done (2026-11-11), checked by the user in the app (smaller, with a chevron, the "×" in its corner, sliding in, moving with the control bar). In a playlist, 10 s before the video's end, the
+player's bottom right shows the next video (thumbnail, "Vidéo suivante dans X s", title,
+channel); a click plays it at once (docs/player/playback-ux.md, "Up next").
+
+### P2. An autoplay switch on the player
+
+Done (2026-11-11), checked by the user in the app (with autoplay off, a playlist's video now ends there). The shared player's control bar has an autoplay
+switch wherever something comes next (YouTube's playlists, Jellyfin's episodes); it keeps the
+player setting "Lire la suite automatiquement".

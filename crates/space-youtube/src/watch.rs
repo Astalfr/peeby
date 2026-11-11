@@ -49,7 +49,7 @@ use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::segments::{Segment, SegmentKind};
-use ui::player::{PlayerEvent, PlayerView, Prefs};
+use ui::player::{PlayerEvent, PlayerView, Prefs, UpNextItem};
 use ui::{runtime, theme};
 
 /// Width of the related videos column.
@@ -153,8 +153,21 @@ impl WatchView {
             cx.notify();
           }
           PlayerEvent::Sound { volume, muted } => Player::save_sound(volume, muted, cx),
-          PlayerEvent::Ended | PlayerEvent::Next => {
+          PlayerEvent::Autoplay(on) => Player::save_autoplay(on, cx),
+          PlayerEvent::Next => {
             if let Some(queue) = &this.queue {
+              queue.update(cx, |q, cx| q.next(cx));
+            }
+          }
+          // The player plays what it announced itself (`Next`): its end means autoplay is off or
+          // its card was hidden. Without an announced item (the next page still loading), the
+          // queue goes on when autoplay is on.
+          PlayerEvent::Ended => {
+            let announced = player.read(cx).offers_up_next();
+            if !announced
+              && Settings::get(cx).player.autoplay_next
+              && let Some(queue) = &this.queue
+            {
               queue.update(cx, |q, cx| q.next(cx));
             }
           }
@@ -247,15 +260,27 @@ impl WatchView {
     view
   }
 
-  /// The player's previous and next buttons follow the queue.
+  /// The player's previous and next buttons follow the queue, and its "up next" card shows the
+  /// queue's next video 10 s before this one ends.
   fn sync_queue_controls(&self, cx: &mut Context<Self>) {
     let controls = self.queue.as_ref().map(|queue| {
       let queue = queue.read(cx);
       (queue.has_previous(), queue.has_next())
     });
-    self
-      .player
-      .update(cx, |player, cx| player.set_queue(controls, cx));
+    let next = self
+      .queue
+      .as_ref()
+      .and_then(|queue| queue.read(cx).next_video().cloned())
+      .map(|video| UpNextItem {
+        title: video.title.clone().into(),
+        author: video.channel.clone().map(Into::into),
+        picture: Some(convert::picture(&video.thumbnails)),
+        until_end: true,
+      });
+    self.player.update(cx, |player, cx| {
+      player.set_queue(controls, cx);
+      player.set_up_next_item(next, cx);
+    });
   }
 
   /// The playlist next to the player: title, place, shuffle and repeat, and its videos in
