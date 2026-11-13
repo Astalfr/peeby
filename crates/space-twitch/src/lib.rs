@@ -657,8 +657,8 @@ impl TwitchSpace {
   }
 
   /// Opens `route` in `tab`, after the page shown (which is covered: a player pauses). It is
-  /// built when it shows, so a tab in the background builds nothing. A sidebar page or the
-  /// search drops the paused players behind it.
+  /// built when it shows, so a tab in the background builds nothing. A sidebar page, the search
+  /// or a page that plays (one player per tab) drops the paused players behind it.
   pub fn open(&mut self, tab: TabId, route: Route, cx: &mut Context<Self>) {
     let Some(t) = self.tabs.get(tab) else {
       return;
@@ -670,10 +670,10 @@ impl TwitchSpace {
       return;
     }
     self.cover(tab, true, cx);
-    let top_level = route.is_top_level();
+    let unload = route.is_top_level() || route.plays();
     if let Some(t) = self.tabs.get_mut(tab) {
       t.push(Page::unbuilt(route));
-      if top_level {
+      if unload {
         t.unload_behind(Route::plays);
       }
     }

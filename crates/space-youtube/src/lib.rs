@@ -392,7 +392,8 @@ impl YouTubeSpace {
 
   /// Opens `route` in `tab`, after the page shown (which is covered: a watch page pauses). A tab
   /// that has not shown yet builds it when it shows, so a tab in the background plays nothing.
-  /// A sidebar page drops the paused players behind it.
+  /// A sidebar page, or one that plays (one player per tab), drops the paused players behind it;
+  /// a watch page rebuilt with "back" resumes at this session's last position.
   pub fn open(&mut self, tab: TabId, route: Route, window: &mut Window, cx: &mut Context<Self>) {
     let Some(t) = self.tabs.get(tab) else {
       return;
@@ -402,7 +403,7 @@ impl YouTubeSpace {
     }
     let live = t.live();
     self.cover(tab, true, cx);
-    let top_level = route.is_top_level();
+    let unload = route.is_top_level() || route.plays();
     let page = if live {
       let view = self.build(tab, &route, window, cx);
       Page::new(route, view)
@@ -411,7 +412,7 @@ impl YouTubeSpace {
     };
     if let Some(t) = self.tabs.get_mut(tab) {
       t.push(page);
-      if top_level {
+      if unload {
         t.unload_behind(Route::plays);
       }
     }
@@ -566,6 +567,7 @@ impl YouTubeSpace {
         t.replace(Page::unbuilt(route));
       } else {
         t.push(Page::unbuilt(route));
+        t.unload_behind(Route::plays);
       }
     }
     let nav = Nav::new(cx.weak_entity(), tab);

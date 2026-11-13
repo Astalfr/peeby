@@ -34,10 +34,11 @@ moves a playing video to the mini-player (ADR 0008) instead of pausing it.
   settings show replaces the page under them; the settings stay on top.
 - Views kept: the pages behind the one shown keep their view (scroll, search, a paused player),
   up to 10 entries back; older ones keep only their route and title. The page left with "back"
-  drops its view, as a pop did: its player stops and reports. A sidebar page or the search drops
-  the views of the pages with a player behind it (YouTube watch and Shorts, Twitch lives, VODs and
-  clips); any page opened in Jellyfin drops a player behind it. A history keeps at most 50
-  entries.
+  drops its view, as a pop did: its player stops and reports. A sidebar page, the search or a
+  page that plays drops the views of the pages with a player behind it (YouTube watch and Shorts,
+  Twitch lives, VODs and clips), so a tab holds one player (since 2026-11-13: a video opened from
+  another kept the first one loaded, paused); any page opened in Jellyfin drops a player behind
+  it. A history keeps at most 50 entries.
 - The sidebar lights the last top-level page (the sidebar's, the search) up to the page shown,
   nothing on the settings.
 - The settings page is an entry of a tab's history, drawn by the shell (`Space::settings_shown`).
@@ -66,6 +67,7 @@ moves a playing video to the mini-player (ADR 0008) instead of pausing it.
 - A page reached with "forward" is built again: a video starts over from its resume position on
   the account, a Jellyfin title is played again (and reported). A rebuilt watch page of a queue
   plays its video alone.
-- A paused player can stay alive behind the page shown (up to 10 entries back, until a sidebar
-  page opens), as on the old stack.
+- A paused player can stay alive behind a page without one (up to 10 entries back, until a
+  sidebar page or another player opens), as on the old stack. "Back" to a video left for another
+  builds it again: YouTube resumes at this session's last position.
 - Revisit if tabs are restored at startup: the routes of each history are what to save.
