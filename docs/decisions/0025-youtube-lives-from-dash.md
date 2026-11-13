@@ -44,15 +44,18 @@ second stream path. Measured on 2026-11-05, anonymous (`live_probe`, then `spike
   local HTTP server on 127.0.0.1 with a random key, like `twitch::Proxy`. Lives without DVR, videos,
   and a proxy that fails to start keep the HLS path. An HLS live keeps its one-hour window.
 - **Playlists.** On each reload the proxy writes a live media playlist per format. It lists the
-  segment numbers from the first one kept to the estimated edge, minus one, each `EXTINF` the
+  segment numbers from the first one kept to the newest one read, each `EXTINF` the
   measured length. Each URI is a short local path (`s/<track>/<sq>`) answered with a 302 to the
   signed URL. `MEDIA-SEQUENCE` is the first number, and it slides once the window is full.
 - **The edge** is read with `HEAD` when the proxy starts (the chosen video and the audio, together),
-  then at most every 2 s while mpv reloads (so about once per reload), and estimated in between. The
-  newest segment read is always listed, the estimate only a segment behind, and a playlist's end never
+  then at most every 2 s while mpv reloads (so about once per reload), and a playlist's end never
   goes back. A track parked at the edge takes a seek only once its playlist grows: with a reading
-  every 10 s, the estimate ran behind and a seek back took 5 to 6 s; now 1.9 s (0.8 s on YouTube's
-  HLS). A segment's length is `x-head-time-millis / x-head-seqnum` when within 5 % of the announced
+  every 10 s, a seek back took 5 to 6 s; now 1.9 s (0.8 s on YouTube's HLS). Nothing is listed past
+  the newest segment read: an estimate from the time since the reading (as first done) ran ahead
+  whenever the broadcast slowed or the reading was old, and mpv then asked for segments not made
+  yet, which YouTube holds for seconds and answers 204 (mpv skips them: frozen picture, gaps in the
+  sound; a 2 s-segment live buffered every few seconds). A live from a hover's prefetch reads its
+  edge again before its start is computed (`LiveProxy::length_fresh`). A segment's length is `x-head-time-millis / x-head-seqnum` when within 5 % of the announced
   one.
 - **The first segment kept** is the DVR length back from the edge, served on most lives. If it is
   gone (24/7 lives keep less than they announce), a search in the background halves the gap to the

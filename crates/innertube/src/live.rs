@@ -52,9 +52,6 @@ const DEFAULT_EXPIRY: Duration = Duration::from_secs(6 * 3600);
 const REFRESH_RETRY: Duration = Duration::from_secs(60);
 /// An edge that has not moved for this long: the live may have ended.
 const STALLED_AFTER: Duration = Duration::from_secs(60);
-/// Segments the playlist stops before the estimated edge, which may run ahead of YouTube's (the
-/// newest segment read is always listed).
-const EDGE_MARGIN: u64 = 1;
 /// Segments added after the first one found served, should the formats' numbers differ a little.
 const FIRST_MARGIN: u64 = 2;
 /// Below this edge number, a segment's length is the announced one, not the measured average.
@@ -121,14 +118,6 @@ struct Edge {
   moved_at: Instant,
   /// The same on the wall clock, never reset by a stall: about when segment `sq` was complete.
   grew_at: SystemTime,
-}
-
-impl Edge {
-  /// The newest segment now, estimated from the last reading.
-  fn now(&self, at: Instant) -> u64 {
-    let elapsed = at.saturating_duration_since(self.read_at).as_secs_f64();
-    self.sq + (elapsed / self.segment) as u64
-  }
 }
 
 struct Shared {
@@ -277,8 +266,19 @@ impl LiveProxy {
     let Some(edge) = *lock(&shared.tracks[self.0.main].edge) else {
       return 0.0;
     };
-    let (first, last) = shared.range(&edge, Instant::now());
+    let (first, last) = shared.range(&edge);
     (last + 1).saturating_sub(first) as f64 * edge.segment
+  }
+
+  /// [`LiveProxy::length`] from a new reading of the edge (one `HEAD`, the last reading kept
+  /// should it fail): a proxy started a while ago (a hover's prefetch) knows only where the edge
+  /// was then, and a live started from there would begin further behind it than meant. Call it
+  /// on a tokio runtime.
+  pub async fn length_fresh(&self) -> f64 {
+    if let Err(e) = read_edge(&self.0.shared, self.0.main).await {
+      tracing::debug!("live proxy: edge not read again: {e}");
+    }
+    self.length()
   }
 
   /// About when the end of the video playlist mpv read last left the broadcaster, for the
@@ -335,13 +335,12 @@ impl Shared {
   }
 
   /// The segments listed for an edge read as `edge`: from the first kept (sliding once the
-  /// window is full) to the newest one read, or further when the estimate is a margin past it.
-  fn range(&self, edge: &Edge, at: Instant) -> (u64, u64) {
-    let last = if self.ended.load(Ordering::Relaxed) {
-      edge.sq
-    } else {
-      edge.now(at).saturating_sub(EDGE_MARGIN).max(edge.sq)
-    };
+  /// window is full) to the newest one read, never further. A segment past it does not exist
+  /// yet: YouTube holds its request for seconds, then answers 204, and mpv skips it (a gap in
+  /// the sound or a frozen picture). An estimate from the time since the reading ran ahead
+  /// whenever the broadcast slowed, or the reading was old (a hover's prefetch).
+  fn range(&self, edge: &Edge) -> (u64, u64) {
+    let last = edge.sq;
     let kept = (*lock(&self.window) / edge.segment) as u64;
     let first = (*lock(&self.first)).max(last.saturating_sub(kept));
     (first.min(last), last)
@@ -642,7 +641,7 @@ async fn playlist(shared: &Arc<Shared>, i: usize) -> Result<String> {
     Some(edge) => read_edge(shared, i).await.unwrap_or(edge),
     None => read_edge(shared, i).await?,
   };
-  let (first, last) = shared.range(&edge, now);
+  let (first, last) = shared.range(&edge);
   // A reading behind the previous estimate keeps the segments already listed.
   let last = shared.tracks[i]
     .listed
@@ -785,19 +784,5 @@ mod tests {
     assert_eq!(first_served(0, 1_896, probe(0)).await, None);
     // No answer for `first`: nothing changes.
     assert_eq!(first_served(0, 1_896, |_| async { None }).await, None);
-  }
-
-  #[test]
-  fn edge_estimate() {
-    let at = Instant::now();
-    let edge = Edge {
-      sq: 100,
-      segment: 5.0,
-      read_at: at,
-      moved_at: at,
-      grew_at: SystemTime::now(),
-    };
-    assert_eq!(edge.now(at), 100);
-    assert_eq!(edge.now(at + Duration::from_secs(12)), 102);
   }
 }

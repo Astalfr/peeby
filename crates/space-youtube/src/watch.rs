@@ -1189,11 +1189,31 @@ pub(super) fn load_stream(
       stream.codecs
     );
     let proxy = stream.live.as_ref().and_then(|l| l.proxy.clone());
-    let mut source = convert::source(stream, &Settings::get(cx).player);
-    resume(&mut source, start);
-    ytdl_fallback(&mut source, video_id, start, player.downgrade());
-    player.update(cx, |player, cx| player.start(source, clicked, cx));
-    settle_window(proxy, player, cx);
+    let Some(live) = proxy.clone() else {
+      let mut source = convert::source(stream, &Settings::get(cx).player);
+      resume(&mut source, start);
+      ytdl_fallback(&mut source, video_id, start, player.downgrade());
+      player.update(cx, |player, cx| player.start(source, clicked, cx));
+      settle_window(proxy, player, cx);
+      return;
+    };
+    // A prefetched live's edge was read at the hover, seconds ago: its start, `LIVE_DELAY`
+    // before the edge, comes from a new reading (one `HEAD`, a fraction of a second).
+    let fresh = runtime::spawn(cx, async move { live.length_fresh().await });
+    let player_settings = Settings::get(cx).player.clone();
+    let player = player.downgrade();
+    cx.spawn(async move |cx| {
+      fresh.await;
+      let mut source = convert::source(stream, &player_settings);
+      resume(&mut source, start);
+      if let Some(player) = player.upgrade() {
+        cx.update(|cx| {
+          player.update(cx, |player, cx| player.start(source, clicked, cx));
+          settle_window(proxy, &player, cx);
+        });
+      }
+    })
+    .detach();
     return;
   }
   let max_height = Settings::get(cx).max_height;
