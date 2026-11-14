@@ -92,6 +92,21 @@ fn cache_dir() -> Option<PathBuf> {
   Some(cache)
 }
 
+/// Makes yt-dlp's cache folder the process's working directory. mpv starts yt-dlp in Peeby's,
+/// and yt-dlp writes files there (its format check's test download, `NamedTemporaryFile(dir='.')`):
+/// started with Windows or from some shortcuts, Peeby's is `C:\Windows\System32`, where that fails
+/// with `Permission denied` and mpv, left with the watch page, ends with "unrecognized file format"
+/// (error -17). Every path of the app is absolute, so nothing else depends on it. Blocking (creates
+/// the folder): call it before the UI.
+pub fn set_working_dir() {
+  let Some(cache) = cache_dir() else {
+    return;
+  };
+  if let Err(e) = std::env::set_current_dir(&cache) {
+    tracing::warn!("working directory: {e}");
+  }
+}
+
 /// Runs `yt-dlp -U` if the last check is more than a day old. yt-dlp verifies the release's
 /// SHA2-256SUMS itself. Blocking (network, a few seconds): run it in the background.
 pub fn update_ytdlp() {

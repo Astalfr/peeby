@@ -36,6 +36,8 @@ fn main() {
     std::process::exit(export_cookies());
   }
   std::thread::spawn(tools::remove_cookie_copy);
+  // yt-dlp, started by mpv, writes in the working directory: never System32 (Windows' at login).
+  tools::set_working_dir();
   // One Peeby at a time (ADR 0020): two would rewrite the same cookie jar and spend the same
   // Twitch refresh token. A next launch hands its arguments to the first one and ends.
   let args: Vec<String> = std::env::args().skip(1).collect();
