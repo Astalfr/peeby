@@ -10,6 +10,8 @@ use innertube::{Client, Stream};
 use peeby_core::settings::Settings;
 use ui::runtime;
 
+use crate::convert::error_text;
+
 /// The mouse must rest this long on a card: sweeping over a grid fetches nothing.
 const HOVER_DELAY: Duration = Duration::from_millis(300);
 /// Under the 6 h validity of the URLs, with margin for a long video.
@@ -19,11 +21,18 @@ const FRESH_FOR: Duration = Duration::from_secs(4 * 3600);
 const LIVE_FRESH_FOR: Duration = Duration::from_secs(10);
 /// Resolved streams kept; the oldest go first.
 const CAPACITY: usize = 64;
+/// How long a video VISIONOS refused with `LOGIN_REQUIRED` goes straight to yt-dlp. YouTube's
+/// bot check ("Sign in to confirm you're not a bot") refuses some videos to every anonymous
+/// client from an IP for hours, while others still play: asking again for those only costs
+/// requests (which feed the check) and a second before yt-dlp starts.
+const REFUSED_FOR: Duration = Duration::from_secs(30 * 60);
 
 /// The streams resolved ahead of the clicks, a global.
 pub struct Streams {
   client: Client,
   ready: HashMap<String, (Instant, Stream)>,
+  /// Videos VISIONOS refused with `LOGIN_REQUIRED`: when, and the error to show if yt-dlp fails.
+  refused: HashMap<String, (Instant, String)>,
   pending: HashSet<String>,
   /// The card under the mouse, if any.
   hovered: Option<String>,
@@ -39,6 +48,7 @@ pub fn init(client: Client, cx: &mut App) {
   let streams = cx.new(|_| Streams {
     client,
     ready: HashMap::new(),
+    refused: HashMap::new(),
     pending: HashSet::new(),
     hovered: None,
   });
@@ -89,6 +99,20 @@ pub fn take(video_id: &str, cx: &mut App) -> Option<Stream> {
   })
 }
 
+/// The error VISIONOS gave `video_id` if it refused it with `LOGIN_REQUIRED` in the last
+/// [`REFUSED_FOR`]: the watch page then starts yt-dlp without asking VISIONOS again.
+pub fn refused(video_id: &str, cx: &mut App) -> Option<String> {
+  let Handle(streams) = cx.try_global::<Handle>().cloned()?;
+  streams.update(cx, |streams, _| streams.refused_text(video_id))
+}
+
+/// Notes that VISIONOS refused `video_id` with `error` (kept only for `LOGIN_REQUIRED`).
+pub fn note_refused(video_id: &str, error: &innertube::Error, cx: &mut App) {
+  if let Some(Handle(streams)) = cx.try_global::<Handle>().cloned() {
+    streams.update(cx, |streams, _| streams.note_refused(video_id, error));
+  }
+}
+
 /// Whether a stream resolved `at` can still be played. A live's window may have grown since
 /// (until it reaches its DVR length): it would start that much behind its edge.
 fn fresh(at: Instant, stream: &Stream) -> bool {
@@ -101,6 +125,19 @@ fn fresh(at: Instant, stream: &Stream) -> bool {
 }
 
 impl Streams {
+  fn refused_text(&mut self, video_id: &str) -> Option<String> {
+    self.refused.retain(|_, (at, _)| at.elapsed() < REFUSED_FOR);
+    self.refused.get(video_id).map(|(_, text)| text.clone())
+  }
+
+  fn note_refused(&mut self, video_id: &str, error: &innertube::Error) {
+    if matches!(error, innertube::Error::Unplayable { status, .. } if status == "LOGIN_REQUIRED") {
+      self
+        .refused
+        .insert(video_id.to_owned(), (Instant::now(), error_text(error)));
+    }
+  }
+
   fn fetch(&mut self, id: String, cx: &mut Context<Self>) {
     // A stale live holds its proxy (ADR 0025): dropped, it stops.
     self.ready.retain(|_, (at, stream)| fresh(*at, stream));
@@ -108,7 +145,7 @@ impl Streams {
       .ready
       .get(&id)
       .is_some_and(|(at, stream)| fresh(*at, stream));
-    if fresh || !self.pending.insert(id.clone()) {
+    if fresh || self.refused_text(&id).is_some() || !self.pending.insert(id.clone()) {
       return;
     }
     let client = self.client.clone();
@@ -135,7 +172,10 @@ impl Streams {
               streams.ready.insert(id, (Instant::now(), stream));
             }
             // The watch page will try again, and fall back to yt-dlp if needed.
-            Some(Err(e)) => tracing::debug!("prefetch {id}: {e}"),
+            Some(Err(e)) => {
+              tracing::debug!("prefetch {id}: {e}");
+              streams.note_refused(&id, &e);
+            }
             None => {}
           }
         })

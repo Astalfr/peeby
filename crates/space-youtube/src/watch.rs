@@ -1216,6 +1216,19 @@ pub(super) fn load_stream(
     .detach();
     return;
   }
+  // Refused minutes ago by YouTube's bot check: VISIONOS would refuse it again.
+  if let Some(failed) = prefetch::refused(video_id, cx) {
+    tracing::info!("VISIONOS refused {video_id} recently, trying yt-dlp");
+    start_ytdl(
+      video_id.to_owned(),
+      start,
+      player.downgrade(),
+      clicked,
+      failed.into(),
+      cx,
+    );
+    return;
+  }
   let max_height = Settings::get(cx).max_height;
   let player_settings = Settings::get(cx).player.clone();
   let (client, id) = (client.clone(), video_id.to_owned());
@@ -1279,6 +1292,7 @@ pub(super) fn load_stream(
     }
     tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
     cx.update(|cx| {
+      prefetch::note_refused(&video_id, &error, cx);
       start_ytdl(
         video_id,
         start,
