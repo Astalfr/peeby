@@ -60,7 +60,9 @@ five steps, each one shippable:
      different windows play together).
    - **A window is never destroyed while Peeby runs.** Closed while another is open, its tabs
      close (their pages and videos), as a browser's do, and it hides as a spare that the next
-     new window reuses. A page keeps what it was built with: subscriptions through its window
+     new window reuses. Their mpv goes first (`PlayerView::release`): hidden, the window draws
+     no new frame, so its last one still holds the page shown and its player, which played on
+     out of reach until then. A page keeps what it was built with: subscriptions through its window
      (`subscribe_in`: the YouTube queue's next video, Jellyfin's player events and their
      account reports), gpui-component's inputs and focus callbacks. A tab moved to another
      window would lose them with the window it was built in; hidden, that window keeps them

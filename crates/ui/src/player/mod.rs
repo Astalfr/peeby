@@ -1221,6 +1221,42 @@ impl PlayerView {
     self.start_with(options, Instant::now(), cx);
   }
 
+  /// Its page closed (its tab gone): mpv goes now, even while something still holds this view
+  /// or its picture (a hidden window's last frame holds the page it showed, ADR 0028). Its
+  /// tasks stop, a start under way included; the view shows nothing more.
+  pub fn release(&mut self, cx: &mut Context<Self>) {
+    // mpv's events, and its start when it is under way (the player it makes is dropped).
+    self._events = None;
+    for task in [
+      &mut self.countdown_task,
+      &mut self.stats_task,
+      &mut self.hold_task,
+      &mut self.osd_task,
+      &mut self.controls_fade_task,
+      &mut self.volume_close_task,
+      &mut self.hide_task,
+      &mut self._sleep_task,
+      &mut self.live_tick,
+      &mut self.rewind_tick,
+      &mut self.stall_task,
+      &mut self.video_stopped_task,
+      &mut self.drops_task,
+    ] {
+      *task = None;
+    }
+    // A picture holds its player through its resize handler.
+    for video in [self.video.take(), self.previous_video.take()]
+      .into_iter()
+      .flatten()
+    {
+      video.update(cx, |video, _| video.set_resize_handler(Rc::new(|_, _| {})));
+    }
+    if let Some(player) = self.player.take() {
+      player.set_paused(true);
+    }
+    cx.notify();
+  }
+
   /// Pauses.
   pub fn pause(&self) {
     self.with_player(|p| p.set_paused(true));

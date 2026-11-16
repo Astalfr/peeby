@@ -449,7 +449,7 @@ impl Shell {
   pub(crate) fn close_all(&mut self, cx: &mut Context<Self>) {
     self.close_mini(cx);
     for tab in std::mem::take(&mut self.tabs) {
-      self.spaces[tab.space].close_tab(tab.id, cx);
+      self.release_tab(tab, cx);
     }
     self.active = None;
     self.settings = None;
@@ -571,7 +571,7 @@ impl Shell {
     if self.mini.as_ref().is_some_and(|m| m.tab == tab) {
       self.close_mini(cx);
     }
-    self.spaces[tab.space].close_tab(tab.id, cx);
+    self.release_tab(tab, cx);
     if self.active == Some(tab) {
       // Nothing to move to the mini-player: the page that showed is gone.
       let next = self.tabs[index.min(self.tabs.len() - 1)];
@@ -579,6 +579,17 @@ impl Shell {
       cx.refresh_windows();
     }
     cx.notify();
+  }
+
+  /// Closes `tab` in its space, its video's mpv released first: a window hidden as it closes
+  /// draws no new frame, so its last one still holds the page shown and its player, which
+  /// would play on out of reach (ADR 0028).
+  fn release_tab(&mut self, tab: TabRef, cx: &mut Context<Self>) {
+    let space = &self.spaces[tab.space];
+    if let Some(player) = space.player(tab.id, cx) {
+      player.update(cx, |player, cx| player.release(cx));
+    }
+    space.close_tab(tab.id, cx);
   }
 
   /// The page on screen goes away (another tab, the settings): a video playing on it moves to
