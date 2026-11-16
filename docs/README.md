@@ -20,6 +20,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
 | Videos the bot check refuses to VISIONOS | The signed-in `web_embedded` client (HLS up to 1080p, storyboard, qualities, captions), its `n` challenge solved by yt-dlp's EJS scripts in a Deno kept running, `adPlaybackContext.pyv` against the ad wait; yt-dlp after it | [0038](decisions/0038-signed-in-web-embedded-fallback.md) |
+| Higher qualities of those videos | The signed-in `tv_samsung`'s direct formats (VP9, AV1, up to 4K, never with `pyv`: served to the end only behind their ad), offered in the quality menu once served, through a local proxy that fetches them in 10 MB chunks | [0039](decisions/0039-direct-formats-through-tv-samsung.md) |
 | Look and motion | Peeby's visual system, one accent per space (YouTube red, Jellyfin blue) | [0006](decisions/0006-peeby-visual-system.md) |
 | Multi-service app (YouTube, Jellyfin, Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
 | Mini-player | A window of its own above the others (PopUp), the same video surface, one sound at a time per window | [0008](decisions/0008-mini-player-window.md) |

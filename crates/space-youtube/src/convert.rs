@@ -143,6 +143,31 @@ fn hls_options(
   options
 }
 
+/// The menu's qualities of a [`innertube::DirectOffer`] served by `proxy`: each video format with
+/// the offer's audio.
+pub fn direct_qualities(
+  offer: &innertube::DirectOffer,
+  proxy: &innertube::DirectProxy,
+  player: &settings::Player,
+) -> Vec<Quality> {
+  offer
+    .videos
+    .iter()
+    .enumerate()
+    .filter_map(|(i, video)| {
+      Some(Quality {
+        label: video.label().into(),
+        options: hls_options(
+          proxy.video_url(i)?,
+          Some(proxy.audio_url()),
+          offer.user_agent,
+          player,
+        ),
+      })
+    })
+    .collect()
+}
+
 /// The watch page's chapters, for the player's seek bar.
 pub fn chapters(chapters: &[Chapter]) -> Vec<player::Chapter> {
   chapters

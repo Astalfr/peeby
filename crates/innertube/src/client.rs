@@ -12,9 +12,9 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::live::LiveProxy;
 use crate::models::{
-  Channel, CommentPage, Feed, LikeStatus, Live, LiveChatPage, NotificationPage, Playlist,
-  PlaylistChoice, PlaylistSummary, Related, SearchPage, SearchResult, ShortsPage, Stream, Tracking,
-  VideoItem, Votes, WatchPage, Watchtime,
+  Channel, CommentPage, DirectOffer, Feed, LikeStatus, Live, LiveChatPage, NotificationPage,
+  Playlist, PlaylistChoice, PlaylistSummary, Related, SearchPage, SearchResult, ShortsPage, Stream,
+  Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
   find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
@@ -1344,6 +1344,119 @@ impl Client {
     video_id: &str,
     pyv: bool,
   ) -> Result<(Value, crate::jsc::PlayerJs, Instant)> {
+    let page = self.embed_page(video_id).await?;
+    let version = page
+      .config
+      .client_version
+      .clone()
+      .unwrap_or_else(|| embedded::CLIENT_VERSION.to_owned());
+    let (hl, gl) = &*self.language;
+    let client = json!({
+      "clientName": embedded::CLIENT_NAME,
+      "clientVersion": version,
+      "userAgent": embedded::EMBEDDED_USER_AGENT,
+      "hl": hl,
+      "gl": gl,
+    });
+    let mut playback = json!({});
+    if let Some(flags) = &page.config.host_flags {
+      playback["encryptedHostFlags"] = json!(flags);
+    }
+    let call = SignedPlayer {
+      client,
+      name_id: embedded::CLIENT_NAME_ID,
+      version: &version,
+      user_agent: embedded::EMBEDDED_USER_AGENT,
+      embedded: true,
+      playback,
+      pyv,
+    };
+    let player = self.signed_player(video_id, &page, call).await?;
+    Ok((player, page.js, Instant::now()))
+  }
+
+  /// The signed-in `TVHTML5` (`tv_samsung`) `player` answer of `video_id`, its player JS and
+  /// when it came: direct formats up to 4K (VP9, AV1, Opus) served to their end without a PO
+  /// token, once its pre-roll ads could be skipped. Never with `pyv`: without its ads the same
+  /// formats stop after the first minute (docs/youtube-bot-check.md).
+  pub async fn tv_player(&self, video_id: &str) -> Result<(Value, crate::jsc::PlayerJs, Instant)> {
+    let page = self.embed_page(video_id).await?;
+    let (hl, gl) = &*self.language;
+    let client = json!({
+      "clientName": embedded::TV_CLIENT_NAME,
+      "clientVersion": embedded::TV_CLIENT_VERSION,
+      "userAgent": embedded::TV_USER_AGENT,
+      "deviceMake": "Samsung",
+      "deviceModel": "UKS9800",
+      "osName": "Tizen",
+      "osVersion": "2.4.0",
+      "hl": hl,
+      "gl": gl,
+    });
+    let call = SignedPlayer {
+      client,
+      name_id: embedded::TV_CLIENT_NAME_ID,
+      version: embedded::TV_CLIENT_VERSION,
+      user_agent: embedded::TV_USER_AGENT,
+      embedded: false,
+      playback: json!({}),
+      pyv: false,
+    };
+    let player = self.signed_player(video_id, &page, call).await?;
+    Ok((player, page.js, Instant::now()))
+  }
+
+  /// `video_id`'s direct formats through `tv_player`, their `n` solved by `solver`: the
+  /// qualities above web_embedded's HLS (VP9 or AV1, up to 4K), with the audio, and when they
+  /// are served. `None` when the answer has no pre-roll ad: without one, these formats stop
+  /// after the first minute (measured with `pyv`), so none is offered.
+  pub async fn tv_offer(
+    &self,
+    video_id: &str,
+    solver: &Arc<crate::jsc::Solver>,
+  ) -> Result<Option<DirectOffer>> {
+    let (player, js, answered) = self.tv_player(video_id).await?;
+    hls_manifest_url(&player).or_else(|e| match e {
+      // A TV answer has no HLS: only its status matters.
+      Error::Parse { .. } => Ok(""),
+      e => Err(e),
+    })?;
+    let wait = embedded::ad_wait(&player);
+    if wait <= 0. {
+      return Ok(None);
+    }
+    let Some((mut videos, mut audio)) = embedded::direct_formats(&player) else {
+      return Ok(None);
+    };
+    let mut solved: HashMap<String, String> = HashMap::new();
+    for url in videos
+      .iter_mut()
+      .map(|v| &mut v.url)
+      .chain(std::iter::once(&mut audio.url))
+    {
+      let Some(challenge) = embedded::query_n(url).map(str::to_owned) else {
+        continue;
+      };
+      let result = match solved.get(&challenge) {
+        Some(result) => result.clone(),
+        None => {
+          let result = solver.solve_n(&js, &challenge).await?;
+          solved.insert(challenge.clone(), result.clone());
+          result
+        }
+      };
+      *url = embedded::with_query_n(url, &result);
+    }
+    Ok(Some(DirectOffer {
+      videos,
+      audio,
+      user_agent: embedded::TV_USER_AGENT,
+      served_at: answered + Duration::from_secs_f64(wait),
+    }))
+  }
+
+  /// The embed page's ytcfg and its player JS, which every signed-in fallback request needs.
+  async fn embed_page(&self, video_id: &str) -> Result<EmbedPage> {
     let session = self.session.as_ref().ok_or(Error::SignInRequired)?;
     let page = self
       .http
@@ -1368,40 +1481,39 @@ impl Client {
       detail: "no player JS".into(),
     })?;
     let (sts, js) = self.player_js(&path).await?;
-    let version = config
-      .client_version
-      .clone()
-      .unwrap_or_else(|| embedded::CLIENT_VERSION.to_owned());
-    let visitor = config
+    Ok(EmbedPage { config, sts, js })
+  }
+
+  /// A signed-in `player` request as yt-dlp makes it for `call`'s client.
+  async fn signed_player(
+    &self,
+    video_id: &str,
+    page: &EmbedPage,
+    call: SignedPlayer<'_>,
+  ) -> Result<Value> {
+    let session = self.session.as_ref().ok_or(Error::SignInRequired)?;
+    let visitor = page
+      .config
       .visitor_data
       .clone()
       .or_else(|| self.state().visitor_data.clone());
-    let (hl, gl) = &*self.language;
-    let mut playback = json!({ "contentPlaybackContext": {
-      "html5Preference": "HTML5_PREF_WANTS",
-      "signatureTimestamp": sts,
-    }});
-    if let Some(flags) = &config.host_flags {
-      playback["contentPlaybackContext"]["encryptedHostFlags"] = json!(flags);
-    }
-    if pyv {
-      playback["adPlaybackContext"] = json!({ "pyv": true });
-    }
-    let mut client = json!({
-      "clientName": embedded::CLIENT_NAME,
-      "clientVersion": version,
-      "userAgent": embedded::EMBEDDED_USER_AGENT,
-      "hl": hl,
-      "gl": gl,
-    });
+    let mut client = call.client;
     if let Some(visitor) = &visitor {
       client["visitorData"] = json!(visitor);
     }
+    let mut content = call.playback;
+    content["html5Preference"] = json!("HTML5_PREF_WANTS");
+    content["signatureTimestamp"] = json!(page.sts);
+    let mut playback = json!({ "contentPlaybackContext": content });
+    if call.pyv {
+      playback["adPlaybackContext"] = json!({ "pyv": true });
+    }
+    let mut context = json!({ "client": client });
+    if call.embedded {
+      context["thirdParty"] = json!({ "embedUrl": embedded::EMBED_URL });
+    }
     let body = json!({
-      "context": {
-        "client": client,
-        "thirdParty": { "embedUrl": embedded::EMBED_URL },
-      },
+      "context": context,
       "videoId": video_id,
       "playbackContext": playback,
       "contentCheckOk": true,
@@ -1410,11 +1522,11 @@ impl Client {
     let mut request = self
       .http
       .post(format!("{ORIGIN}/youtubei/v1/player?prettyPrint=false"))
-      .header("User-Agent", embedded::EMBEDDED_USER_AGENT)
+      .header("User-Agent", call.user_agent)
       .header("Origin", ORIGIN)
       .header("X-Origin", ORIGIN)
-      .header("X-Youtube-Client-Name", embedded::CLIENT_NAME_ID)
-      .header("X-Youtube-Client-Version", &version)
+      .header("X-Youtube-Client-Name", call.name_id)
+      .header("X-Youtube-Client-Version", call.version)
       .header("X-Youtube-Bootstrap-Logged-In", "true")
       .json(&body);
     if let Some(visitor) = &visitor {
@@ -1427,8 +1539,7 @@ impl Client {
         .header("Authorization", cookies.authorization())
         .header("X-Goog-AuthUser", "0");
     }
-    let player = self.send("player", request, true).await?;
-    Ok((player, js, Instant::now()))
+    self.send("player", request, true).await
   }
 
   /// The player JS at `path` and its `signatureTimestamp`, fetched once per version.
@@ -1537,6 +1648,28 @@ impl Client {
     }
     Ok(hls::playlist_length(&response.text().await?))
   }
+}
+
+/// The embed page's ytcfg, with its player JS and `signatureTimestamp`.
+struct EmbedPage {
+  config: embedded::EmbedConfig,
+  sts: u32,
+  js: crate::jsc::PlayerJs,
+}
+
+/// What differs between the signed-in clients of [`Client::signed_player`].
+struct SignedPlayer<'a> {
+  /// `context.client`, without its `visitorData`.
+  client: Value,
+  /// `X-Youtube-Client-Name`.
+  name_id: &'static str,
+  version: &'a str,
+  user_agent: &'static str,
+  /// Claims an embedding page (`context.thirdParty`).
+  embedded: bool,
+  /// Extra `contentPlaybackContext` fields.
+  playback: Value,
+  pyv: bool,
 }
 
 /// Runs `futures` concurrently and returns their outputs in order.

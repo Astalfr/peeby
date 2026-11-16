@@ -8,6 +8,8 @@
 
 use serde_json::Value;
 
+use crate::models::{DirectAudio, DirectVideo};
+
 /// `clientName` of the client.
 pub(crate) const CLIENT_NAME: &str = "WEB_EMBEDDED_PLAYER";
 /// `X-Youtube-Client-Name` of the client.
@@ -19,6 +21,12 @@ pub(crate) const CLIENT_VERSION: &str = "2.20260708.00.00";
 pub const EMBEDDED_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)";
 /// The page the player claims to be embedded in: any non-YouTube URL (yt-dlp).
 pub(crate) const EMBED_URL: &str = "https://www.reddit.com/";
+/// `tv_samsung` (yt-dlp): `clientName`, `X-Youtube-Client-Name`, `clientVersion`, User-Agent.
+pub(crate) const TV_CLIENT_NAME: &str = "TVHTML5";
+pub(crate) const TV_CLIENT_NAME_ID: &str = "7";
+pub(crate) const TV_CLIENT_VERSION: &str = "5.20260707";
+/// Its direct formats are fetched with it too.
+pub const TV_USER_AGENT: &str = "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1";
 
 /// What a `player` request needs from the embed page (`/embed/<id>?html5=1`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,6 +124,100 @@ pub fn ad_wait(player: &Value) -> f64 {
     .fold(0., |total, seconds| total + seconds)
 }
 
+/// A player answer's direct formats with a URL, as the menu offers them: per height from 1080p
+/// up, VP9 (SDR before HDR), else AV1, highest first; and the audio, Opus before AAC, the
+/// original track of a dubbed video. `None` without video or audio.
+pub fn direct_formats(player: &Value) -> Option<(Vec<DirectVideo>, DirectAudio)> {
+  let formats: Vec<&Value> = player["streamingData"]["adaptiveFormats"]
+    .as_array()?
+    .iter()
+    .filter(|f| f["url"].is_string())
+    .collect();
+  let mime = |f: &Value| f["mimeType"].as_str().unwrap_or_default().to_owned();
+  let codecs = |f: &Value| {
+    let mime = mime(f);
+    mime
+      .split("codecs=\"")
+      .nth(1)
+      .map(|c| c.trim_end_matches('"').to_owned())
+      .unwrap_or_default()
+  };
+  let mut videos: Vec<(u32, (u8, u64), DirectVideo)> = Vec::new();
+  for f in formats.iter().filter(|f| mime(f).starts_with("video/")) {
+    let (Some(width), Some(height)) = (f["width"].as_u64(), f["height"].as_u64()) else {
+      continue;
+    };
+    // A vertical video's shorter side, as `hls::Variant::height`.
+    let height = u32::try_from(width.min(height)).unwrap_or(0);
+    let codecs = codecs(f);
+    let hdr = f["colorInfo"]["transferCharacteristics"]
+      .as_str()
+      .is_some_and(|t| t.contains("SMPTEST2084") || t.contains("HLG"));
+    let family: u8 = match (codecs.starts_with("vp09") || codecs.starts_with("vp9"), hdr) {
+      (true, false) => 3,
+      _ if codecs.starts_with("av01") && !hdr => 2,
+      (true, true) => 1,
+      _ => 0,
+    };
+    if height < 1080 || family == 0 {
+      continue;
+    }
+    let rank = (family, f["bitrate"].as_u64().unwrap_or(0));
+    let video = DirectVideo {
+      height,
+      frame_rate: f["fps"].as_u64().and_then(|r| u32::try_from(r).ok()),
+      codecs,
+      hdr,
+      length: content_length(f),
+      url: f["url"].as_str().unwrap_or_default().to_owned(),
+    };
+    match videos.iter_mut().find(|(h, _, _)| *h == height) {
+      Some(slot) if slot.1 < rank => *slot = (height, rank, video),
+      Some(_) => {}
+      None => videos.push((height, rank, video)),
+    }
+  }
+  videos.sort_by_key(|(height, _, _)| std::cmp::Reverse(*height));
+  let audio = formats
+    .iter()
+    .filter(|f| mime(f).starts_with("audio/"))
+    .filter(|f| f["audioTrack"].is_null() || f["audioTrack"]["audioIsDefault"] == true)
+    .max_by_key(|f| (mime(f).contains("opus"), f["bitrate"].as_u64().unwrap_or(0)))
+    .map(|f| DirectAudio {
+      codecs: codecs(f),
+      length: content_length(f),
+      url: f["url"].as_str().unwrap_or_default().to_owned(),
+    })?;
+  let videos: Vec<DirectVideo> = videos.into_iter().map(|(_, _, v)| v).collect();
+  (!videos.is_empty()).then_some((videos, audio))
+}
+
+/// `contentLength` of a format (a string in the answer).
+fn content_length(format: &Value) -> Option<u64> {
+  format["contentLength"].as_str()?.parse().ok()
+}
+
+/// The `n` parameter of a direct format's query.
+pub fn query_n(url: &str) -> Option<&str> {
+  let query = url.split_once('?')?.1;
+  query.split('&').find_map(|pair| pair.strip_prefix("n="))
+}
+
+/// `url` with its query's `n` replaced by `solved`.
+pub fn with_query_n(url: &str, solved: &str) -> String {
+  let Some((base, query)) = url.split_once('?') else {
+    return url.to_owned();
+  };
+  let query: Vec<String> = query
+    .split('&')
+    .map(|pair| match pair.strip_prefix("n=") {
+      Some(_) => format!("n={solved}"),
+      None => pair.to_owned(),
+    })
+    .collect();
+  format!("{base}?{}", query.join("&"))
+}
+
 /// `length_seconds` of an ad's `playerVars` (a query string; the last one counts).
 fn ad_length(player_vars: &str) -> Option<f64> {
   player_vars
@@ -182,6 +284,36 @@ mod tests {
       "renderer": { "instreamVideoAdRenderer": { "skipOffsetMilliseconds": 5000 } } } }] });
     assert_eq!(ad_wait(&mid), 0.);
     assert_eq!(ad_wait(&json!({})), 0.);
+  }
+
+  #[test]
+  fn direct_formats_prefer_sdr_vp9() {
+    let format = |height: u64, mime: &str, hdr: bool, bitrate: u64| {
+      let mut f = json!({ "url": "https://r/videoplayback?n=x", "mimeType": mime,
+        "width": height * 16 / 9, "height": height, "fps": 30, "bitrate": bitrate });
+      if hdr {
+        f["colorInfo"] =
+          json!({ "transferCharacteristics": "COLOR_TRANSFER_CHARACTERISTICS_SMPTEST2084" });
+      }
+      f
+    };
+    let player = json!({ "streamingData": { "adaptiveFormats": [
+      format(2160, r#"video/webm; codecs="vp09.02.51.10""#, true, 30),
+      format(2160, r#"video/mp4; codecs="av01.0.13M.08""#, false, 20),
+      format(1440, r#"video/webm; codecs="vp09.00.50.08""#, false, 10),
+      format(1440, r#"video/mp4; codecs="av01.0.12M.08""#, false, 12),
+      format(1080, r#"video/mp4; codecs="avc1.640028""#, false, 5),
+      { "url": "https://r/a", "mimeType": r#"audio/mp4; codecs="mp4a.40.2""#, "bitrate": 130 },
+      { "url": "https://r/o", "mimeType": r#"audio/webm; codecs="opus""#, "bitrate": 120 },
+      { "url": "https://r/d", "mimeType": r#"audio/webm; codecs="opus""#, "bitrate": 160,
+        "audioTrack": { "audioIsDefault": false } },
+    ]}});
+    let (videos, audio) = direct_formats(&player).unwrap();
+    let labels: Vec<String> = videos.iter().map(DirectVideo::label).collect();
+    // AV1 SDR before VP9 HDR; VP9 before AV1; H.264 never (the HLS ladder has it).
+    assert_eq!(labels, ["2160p AV1", "1440p VP9"]);
+    // Opus, the original track (a dub is not the default).
+    assert_eq!(audio.url, "https://r/o");
   }
 
   #[test]

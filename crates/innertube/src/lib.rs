@@ -37,6 +37,7 @@
 
 mod auth;
 mod client;
+mod direct;
 mod embedded;
 mod error;
 pub mod hls;
@@ -48,21 +49,23 @@ mod proto;
 
 pub use auth::{Cookies, parse_rotation_delay};
 pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
+pub use direct::DirectProxy;
 pub use embedded::{
-  EMBEDDED_USER_AGENT, EmbedConfig, ad_wait, n_challenge, parse_embed_config, signature_timestamp,
+  EMBEDDED_USER_AGENT, EmbedConfig, TV_USER_AGENT, ad_wait, direct_formats, n_challenge,
+  parse_embed_config, query_n, signature_timestamp, with_query_n,
 };
 pub use error::Error;
 pub use live::LiveProxy;
 pub use models::{
   Caption, Channel, ChannelHeader, ChannelNotifications, ChannelTab, ChannelTabKind, Chapter,
   ChatAction, ChatBadge, ChatBadgeKind, ChatMessage, ChatRun, Collaborator, Comment,
-  CommentActions, CommentComposer, CommentPage, CommentSort, Feed, FeedChip, LikeParams,
-  LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
-  NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, SearchSuggestion,
-  ShortItem, ShortShelf, ShortsPage, SponsorCategory, SponsorSegment, Storyboard, StoryboardFrame,
-  Stream, Subscription, SuggestedChannel, TextLink, Thumbnail, Tracking, VideoItem, Votes,
-  WatchPage, Watchtime,
+  CommentActions, CommentComposer, CommentPage, CommentSort, DirectAudio, DirectOffer, DirectVideo,
+  Feed, FeedChip, LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat,
+  NotInterested, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage,
+  SearchResult, SearchSuggestion, ShortItem, ShortShelf, ShortsPage, SponsorCategory,
+  SponsorSegment, Storyboard, StoryboardFrame, Stream, Subscription, SuggestedChannel, TextLink,
+  Thumbnail, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 pub use parse::{
   is_mix, parse_account_handle, parse_captions, parse_channel_search, parse_channels,

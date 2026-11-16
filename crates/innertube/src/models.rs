@@ -752,6 +752,85 @@ pub struct Stream {
   pub live: Option<Live>,
 }
 
+/// The direct (DASH) formats of a video the bot check refuses to VISIONOS, through `tv_samsung`
+/// ([`crate::Client::tv_offer`]): qualities above web_embedded's HLS, offered in the menu once
+/// served. Their URLs carry the user's IP: never log them.
+#[derive(Clone, Debug)]
+pub struct DirectOffer {
+  /// Highest first, from 1080p up.
+  pub videos: Vec<DirectVideo>,
+  /// The audio every video plays with.
+  pub audio: DirectAudio,
+  /// User-Agent the formats are fetched with.
+  pub user_agent: &'static str,
+  /// When the formats are served (403 before: the answer's pre-roll ads).
+  pub served_at: std::time::Instant,
+}
+
+impl DirectOffer {
+  /// Waits until the formats are served ([`Self::served_at`]).
+  pub async fn served(&self) {
+    tokio::time::sleep_until(self.served_at.into()).await;
+  }
+}
+
+/// A direct video format, video only.
+#[derive(Clone)]
+pub struct DirectVideo {
+  /// Shorter side, as [`crate::hls::Variant::height`].
+  pub height: u32,
+  /// `fps`.
+  pub frame_rate: Option<u32>,
+  /// `vp09.00.51.08`, `av01.0.13M.08`…
+  pub codecs: String,
+  /// HDR (PQ or HLG transfer).
+  pub hdr: bool,
+  /// `contentLength`, bytes.
+  pub length: Option<u64>,
+  /// Its URL, `n` solved. Contains the user's IP: never log it.
+  pub url: String,
+}
+
+impl std::fmt::Debug for DirectVideo {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}p {}", self.height, self.codecs)
+  }
+}
+
+impl DirectVideo {
+  /// `2160p60 VP9 HDR`, `1440p AV1`.
+  pub fn label(&self) -> String {
+    let rate = match self.frame_rate {
+      Some(fps) if fps > 30 => fps.to_string(),
+      _ => String::new(),
+    };
+    let codec = if self.codecs.starts_with("av01") {
+      "AV1"
+    } else {
+      "VP9"
+    };
+    let hdr = if self.hdr { " HDR" } else { "" };
+    format!("{}p{rate} {codec}{hdr}", self.height)
+  }
+}
+
+/// The direct audio format of a [`DirectOffer`].
+#[derive(Clone)]
+pub struct DirectAudio {
+  /// `opus`, `mp4a.40.2`.
+  pub codecs: String,
+  /// `contentLength`, bytes.
+  pub length: Option<u64>,
+  /// Its URL, `n` solved. Contains the user's IP: never log it.
+  pub url: String,
+}
+
+impl std::fmt::Debug for DirectAudio {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.codecs)
+  }
+}
+
 /// What a live's playlists cover.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Live {

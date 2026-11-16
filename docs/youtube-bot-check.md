@@ -78,8 +78,11 @@ Every signed-in client above returns `adaptiveFormats` with plain URLs (no `sign
 up to 2160p HDR on a 4K video. With `n` solved, a range request works for the first 45 s of
 content and answers 403 from 90 s on, audio included, on `web_embedded`, `mweb`,
 `tv_downgraded` and `web_creator`. This is the PO token (BotGuard attestation) gate: other
-clients report the same stop after 45–60 s. Without a PO token, the ceiling is HLS: 1080p,
-H.264 + AAC.
+clients report the same stop after 45–60 s.
+
+Except behind a pre-roll ad: `tv_samsung` asked without `pyv` serves its direct formats to the
+end of the file, once the ad could have been skipped; with `pyv`, it is locked like the others
+([ADR 0039](decisions/0039-direct-formats-through-tv-samsung.md)).
 
 yt-dlp's PO Token Guide says Premium accounts need no such token for the streams (source, not
 tested; the test account gets ads, so it is not Premium).
@@ -192,10 +195,12 @@ About 0.6–0.8 s from the click to the URLs, against 0.2 s for VISIONOS and 4�
      with QuickJS-NG, so only with the player kept loaded (paid once per player version);
    - Deno kept running: nothing new, the bundle stays as it is. Chosen (ADR 0038): a solve
      then costs a call, the engine brings no speed, only the bundle's 110 MB.
-3. **`tv_samsung`'s direct formats**: an mpv log of the yt-dlp fallback (2026-11-16) shows it
-   playing AV1 1080p60 as DASH, likely from `tv_samsung`, the one client whose direct formats were
-   not checked past 90 s. If they play to the end without a PO token, VP9, AV1 and above 1080p are
-   open without BotGuard (with the ad wait, which `pyv` removes on `tv_downgraded`). To measure.
+3. **`tv_samsung`'s direct formats** (done, [ADR 0039](decisions/0039-direct-formats-through-tv-samsung.md)):
+   without `pyv`, served to the end of the file (1 MB ranges up to 97 %, VP9, AV1, Opus, up to 4K)
+   once its pre-roll could be skipped (about 5 s); with `pyv`, locked after the first tens of
+   seconds like every other client. mpv's requests to the end of the file are throttled
+   (21 Mbit/s): a local proxy fetches them in 10 MB `&range=` chunks (200–430 Mbit/s). Offered in
+   the quality menu once served.
 4. **PO tokens from a hidden WebView2** running YouTube's own page signed in (the way the
    Twitch bonus is claimed, [ADR 0012](decisions/0012-twitch-channel-points.md)): would open
    VP9, AV1, 1440p, 4K and HDR. A large piece of work, not tested, and a decision about where

@@ -970,6 +970,39 @@ impl PlayerView {
     self.quality
   }
 
+  /// Offers `qualities` above the menu's, once the source started from `started_url` is still
+  /// the one playing (a page found better ones after the start; the player may have moved on
+  /// to another video since). Nothing switches: the menu only gets them. `held` (what serves
+  /// them, such as a local proxy) lives as long as the source.
+  pub fn add_qualities(
+    &mut self,
+    started_url: &str,
+    qualities: Vec<Quality>,
+    held: Option<Rc<dyn std::any::Any>>,
+    cx: &mut Context<Self>,
+  ) {
+    let Some(source) = self
+      .source
+      .as_mut()
+      .filter(|s| s.options.url == started_url)
+    else {
+      return;
+    };
+    let added = qualities.len();
+    tracing::info!(
+      "{added} more qualities ({})",
+      qualities
+        .iter()
+        .map(|q| q.label.as_ref())
+        .collect::<Vec<_>>()
+        .join(" ")
+    );
+    source.qualities.splice(0..0, qualities);
+    source.held.extend(held);
+    self.quality = self.quality.map(|i| i + added);
+    cx.notify();
+  }
+
   /// Plays the source's quality `index`, as if picked in the menu (a page falling back from a
   /// codec the GPU does not decode).
   pub fn set_quality(&mut self, index: usize, cx: &mut Context<Self>) {

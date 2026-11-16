@@ -1618,3 +1618,22 @@ fn embedded_player_without_pyv_waits_for_its_ads() {
   // The same video asked without `pyv`: a pre-roll skippable after 5 s.
   assert_eq!(innertube::ad_wait(&fixture("player_embedded_ads.json")), 5.);
 }
+
+#[test]
+fn tv_player_offers_its_direct_formats() {
+  // The same video through tv_samsung, signed in, without `pyv` (captured 2026-11-16): direct
+  // formats served to their end once its pre-roll could be skipped.
+  let player = fixture("player_tv.json");
+  assert_eq!(innertube::ad_wait(&player), 5.);
+  let (videos, audio) = innertube::direct_formats(&player).unwrap();
+  let labels: Vec<String> = videos.iter().map(|v| v.label()).collect();
+  // From 1080p up, VP9 at each height; the 720p is left to the HLS ladder.
+  assert_eq!(labels, ["1440p60 VP9", "1080p60 VP9"]);
+  assert!(videos.iter().all(|v| v.length.is_some()));
+  assert_eq!(audio.codecs, "opus");
+  let n = innertube::query_n(&videos[0].url).unwrap();
+  assert_eq!(n, "REDACTED");
+  let solved = innertube::with_query_n(&videos[0].url, "solved");
+  assert_eq!(innertube::query_n(&solved), Some("solved"));
+  assert_eq!(solved.len(), videos[0].url.len() - n.len() + "solved".len());
+}

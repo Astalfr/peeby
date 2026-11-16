@@ -39,6 +39,9 @@ pub struct Source {
   /// Kept alive as long as the player holds the source: what serves its URLs, such as a local
   /// playlist proxy, which stops when dropped.
   pub keep_alive: Option<Rc<dyn std::any::Any>>,
+  /// Kept alive the same way: what serves the qualities added after the start
+  /// ([`super::PlayerView::add_qualities`]).
+  pub held: Vec<Rc<dyn std::any::Any>>,
   /// A live's clock, for the statistics' delay to the streamer: when the end of the playlist
   /// mpv read last left the broadcaster. Called on the UI thread once a second while the
   /// statistics show: it reads memory, never the network.

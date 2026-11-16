@@ -1,0 +1,965 @@
+{
+  "playabilityStatus": {
+    "backgroundability": {
+      "backgroundabilityRenderer": {
+        "backgroundable": true
+      }
+    },
+    "playableInEmbed": true,
+    "status": "OK"
+  },
+  "streamingData": {
+    "adaptiveFormats": [
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 10882767,
+        "bitrate": 13410007,
+        "colorInfo": {
+          "matrixCoefficients": "COLOR_MATRIX_COEFFICIENTS_BT709",
+          "primaries": "COLOR_PRIMARIES_BT709",
+          "transferCharacteristics": "COLOR_TRANSFER_CHARACTERISTICS_BT709"
+        },
+        "contentLength": "10095806476",
+        "fps": 60,
+        "height": 1440,
+        "indexRange": {
+          "end": "27003",
+          "start": "220"
+        },
+        "initRange": {
+          "end": "219",
+          "start": "0"
+        },
+        "itag": 308,
+        "lastModified": "1794681928150900",
+        "mimeType": "video/webm; codecs=\"vp9\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd1440",
+        "qualityLabel": "1440p60",
+        "qualityOrdinal": "QUALITY_ORDINAL_1440P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=308&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fwebm&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=10095806476&dur=7421.499&lmt=1794681928150900&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 2560
+      },
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 9450929,
+        "bitrate": 13732754,
+        "colorInfo": {
+          "matrixCoefficients": "COLOR_MATRIX_COEFFICIENTS_BT709",
+          "primaries": "COLOR_PRIMARIES_BT709",
+          "transferCharacteristics": "COLOR_TRANSFER_CHARACTERISTICS_BT709"
+        },
+        "contentLength": "8767508376",
+        "fps": 60,
+        "height": 1440,
+        "indexRange": {
+          "end": "18036",
+          "start": "701"
+        },
+        "initRange": {
+          "end": "700",
+          "start": "0"
+        },
+        "itag": 400,
+        "lastModified": "1794694961548606",
+        "mimeType": "video/mp4; codecs=\"av01.0.12M.08\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd1440",
+        "qualityLabel": "1440p60",
+        "qualityOrdinal": "QUALITY_ORDINAL_1440P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=400&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fmp4&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=8767508376&dur=7421.499&lmt=1794694961548606&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=543G234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 2560
+      },
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 4685626,
+        "bitrate": 7408273,
+        "contentLength": "4346796451",
+        "fps": 60,
+        "height": 1080,
+        "indexRange": {
+          "end": "18077",
+          "start": "742"
+        },
+        "initRange": {
+          "end": "741",
+          "start": "0"
+        },
+        "itag": 299,
+        "lastModified": "1794603854037533",
+        "mimeType": "video/mp4; codecs=\"avc1.64002A\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd1080",
+        "qualityLabel": "1080p60",
+        "qualityOrdinal": "QUALITY_ORDINAL_1080P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=299&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fmp4&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=4346796451&dur=7421.499&lmt=1794603854037533&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 1920
+      },
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 3655516,
+        "bitrate": 5182128,
+        "colorInfo": {
+          "matrixCoefficients": "COLOR_MATRIX_COEFFICIENTS_BT709",
+          "primaries": "COLOR_PRIMARIES_BT709",
+          "transferCharacteristics": "COLOR_TRANSFER_CHARACTERISTICS_BT709"
+        },
+        "contentLength": "3391176393",
+        "fps": 60,
+        "height": 1080,
+        "indexRange": {
+          "end": "26159",
+          "start": "220"
+        },
+        "initRange": {
+          "end": "219",
+          "start": "0"
+        },
+        "itag": 303,
+        "lastModified": "1794700495306847",
+        "mimeType": "video/webm; codecs=\"vp9\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd1080",
+        "qualityLabel": "1080p60",
+        "qualityOrdinal": "QUALITY_ORDINAL_1080P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=303&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fwebm&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=3391176393&dur=7421.499&lmt=1794700495306847&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 1920
+      },
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 3656226,
+        "bitrate": 4414655,
+        "colorInfo": {
+          "matrixCoefficients": "COLOR_MATRIX_COEFFICIENTS_BT709",
+          "primaries": "COLOR_PRIMARIES_BT709",
+          "transferCharacteristics": "COLOR_TRANSFER_CHARACTERISTICS_BT709"
+        },
+        "contentLength": "3391834917",
+        "fps": 60,
+        "height": 1080,
+        "indexRange": {
+          "end": "18035",
+          "start": "700"
+        },
+        "initRange": {
+          "end": "699",
+          "start": "0"
+        },
+        "itag": 399,
+        "lastModified": "1794690598529931",
+        "mimeType": "video/mp4; codecs=\"av01.0.09M.08\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd1080",
+        "qualityLabel": "1080p60",
+        "qualityOrdinal": "QUALITY_ORDINAL_1080P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=399&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fmp4&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=3391834917&dur=7421.499&lmt=1794690598529931&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=543G234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 1920
+      },
+      {
+        "approxDurationMs": "7421499",
+        "averageBitrate": 1701498,
+        "bitrate": 2393708,
+        "contentLength": "1578458508",
+        "fps": 30,
+        "height": 720,
+        "indexRange": {
+          "end": "18075",
+          "start": "740"
+        },
+        "initRange": {
+          "end": "739",
+          "start": "0"
+        },
+        "itag": 136,
+        "lastModified": "1794604200001041",
+        "mimeType": "video/mp4; codecs=\"avc1.4D401F\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "hd720",
+        "qualityLabel": "720p",
+        "qualityOrdinal": "QUALITY_ORDINAL_720P",
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=136&aitags=133%2C134%2C135%2C136%2C160%2C242%2C243%2C244%2C247%2C278%2C298%2C299%2C302%2C303%2C308%2C394%2C395%2C396%2C397%2C398%2C399%2C400&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=video%2Fmp4&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=1578458508&dur=7421.499&lmt=1794604200001041&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED",
+        "width": 1280
+      },
+      {
+        "approxDurationMs": "7421521",
+        "audioChannels": 2,
+        "audioQuality": "AUDIO_QUALITY_MEDIUM",
+        "audioSampleRate": "48000",
+        "averageBitrate": 127372,
+        "bitrate": 160767,
+        "contentLength": "118162283",
+        "indexRange": {
+          "end": "13531",
+          "start": "266"
+        },
+        "initRange": {
+          "end": "265",
+          "start": "0"
+        },
+        "itag": 251,
+        "lastModified": "1794602824885668",
+        "loudnessDb": -5.1900005,
+        "mimeType": "audio/webm; codecs=\"opus\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "tiny",
+        "qualityOrdinal": "QUALITY_ORDINAL_UNKNOWN",
+        "trackAbsoluteLoudnessLkfs": -19.19,
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=118162283&dur=7421.521&lmt=1794602824885668&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED"
+      },
+      {
+        "approxDurationMs": "7421561",
+        "audioChannels": 2,
+        "audioQuality": "AUDIO_QUALITY_MEDIUM",
+        "audioSampleRate": "44100",
+        "averageBitrate": 129471,
+        "bitrate": 137536,
+        "contentLength": "120110529",
+        "highReplication": true,
+        "indexRange": {
+          "end": "9682",
+          "start": "723"
+        },
+        "initRange": {
+          "end": "722",
+          "start": "0"
+        },
+        "itag": 140,
+        "lastModified": "1794599468618709",
+        "loudnessDb": -5.1900005,
+        "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+        "projectionType": "RECTANGULAR",
+        "quality": "tiny",
+        "qualityOrdinal": "QUALITY_ORDINAL_UNKNOWN",
+        "trackAbsoluteLoudnessLkfs": -19.19,
+        "url": "https://rr1---sn-25glenez.googlevideo.com/videoplayback?expire=1794857186&ei=gQT7atqtOPHf8uMPvpT8sA4&ip=203.0.113.7&id=o-AGqLoRPPqtC3Ik5SOO0GPYLJfnT1i8qPWohOjJLH8k2C&itag=140&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=288&met=1794835585%2C&mh=Il&mm=31%2C26&mn=sn-25glenez%2Csn-4g5e6nsr&ms=au%2Conr&mv=m&mvi=1&pl=18&rms=au%2Cau&pcm2=no&initcwndbps=5878625&siu=1&bui=AZFAFb-y3VVeCK2TX6nVlGctp_0YT3r0iMrUk22S7edrJ7XVomtQYk7nsJcv4NYJV8sgfYNJJw&spc=nfZ8ZttXL8jhox4Hp7i14sDJVjQ&vprv=1&svpuc=1&mime=audio%2Fmp4&ns=7YC0bSpmTm1VKm07K_tBLsUa&rqh=1&gir=yes&clen=120110529&dur=7421.561&lmt=1794599468618709&mt=1794835141&fvip=4&epbp=1&keepalive=yes&lmw=1&fexp=51565116&c=TVHTML5&sefc=1&txp=5432234&n=REDACTED&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cpcm2%2Csiu%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=REDACTED&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=REDACTED"
+      }
+    ],
+    "expiresInSeconds": "21540"
+  },
+  "videoDetails": {
+    "allowRatings": true,
+    "channelId": "UC9EseZz2V76b-Nv0Jx1b-Jg",
+    "isCrawlable": true,
+    "isLiveContent": true,
+    "isLowLatencyLiveStream": true,
+    "isOwnerViewing": false,
+    "isPrivate": false,
+    "isTvfilmVideo": false,
+    "isUnpluggedCorpus": false,
+    "latencyClass": "MDE_STREAM_OPTIMIZATIONS_RENDERER_LATENCY_LOW",
+    "lengthSeconds": "7422",
+    "thumbnail": {
+      "thumbnails": [
+        {
+          "height": 360,
+          "url": "https://i.ytimg.com/vi/7YYPsowcKSU/hqdefault.jpg?v=6af600d7",
+          "width": 480
+        }
+      ]
+    },
+    "videoId": "7YYPsowcKSU"
+  },
+  "adPlacements": [
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "63133",
+              "offsetStartMilliseconds": "0"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_START"
+          }
+        },
+        "renderer": {
+          "instreamVideoAdRenderer": {
+            "skipOffsetMilliseconds": 5000,
+            "playerVars": "length_seconds=6"
+          }
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "300931",
+              "offsetStartMilliseconds": "63133"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "381342",
+              "offsetStartMilliseconds": "300931"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "482266",
+              "offsetStartMilliseconds": "381342"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "608709",
+              "offsetStartMilliseconds": "482266"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "823194",
+              "offsetStartMilliseconds": "608709"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1094481",
+              "offsetStartMilliseconds": "823194"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1341366",
+              "offsetStartMilliseconds": "1094481"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1586039",
+              "offsetStartMilliseconds": "1341366"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1739829",
+              "offsetStartMilliseconds": "1586039"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1927469",
+              "offsetStartMilliseconds": "1739829"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2067744",
+              "offsetStartMilliseconds": "1927469"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2201026",
+              "offsetStartMilliseconds": "2067744"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2447433",
+              "offsetStartMilliseconds": "2201026"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2642113",
+              "offsetStartMilliseconds": "2447433"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2852855",
+              "offsetStartMilliseconds": "2642113"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3090492",
+              "offsetStartMilliseconds": "2852855"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3166866",
+              "offsetStartMilliseconds": "3090492"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3328018",
+              "offsetStartMilliseconds": "3166866"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3599781",
+              "offsetStartMilliseconds": "3328018"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3781824",
+              "offsetStartMilliseconds": "3599781"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3962800",
+              "offsetStartMilliseconds": "3781824"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4147110",
+              "offsetStartMilliseconds": "3962800"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4331302",
+              "offsetStartMilliseconds": "4147110"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4511304",
+              "offsetStartMilliseconds": "4331302"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4691619",
+              "offsetStartMilliseconds": "4511304"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4887831",
+              "offsetStartMilliseconds": "4691619"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5097856",
+              "offsetStartMilliseconds": "4887831"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5280736",
+              "offsetStartMilliseconds": "5097856"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5466798",
+              "offsetStartMilliseconds": "5280736"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5644983",
+              "offsetStartMilliseconds": "5466798"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5822485",
+              "offsetStartMilliseconds": "5644983"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6012696",
+              "offsetStartMilliseconds": "5822485"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6189633",
+              "offsetStartMilliseconds": "6012696"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6367708",
+              "offsetStartMilliseconds": "6189633"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6553000",
+              "offsetStartMilliseconds": "6367708"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6743800",
+              "offsetStartMilliseconds": "6553000"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6922580",
+              "offsetStartMilliseconds": "6743800"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "7102635",
+              "offsetStartMilliseconds": "6922580"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "7280822",
+              "offsetStartMilliseconds": "7102635"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "-1",
+              "offsetStartMilliseconds": "7280822"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    }
+  ],
+  "responseContext": {}
+}

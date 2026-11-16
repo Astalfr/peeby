@@ -1328,8 +1328,9 @@ fn start_embedded(
   }
   let max_height = Settings::get(cx).max_height;
   let player_settings = Settings::get(cx).player.clone();
-  let id = video_id.clone();
+  let (id, resolver) = (video_id.clone(), client.clone());
   let fetch = runtime::spawn(cx, async move {
+    let client = resolver;
     let solver = tools::solver().ok_or_else(|| {
       innertube::Error::Solver("the EJS scripts are not bundled (scripts/fetch-tools.ps1)".into())
     })?;
@@ -1346,15 +1347,67 @@ fn start_embedded(
       let mut source = convert::source(stream, &player_settings);
       resume(&mut source, start);
       ytdl_fallback(&mut source, &video_id, start, player.clone());
+      let started_url = source.options.url.clone();
       player
         .update(cx, |player, cx| player.start(source, clicked, cx))
         .ok();
+      cx.update(|cx| offer_direct(client, video_id, started_url, player, cx));
     }
     Some(Err(e)) => {
       tracing::info!("web_embedded failed ({e}), trying yt-dlp");
       cx.update(|cx| start_ytdl(video_id, start, player, clicked, failed, cx));
     }
     None => {}
+  })
+  .detach();
+}
+
+/// Adds tv_samsung's direct formats (VP9 or AV1, up to 4K) to the menu of a video playing from
+/// web_embedded's HLS, once they are served (about 5 s after their answer: its ads), through a
+/// local proxy that fetches them in 10 MB chunks (`innertube::DirectProxy`). Never switches to
+/// them: the menu only gets them.
+fn offer_direct(
+  client: Client,
+  video_id: String,
+  started_url: String,
+  player: WeakEntity<PlayerView>,
+  cx: &mut App,
+) {
+  let player_settings = Settings::get(cx).player.clone();
+  let offer = runtime::spawn(cx, async move {
+    let solver = tools::solver()?;
+    match client.tv_offer(&video_id, &solver).await {
+      Ok(Some(offer)) => {
+        offer.served().await;
+        match innertube::DirectProxy::start(&offer).await {
+          Ok(proxy) => Some((offer, proxy)),
+          Err(e) => {
+            tracing::info!("tv_samsung: {e}, no direct format offered");
+            None
+          }
+        }
+      }
+      Ok(None) => {
+        tracing::debug!("tv_samsung: no pre-roll ad, no direct format offered");
+        None
+      }
+      Err(e) => {
+        tracing::info!("tv_samsung: {e}, no direct format offered");
+        None
+      }
+    }
+  });
+  cx.spawn(async move |cx| {
+    let Some(Some((offer, proxy))) = offer.await else {
+      return;
+    };
+    let qualities = convert::direct_qualities(&offer, &proxy, &player_settings);
+    let held = Some(Rc::new(proxy) as Rc<dyn std::any::Any>);
+    player
+      .update(cx, |player, cx| {
+        player.add_qualities(&started_url, qualities, held, cx)
+      })
+      .ok();
   })
   .detach();
 }

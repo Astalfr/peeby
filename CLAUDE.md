@@ -36,7 +36,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - A video through the signed-in web_embedded client (ADR 0038), its `n` solved in the bundled Deno:
   `cargo run -p innertube --example embedded -- <cookies.txt> <video-id>… [--save <file>] [--no-pyv]`
   (an exported copy, as for `home`; timings, qualities, first segment, no URL; `--save` writes the whole
-  `player` answer, IP and signatures included: redact before a fixture)
+  `player` answer, IP and signatures included: redact before a fixture; `--tv` the same for tv_samsung's
+  direct formats, both ends of each read once served)
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (an exported copy, as for `home`)
 - A YouTube live through its proxy, anonymous: `cargo run -p innertube --example live_probe -- [id | "query"] [--serve <s>]`
@@ -98,7 +99,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
   A video the bot check refuses to VISIONOS goes through the signed-in `web_embedded` client before yt-dlp (ADR 0038):
   its manifest's `n` challenge solved by `innertube::jsc::Solver` (unsolved, every segment is 403), its stream
-  handed to mpv only once the answer's pre-roll ads could be skipped (none with `pyv`).
+  handed to mpv only once the answer's pre-roll ads could be skipped (none with `pyv`). Its higher qualities come from the
+  signed-in `tv_samsung`'s direct formats (ADR 0039), never asked with `pyv` (without their ad they stop after a
+  minute), served to mpv by `innertube::DirectProxy` in 10 MB `&range=` chunks: mpv's own requests are throttled.
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
 - Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.dat`,
   encrypted with DPAPI (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004 and 0022.

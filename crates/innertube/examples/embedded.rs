@@ -2,10 +2,12 @@
 //! bundled Deno: timings, qualities, captions, storyboard and whether the first segment is
 //! served. Prints no URL.
 //!
-//! `cargo run -p innertube --example embedded -- <cookies.txt> <video-id>… [--save <file>] [--no-pyv]`
+//! `cargo run -p innertube --example embedded -- <cookies.txt> <video-id>… [--save <file>] [--no-pyv] [--tv]`
 //! (an exported copy of the jar, as for `home`; needs `scripts/fetch-tools.ps1`). `--save` writes
-//! the first video's whole `player` answer: stream URLs with the IP and signatures, the
-//! account's visitorData: redact and trim it before it becomes a fixture.
+//! the first video's whole `player` answer (`--tv`: tv_samsung's): stream URLs with the IP and
+//! signatures, the account's visitorData: redact and trim it before it becomes a fixture. `--tv`
+//! also prints each video's direct formats (`Client::tv_offer`) and reads their first and last
+//! megabyte once served.
 
 // An example prints on purpose.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -21,6 +23,7 @@ use innertube::{Client, Cookies};
 async fn main() {
   let mut args: Vec<String> = std::env::args().skip(1).collect();
   let pyv = !take_flag(&mut args, "--no-pyv");
+  let tv = take_flag(&mut args, "--tv");
   let save = args
     .iter()
     .position(|a| a == "--save")
@@ -30,7 +33,7 @@ async fn main() {
     })
     .map(|file| file.unwrap_or_else(|| fail("--save needs a file")));
   let Some((path, ids)) = args.split_first() else {
-    fail("usage: embedded <cookies.txt> <video-id>… [--save <file>] [--no-pyv]")
+    fail("usage: embedded <cookies.txt> <video-id>… [--save <file>] [--no-pyv] [--tv]")
   };
   let text = std::fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("{path}: {e}")));
   let cookies = Cookies::from_netscape(&text).unwrap_or_else(|e| fail(&e.to_string()));
@@ -56,10 +59,12 @@ async fn main() {
 
   if let Some(file) = &save {
     let id = &ids[0];
-    let (player, _, _) = client
-      .embedded_player(id, pyv)
-      .await
-      .unwrap_or_else(|e| fail(&e.to_string()));
+    let answer = if tv {
+      client.tv_player(id).await
+    } else {
+      client.embedded_player(id, pyv).await
+    };
+    let (player, _, _) = answer.unwrap_or_else(|e| fail(&e.to_string()));
     let json = serde_json::to_string_pretty(&player).unwrap_or_else(|e| fail(&e.to_string()));
     std::fs::write(file, json).unwrap_or_else(|e| fail(&format!("{file}: {e}")));
     println!(
@@ -69,6 +74,12 @@ async fn main() {
   }
 
   let http = reqwest::Client::new();
+  if tv {
+    for id in ids {
+      direct(&client, &http, &solver, id).await;
+    }
+    return;
+  }
   for id in ids {
     let t = Instant::now();
     let stream = match client.embedded_stream(id, 1080, &solver).await {
@@ -110,6 +121,50 @@ async fn main() {
       status.map_or("?".into(), |s| s.to_string()),
       t.elapsed().as_millis()
     );
+  }
+}
+
+/// `id`'s direct formats through tv_samsung, then the first and last megabyte of the best video
+/// and of the audio once served.
+async fn direct(client: &Client, http: &reqwest::Client, solver: &Arc<Solver>, id: &str) {
+  let t = Instant::now();
+  let offer = match client.tv_offer(id, solver).await {
+    Ok(Some(offer)) => offer,
+    Ok(None) => return println!("{id}: no pre-roll ad, nothing offered"),
+    Err(e) => return println!("{id}: {e}"),
+  };
+  let labels: Vec<String> = offer.videos.iter().map(|v| v.label()).collect();
+  let wait = offer.served_at.saturating_duration_since(Instant::now());
+  println!(
+    "{id}: offer in {} ms · {labels:?} + {} · served in {} ms",
+    t.elapsed().as_millis(),
+    offer.audio.codecs,
+    wait.as_millis()
+  );
+  tokio::time::sleep(wait).await;
+  let Some(best) = offer.videos.first() else {
+    return;
+  };
+  let formats = [
+    ("video", &best.url, best.length),
+    ("audio", &offer.audio.url, offer.audio.length),
+  ];
+  for (name, url, length) in formats {
+    let mut out = Vec::new();
+    let last = length.map_or("0-1".into(), |l| {
+      format!("{}-{}", l.saturating_sub(1_048_576), l - 1)
+    });
+    for range in ["0-1048575".to_owned(), last] {
+      let status = http
+        .get(url)
+        .header("User-Agent", offer.user_agent)
+        .header("Range", format!("bytes={range}"))
+        .send()
+        .await
+        .map_or(0, |r| r.status().as_u16());
+      out.push(format!("{range}: {status}"));
+    }
+    println!("  {name}: {}", out.join(", "));
   }
 }
 

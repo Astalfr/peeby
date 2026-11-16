@@ -533,7 +533,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// 128 random bits as hex, from the standard library's randomly seeded hasher.
-fn random_key() -> String {
+pub(crate) fn random_key() -> String {
   (0..2)
     .map(|i| {
       let mut hasher = RandomState::new().build_hasher();

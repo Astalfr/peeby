@@ -14,6 +14,18 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **5: distribution (1.0)** | 🚧 (done once v1.0.0 is published and installed) | CI, installer with libmpv, yt-dlp and Deno in `tools/` (Inno Setup, after Twitty's), releases from version tags, updates from GitHub Releases with the title bar's button ([ADR 0027](decisions/0027-installer-and-updates.md), [release.md](release.md)) | Downloadable build |
 
 
+## Higher qualities of refused videos
+
+- Done (2026-11-16, [ADR 0039](decisions/0039-direct-formats-through-tv-samsung.md)): a video playing
+  from web_embedded's HLS gets, about 5 s later, the signed-in `tv_samsung`'s direct formats in its
+  quality menu (VP9, else AV1, from 1080p up to 4K, with Opus), served by a local proxy that fetches
+  them in 10 MB `&range=` chunks (`innertube::DirectProxy`); never by itself. 4 tests (a redacted
+  `player_tv.json`, format choice, `n` in a query, ranges), `--tv` in `examples/embedded.rs`.
+  Checked: clippy, tests, both ends of each file served, the spike playing 1440p60 VP9 + Opus through
+  the proxy (0.61 s to play, a seek to 1 h within 2 s, no drift or drops), the debug build adding
+  `2160p60 VP9`, `1440p60 VP9`, `1080p60 VP9` 5.4 s after the start. **Not verified:** a switch from the
+  menu in the app, AV1 and HDR on screen, a video without a pre-roll ad.
+
 ## Videos the bot check refuses
 
 - Done (2026-11-16, [ADR 0038](decisions/0038-signed-in-web-embedded-fallback.md), findings in
