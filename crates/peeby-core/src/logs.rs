@@ -20,7 +20,7 @@ use crate::settings;
 /// a `RUST_LOG` at debug writes them to the file too. Every crate of the app is named: a target
 /// is its crate's name, so one left out logs nothing.
 const DEFAULT_FILTER: &str = "peeby=info,peeby_core=info,space_youtube=info,space_twitch=info,\
-  space_jellyfin=info,innertube=info,twitch=info";
+  space_jellyfin=info,innertube=info,twitch=info,ui=info";
 /// How long a panic waits for the file to get its last lines.
 const FLUSH_WAIT: Duration = Duration::from_secs(1);
 

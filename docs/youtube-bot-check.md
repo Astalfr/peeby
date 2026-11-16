@@ -205,12 +205,24 @@ About 0.6–0.8 s from the click to the URLs, against 0.2 s for VISIONOS and 4�
    Twitch bonus is claimed, [ADR 0012](decisions/0012-twitch-channel-points.md)): would open
    VP9, AV1, 1440p, 4K and HDR. A large piece of work, not tested, and a decision about where
    the project's line on bot checks stands.
-5. **mpv's start** (about 1 s today). web_embedded's muxed playlist gave its first frame in
-   0.5 s in the app, which supports the idea below. In one YouTube play, mpv opened the video playlist
-   (0.75 s with its probing), only then the audio playlist (0.2 s), then the segments. A local
-   proxy (as `innertube::LiveProxy`) serving one playlist with both, already fetched; the
-   first segment prefetched on a long hover or on mouse down; less probing
-   (`demuxer-lavf-*`). Estimated 0.3–0.6 s, not measured.
+5. **mpv's start** (measured, then dropped, 2026-11-16). In one YouTube play, mpv opened the
+   video playlist (0.75 s with its probing), only then the audio playlist (0.2 s), then the
+   segments.
+   - mpv options change nothing: in the playback spike, `demuxer-lavf-probesize`,
+     `analyzeduration`, `probe-info=nostreams`, `cache-pause-wait`, the HLS demuxer's
+     `http_persistent`/`http_multiple`, alone or together, all gave 0.8–0.86 s to `loaded` and
+     1.2–1.25 s to the first position, within the runs' own spread.
+   - A local proxy that fetches both media playlists, the init segments and the segments around
+     the start at once, over one pooled client, and serves them from memory: in the spike, mpv's
+     first position in 0.49–0.61 s against 1.03–1.13 s direct (its 0.3 s of fetching done
+     before). In the app, with the fetching started as soon as the stream is known, the gain
+     shrank to about 0.2 s on VISIONOS streams (0.70 s against 0.90 s from the stream to the
+     first position, 3 videos each) and nothing on web_embedded's muxed playlist (0.79 against
+     0.75 s): there, mpv's own start (its creation, about 0.25 s before it opens the file,
+     inferred from its log) weighs more than the network. Dropped: not worth every video's
+     traffic going through Peeby.
+   - Left: an mpv instance created ahead, idle, so that the click only loads the file
+     (estimated 0.2–0.25 s for every video, not measured; it touches the copied `player` crate).
 6. **Feeding the bot check less** (a hypothesis): the hover prefetch (`prefetch.rs`, since
    before 2026-11-07) sends an anonymous `player` request after 300 ms on a card, mostly for
    videos never played, and each launch takes a new anonymous visitorData. Longer hover delay,
