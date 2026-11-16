@@ -30,6 +30,7 @@ PeebTube additions to `player`:
 - `VOLUME_MAX` (mpv's `volume-max`, 200) and `Player::set_volume` up to it, for the volume boost;
 - `Player::set_speed` (`speed`), for the 2× speed while Space or the left button is held;
 - `Event::Cached` (`demuxer-cache-time`, observed), for the loaded part drawn on the seek bar;
+- `Event::FramesDropped` (`frame-drop-count`, observed), for the shared player's warning when the picture skips ahead to keep up with the audio;
 - `StartOptions::audio_device`, `Player::set_audio_device` and `audio_devices` (an mpv without render context, `sys::RenderBackend::None`), for the top bar's audio output menu;
 - `StartOptions::http_proxy` (`http-proxy`), for a Jellyfin server behind a WireGuard tunnel (ADR 0037);
 - `play_wav` (`sys::play_wav`: Windows' `PlaySoundW` from winmm.dll, loaded at runtime like libmpv), for the opening animation's sound;
@@ -40,7 +41,8 @@ PeebTube additions to `gpui-video`:
 - `VideoView` releases replaced frames from every window (`App::drop_image`), since the mini-player draws the same view in a second window;
 - re-exports `set_window_bounds` from the patched GPUI;
 - frames are painted fitted to the view (`ObjectFit::Contain`), not stretched: while it is resized, mpv renders at the old size until the new one settles, and the picture kept its old shape until then;
-- `VideoView::has_frame`, so that the shared player keeps the previous mpv's picture until a restarted one has its first frame (a quality change, a multistream's swap, ADR 0033).
+- `VideoView::has_frame`, so that the shared player keeps the previous mpv's picture until a restarted one has its first frame (a quality change, a multistream's swap, ADR 0033);
+- `VideoView::set_late_handler`: frames that waited `LATE_AFTER` (250 ms) for the UI thread, at least 3 of them, are reported, since only the newest is shown (the picture froze, then jumped); the shared player logs it.
 
 PeebTube additions to the GPUI patch (`vendor/gpui-pre-windows`):
 - `set_window_bounds` (`window.rs`): moves and resizes a window without activating it, for the mini-player's edges (ADR 0008).

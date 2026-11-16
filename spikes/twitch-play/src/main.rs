@@ -544,7 +544,11 @@ impl Spike {
         s.error = Some(e);
       }
       Event::Ended(None) => eprintln!("ended"),
-      Event::EndReached | Event::Chapters(_) | Event::Muted(_) | Event::Cached(_) => {}
+      Event::EndReached
+      | Event::Chapters(_)
+      | Event::Muted(_)
+      | Event::Cached(_)
+      | Event::FramesDropped(_) => {}
     }
   }
 

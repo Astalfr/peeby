@@ -332,7 +332,8 @@ impl Spike {
       | Event::EndReached
       | Event::Chapters(_)
       | Event::Muted(_)
-      | Event::Cached(_) => {}
+      | Event::Cached(_)
+      | Event::FramesDropped(_) => {}
     }
   }
 

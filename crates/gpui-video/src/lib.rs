@@ -6,6 +6,7 @@
 
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
@@ -25,6 +26,15 @@ const EXTERNAL_TEXTURE_MAGIC: &[u8; 8] = b"GPUIEXT1";
 /// Called with the video area's size in physical pixels whenever it changes.
 pub type ResizeHandler = Rc<dyn Fn(u32, u32)>;
 
+/// Called when frames waited for the UI thread ([`LATE_AFTER`]): how long it took none, and
+/// how many came meanwhile. Only the newest is shown, so the picture froze, then jumped.
+pub type LateHandler = Rc<dyn Fn(Duration, usize, &mut App)>;
+
+/// A wait for the UI thread this long, with [`LATE_FRAMES`] frames come meanwhile, is reported.
+pub const LATE_AFTER: Duration = Duration::from_millis(250);
+/// Fewer frames in a long wait are no stall: the first ones after a pause or a seek.
+const LATE_FRAMES: usize = 3;
+
 /// The registered shared textures of the player's ring, with their marker images.
 type Ring = Vec<(u64, Arc<RenderImage>)>;
 
@@ -42,6 +52,7 @@ pub struct VideoView {
   stale: Vec<Arc<RenderImage>>,
   /// Radii of the picture's corners: a parent's `overflow_hidden` clips to a rectangle.
   corner_radii: Corners<Pixels>,
+  on_late: Option<LateHandler>,
   _frames: Task<()>,
 }
 
@@ -53,12 +64,25 @@ impl VideoView {
     cx: &mut Context<Self>,
   ) -> Self {
     let task = cx.spawn(async move |this, cx| {
+      let mut taken_at = Instant::now();
       while let Ok(first) = frames.recv().await {
         let mut batch = vec![first];
         while let Ok(more) = frames.try_recv() {
           batch.push(more);
         }
+        let waited = taken_at.elapsed();
+        taken_at = Instant::now();
+        let pictures = batch
+          .iter()
+          .filter(|f| !matches!(f, Frame::GpuTextures { .. }))
+          .count();
         let alive = this.update(cx, |view, cx| {
+          if waited >= LATE_AFTER
+            && pictures >= LATE_FRAMES
+            && let Some(on_late) = view.on_late.clone()
+          {
+            on_late(waited, pictures, cx);
+          }
           for frame in batch {
             view.apply(frame);
           }
@@ -79,6 +103,7 @@ impl VideoView {
       cpu_frame: None,
       stale: Vec::new(),
       corner_radii: Corners::default(),
+      on_late: None,
       _frames: task,
     }
   }
@@ -91,6 +116,11 @@ impl VideoView {
   /// Whether it has a frame to show (a new player's view has none until its first one).
   pub fn has_frame(&self) -> bool {
     self.current_slot.is_some() || self.held.is_some() || self.cpu_frame.is_some()
+  }
+
+  /// Reports the waits for the UI thread to `on_late`.
+  pub fn set_late_handler(&mut self, on_late: LateHandler) {
+    self.on_late = Some(on_late);
   }
 
   /// Replaces the resize handler (e.g. once the player exists).

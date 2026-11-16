@@ -88,6 +88,10 @@ const VIDEO_BEHIND: f64 = 2.0;
 /// How long the playhead stays [`VIDEO_BEHIND`] before the video counts as stopped: a seek's
 /// position can come before the cache's.
 const VIDEO_STOPPED_AFTER: Duration = Duration::from_secs(2);
+/// mpv's dropped frames are added up over this long before a warning: a skip drops a burst.
+const DROPS_WINDOW: Duration = Duration::from_secs(1);
+/// Fewer frames dropped in a [`DROPS_WINDOW`] do not show.
+const DROPS_SHOWN: u64 = 3;
 const VOLUME_FADE: Duration = Duration::from_millis(150);
 const VOLUME_STEP: f64 = 5.0;
 /// The wheel's step over the volume slider, finer than the picture's.
@@ -505,6 +509,12 @@ pub struct PlayerView {
   video_stopped_task: Option<Task<()>>,
   /// A live's speed kept close to its edge ([`Source::catch_up`]).
   catch_up: catch_up::CatchUp,
+  /// mpv's `frame-drop-count` last seen (each mpv starts from 0).
+  frames_dropped: u64,
+  /// Frames dropped since the last warning, and the position the first of them was at.
+  drops_pending: Option<(u64, f64)>,
+  /// Warns of [`Self::drops_pending`] after [`DROPS_WINDOW`].
+  drops_task: Option<Task<()>>,
   _events: Option<Task<()>>,
 }
 
@@ -625,6 +635,9 @@ impl PlayerView {
       stall_task: None,
       video_stopped_task: None,
       catch_up: Default::default(),
+      frames_dropped: 0,
+      drops_pending: None,
+      drops_task: None,
       _events: None,
     }
   }
@@ -1638,12 +1651,27 @@ impl PlayerView {
   ) {
     running::register(&player, cx.weak_entity(), cx);
     let resize = player.clone();
+    let this = cx.weak_entity();
     let video = cx.new(|cx| {
-      VideoView::new(
+      let mut view = VideoView::new(
         frames,
         Rc::new(move |w, h| resize.set_target_size(w, h)),
         cx,
-      )
+      );
+      // The UI thread was busy: the picture froze, then jumped to the newest frame while the
+      // sound played on. Nothing else logs it.
+      view.set_late_handler(Rc::new(move |waited, frames, cx| {
+        let Some(player) = this.upgrade() else { return };
+        let player = player.read(cx);
+        let role = if player.secondary { " (secondary)" } else { "" };
+        tracing::warn!(
+          "video{role}: frames waited {:.2} s for the UI thread ({frames} frames, only the \
+           newest shown) at {}",
+          waited.as_secs_f64(),
+          format_time(player.position)
+        );
+      }));
+      view
     });
     // Its first frame ends the previous picture's wait.
     cx.observe(&video, |this, video, cx| {
@@ -1661,8 +1689,9 @@ impl PlayerView {
     } else {
       None
     };
-    // A new mpv starts with an empty cache.
+    // A new mpv starts with an empty cache, and no frame dropped.
     self.cached = 0.0;
+    self.frames_dropped = 0;
     player.set_volume(self.volume);
     if self.muted || self.secondary {
       player.set_muted(true);
@@ -1774,6 +1803,7 @@ impl PlayerView {
       // A secondary player is muted by its page, not by the viewer.
       Event::Muted(_) if self.secondary => {}
       Event::Muted(muted) => self.muted = muted,
+      Event::FramesDropped(total) => self.on_frames_dropped(total, cx),
       Event::Tracks(tracks) => self.on_tracks(tracks, cx),
       Event::Chapters(chapters) => self.on_chapters(chapters),
       Event::EndReached if self.ended_early() => self.reload_after_early_end(cx),
@@ -1837,6 +1867,41 @@ impl PlayerView {
       .into(),
       cx,
     );
+  }
+
+  /// Adds up the frames mpv dropped to keep up with the audio (the picture skipped ahead) and
+  /// warns of a burst [`DROPS_WINDOW`] after its first frame: nothing else logs them.
+  fn on_frames_dropped(&mut self, total: u64, cx: &mut Context<Self>) {
+    let new = total.saturating_sub(self.frames_dropped);
+    self.frames_dropped = total;
+    if new == 0 {
+      return;
+    }
+    let position = self.position;
+    let pending = self.drops_pending.get_or_insert((0, position));
+    pending.0 += new;
+    if self.drops_task.is_some() {
+      return;
+    }
+    self.drops_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(DROPS_WINDOW).await;
+      this
+        .update(cx, |this, _| {
+          this.drops_task = None;
+          let Some((dropped, at)) = this.drops_pending.take() else {
+            return;
+          };
+          if dropped >= DROPS_SHOWN {
+            let role = if this.secondary { " (secondary)" } else { "" };
+            tracing::warn!(
+              "video{role}: {dropped} frames dropped to keep up with the audio at {} ({} in all)",
+              format_time(at),
+              this.frames_dropped
+            );
+          }
+        })
+        .ok();
+    }));
   }
 
   /// Starts or stops the timer that reloads a video stuck buffering ([`STALL_AFTER`]). A live

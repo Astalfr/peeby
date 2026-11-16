@@ -267,6 +267,9 @@ pub enum Event {
   Chapters(Vec<Chapter>),
   /// Muted or not.
   Muted(bool),
+  /// Video frames dropped so far to keep up with the audio (`frame-drop-count`): the
+  /// picture jumps ahead while the sound plays on.
+  FramesDropped(u64),
   /// Playback reached the end of the file. With `keep-open` mpv stays paused on the last
   /// frame instead of unloading the file, so this comes from `eof-reached`.
   EndReached,
@@ -384,6 +387,8 @@ impl Player {
       ("chapter-list", sys::FORMAT_NONE),
       ("eof-reached", sys::FORMAT_FLAG),
       ("mute", sys::FORMAT_FLAG),
+      // An integer property: mpv converts it.
+      ("frame-drop-count", sys::FORMAT_DOUBLE),
     ] {
       mpv.observe(name, format)?;
     }
@@ -861,6 +866,9 @@ fn event_loop(mpv: &Mpv, shared: &Shared, events: &async_channel::Sender<Event>)
         send(Event::Buffering(value))
       }
       MpvEvent::Flag(name, Some(value)) if name == "mute" => send(Event::Muted(value)),
+      MpvEvent::Double(name, Some(value)) if name == "frame-drop-count" => {
+        send(Event::FramesDropped(value.max(0.0) as u64))
+      }
       MpvEvent::Flag(name, Some(true)) if name == "eof-reached" => send(Event::EndReached),
       MpvEvent::Changed(name) if name == "track-list" => send(Event::Tracks(read_tracks(mpv))),
       MpvEvent::Changed(name) if name == "chapter-list" => {
