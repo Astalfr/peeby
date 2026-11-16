@@ -111,6 +111,12 @@ pub fn error_text(error: &innertube::Error) -> String {
       "Impossible de préparer le direct.",
     )
     .into(),
+    // Shown only when yt-dlp is not bundled either: it takes over otherwise.
+    Error::Solver(_) => t(
+      "YouTube's player changed: the video cannot be decoded until an update.",
+      "Le lecteur de YouTube a changé : la vidéo ne peut pas être décodée avant une mise à jour.",
+    )
+    .into(),
   }
 }
 

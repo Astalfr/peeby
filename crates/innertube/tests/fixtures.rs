@@ -1598,3 +1598,23 @@ fn cookie_rotation_gives_its_next_delay() {
   );
   assert_eq!(innertube::parse_rotation_delay("<html>"), None);
 }
+
+#[test]
+fn embedded_player_plays_with_its_extras() {
+  // A video VISIONOS refused (bot check), signed in through web_embedded with `pyv`
+  // (captured 2026-11-16, trimmed to two formats).
+  let player = fixture("player_embedded.json");
+  let url = hls_manifest_url(&player).unwrap();
+  assert!(url.starts_with("https://manifest.googlevideo.com/api/manifest/hls_variant/"));
+  // The `n` challenge must be solved before the manifest is fetched.
+  assert_eq!(innertube::n_challenge(url), Some("NNNNNNNNNNNNNNNNN"));
+  assert_eq!(innertube::ad_wait(&player), 0.);
+  assert!(innertube::parse_storyboard(&player).is_some());
+  assert!(!innertube::parse_captions(&player).is_empty());
+}
+
+#[test]
+fn embedded_player_without_pyv_waits_for_its_ads() {
+  // The same video asked without `pyv`: a pre-roll skippable after 5 s.
+  assert_eq!(innertube::ad_wait(&fixture("player_embedded_ads.json")), 5.);
+}

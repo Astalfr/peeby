@@ -8,12 +8,17 @@
     third_party/yt-dlp/yt-dlp.exe          yt-dlp single-file build: it updates itself (`yt-dlp -U`),
                                            which the "onedir" build cannot do
     third_party/yt-dlp/deno.exe            Deno, the JS runtime yt-dlp needs for YouTube (~110 MB)
+    third_party/yt-dlp/yt.solver.*.min.js  yt-dlp's EJS solver of the `n` challenge, which Peeby runs
+                                           in Deno itself for the web_embedded client
+                                           (innertube::jsc); its version follows yt-dlp's
+                                           (yt_dlp/extractor/youtube/jsc/_builtin/vendor/_info.py)
     third_party/yt-dlp/VERSION             pins of this script, to skip a re-download
   QuickJS-NG (2 MB) was measured and rejected: 5.6 s per JS challenge against 0.8 s for Deno.
   The release bundle ships the same layout under tools/ next to the executable.
 
-  To bump a pin: take the SHA-256 from the release (yt-dlp: SHA2-256SUMS; Deno:
-  the asset "digest" of the GitHub releases API) and update $Pins below.
+  To bump a pin: take the SHA-256 from the release (yt-dlp: SHA2-256SUMS; Deno and EJS:
+  the asset "digest" of the GitHub releases API) and update $Pins below. EJS's scripts must be
+  the version the pinned yt-dlp vendors (its SHA3-512 in `_info.py`).
 
 .PARAMETER Force
   Download again even if third_party/yt-dlp/ already matches the pins.
@@ -36,6 +41,18 @@ $Pins = @(
     Url     = 'https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip'
     Sha256  = 'cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf'
     Extract = '.'
+  },
+  @{
+    Name    = 'ejs 0.8.0 lib'
+    Url     = 'https://github.com/yt-dlp/ejs/releases/download/0.8.0/yt.solver.lib.min.js'
+    Sha256  = 'c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577'
+    Rename  = 'yt.solver.lib.min.js'
+  },
+  @{
+    Name    = 'ejs 0.8.0 core'
+    Url     = 'https://github.com/yt-dlp/ejs/releases/download/0.8.0/yt.solver.core.min.js'
+    Sha256  = '18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00'
+    Rename  = 'yt.solver.core.min.js'
   }
 )
 

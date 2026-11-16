@@ -14,6 +14,21 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **5: distribution (1.0)** | 🚧 (done once v1.0.0 is published and installed) | CI, installer with libmpv, yt-dlp and Deno in `tools/` (Inno Setup, after Twitty's), releases from version tags, updates from GitHub Releases with the title bar's button ([ADR 0027](decisions/0027-installer-and-updates.md), [release.md](release.md)) | Downloadable build |
 
 
+## Videos the bot check refuses
+
+- Done (2026-11-16, [ADR 0038](decisions/0038-signed-in-web-embedded-fallback.md), findings in
+  [youtube-bot-check.md](youtube-bot-check.md)): since 2026-11-14 YouTube's bot check refused nearly
+  every video to VISIONOS, which then went to yt-dlp (8.5 s, no storyboard, qualities or captions). They
+  now go through the signed-in `web_embedded` client (`Client::embedded_stream`), its `n` challenge
+  solved by yt-dlp's EJS scripts in a Deno kept running (`innertube::jsc`), with `pyv` against the ad
+  wait; yt-dlp after it. EJS 0.8.0 pinned in fetch-tools.ps1 and shipped in `tools\`. 6 tests (4 unit,
+  2 on 2 new redacted fixtures), `examples/embedded.rs`. Checked: clippy, tests, the example on four
+  refused videos (0.2–0.25 s to the stream once warm, first segment 200), the debug build on two
+  refused videos (stream after 1.28 s then 0.68 s, first frame 0.5 s later, hardware decoding), Deno
+  ending with Peeby. **Not verified:** the storyboard and the quality menu on screen, captions, a seek
+  far into a long video, age-restricted or non-embeddable videos (yt-dlp expected), the installer
+  with the new files.
+
 ## Volume boost
 
 - Done (2026-11-07): a "Boost" button after the volume slider (shown on hover) lets the player's volume go up to 200 % ([playback-ux.md](player/playback-ux.md)): mpv's `volume-max` is 200 (`player::VOLUME_MAX`), the track doubles, marks 100 % and draws the boost in the warning color; the keys and the wheel go up to it. Never remembered: each player starts without it, the kept volume is 100 % at most. Checked: build, clippy, tests. **Not verified:** in the app.

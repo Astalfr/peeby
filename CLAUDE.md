@@ -33,6 +33,10 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - "Not interested" on the first Home video, then its undo, both `feedback` answers saved:
   `cargo run -p innertube --example not_interested -- <cookies.txt> <dir>` (an exported copy, as for `home`;
   writes from the account, ask first; trim `responseContext` before a fixture)
+- A video through the signed-in web_embedded client (ADR 0038), its `n` solved in the bundled Deno:
+  `cargo run -p innertube --example embedded -- <cookies.txt> <video-id>… [--save <file>] [--no-pyv]`
+  (an exported copy, as for `home`; timings, qualities, first segment, no URL; `--save` writes the whole
+  `player` answer, IP and signatures included: redact before a fixture)
 - Live check of every endpoint (counts only): `cargo run -p innertube --example smoke -- [cookies.txt]`
   (an exported copy, as for `home`)
 - A YouTube live through its proxy, anonymous: `cargo run -p innertube --example live_probe -- [id | "query"] [--serve <s>]`
@@ -42,7 +46,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
 - How long a live's segments stay served after leaving Twitch's playlist (bounds `twitch::LIVE_KEPT`), anonymous:
   `cargo run -p twitch --example segment_ttl -- <login> [minutes]`
 - libmpv: `pwsh scripts/fetch-mpv.ps1` fills third_party/mpv/ (git-ignored, required to run the player)
-- yt-dlp + Deno: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored, for the fallback and the spike).
+- yt-dlp + Deno + yt-dlp's EJS solver scripts: `pwsh scripts/fetch-tools.ps1` fills third_party/yt-dlp/ (git-ignored,
+  for the web_embedded client's `n` challenge, the fallback and the spike).
   Single-file `yt-dlp.exe` on purpose: the app updates it with `yt-dlp -U`, which "onedir" builds cannot do.
 - Playback spike with timings: `cargo run -p spike-yt-play --release -- <url>` (`PEEBY_RESOLVER=ytdl` for yt-dlp)
 - Jellyfin through WireGuard (ADR 0037): `cargo run -p spike-jellyfin-wg --release -- <wg.conf> [server-url] [--peeby]`
@@ -91,6 +96,9 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   with DVR from its DASH segments through `innertube::LiveProxy`, which serves mpv local playlists and redirects
   (ADR 0025): the signed URLs stay in the proxy, never in a playlist, a log or an error.
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
+  A video the bot check refuses to VISIONOS goes through the signed-in `web_embedded` client before yt-dlp (ADR 0038):
+  its manifest's `n` challenge solved by `innertube::jsc::Solver` (unsolved, every segment is 403), its stream
+  handed to mpv only once the answer's pre-roll ads could be skipped (none with `pyv`).
 - With cookies, an InnerTube response with `logged_in=0` is an error (`Error::NotLoggedIn`), never an empty feed.
 - Cookies are secrets: never in logs, URLs or error messages. They live in `%APPDATA%\peeby\cookies.dat`,
   encrypted with DPAPI (a whole cookie jar does not fit the Windows Credential Manager), see ADR 0004 and 0022.
@@ -195,7 +203,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   `D:\DEV\peeby\crates\peeby\src\player_page.rs`); Jellyfin specifics (reports, track mapping) go to its space.
 
 ## Ask before
-- Adding, removing or upgrading a dependency, changing the GPUI revision, the libmpv build or the yt-dlp/Deno pins.
+- Adding, removing or upgrading a dependency, changing the GPUI revision, the libmpv build or the yt-dlp/Deno/EJS pins
+  (EJS's scripts must be the version the pinned yt-dlp vendors).
 - Touching rust-toolchain.toml, CI or .claude/ hooks.
 - Introducing `unsafe` outside the FFI modules.
 - Changing the copied peeby crates (`player`, `gpui-video`, `vendor/`) beyond small additions: note them in ADR 0001.

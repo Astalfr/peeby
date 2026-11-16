@@ -74,6 +74,8 @@ Source: "{#Root}\third_party\vcruntime\vcruntime140_1.dll"; DestDir: "{app}"; Fl
 ; never puts the older pinned copy back over it.
 Source: "{#Root}\third_party\yt-dlp\yt-dlp.exe"; DestDir: "{app}\tools"; Flags: onlyifdoesntexist
 Source: "{#Root}\third_party\yt-dlp\deno.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+; The n challenge solver of the web_embedded client (innertube::jsc), pinned with yt-dlp.
+Source: "{#Root}\third_party\yt-dlp\yt.solver.*.min.js"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "{#Root}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]

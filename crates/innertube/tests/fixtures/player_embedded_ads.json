@@ -1,0 +1,750 @@
+{
+  "playabilityStatus": {
+    "contextParams": "Q0FFU0FnZ0M=",
+    "liveStreamability": {
+      "liveStreamabilityRenderer": {
+        "broadcastId": "1",
+        "displayEndscreen": true,
+        "pollDelayMs": "15000",
+        "videoId": "7YYPsowcKSU"
+      }
+    },
+    "playableInEmbed": true,
+    "status": "OK"
+  },
+  "adPlacements": [
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "300931",
+              "offsetStartMilliseconds": "63133"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "381342",
+              "offsetStartMilliseconds": "300931"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "482266",
+              "offsetStartMilliseconds": "381342"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "608709",
+              "offsetStartMilliseconds": "482266"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "823194",
+              "offsetStartMilliseconds": "608709"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1094481",
+              "offsetStartMilliseconds": "823194"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1341366",
+              "offsetStartMilliseconds": "1094481"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1586039",
+              "offsetStartMilliseconds": "1341366"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1739829",
+              "offsetStartMilliseconds": "1586039"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "1927469",
+              "offsetStartMilliseconds": "1739829"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2067744",
+              "offsetStartMilliseconds": "1927469"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2201026",
+              "offsetStartMilliseconds": "2067744"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2447433",
+              "offsetStartMilliseconds": "2201026"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2642113",
+              "offsetStartMilliseconds": "2447433"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "2852855",
+              "offsetStartMilliseconds": "2642113"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3090492",
+              "offsetStartMilliseconds": "2852855"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3166866",
+              "offsetStartMilliseconds": "3090492"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3328018",
+              "offsetStartMilliseconds": "3166866"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3599781",
+              "offsetStartMilliseconds": "3328018"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3781824",
+              "offsetStartMilliseconds": "3599781"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "3962800",
+              "offsetStartMilliseconds": "3781824"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4147110",
+              "offsetStartMilliseconds": "3962800"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4331302",
+              "offsetStartMilliseconds": "4147110"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4511304",
+              "offsetStartMilliseconds": "4331302"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4691619",
+              "offsetStartMilliseconds": "4511304"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "4887831",
+              "offsetStartMilliseconds": "4691619"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5097856",
+              "offsetStartMilliseconds": "4887831"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5280736",
+              "offsetStartMilliseconds": "5097856"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5466798",
+              "offsetStartMilliseconds": "5280736"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5644983",
+              "offsetStartMilliseconds": "5466798"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "5822485",
+              "offsetStartMilliseconds": "5644983"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6012696",
+              "offsetStartMilliseconds": "5822485"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6189633",
+              "offsetStartMilliseconds": "6012696"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6367708",
+              "offsetStartMilliseconds": "6189633"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6553000",
+              "offsetStartMilliseconds": "6367708"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6743800",
+              "offsetStartMilliseconds": "6553000"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "6922580",
+              "offsetStartMilliseconds": "6743800"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "7102635",
+              "offsetStartMilliseconds": "6922580"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "7280822",
+              "offsetStartMilliseconds": "7102635"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "-1",
+              "offsetStartMilliseconds": "7280822"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_MILLISECONDS"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    },
+    {
+      "adPlacementRenderer": {
+        "config": {
+          "adPlacementConfig": {
+            "adTimeOffset": {
+              "offsetEndMilliseconds": "-1",
+              "offsetStartMilliseconds": "-1"
+            },
+            "hideCueRangeMarker": false,
+            "kind": "AD_PLACEMENT_KIND_END"
+          }
+        },
+        "renderer": {
+          "adBreakServiceRenderer": {}
+        }
+      }
+    }
+  ],
+  "adSlots": [
+    {
+      "adSlotRenderer": {
+        "adSlotMetadata": {
+          "triggerEvent": "SLOT_TRIGGER_EVENT_BEFORE_CONTENT"
+        },
+        "fulfillmentContent": {
+          "fulfilledLayout": {
+            "playerBytesAdLayoutRenderer": {
+              "renderingContent": {
+                "instreamVideoAdRenderer": {
+                  "skipOffsetMilliseconds": 5000,
+                  "playerVars": "length_seconds=6"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "adSlotRenderer": {
+        "adSlotMetadata": {
+          "triggerEvent": "SLOT_TRIGGER_EVENT_LAYOUT_ID_ENTERED"
+        },
+        "fulfillmentContent": {
+          "fulfilledLayout": {
+            "playerBytesAdLayoutRenderer": {
+              "renderingContent": {}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "responseContext": {}
+}

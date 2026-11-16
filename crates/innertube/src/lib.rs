@@ -37,8 +37,10 @@
 
 mod auth;
 mod client;
+mod embedded;
 mod error;
 pub mod hls;
+pub mod jsc;
 mod live;
 mod models;
 mod parse;
@@ -46,6 +48,9 @@ mod proto;
 
 pub use auth::{Cookies, parse_rotation_delay};
 pub use client::{Client, SaveCookies, VISIONOS_USER_AGENT, hls_manifest_url, save_to_file};
+pub use embedded::{
+  EMBEDDED_USER_AGENT, EmbedConfig, ad_wait, n_challenge, parse_embed_config, signature_timestamp,
+};
 pub use error::Error;
 pub use live::LiveProxy;
 pub use models::{

@@ -14,8 +14,9 @@ sha1 = "0.10"
 # SponsorBlock is asked by a prefix of the video id's SHA-256, not by the id (ADR 0034).
 sha2 = "0.10"
 thiserror = "2"
-# The local playlist proxy of lives (ADR 0025): the features the twitch crate already builds.
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync"] }
+# The local playlist proxy of lives (ADR 0025): the features the twitch crate already builds;
+# `time` for the web_embedded stream's wait behind its ads.
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 tracing = "0.1"
 
 [dev-dependencies]

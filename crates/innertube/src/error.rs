@@ -47,6 +47,9 @@ pub enum Error {
   /// The local proxy of a live could not start (ADR 0025).
   #[error("live proxy: {0}")]
   Proxy(String),
+  /// The `n` challenge solver (Deno running yt-dlp's EJS scripts) failed.
+  #[error("n challenge solver: {0}")]
+  Solver(String),
 }
 
 impl From<reqwest::Error> for Error {

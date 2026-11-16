@@ -1,11 +1,14 @@
-//! The bundled yt-dlp and Deno (ADR 0005), used when the VISIONOS client cannot play a video:
-//! mpv's `ytdl_hook` runs yt-dlp, isolated from the host's config and cache. yt-dlp updates
-//! itself once a day, since YouTube breaks old versions.
+//! The bundled yt-dlp and Deno (ADR 0005): Deno solves the web_embedded client's `n` challenge
+//! (yt-dlp's EJS scripts, [`solver`]); when that client cannot play a video either, mpv's
+//! `ytdl_hook` runs yt-dlp, isolated from the host's config and cache. yt-dlp updates itself
+//! once a day, since YouTube breaks old versions.
 
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime};
 
+use innertube::jsc::Solver;
 use player::{StartOptions, Ytdl};
 
 /// HLS only: DASH (`https`) URLs return 403 until their `available_at`, about 5 s later.
@@ -67,6 +70,26 @@ pub fn ytdl_options(video_id: &str) -> Option<StartOptions> {
     readahead_secs: Some(super::convert::READAHEAD_SECS),
     ..Default::default()
   })
+}
+
+/// The `n` challenge solver of the web_embedded client: the bundled Deno on yt-dlp's EJS
+/// scripts (`innertube::jsc`), created once; `None` when they are not bundled. Blocking the first
+/// time (reads the scripts, writes the solver's): call it off the UI thread.
+pub fn solver() -> Option<Arc<Solver>> {
+  static SOLVER: OnceLock<Option<Arc<Solver>>> = OnceLock::new();
+  SOLVER
+    .get_or_init(|| {
+      let dir = tools_dir()?;
+      let cache = cache_dir()?;
+      match Solver::new(&dir.join("deno.exe"), &dir, &cache) {
+        Ok(solver) => Some(Arc::new(solver)),
+        Err(e) => {
+          tracing::warn!("{e}");
+          None
+        }
+      }
+    })
+    .clone()
 }
 
 /// Deletes the plain copy of the cookies given to yt-dlp, if one is left. Blocking.

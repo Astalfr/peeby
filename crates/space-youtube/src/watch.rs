@@ -1218,8 +1218,9 @@ pub(super) fn load_stream(
   }
   // Refused minutes ago by YouTube's bot check: VISIONOS would refuse it again.
   if let Some(failed) = prefetch::refused(video_id, cx) {
-    tracing::info!("VISIONOS refused {video_id} recently, trying yt-dlp");
-    start_ytdl(
+    tracing::info!("VISIONOS refused {video_id} recently, trying web_embedded");
+    start_embedded(
+      client.clone(),
       video_id.to_owned(),
       start,
       player.downgrade(),
@@ -1267,9 +1268,9 @@ pub(super) fn load_stream(
     // the cookies, plays it); otherwise say so rather than let yt-dlp fail after a few seconds.
     let error = match error {
       innertube::Error::Unplayable { ref status, .. } if status == "UNPLAYABLE" => {
-        let id = video_id.clone();
+        let (id, members) = (video_id.clone(), client.clone());
         let check =
-          cx.update(|cx| runtime::spawn(cx, async move { client.check_members_only(&id).await }));
+          cx.update(|cx| runtime::spawn(cx, async move { members.check_members_only(&id).await }));
         match check.await {
           Some(Err(members @ innertube::Error::MembersOnly { .. })) => members,
           _ => error,
@@ -1290,18 +1291,70 @@ pub(super) fn load_stream(
         .ok();
       return;
     }
-    tracing::info!("VISIONOS failed ({error}), trying yt-dlp");
+    // The bot check refuses VISIONOS, an anonymous visitor: the signed-in web_embedded client
+    // passes it. Anything else (age restriction, client blocked, unexpected response): yt-dlp.
+    let bot_check =
+      matches!(&error, innertube::Error::Unplayable { status, .. } if status == "LOGIN_REQUIRED");
+    let next = if bot_check { "web_embedded" } else { "yt-dlp" };
+    tracing::info!("VISIONOS failed ({error}), trying {next}");
     cx.update(|cx| {
       prefetch::note_refused(&video_id, &error, cx);
-      start_ytdl(
-        video_id,
-        start,
-        player,
-        clicked,
-        error_text(&error).into(),
-        cx,
-      )
+      let failed = error_text(&error).into();
+      if bot_check {
+        start_embedded(client, video_id, start, player, clicked, failed, cx);
+      } else {
+        start_ytdl(video_id, start, player, clicked, failed, cx);
+      }
     });
+  })
+  .detach();
+}
+
+/// Plays `video_id` through the signed-in web_embedded client (docs/youtube-bot-check.md), its
+/// `n` challenge solved by the bundled Deno: storyboard, qualities and captions, about 0.3 s
+/// once Deno is running. Signed out, or when it fails, yt-dlp takes over, then shows `failed`.
+fn start_embedded(
+  client: Client,
+  video_id: String,
+  start: Option<f64>,
+  player: WeakEntity<PlayerView>,
+  clicked: Instant,
+  failed: SharedString,
+  cx: &mut App,
+) {
+  if !client.signed_in() {
+    start_ytdl(video_id, start, player, clicked, failed, cx);
+    return;
+  }
+  let max_height = Settings::get(cx).max_height;
+  let player_settings = Settings::get(cx).player.clone();
+  let id = video_id.clone();
+  let fetch = runtime::spawn(cx, async move {
+    let solver = tools::solver().ok_or_else(|| {
+      innertube::Error::Solver("the EJS scripts are not bundled (scripts/fetch-tools.ps1)".into())
+    })?;
+    client.embedded_stream(&id, max_height, &solver).await
+  });
+  cx.spawn(async move |cx| match fetch.await {
+    Some(Ok(stream)) => {
+      tracing::info!(
+        "web_embedded: stream after {:.2} s: {} {}",
+        clicked.elapsed().as_secs_f64(),
+        stream.resolution,
+        stream.codecs
+      );
+      let mut source = convert::source(stream, &player_settings);
+      resume(&mut source, start);
+      ytdl_fallback(&mut source, &video_id, start, player.clone());
+      player
+        .update(cx, |player, cx| player.start(source, clicked, cx))
+        .ok();
+    }
+    Some(Err(e)) => {
+      tracing::info!("web_embedded failed ({e}), trying yt-dlp");
+      cx.update(|cx| start_ytdl(video_id, start, player, clicked, failed, cx));
+    }
+    None => {}
   })
   .detach();
 }
@@ -1319,7 +1372,7 @@ fn ytdl_fallback(
   }
   let video_id = video_id.to_owned();
   source.fallback = Some(Rc::new(move |failed, cx| {
-    tracing::info!("mpv could not open VISIONOS's playlists, trying yt-dlp");
+    tracing::info!("mpv could not open the playlists, trying yt-dlp");
     start_ytdl(
       video_id.clone(),
       start,

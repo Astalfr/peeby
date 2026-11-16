@@ -2,11 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
 use crate::auth::{Cookies, ORIGIN, ROTATE_COOKIES_BODY, ROTATE_COOKIES_URL, parse_rotation_delay};
+use crate::embedded;
 use crate::error::{Error, Result};
 use crate::hls;
 use crate::live::LiveProxy;
@@ -62,6 +63,8 @@ struct State {
   web_version: Option<String>,
   /// Original titles by video id; `None` when oEmbed has none (embedding disabled, private).
   titles: HashMap<String, Option<String>>,
+  /// Player JS by path, with its `signatureTimestamp`: one per YouTube player version.
+  players: HashMap<String, (u32, crate::jsc::PlayerJs)>,
 }
 
 /// Saves the whole jar when YouTube rotates a value ([`Client::new`]). Blocking: it runs on the
@@ -1258,6 +1261,209 @@ impl Client {
     self.send("player", request, false).await
   }
 
+  /// Best HLS stream up to `max_height` pixels through the signed-in `WEB_EMBEDDED_PLAYER`
+  /// client, which passes the bot check that refuses VISIONOS (an anonymous visitor). About
+  /// 0.6–0.8 s: the embed page, the `player` answer, the `n` challenge solved by `solver`, the
+  /// master playlist. 1080p H.264 at most; lives are not handled (`Unplayable`).
+  pub async fn embedded_stream(
+    &self,
+    video_id: &str,
+    max_height: u32,
+    solver: &Arc<crate::jsc::Solver>,
+  ) -> Result<Stream> {
+    let (player, js, answered) = self.embedded_player(video_id, true).await?;
+    // Without ads in the answer (`pyv`), media is served at once; else after them.
+    let (player, js, answered) = match hls_manifest_url(&player) {
+      Err(Error::Unplayable { .. }) => {
+        tracing::debug!("web_embedded: refused with pyv, asking again without it");
+        self.embedded_player(video_id, false).await?
+      }
+      _ => (player, js, answered),
+    };
+    let details = &player["videoDetails"];
+    if details["isLive"] == true || details["isPostLiveDvr"] == true {
+      return Err(Error::Unplayable {
+        status: "LIVE".into(),
+        reason: "lives are not played through web_embedded".into(),
+      });
+    }
+    let manifest = hls_manifest_url(&player)?;
+    let master_url = match embedded::n_challenge(manifest) {
+      Some(challenge) => {
+        let solved = solver.solve_n(&js, challenge).await?;
+        embedded::with_solved_n(manifest, challenge, &solved)
+      }
+      None => manifest.to_owned(),
+    };
+    let response = self
+      .http
+      .get(&master_url)
+      .header("User-Agent", embedded::EMBEDDED_USER_AGENT)
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "hls master",
+      });
+    }
+    let qualities = hls::ladder(&response.text().await?);
+    let variant = qualities
+      .iter()
+      .find(|v| v.height <= max_height)
+      .or(qualities.last())
+      .cloned()
+      .ok_or(Error::Parse {
+        endpoint: "hls master",
+        detail: "no variant".into(),
+      })?;
+    let wait = embedded::ad_wait(&player);
+    if wait > 0. {
+      // Segments answer 403 until the ads could have been skipped, counted from the answer.
+      tracing::debug!("web_embedded: {wait} s of ads before the stream is served");
+      tokio::time::sleep_until((answered + Duration::from_secs_f64(wait)).into()).await;
+    }
+    Ok(Stream {
+      video_url: variant.url,
+      audio_url: variant.audio_url,
+      resolution: variant.resolution,
+      codecs: variant.codecs,
+      user_agent: embedded::EMBEDDED_USER_AGENT,
+      captions: parse_captions(&player),
+      storyboard: parse_storyboard(&player),
+      qualities,
+      live: None,
+    })
+  }
+
+  /// The signed-in `WEB_EMBEDDED_PLAYER` `player` answer of `video_id`, its player JS and when
+  /// it came. With `pyv` (`adPlaybackContext.pyv`, yt-dlp's `use_ad_playback_context`), the
+  /// answer carries no pre-roll ads, so media is served at once (docs/youtube-bot-check.md).
+  pub async fn embedded_player(
+    &self,
+    video_id: &str,
+    pyv: bool,
+  ) -> Result<(Value, crate::jsc::PlayerJs, Instant)> {
+    let session = self.session.as_ref().ok_or(Error::SignInRequired)?;
+    let page = self
+      .http
+      .get(format!("{ORIGIN}/embed/{video_id}?html5=1"))
+      .header("User-Agent", embedded::EMBEDDED_USER_AGENT)
+      .header("Referer", embedded::EMBED_URL)
+      .header("Cookie", lock(&session.cookies).header());
+    let response = page.send().await?;
+    self.keep_rotated_cookies(&response);
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "embed page",
+      });
+    }
+    let config = embedded::parse_embed_config(&response.text().await?);
+    if !config.logged_in {
+      return Err(Error::NotLoggedIn);
+    }
+    let path = config.player_js.clone().ok_or(Error::Parse {
+      endpoint: "embed page",
+      detail: "no player JS".into(),
+    })?;
+    let (sts, js) = self.player_js(&path).await?;
+    let version = config
+      .client_version
+      .clone()
+      .unwrap_or_else(|| embedded::CLIENT_VERSION.to_owned());
+    let visitor = config
+      .visitor_data
+      .clone()
+      .or_else(|| self.state().visitor_data.clone());
+    let (hl, gl) = &*self.language;
+    let mut playback = json!({ "contentPlaybackContext": {
+      "html5Preference": "HTML5_PREF_WANTS",
+      "signatureTimestamp": sts,
+    }});
+    if let Some(flags) = &config.host_flags {
+      playback["contentPlaybackContext"]["encryptedHostFlags"] = json!(flags);
+    }
+    if pyv {
+      playback["adPlaybackContext"] = json!({ "pyv": true });
+    }
+    let mut client = json!({
+      "clientName": embedded::CLIENT_NAME,
+      "clientVersion": version,
+      "userAgent": embedded::EMBEDDED_USER_AGENT,
+      "hl": hl,
+      "gl": gl,
+    });
+    if let Some(visitor) = &visitor {
+      client["visitorData"] = json!(visitor);
+    }
+    let body = json!({
+      "context": {
+        "client": client,
+        "thirdParty": { "embedUrl": embedded::EMBED_URL },
+      },
+      "videoId": video_id,
+      "playbackContext": playback,
+      "contentCheckOk": true,
+      "racyCheckOk": true,
+    });
+    let mut request = self
+      .http
+      .post(format!("{ORIGIN}/youtubei/v1/player?prettyPrint=false"))
+      .header("User-Agent", embedded::EMBEDDED_USER_AGENT)
+      .header("Origin", ORIGIN)
+      .header("X-Origin", ORIGIN)
+      .header("X-Youtube-Client-Name", embedded::CLIENT_NAME_ID)
+      .header("X-Youtube-Client-Version", &version)
+      .header("X-Youtube-Bootstrap-Logged-In", "true")
+      .json(&body);
+    if let Some(visitor) = &visitor {
+      request = request.header("X-Goog-Visitor-Id", visitor);
+    }
+    {
+      let cookies = lock(&session.cookies);
+      request = request
+        .header("Cookie", cookies.header())
+        .header("Authorization", cookies.authorization())
+        .header("X-Goog-AuthUser", "0");
+    }
+    let player = self.send("player", request, true).await?;
+    Ok((player, js, Instant::now()))
+  }
+
+  /// The player JS at `path` and its `signatureTimestamp`, fetched once per version.
+  async fn player_js(&self, path: &str) -> Result<(u32, crate::jsc::PlayerJs)> {
+    if let Some(cached) = self.state().players.get(path).cloned() {
+      return Ok(cached);
+    }
+    let response = self
+      .http
+      .get(format!("{ORIGIN}{path}"))
+      .header("User-Agent", embedded::EMBEDDED_USER_AGENT)
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "player js",
+      });
+    }
+    let code = response.text().await?;
+    let sts = embedded::signature_timestamp(&code).ok_or(Error::Parse {
+      endpoint: "player js",
+      detail: "no signatureTimestamp".into(),
+    })?;
+    let js = crate::jsc::PlayerJs {
+      path: path.to_owned(),
+      code: code.into(),
+    };
+    self
+      .state()
+      .players
+      .insert(path.to_owned(), (sts, js.clone()));
+    Ok((sts, js))
+  }
+
   async fn visionos_stream(&self, video_id: &str, max_height: u32) -> Result<Stream> {
     let player = self.visionos_player(video_id).await?;
     // A live with DVR plays from its DASH segments through the local proxy: the whole broadcast
@@ -1359,7 +1565,7 @@ async fn join_all<F: Future>(futures: Vec<F>) -> Vec<F::Output> {
 }
 
 /// A poisoned lock only means a panic elsewhere; the value stays usable.
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
   mutex
     .lock()
     .unwrap_or_else(std::sync::PoisonError::into_inner)

@@ -19,6 +19,7 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 | Streams | VISIONOS client, HLS (no JS challenge, no `available_at` wait) | [0003](decisions/0003-visionos-hls-streams.md) |
 | Sign-in | Browser cookies (`cookies.txt`), SAPISIDHASH | [0004](decisions/0004-cookie-session.md) |
 | Fallback extraction | yt-dlp + Deno bundled, pinned and isolated | [0005](decisions/0005-bundled-yt-dlp.md) |
+| Videos the bot check refuses to VISIONOS | The signed-in `web_embedded` client (HLS up to 1080p, storyboard, qualities, captions), its `n` challenge solved by yt-dlp's EJS scripts in a Deno kept running, `adPlaybackContext.pyv` against the ad wait; yt-dlp after it | [0038](decisions/0038-signed-in-web-embedded-fallback.md) |
 | Look and motion | Peeby's visual system, one accent per space (YouTube red, Jellyfin blue) | [0006](decisions/0006-peeby-visual-system.md) |
 | Multi-service app (YouTube, Jellyfin, Twitch) | Peeby: one space per service, peeby abandoned, no data migration | [0007](decisions/0007-multi-space-app.md) |
 | Mini-player | A window of its own above the others (PopUp), the same video surface, one sound at a time per window | [0008](decisions/0008-mini-player-window.md) |
@@ -59,6 +60,8 @@ Peeby is a native media client for Windows, written in Rust with [GPUI](https://
 - [architecture.md](architecture.md): crates, threads, data flow
 - [design.md](design.md): palette, layout, pages and motion; the logo, its sources and the proposals: [logo/](logo/README.md)
 - [etude-faisabilite.md](etude-faisabilite.md): the feasibility study (French), with measurements and sources
+- [youtube-bot-check.md](youtube-bot-check.md): YouTube's bot check on the VISIONOS resolver, what was measured
+  (2026-11-16) and the leads; the first one is done ([ADR 0038](decisions/0038-signed-in-web-embedded-fallback.md))
 - [decisions/](decisions/): architecture decision records; the former peeby's are archived in [decisions/peeby/](decisions/peeby/)
 - [player/](player/): mpv options, video surface, playback UX, ASS subtitles (from peeby)
 - [twitch.md](twitch.md): how the Twitch space works (playback, credentials, chat, Helix), with what was
