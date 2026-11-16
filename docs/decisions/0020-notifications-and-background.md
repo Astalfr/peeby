@@ -58,9 +58,12 @@ and spend the single-use Twitch refresh token (ADR 0010): one of the sessions wo
   auth-token every 3 minutes through raw GQL (`twitch::notifications`: `currentUser {
   notifications(first: 20, displayType: VIEWER) { summary { unseenCount lastSeenAt } edges {
   node } } }`, fields found from GQL's validation messages, introspection being off; fixture
-  `gql_notifications.json`). They need only the auth-token, not Helix. Reading writes nothing:
-  no mutation marking them seen was found among the guessed names, so Peeby's "seen" is its own
-  (the panel opened), after twitch.tv's `lastSeenAt`, and twitch.tv's count stays as it is. A
+  `gql_notifications.json`). They need only the auth-token, not Helix. Reading writes nothing.
+  Peeby's "seen" is the panel's Twitch tab shown, after twitch.tv's `lastSeenAt`; since
+  2026-11-16 it also sends twitch.tv's own `viewedNotifications` then (when twitch.tv's count is
+  not 0), clearing twitch.tv's badge as its bell does, and `markAllViewerNotificationsAsRead`
+  when one is unread (the user's choice: opening the panel reads them all), and a click (or a middle click) on a
+  notification sends `readNotifications` for it (docs/twitch.md). A
   notification made after the last look is new. The first reading only learns; later, one not
   read before and made since Peeby started (minus a minute) is announced. Its kind is
   `twitch_inbox` (a Windows notification with its picture, titled "Twitch"). They show in

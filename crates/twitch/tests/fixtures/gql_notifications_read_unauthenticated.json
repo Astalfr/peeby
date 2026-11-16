@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "message": "unauthenticated",
+      "path": [
+        "readNotifications"
+      ],
+      "extensions": {
+        "code": "Unauthenticated"
+      }
+    }
+  ],
+  "data": {
+    "readNotifications": null
+  }
+}

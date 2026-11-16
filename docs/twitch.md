@@ -519,9 +519,17 @@ headers, no persisted hash. Decisions: [ADR 0012](decisions/0012-twitch-channel-
     (a drop's reward in `**…**`), categories `watch_streaks`, `recommended_content`,
     `promotions`, `drops_and_quests`, `transactional`, one `click` action with a twitch.tv or
     external URL, `unseenCount` the notifications made after `lastSeenAt`. No live announcement
-    in the account's list (Peeby announces lives itself, from Helix). No mutation marking them
-    seen answered among the guessed names (`updateOnsiteNotification…`, `markOnsite…`): Peeby
-    keeps its own seen state. ADR 0020.
+    in the account's list (Peeby announces lives itself, from Helix). The guessed mutation names
+    (`updateOnsiteNotification…`, `markOnsite…`) do not exist; twitch.tv's own are in its bell's
+    chunk (`features.onsite-notifications.components.onsite-notifications.container-<hash>.js`,
+    read on 2026-11-16, validated anonymous: `unauthenticated` before anything happens):
+    `viewedNotifications { user { id notifications { summary { unseenCount lastSeenAt } } } }`,
+    no argument, sent when its bell opens (its badge to 0, `lastSeenAt` now);
+    `readNotifications(input: { ids: [ID!]! }) { notifications { id isRead } count }` on a click;
+    `markAllViewerNotificationsAsRead(input: { userID }) { hasSucceeded }` ("mark all as read",
+    `userID` being `currentUser.id`). Peeby sends the first two as twitch.tv does, and the third
+    too when its panel shows Twitch's tab with an unread notification. The signed-in answers are **[?]** (not
+    captured: a write from the account). ADR 0020.
   - **Outgoing raids** ([ADR 0024](decisions/0024-twitch-raids-pubsub.md)): GQL's
     `user(login) { raid }` exists but stayed null for viewers (2026-11-04, about 2,600 lives
     scanned 52 times, anonymous and with the auth-token). Twitch's PubSub gives them instead,

@@ -2,8 +2,9 @@
 //! read with the auth-token every 3 minutes ([`twitch::notifications`]). It shows in the Twitch
 //! tab of Peeby's bell with the followed lives' events ([`super::bell`]), newest first, and as
 //! Windows notifications (`[notifications] twitch_inbox`, ADR 0020). Reading the list writes
-//! nothing on Twitch: Peeby's "seen" is its own, after twitch.tv's (`lastSeenAt`), so twitch.tv's
-//! count stays as it is. The first reading only learns, as the followed lives' bell does.
+//! nothing on Twitch; Peeby's panel shown marks it seen and all read on twitch.tv too (its badge
+//! cleared), and a click marks the notification read. The first reading only learns,
+//! as the followed lives' bell does.
 
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -42,6 +43,10 @@ pub struct Inbox {
   known: Option<HashSet<String>>,
   /// twitch.tv's last look at its bell, milliseconds since the epoch.
   twitch_seen_at: Option<i64>,
+  /// twitch.tv's unseen count (its bell's badge) as last read.
+  twitch_unseen: usize,
+  /// The account's id, to mark them all read.
+  user_id: Option<String>,
   /// Peeby's last look (its panel opened), milliseconds since the epoch.
   seen_at: Option<i64>,
 }
@@ -64,6 +69,8 @@ impl Inbox {
     known.extend(page.notifications.iter().map(|n| n.id.clone()));
     self.notifications = page.notifications;
     self.twitch_seen_at = page.last_seen_at;
+    self.twitch_unseen = page.unseen;
+    self.user_id = page.user_id;
     fresh
   }
 
@@ -91,6 +98,45 @@ impl Inbox {
   pub fn see(&mut self, now: i64) {
     let newest = self.notifications.iter().filter_map(|n| n.created_at).max();
     self.seen_at = Some(newest.map_or(now, |n| n.max(now)));
+  }
+
+  /// Whether twitch.tv's bell shows a badge: the list is to be marked seen there.
+  pub fn twitch_unseen(&self) -> bool {
+    self.twitch_unseen > 0
+  }
+
+  /// twitch.tv marked the list seen (its last look now `at`, else `now`).
+  pub fn twitch_saw(&mut self, at: Option<i64>, now: i64) {
+    self.twitch_unseen = 0;
+    self.twitch_seen_at = self.twitch_seen_at.max(Some(at.unwrap_or(now)));
+  }
+
+  /// The account's id when one notification is unread: they are to be marked all read.
+  pub fn unread_for(&self) -> Option<&str> {
+    self
+      .notifications
+      .iter()
+      .any(|n| !n.read)
+      .then_some(self.user_id.as_deref())
+      .flatten()
+  }
+
+  /// Marks them all read.
+  pub fn read_all(&mut self) {
+    for n in &mut self.notifications {
+      n.read = true;
+    }
+  }
+
+  /// Marks `id` read (clicked), returning whether it was unread.
+  pub fn read(&mut self, id: &str) -> bool {
+    match self.notifications.iter_mut().find(|n| n.id == id) {
+      Some(n) if !n.read => {
+        n.read = true;
+        true
+      }
+      _ => false,
+    }
   }
 
   /// The notifications, newest first.
@@ -189,6 +235,11 @@ pub fn open(nav: &WeakEntity<TwitchSpace>, notification: &Notification, cx: &mut
   let Some(url) = notification.url.clone() else {
     return;
   };
+  nav
+    .update(cx, |space, cx| {
+      space.read_notification(&notification.id, cx)
+    })
+    .ok();
   match route(&url) {
     Some(route) => {
       nav
@@ -290,7 +341,26 @@ mod tests {
       notifications,
       unseen: 0,
       last_seen_at,
+      user_id: Some("1".into()),
     }
+  }
+
+  #[test]
+  fn twitch_tv_marks_seen_once_and_reads_once() {
+    let mut inbox = Inbox::default();
+    let mut first = page(vec![notification("a", 1_000)], Some(500));
+    first.unseen = 1;
+    inbox.update(first, 0);
+    assert!(inbox.twitch_unseen());
+    inbox.twitch_saw(None, 2_000);
+    assert!(!inbox.twitch_unseen());
+    // twitch.tv's new last look counts as Peeby's.
+    assert_eq!(inbox.unseen(), 0);
+    assert_eq!(inbox.unread_for(), Some("1"));
+    assert!(inbox.read("a"));
+    assert!(!inbox.read("a"));
+    assert_eq!(inbox.unread_for(), None);
+    assert!(!inbox.read("missing"));
   }
 
   #[test]

@@ -827,7 +827,8 @@ impl TwitchSpace {
     }
   }
 
-  /// The bell's lives and the notification center are seen (its panel opened).
+  /// The bell's lives and the notification center are seen (its panel opened); on twitch.tv
+  /// too, its badge cleared and its notifications marked all read.
   pub fn see_bell(&mut self, cx: &mut Context<Self>) {
     if let State::SignedIn(signed) = &mut self.state
       && signed.bell.unseen() > 0
@@ -839,6 +840,82 @@ impl TwitchSpace {
       self.inbox.see(inbox::now_ms());
       cx.notify();
     }
+    if self.inbox.twitch_unseen() {
+      self.mark_inbox_seen(cx);
+    }
+    if let Some(user_id) = self.inbox.unread_for().map(str::to_owned) {
+      self.mark_inbox_read(user_id, cx);
+    }
+  }
+
+  /// Marks all of the notification center read on twitch.tv
+  /// (`markAllViewerNotificationsAsRead`, its "mark all as read"); read at once in Peeby, a
+  /// failure leaving them to the next reading.
+  fn mark_inbox_read(&mut self, user_id: String, cx: &mut Context<Self>) {
+    let (Some(client), Some(_)) = (self.client.clone(), &self.auth_token) else {
+      return;
+    };
+    self.inbox.read_all();
+    cx.notify();
+    drop(runtime::spawn(cx, async move {
+      let sent = async {
+        let answer = client
+          .gql(&twitch::notifications::read_all_request(&user_id))
+          .await?;
+        twitch::notifications::parse_read_all(&answer)
+      };
+      if let Err(e) = sent.await {
+        tracing::warn!("Twitch notifications read: {e}");
+      }
+    }));
+  }
+
+  /// Marks the notification center seen on twitch.tv (`viewedNotifications`, as its bell does
+  /// when it opens). Counted seen at once, so that the panel opened again sends nothing; a
+  /// failure leaves twitch.tv's count to the next reading.
+  fn mark_inbox_seen(&mut self, cx: &mut Context<Self>) {
+    let (Some(client), Some(_)) = (self.client.clone(), &self.auth_token) else {
+      return;
+    };
+    self.inbox.twitch_saw(None, inbox::now_ms());
+    let send = runtime::spawn(cx, async move {
+      let answer = client.gql(&twitch::notifications::view_request()).await?;
+      twitch::notifications::parse_view(&answer)
+    });
+    cx.spawn(async move |this, cx| {
+      let result = send.await;
+      this
+        .update(cx, |this, _| match result {
+          Some(Ok(at)) => this.inbox.twitch_saw(at, inbox::now_ms()),
+          Some(Err(e)) => tracing::warn!("Twitch notifications seen: {e}"),
+          None => {}
+        })
+        .ok();
+    })
+    .detach();
+  }
+
+  /// Marks the notification `id` read on twitch.tv (`readNotifications`, as a click in its
+  /// bell does), when it is unread.
+  pub fn read_notification(&mut self, id: &str, cx: &mut Context<Self>) {
+    let (Some(client), Some(_)) = (self.client.clone(), &self.auth_token) else {
+      return;
+    };
+    if !self.inbox.read(id) {
+      return;
+    }
+    let ids = vec![id.to_owned()];
+    drop(runtime::spawn(cx, async move {
+      let sent = async {
+        let answer = client
+          .gql(&twitch::notifications::read_request(&ids))
+          .await?;
+        twitch::notifications::parse_read(&answer)
+      };
+      if let Err(e) = sent.await {
+        tracing::warn!("Twitch notification read: {e}");
+      }
+    }));
   }
 
   /// Shows the settings' test notification of the notification center: its newest one, else a

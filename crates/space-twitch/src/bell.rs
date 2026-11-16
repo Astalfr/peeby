@@ -478,6 +478,7 @@ impl BellPanel {
     let image = inbox::picture(notification)
       .map(|picture| picture::image_fill(&picture, AVATAR, 1., radius, window, cx));
     let in_new_tab = notification.url.as_deref().and_then(inbox::route);
+    let id = notification.id.clone();
     // Bold runs as Twitch shows them (a drop's reward), the text wrapping across them.
     let runs: Vec<TextRun> = notification
       .spans
@@ -522,6 +523,10 @@ impl BellPanel {
         && let Some(route) = in_new_tab.clone()
       {
         cx.stop_propagation();
+        this
+          .nav
+          .update(cx, |space, cx| space.read_notification(&id, cx))
+          .ok();
         this.open_in_new_tab(route, cx);
       }
     }))

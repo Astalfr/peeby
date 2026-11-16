@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "message": "unauthenticated",
+      "path": [
+        "markAllViewerNotificationsAsRead"
+      ],
+      "extensions": {
+        "code": "Unauthenticated"
+      }
+    }
+  ],
+  "data": {
+    "markAllViewerNotificationsAsRead": null
+  }
+}

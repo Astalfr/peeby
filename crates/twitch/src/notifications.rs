@@ -11,8 +11,13 @@
 //!   seen), `isRead`, `createdAt`, `updatedAt`, `thumbnailURL`, `renderStyle`,
 //!   `destinationType`, `actions { id type label url body modalID }` (the first one with a `url`
 //!   is the click), `extra` (a union, not read).
-//! - Reading the list writes nothing: no mutation marking it read or seen was found among the
-//!   guessed names, so Peeby keeps its own "seen" and twitch.tv's count stays as it is.
+//! - Reading the list writes nothing. twitch.tv's own mutations (its bell's chunk,
+//!   `features.onsite-notifications…container`, read on 2026-11-16; validated anonymous, which
+//!   answers `unauthenticated` before anything happens): `viewedNotifications` (no argument)
+//!   when the bell opens, setting `unseenCount` to 0 and `lastSeenAt` to now (its badge), and
+//!   `readNotifications(input: { ids })` when a notification is clicked (`isRead`), and
+//!   `markAllViewerNotificationsAsRead(input: { userID }) { hasSucceeded }` (its "mark all as
+//!   read"; `userID` is `currentUser.id`).
 
 use serde_json::{Value, json};
 
@@ -26,6 +31,12 @@ const QUERY: &str = "query Notifications($first: Int!) { currentUser { id notifi
   $first, displayType: VIEWER) { summary { unseenCount lastSeenAt } edges { node { id body type \
   category isRead createdAt updatedAt thumbnailURL renderStyle destinationType actions { id type \
   label url } } } } } }";
+
+const VIEW_MUTATION: &str = "mutation OnsiteNotifications_View { viewedNotifications { user {   id notifications { summary { unseenCount lastSeenAt } } } } }";
+
+const READ_MUTATION: &str = "mutation OnsiteNotifications_ReadNotifications($input:   ReadNotificationsInput!) { readNotifications(input: $input) { notifications { id isRead }   count } }";
+
+const READ_ALL_MUTATION: &str = "mutation OnsiteNotifications_MarkAllViewerNotificationsAsRead(  $input: MarkAllViewerNotificationsAsReadInput!) { markAllViewerNotificationsAsRead(input:   $input) { hasSucceeded } }";
 
 /// One notification of the account's list.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +84,8 @@ pub struct Page {
   pub unseen: usize,
   /// When twitch.tv's bell was last opened, milliseconds since the epoch.
   pub last_seen_at: Option<i64>,
+  /// The account's id (`currentUser.id`), for [`read_all_request`].
+  pub user_id: Option<String>,
 }
 
 /// The request for the newest `first` notifications.
@@ -113,7 +126,91 @@ pub fn parse(answer: &Value) -> Result<Page> {
     last_seen_at: summary["lastSeenAt"]
       .as_str()
       .and_then(crate::time::epoch_millis),
+    user_id: user["id"]
+      .as_str()
+      .filter(|id| !id.is_empty())
+      .map(str::to_owned),
   })
+}
+
+/// The request marking the list seen, as twitch.tv's bell does when it opens: its unseen count
+/// goes to 0. Writes to the account.
+pub fn view_request() -> Value {
+  json!({
+    "operationName": "OnsiteNotifications_View",
+    "query": VIEW_MUTATION,
+    "variables": {},
+  })
+}
+
+/// Reads [`view_request`]'s answer: twitch.tv's new last look (`lastSeenAt`, milliseconds since
+/// the epoch), when it gives one. Without the auth-token it is [`Error::NotLoggedIn`].
+pub fn parse_view(answer: &Value) -> Result<Option<i64>> {
+  let payload = mutation_payload(answer, "viewedNotifications")?;
+  Ok(
+    payload["user"]["notifications"]["summary"]["lastSeenAt"]
+      .as_str()
+      .and_then(crate::time::epoch_millis),
+  )
+}
+
+/// The request marking `ids` read, as a click in twitch.tv's bell does. Writes to the account.
+pub fn read_request(ids: &[String]) -> Value {
+  json!({
+    "operationName": "OnsiteNotifications_ReadNotifications",
+    "query": READ_MUTATION,
+    "variables": { "input": { "ids": ids } },
+  })
+}
+
+/// Reads [`read_request`]'s answer: how many Twitch marked read. Without the auth-token it is
+/// [`Error::NotLoggedIn`].
+pub fn parse_read(answer: &Value) -> Result<usize> {
+  let payload = mutation_payload(answer, "readNotifications")?;
+  Ok(
+    payload["count"]
+      .as_u64()
+      .and_then(|n| usize::try_from(n).ok())
+      .unwrap_or(0),
+  )
+}
+
+/// The request marking all of the account's (`user_id`) notifications read, as twitch.tv's
+/// "mark all as read" does. Writes to the account.
+pub fn read_all_request(user_id: &str) -> Value {
+  json!({
+    "operationName": "OnsiteNotifications_MarkAllViewerNotificationsAsRead",
+    "query": READ_ALL_MUTATION,
+    "variables": { "input": { "userID": user_id } },
+  })
+}
+
+/// Reads [`read_all_request`]'s answer: `hasSucceeded` false is an error. Without the
+/// auth-token it is [`Error::NotLoggedIn`].
+pub fn parse_read_all(answer: &Value) -> Result<()> {
+  let payload = mutation_payload(answer, "markAllViewerNotificationsAsRead")?;
+  if payload["hasSucceeded"].as_bool() == Some(true) {
+    Ok(())
+  } else {
+    Err(Error::Gql(
+      "markAllViewerNotificationsAsRead: not succeeded".to_owned(),
+    ))
+  }
+}
+
+/// A mutation's payload; `unauthenticated` is [`Error::NotLoggedIn`], a null payload an error.
+fn mutation_payload<'a>(answer: &'a Value, name: &str) -> Result<&'a Value> {
+  if answer["errors"][0]["message"].as_str() == Some("unauthenticated") {
+    return Err(Error::NotLoggedIn);
+  }
+  if let Some(error) = gql_error(answer) {
+    return Err(error);
+  }
+  let payload = &answer["data"][name];
+  if payload.is_null() {
+    return Err(Error::Gql(format!("{name}: no answer")));
+  }
+  Ok(payload)
 }
 
 fn notification(node: &Value) -> Option<Notification> {
