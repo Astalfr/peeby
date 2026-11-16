@@ -55,18 +55,22 @@ pub fn offer(video_id: &str, resume: Option<u32>, cx: &mut App) {
 pub fn start_at(video_id: &str, cx: &mut App) -> Option<f64> {
   let resume = cx.default_global::<Resume>();
   let offered = resume.offered.remove(video_id);
-  match resume.played.get(video_id) {
-    Some(played) => *played,
+  let played = resume.played.get(video_id).copied();
+  let start = match played {
+    Some(played) => played,
     None => offered,
   }
   .filter(|&s| s > 0)
-  .map(f64::from)
+  .map(f64::from);
+  tracing::info!("history: {video_id} starts at {start:?} (session {played:?}, card {offered:?})");
+  start
 }
 
 fn remember(video_id: &str, position: f64, duration: f64, cx: &mut App) {
   let watched = duration > 0.0 && position >= duration - END_MARGIN;
   // Truncation on purpose: a resume a fraction of a second early.
   let seconds = (!watched).then_some(position as u32);
+  tracing::info!("history: {video_id} at {position:.0} s of {duration:.0}, resumes at {seconds:?}");
   cx.default_global::<Resume>()
     .played
     .insert(video_id.to_owned(), seconds);
@@ -216,6 +220,13 @@ impl Reporter {
   /// A `watchtime` ping from the segment's start to the current position.
   fn report(&mut self, player: &Entity<PlayerView>, paused: bool, last: bool, cx: &mut App) {
     if !self.announced || self.finished {
+      tracing::info!(
+        "history: {} not reported (announced {}, finished {}, stats URLs {})",
+        self.video_id,
+        self.announced,
+        self.finished,
+        self.tracking.is_some()
+      );
       return;
     }
     let Some(tracking) = self.tracking.clone() else {
