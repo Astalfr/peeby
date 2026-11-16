@@ -188,13 +188,8 @@ About 0.6–0.8 s from the click to the URLs, against 0.2 s for VISIONOS and 4�
    click once Deno runs (about 0.35 s of it VISIONOS's refusal), first frame 0.5 s later.
    `web_safari` behind it is not done; yt-dlp stays the last resort until the untested kinds of
    videos are checked.
-2. **The JS engine for `n`**, which decides whether Deno (110 MB) can go:
-   - a hidden WebView2: `wry` is already a dependency ([ADR 0017](decisions/0017-sign-in-webview.md)),
-     V8 is on the host, nothing to ship; a process of its own, as the sign-in window;
-   - QuickJS or Boa in the process: a new dependency; ADR 0005 measured 5.6 s per challenge
-     with QuickJS-NG, so only with the player kept loaded (paid once per player version);
-   - Deno kept running: nothing new, the bundle stays as it is. Chosen (ADR 0038): a solve
-     then costs a call, the engine brings no speed, only the bundle's 110 MB.
+2. **The JS engine for `n`**, which decides whether Deno can go (measured 2026-11-16, not
+   done: the user keeps Deno). See "Removing Deno" below.
 3. **`tv_samsung`'s direct formats** (done, [ADR 0039](decisions/0039-direct-formats-through-tv-samsung.md)):
    without `pyv`, served to the end of the file (1 MB ranges up to 97 %, VP9, AV1, Opus, up to 4K)
    once its pre-roll could be skipped (about 5 s); with `pyv`, locked after the first tens of
@@ -233,6 +228,53 @@ About 0.6–0.8 s from the click to the URLs, against 0.2 s for VISIONOS and 4�
 
 Set aside: implementing SABR (needs a PO token anyway), third-party proxies (Invidious, Piped:
 privacy, reliability).
+
+## Removing Deno (measured, not done)
+
+Deno (`deno.exe`, 98 MB, the bundle's largest file; yt-dlp is 23.5 MB) does two jobs: Peeby's
+`n` solver (`innertube::jsc`, which web_embedded and tv_samsung need) and yt-dlp's JS runtime
+(every yt-dlp client that takes cookies needs one; without it yt-dlp keeps only VISIONOS,
+useless when the connection is taken for a bot). Removing it means replacing both.
+
+Measured on 2026-11-16 with the same script on each engine, on YouTube's player JS of the day
+(`ad8d59ae`, 1.6 MB; the player had changed from `fad7e4e9` the same day, so its parse is paid
+more often than "once a week"): EJS's `jsc` preprocessing the player, the preprocessed code
+(2.3 MB) evaluated into its `n` function, 3 then 100 challenges. Two or three runs each, stable;
+every engine gave the same results.
+
+| | Deno 2.9.8 | QuickJS-ng 0.18.0 | WebView2 (V8, in a Web Worker) |
+|---|---|---|---|
+| Player parse (once per player version) | 0.30–0.32 s | 2.66 s | 0.22 s |
+| Preprocessed code evaluated (from a disk cache) | 0.05–0.07 s | 0.12–0.13 s | 0.03–0.05 s |
+| One `n` challenge | 0.1 ms | 1.65 ms | 0.06 ms |
+| Process start to the first result, no cache | 0.52–0.58 s | 3.1 s | 0.68–0.71 s (0.3 s to build the WebView) |
+| Process start to the first result, cached | 0.20–0.22 s | 0.42 s | – |
+| Added to the bundle | 98 MB | 1.8 MB | nothing (`wry` already, V8 on the host) |
+
+- WebView2 runs the JS faster than Deno; only its start is slower (a browser, a renderer and a
+  GPU process, a profile folder, a page and a worker before the first line). Kept running for
+  the session, as Deno is, that start is paid once, and can be paid in the background at launch.
+- In a page, the solver must run in a Web Worker: the preprocessed player begins with
+  `globalThis.location = new URL("https://www.youtube.com/…")`, which in a page navigates to
+  YouTube (the first try hung there, its profile full of youtube.com data). In Deno and QuickJS
+  it does nothing.
+- QuickJS does better than ADR 0005's 5.6 s per challenge, but its parse stays 8 times Deno's.
+
+The plan it gave, not carried out:
+
+1. Peeby's solver in a hidden WebView2 (`peeby --jsc`, a hidden window as the Twitch bonus
+   claim's, a Web Worker, the same line protocol as `jsc_server.js`): about a day. Not measured:
+   its memory (several `msedgewebview2` processes, likely 50–100 MB while it runs, against about
+   40 MB for Deno); closing it when idle would cost its 0.7 s start again.
+2. yt-dlp on `quickjs-ng` (1.8 MB, pinned in fetch-tools.ps1): yt-dlp parses the player again on
+   every run, so its fallback would take about 2.4 s more (about 11–12 s instead of 9). No clean
+   way was found to make yt-dlp use Peeby's solver (a yt-dlp plugin calling Peeby: one more
+   piece to keep up with yt-dlp's daily releases).
+3. The installer, fetch-tools.ps1, ADRs 0005 and 0038, CLAUDE.md.
+
+Net: about 96 MB less, a slightly faster solver, a yt-dlp fallback about 2.4 s slower. Kept as it
+is (Deno for both) by the user's choice, on 2026-11-16. Revisit if the bundle's size matters, or
+if Deno stops being maintained.
 
 ## How the probes were run
 

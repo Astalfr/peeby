@@ -65,6 +65,9 @@ follows describes the VISIONOS-first order, which the setting keeps.
 - The EJS scripts follow YouTube's player: a new player can break them until they are updated
   with yt-dlp. yt-dlp, which updates itself, then takes over. `pyv` is undocumented: if it stops
   working, the stream waits for the ads (about 3.5 s).
-- Deno (110 MB) stays in the bundle and now serves Peeby too.
+- Deno (98 MB) stays in the bundle and now serves Peeby too. Replacing it was measured on
+  2026-11-16 and not done ([youtube-bot-check.md](../youtube-bot-check.md), "Removing Deno"):
+  a hidden WebView2 runs the solver faster than Deno once started (0.7 s to start), but yt-dlp
+  would need QuickJS, its fallback about 2.4 s slower.
 - Revisit when the bot check lifts (VISIONOS plays again, no change needed), when a PO token
   source is decided (the DASH formats), or if `web_embedded` starts asking for a PO token.
