@@ -10,7 +10,9 @@ use crate::account::AccountView;
 use crate::{YouTubeSpace, inbox};
 use innertube::NotificationKind;
 use innertube::SponsorCategory;
-use peeby_core::settings::{LANGUAGES, QUALITIES, SegmentAction, Settings, StartPage};
+use peeby_core::settings::{
+  LANGUAGES, QUALITIES, SegmentAction, Settings, StartPage, YouTubePlayer,
+};
 use peeby_core::shell::delivery_row;
 use ui::form::{OnClick, chips, choices, row, section, toggle};
 use ui::i18n::t;
@@ -56,6 +58,16 @@ pub fn part(
       settings.max_height == height,
       on_click,
     )
+  });
+  let players = [
+    (t("Signed-in", "Connecté"), YouTubePlayer::Embedded),
+    ("VISIONOS", YouTubePlayer::Visionos),
+  ]
+  .into_iter()
+  .map(|(label, mode)| {
+    let on_click: OnClick =
+      Box::new(move |_, cx| Settings::update(cx, |s| s.youtube_player = mode));
+    (label.to_owned(), settings.youtube_player == mode, on_click)
   });
   v_flex()
     .gap_8()
@@ -116,6 +128,15 @@ pub fn part(
              tout moment. Au-delà de 1080p, la vidéo est en VP9 et demande plus de débit.",
           ),
           choices("quality", qualities),
+        )
+        .into_any_element(),
+        row(
+          t("Player", "Lecteur"),
+          t(
+            "Which YouTube player starts a video. Signed-in: YouTube's embedded player with your              account, which YouTube does not take for a bot; 1080p at once, VP9 up to 4K in the              quality menu a few seconds later. VISIONOS: anonymous, VP9 at once, but refused when              YouTube takes the connection for a bot, then the signed-in one plays. Signed out,              VISIONOS. yt-dlp, slower, when neither can.",
+            "Le lecteur YouTube qui démarre une vidéo. Connecté : le lecteur intégré de YouTube              avec votre compte, que YouTube ne prend pas pour un robot ; 1080p tout de suite, le              VP9 jusqu'à la 4K dans le menu des qualités quelques secondes plus tard. VISIONOS :              anonyme, VP9 tout de suite, mais refusé quand YouTube prend la connexion pour un              robot, le lecteur connecté lit alors la vidéo. Déconnecté, VISIONOS. yt-dlp, plus              lent, quand aucun des deux ne peut.",
+          ),
+          choices("youtube-player", players),
         )
         .into_any_element(),
       ],

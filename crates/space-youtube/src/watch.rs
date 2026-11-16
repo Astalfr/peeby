@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
@@ -23,6 +23,7 @@ use gpui::{
   Task, WeakEntity, Window, div, px, relative,
 };
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::notification::Notification;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
@@ -40,7 +41,7 @@ use crate::queue::{Queue, QueueEvent};
 use crate::rating::{self, DISLIKE_RED, LIKE_BLUE, Rating};
 use crate::{Nav, Route};
 use crate::{bell, chat, prefetch, save, subscribe, tools};
-use peeby_core::settings::{Player, SegmentAction, Settings};
+use peeby_core::settings::{Player, SegmentAction, Settings, YouTubePlayer};
 use peeby_core::shell::space::middle_click;
 use ui::assets::Icon;
 use ui::card::skeleton_compact;
@@ -1171,9 +1172,11 @@ impl WatchView {
   }
 }
 
-/// Starts `video_id` in `player` at `start`: from the hover prefetch when it has the stream, else
-/// from VISIONOS (~0.2 s), else through the bundled yt-dlp. yt-dlp also takes over when mpv
-/// cannot open VISIONOS's playlists (some videos list media playlists that answer 404).
+/// Starts `video_id` in `player` at `start`. With the "Player" setting on web_embedded (the
+/// default) and a session: web_embedded, then VISIONOS (lives, videos it cannot embed), then
+/// yt-dlp. On VISIONOS, or signed out: the hover prefetch when it has the stream, else VISIONOS
+/// (~0.2 s), web_embedded when the bot check refuses it, then yt-dlp. yt-dlp also takes over
+/// when mpv cannot open the playlists (some videos list media playlists that answer 404).
 pub(super) fn load_stream(
   client: &Client,
   video_id: &str,
@@ -1182,7 +1185,8 @@ pub(super) fn load_stream(
   cx: &mut App,
 ) {
   let clicked = Instant::now();
-  if let Some(stream) = prefetch::take(video_id, cx) {
+  let embedded_first = embedded_first(client, cx);
+  if !embedded_first && let Some(stream) = prefetch::take(video_id, cx) {
     tracing::info!(
       "stream from hover prefetch: {} {}",
       stream.resolution,
@@ -1216,29 +1220,116 @@ pub(super) fn load_stream(
     .detach();
     return;
   }
-  // Refused minutes ago by YouTube's bot check: VISIONOS would refuse it again.
-  if let Some(failed) = prefetch::refused(video_id, cx) {
-    tracing::info!("VISIONOS refused {video_id} recently, trying web_embedded");
-    start_embedded(
-      client.clone(),
-      video_id.to_owned(),
-      start,
-      player.downgrade(),
-      clicked,
-      failed.into(),
-      cx,
-    );
+  let (client, video_id, player) = (client.clone(), video_id.to_owned(), player.downgrade());
+  if embedded_first {
+    let next = Next::Visionos {
+      embedded_failed: None,
+    };
+    start_embedded(client, video_id, start, player, clicked, next, cx);
     return;
   }
+  // Refused minutes ago by YouTube's bot check: VISIONOS would refuse it again.
+  if let Some(failed) = prefetch::refused(&video_id, cx) {
+    tracing::info!("VISIONOS refused {video_id} recently, trying web_embedded");
+    let next = Next::Ytdl {
+      failed: failed.into(),
+      embedded_failed: None,
+    };
+    start_embedded(client, video_id, start, player, clicked, next, cx);
+    return;
+  }
+  start_visionos(client, video_id, start, player, clicked, None, cx);
+}
+
+/// Whether videos go through web_embedded first: the "Player" setting, signed in.
+pub(crate) fn embedded_first(client: &Client, cx: &App) -> bool {
+  Settings::get(cx).youtube_player == YouTubePlayer::Embedded && client.signed_in()
+}
+
+/// What plays a video when web_embedded cannot.
+enum Next {
+  /// VISIONOS, web_embedded having been tried (it went first). Should VISIONOS fail too, yt-dlp
+  /// plays it and a toast says why web_embedded could not.
+  Visionos {
+    /// Why web_embedded could not; `None` when it was skipped (signed out).
+    embedded_failed: Option<SharedString>,
+  },
+  /// yt-dlp, then `failed` (VISIONOS's error) if it fails too; a toast when web_embedded failed.
+  Ytdl {
+    failed: SharedString,
+    embedded_failed: Option<SharedString>,
+  },
+}
+
+impl Next {
+  fn name(&self) -> &'static str {
+    match self {
+      Self::Visionos { .. } => "VISIONOS",
+      Self::Ytdl { .. } => "yt-dlp",
+    }
+  }
+
+  /// The same way, after web_embedded failed for `reason`.
+  fn after(self, reason: SharedString) -> Self {
+    match self {
+      Self::Visionos { .. } => Self::Visionos {
+        embedded_failed: Some(reason),
+      },
+      Self::Ytdl { failed, .. } => Self::Ytdl {
+        failed,
+        embedded_failed: Some(reason),
+      },
+    }
+  }
+
+  /// Plays the video this way.
+  fn start(
+    self,
+    client: Client,
+    video_id: String,
+    start: Option<f64>,
+    player: WeakEntity<PlayerView>,
+    clicked: Instant,
+    cx: &mut App,
+  ) {
+    match self {
+      Self::Visionos { embedded_failed } => {
+        // Tried or not (signed out), web_embedded does not come again.
+        let failed = embedded_failed.unwrap_or_default();
+        start_visionos(client, video_id, start, player, clicked, Some(failed), cx)
+      }
+      Self::Ytdl {
+        failed,
+        embedded_failed,
+      } => {
+        if let Some(reason) = embedded_failed {
+          notify_ytdl(&reason, &player, cx);
+        }
+        start_ytdl(video_id, start, player, clicked, failed, cx)
+      }
+    }
+  }
+}
+
+/// Plays `video_id` through VISIONOS (~0.2 s, anonymous). Refused by the bot check, it says so in
+/// a toast and goes to web_embedded, unless that was tried already (`embedded_failed`, why it
+/// could not; empty when it was skipped); else to yt-dlp, with a toast when web_embedded failed.
+fn start_visionos(
+  client: Client,
+  video_id: String,
+  start: Option<f64>,
+  player: WeakEntity<PlayerView>,
+  clicked: Instant,
+  embedded_failed: Option<SharedString>,
+  cx: &mut App,
+) {
   let max_height = Settings::get(cx).max_height;
   let player_settings = Settings::get(cx).player.clone();
-  let (client, id) = (client.clone(), video_id.to_owned());
+  let id = video_id.clone();
   let fetch = runtime::spawn(cx, {
     let client = client.clone();
     async move { client.stream(&id, max_height).await }
   });
-  let player = player.downgrade();
-  let video_id = video_id.to_owned();
   cx.spawn(async move |cx| {
     let error = match fetch.await {
       Some(Ok(stream)) => {
@@ -1292,17 +1383,36 @@ pub(super) fn load_stream(
       return;
     }
     // The bot check refuses VISIONOS, an anonymous visitor: the signed-in web_embedded client
-    // passes it. Anything else (age restriction, client blocked, unexpected response): yt-dlp.
+    // passes it, unless it was tried first. Anything else (age restriction, client blocked,
+    // unexpected response): yt-dlp.
     let bot_check =
       matches!(&error, innertube::Error::Unplayable { status, .. } if status == "LOGIN_REQUIRED");
-    let next = if bot_check { "web_embedded" } else { "yt-dlp" };
+    let embedded = bot_check && embedded_failed.is_none() && client.signed_in();
+    let next = if embedded { "web_embedded" } else { "yt-dlp" };
     tracing::info!("VISIONOS failed ({error}), trying {next}");
     cx.update(|cx| {
       prefetch::note_refused(&video_id, &error, cx);
-      let failed = error_text(&error).into();
       if bot_check {
-        start_embedded(client, video_id, start, player, clicked, failed, cx);
+        notify_bot_check(embedded, client.signed_in(), &player, cx);
+      }
+      let failed = error_text(&error).into();
+      if embedded {
+        start_embedded(
+          client,
+          video_id,
+          start,
+          player,
+          clicked,
+          Next::Ytdl {
+            failed,
+            embedded_failed: None,
+          },
+          cx,
+        );
       } else {
+        if let Some(reason) = embedded_failed.filter(|r| !r.is_empty()) {
+          notify_ytdl(&reason, &player, cx);
+        }
         start_ytdl(video_id, start, player, clicked, failed, cx);
       }
     });
@@ -1310,21 +1420,94 @@ pub(super) fn load_stream(
   .detach();
 }
 
+/// How long after a bot-check toast another one waits: once a session goes to web_embedded,
+/// every video would raise it.
+const BOT_CHECK_NOTICE_EVERY: Duration = Duration::from_secs(30 * 60);
+
+/// When the last bot-check toast showed.
+#[derive(Default)]
+struct BotCheckNotice(Option<Instant>);
+
+impl gpui::Global for BotCheckNotice {}
+
+/// A toast in the player's window: YouTube's bot check refused VISIONOS, and what plays the video
+/// instead (`embedded`: web_embedded, else yt-dlp). At most once per
+/// [`BOT_CHECK_NOTICE_EVERY`].
+fn notify_bot_check(
+  embedded: bool,
+  signed_in: bool,
+  player: &WeakEntity<PlayerView>,
+  cx: &mut App,
+) {
+  let notice = cx.default_global::<BotCheckNotice>();
+  if notice
+    .0
+    .is_some_and(|at| at.elapsed() < BOT_CHECK_NOTICE_EVERY)
+  {
+    return;
+  }
+  notice.0 = Some(Instant::now());
+  let text = if embedded {
+    t(
+      "YouTube takes this connection for a bot: VISIONOS cannot play the video, the signed-in \
+       player does. The Player setting can start with it.",
+      "YouTube prend cette connexion pour un robot : VISIONOS ne lit pas la vidéo, le lecteur \
+       connecté la lit. Le réglage Lecteur permet de commencer par lui.",
+    )
+  } else if signed_in {
+    t(
+      "YouTube takes this connection for a bot: VISIONOS cannot play the video, yt-dlp does, \
+       more slowly.",
+      "YouTube prend cette connexion pour un robot : VISIONOS ne lit pas la vidéo, yt-dlp la \
+       lit, plus lentement.",
+    )
+  } else {
+    t(
+      "YouTube takes this connection for a bot: VISIONOS cannot play the video, yt-dlp does, \
+       more slowly. Signed in, the signed-in player plays it at once.",
+      "YouTube prend cette connexion pour un robot : VISIONOS ne lit pas la vidéo, yt-dlp la \
+       lit, plus lentement. Connecté, le lecteur connecté la lit tout de suite.",
+    )
+  };
+  push_toast("bot check", Notification::warning(text), player, cx);
+}
+
+/// A toast in the player's window: the signed-in player (web_embedded) could not play the video,
+/// for `reason`, and yt-dlp does, more slowly.
+fn notify_ytdl(reason: &str, player: &WeakEntity<PlayerView>, cx: &mut App) {
+  let text = ui::tf!(
+    "The signed-in player could not play this video ({reason}): yt-dlp plays it, more slowly.",
+    "Le lecteur connecté n'a pas pu lire cette vidéo ({reason}) : yt-dlp la lit, plus lentement."
+  );
+  push_toast(
+    "web_embedded failed, yt-dlp plays",
+    Notification::warning(text),
+    player,
+    cx,
+  );
+}
+
+/// `note` as a toast in `player`'s window (`what` names it in the log).
+fn push_toast(what: &str, note: Notification, player: &WeakEntity<PlayerView>, cx: &mut App) {
+  tracing::info!("toast: {what}");
+  player.update(cx, |player, cx| player.toast(note, cx)).ok();
+}
+
 /// Plays `video_id` through the signed-in web_embedded client (docs/youtube-bot-check.md), its
 /// `n` challenge solved by the bundled Deno: storyboard, qualities and captions, about 0.3 s
-/// once Deno is running. Signed out, or when it fails, yt-dlp takes over, then shows `failed`.
+/// once Deno is running. Signed out, or when it fails (a live, a video not embeddable, an
+/// expired session), `next` takes over.
 fn start_embedded(
   client: Client,
   video_id: String,
   start: Option<f64>,
   player: WeakEntity<PlayerView>,
   clicked: Instant,
-  failed: SharedString,
+  next: Next,
   cx: &mut App,
 ) {
   if !client.signed_in() {
-    start_ytdl(video_id, start, player, clicked, failed, cx);
-    return;
+    return next.start(client, video_id, start, player, clicked, cx);
   }
   let max_height = Settings::get(cx).max_height;
   let player_settings = Settings::get(cx).player.clone();
@@ -1354,8 +1537,10 @@ fn start_embedded(
       cx.update(|cx| offer_direct(client, video_id, started_url, player, cx));
     }
     Some(Err(e)) => {
-      tracing::info!("web_embedded failed ({e}), trying yt-dlp");
-      cx.update(|cx| start_ytdl(video_id, start, player, clicked, failed, cx));
+      tracing::info!("web_embedded failed ({e}), trying {}", next.name());
+      let reason = SharedString::from(error_text(&e));
+      let next = next.after(reason);
+      cx.update(|cx| next.start(client, video_id, start, player, clicked, cx));
     }
     None => {}
   })

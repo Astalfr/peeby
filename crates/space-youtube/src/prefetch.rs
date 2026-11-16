@@ -1,5 +1,6 @@
 //! Streams resolved ahead of the click: hovering a video card for a moment resolves its stream
 //! (VISIONOS, ~0.2 s), so the watch page can start mpv at once. Stream URLs stay valid 6 h.
+//! Not while videos go through web_embedded first (the "Player" setting, ADR 0040).
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -139,6 +140,14 @@ impl Streams {
   }
 
   fn fetch(&mut self, id: String, cx: &mut Context<Self>) {
+    // Videos go through web_embedded first (the "Player" setting, signed in): a VISIONOS stream
+    // would not be used, and its anonymous request would only feed the bot check.
+    if cx
+      .try_global::<crate::save::Session>()
+      .is_some_and(|session| crate::watch::embedded_first(&session.0, cx))
+    {
+      return;
+    }
     // A stale live holds its proxy (ADR 0025): dropped, it stops.
     self.ready.retain(|_, (at, stream)| fresh(*at, stream));
     let fresh = self

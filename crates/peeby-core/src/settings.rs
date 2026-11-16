@@ -72,6 +72,20 @@ pub enum StartPage {
   Subscriptions,
 }
 
+/// Which client resolves a YouTube video's stream first (ADR 0040). yt-dlp is the last resort
+/// either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum YouTubePlayer {
+  /// The signed-in web_embedded client (ADR 0038), which passes YouTube's bot check: 1080p H.264
+  /// at once, VP9 up to 4K in the quality menu a few seconds later. Signed out, VISIONOS.
+  #[default]
+  Embedded,
+  /// VISIONOS, an anonymous visitor (ADR 0003): VP9 at once, refused when YouTube takes the
+  /// connection for a bot; web_embedded then.
+  Visionos,
+}
+
 /// How the tab bar offers a new tab, after the tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -112,6 +126,8 @@ pub struct Settings {
   pub subscriptions_layout: FeedLayout,
   /// YouTube page shown at startup and after a session change.
   pub start_page: StartPage,
+  /// Which client resolves a video's stream first.
+  pub youtube_player: YouTubePlayer,
   /// Playlists shown and played last video first.
   pub reversed_playlists: Vec<String>,
   /// Watch page in theater mode: the player across the whole width, above the details.
@@ -516,6 +532,7 @@ impl Default for Settings {
       muted: false,
       subscriptions_layout: FeedLayout::Grid,
       start_page: StartPage::Home,
+      youtube_player: YouTubePlayer::Embedded,
       reversed_playlists: Vec::new(),
       theater: false,
       chat_hidden: false,
@@ -764,12 +781,26 @@ mod tests {
   }
 
   #[test]
+  fn youtube_player_names() {
+    let settings: Settings = toml::from_str(
+      "youtube_player = \"visionos\"
+",
+    )
+    .unwrap();
+    assert_eq!(settings.youtube_player, super::YouTubePlayer::Visionos);
+    let written = toml::to_string(&Settings::default()).unwrap();
+    assert!(written.contains("youtube_player = \"embedded\""));
+  }
+
+  #[test]
   fn partial_file_takes_defaults() {
     let settings: Settings = toml::from_str(
       "max_height = 720\nunknown = 1\n[jellyfin]\ndevice_id = \"abc\"\n[jellyfin.home]\nshow_hero = false\n",
     )
     .unwrap();
     assert_eq!(settings.max_height, 720);
+    // An existing file without the key gets the web_embedded client first.
+    assert_eq!(settings.youtube_player, super::YouTubePlayer::Embedded);
     assert_eq!(settings.language, "fr");
     assert_eq!(settings.interface_language, "en");
     assert_eq!(settings.jellyfin.device_id, "abc");

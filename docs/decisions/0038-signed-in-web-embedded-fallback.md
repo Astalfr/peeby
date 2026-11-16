@@ -32,6 +32,9 @@ challenge in a call.
 
 ## Decision
 
+Since [0040](0040-youtube-player-setting.md), a setting puts web_embedded first by default; what
+follows describes the VISIONOS-first order, which the setting keeps.
+
 - A video goes through VISIONOS first, as before. When VISIONOS answers `LOGIN_REQUIRED` (or
   refused it in the last 30 minutes, `prefetch::refused`) and a session is set, it goes through
   `Client::embedded_stream`; when that fails, or signed out, through yt-dlp, which stays the last

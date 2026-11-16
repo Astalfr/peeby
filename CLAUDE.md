@@ -97,7 +97,8 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   with DVR from its DASH segments through `innertube::LiveProxy`, which serves mpv local playlists and redirects
   (ADR 0025): the signed URLs stay in the proxy, never in a playlist, a log or an error.
   Never hand DASH `https` URLs to mpv before their `available_at` (403 until then); the yt-dlp fallback forces HLS.
-  A video the bot check refuses to VISIONOS goes through the signed-in `web_embedded` client before yt-dlp (ADR 0038):
+  The "Player" setting (ADR 0040) picks what goes first: signed in, `web_embedded` by default (then VISIONOS, then
+  yt-dlp; the hover prefetch idle), or VISIONOS. A video the bot check refuses to VISIONOS goes through the signed-in `web_embedded` client before yt-dlp (ADR 0038):
   its manifest's `n` challenge solved by `innertube::jsc::Solver` (unsolved, every segment is 403), its stream
   handed to mpv only once the answer's pre-roll ads could be skipped (none with `pyv`). Its higher qualities come from the
   signed-in `tv_samsung`'s direct formats (ADR 0039), never asked with `pyv` (without their ad they stop after a

@@ -33,7 +33,7 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
+use gpui_component::{ActiveTheme, Disableable, Sizable, WindowExt as _, h_flex, v_flex};
 use gpui_video::VideoView;
 use player::{Chapter, Choice, Event, Player, StartOptions, Track};
 use segments::Segment;
@@ -470,6 +470,8 @@ pub struct PlayerView {
   /// 1, 2… since the streams carry none).
   captions_added: Vec<String>,
   menu: Option<Menu>,
+  /// A toast for the window the player is in, pushed at its next render ([`Self::toast`]).
+  toast: Option<gpui_component::notification::Notification>,
   /// The sleep timer, not kept across launches.
   sleep: Option<Sleep>,
   _sleep_task: Option<Task<()>>,
@@ -606,6 +608,7 @@ impl PlayerView {
       caption: None,
       captions_added: Vec::new(),
       menu: None,
+      toast: None,
       sleep: None,
       _sleep_task: None,
       queue: None,
@@ -1000,6 +1003,17 @@ impl PlayerView {
     source.qualities.splice(0..0, qualities);
     source.held.extend(held);
     self.quality = self.quality.map(|i| i + added);
+    cx.notify();
+  }
+
+  /// Shows `note` as a toast in the window the player is in, at its next render: a page's
+  /// message about this playback, wherever the focus is.
+  pub fn toast(
+    &mut self,
+    note: gpui_component::notification::Notification,
+    cx: &mut Context<Self>,
+  ) {
+    self.toast = Some(note);
     cx.notify();
   }
 
@@ -3568,6 +3582,10 @@ impl PlayerView {
 
 impl Render for PlayerView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    if let Some(note) = self.toast.take() {
+      // Deferred: never update a window from inside its own render.
+      window.defer(cx, move |window, cx| window.push_notification(note, cx));
+    }
     let id = window.window_handle().window_id();
     if self.window != Some(id) {
       let moved = self.window.is_some();

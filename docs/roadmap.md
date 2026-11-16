@@ -14,6 +14,18 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 | **5: distribution (1.0)** | 🚧 (done once v1.0.0 is published and installed) | CI, installer with libmpv, yt-dlp and Deno in `tools/` (Inno Setup, after Twitty's), releases from version tags, updates from GitHub Releases with the title bar's button ([ADR 0027](decisions/0027-installer-and-updates.md), [release.md](release.md)) | Downloadable build |
 
 
+## The YouTube player tried first
+
+- Done (2026-11-16, [ADR 0040](decisions/0040-youtube-player-setting.md)): "Player" / "Lecteur" in
+  YouTube's settings: the signed-in web_embedded first (default; then VISIONOS, then yt-dlp; the
+  hover prefetch idle) or VISIONOS first (then web_embedded on the bot check, then yt-dlp). Toasts
+  in the player's window (`PlayerView::toast`): the bot check refused VISIONOS (every 30 min at
+  most), web_embedded fell back to yt-dlp (with the reason). The player's log lines are in the
+  default filter (`ui=info`). 1 test (the setting's names and default). Checked: clippy, tests, the
+  debug build in both modes (web_embedded straight away; VISIONOS refused, web_embedded made to
+  fail, both toasts logged, yt-dlp playing). **Not verified:** the toasts on screen, a live in the
+  default mode (web_embedded refuses it, VISIONOS plays it).
+
 ## Higher qualities of refused videos
 
 - Done (2026-11-16, [ADR 0039](decisions/0039-direct-formats-through-tv-samsung.md)): a video playing
