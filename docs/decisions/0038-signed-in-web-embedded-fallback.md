@@ -18,6 +18,9 @@ Options measured, signed in:
   client), ignored with either alone.
 - `web_embedded` (`WEB_EMBEDDED_PLAYER`): passes the bot check. Its HLS manifest (6 variants,
   144p to 1080p, H.264 + AAC muxed) carries an `n` challenge: unsolved, every segment answers 403.
+  A dubbed video has one variant per language at each height (the original, an untagged copy,
+  each dub), a dub sometimes with the highest bandwidth: `hls::ladder` takes the original track
+  (`acont=original` in the variant's `sgoap`), then the untagged one, before any dub.
   Asked with `adPlaybackContext.pyv`, its answer has no pre-roll ads and the stream is served at
   once (else after the ads could be skipped, about 3.5 s).
 - `web_safari`: HLS too, but `pyv` breaks it; `mweb`, `web_creator`, `tv`, `tv_downgraded`,

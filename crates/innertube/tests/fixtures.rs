@@ -851,6 +851,27 @@ fn dubbed_video_plays_original_audio() {
   }
 }
 
+/// web_embedded's master muxes the audio: one variant per language at each height, a dub
+/// sometimes with the highest bandwidth (SFOvdzMqhwA, 20 automatic dubs).
+#[test]
+fn embedded_dubbed_video_plays_original_audio() {
+  let path = format!(
+    "{}/tests/fixtures/hls_master_embedded_dubbed.m3u8",
+    env!("CARGO_MANIFEST_DIR")
+  );
+  let master = std::fs::read_to_string(path).unwrap();
+  let ladder = hls::ladder(&master);
+  let heights: Vec<u32> = ladder.iter().map(|v| v.height).collect();
+  assert_eq!(heights, [1080, 720]);
+  for variant in &ladder {
+    assert!(
+      variant.url.contains("acont%3Doriginal"),
+      "{}",
+      variant.label()
+    );
+  }
+}
+
 #[test]
 fn quality_ladder() {
   let path = format!(

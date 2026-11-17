@@ -45,11 +45,11 @@ pub fn best_variant(master: &str, max_height: u32) -> Option<Variant> {
     .find(|variant| variant.height <= max_height)
 }
 
-/// One variant per height, highest first; at equal height VP9 over AVC, then the highest
-/// bandwidth.
+/// One variant per height, highest first; at equal height the original audio (see
+/// [`audio_rank`]), then VP9 over AVC, then the highest bandwidth.
 pub fn ladder(master: &str) -> Vec<Variant> {
   let mut lines = master.lines();
-  let mut best: Vec<((u32, bool, u64), Variant)> = Vec::new();
+  let mut best: Vec<((u32, u8, bool, u64), Variant)> = Vec::new();
   while let Some(line) = lines.next() {
     let Some(attrs) = line.strip_prefix("#EXT-X-STREAM-INF:") else {
       continue;
@@ -64,8 +64,13 @@ pub fn ladder(master: &str) -> Vec<Variant> {
       .and_then(|b| b.parse().ok())
       .unwrap_or(0);
     let codecs = attribute(attrs, "CODECS").unwrap_or_default();
-    let rank = (height, codecs.starts_with("vp09"), bandwidth);
-    let slot = best.iter_mut().find(|((h, _, _), _)| *h == height);
+    let rank = (
+      height,
+      audio_rank(url),
+      codecs.starts_with("vp09"),
+      bandwidth,
+    );
+    let slot = best.iter_mut().find(|((h, _, _, _), _)| *h == height);
     if slot
       .as_ref()
       .is_some_and(|(best_rank, _)| rank <= *best_rank)
@@ -100,6 +105,18 @@ pub fn playlist_length(media: &str) -> f64 {
     .filter_map(|line| line.strip_prefix("#EXTINF:"))
     .filter_map(|rest| rest.split(',').next()?.trim().parse::<f64>().ok())
     .sum()
+}
+
+/// How original a muxed variant's audio is, from the `acont` of its URL (its `sgoap`): web_embedded
+/// lists one variant per language at each height, dubs with about the same bandwidth as the
+/// original. 2 the original track, 1 untagged (a video without dubs, a video-only variant, or
+/// the dubbed video's untagged copy of its original), 0 a dub or a described track.
+fn audio_rank(url: &str) -> u8 {
+  match audio_content(url) {
+    Some("original") => 2,
+    None => 1,
+    Some(_) => 0,
+  }
 }
 
 /// URI of the audio rendition of `group`. A dubbed video lists one rendition per language, dubs
