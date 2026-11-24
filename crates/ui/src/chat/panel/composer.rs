@@ -591,6 +591,7 @@ impl ChatPanel {
             el.bg(theme::surface_hover())
           })
           .hover(|s| s.bg(theme::surface_hover()))
+          .active(|s| s.bg(theme::surface_pressed()))
           .children(picture)
           .child(div().min_w_0().truncate().child(label))
           .on_mouse_down(
@@ -1089,6 +1090,7 @@ fn cell(
     .rounded(theme::RADIUS)
     .cursor_pointer()
     .hover(|s| s.bg(theme::surface_hover()))
+    .active(|s| s.bg(theme::surface_pressed()))
     .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
       if let Some(composer) = &mut this.composer {
         if *hovered {

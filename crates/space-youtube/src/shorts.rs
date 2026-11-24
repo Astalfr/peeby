@@ -476,6 +476,7 @@ fn action(
     .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
     .child(
       div()
+        .id(SharedString::from(format!("{id}-disc")))
         .size(px(ACTION_SIZE))
         .flex()
         .items_center()
@@ -483,6 +484,7 @@ fn action(
         .rounded_full()
         .bg(theme::surface())
         .group_hover(id, |s| s.bg(theme::surface_hover()))
+        .group_active(id, |s| s.bg(theme::surface_pressed()))
         .when(active, |el| el.text_color(theme::accent()))
         .child(gpui_component::Icon::new(icon).size(px(22.))),
     )

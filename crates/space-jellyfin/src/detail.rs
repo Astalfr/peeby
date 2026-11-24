@@ -404,6 +404,7 @@ impl DetailView {
       .rounded(theme::RADIUS)
       .items_start()
       .hover(|s| s.bg(theme::surface()))
+      .active(|s| s.bg(theme::surface_pressed()))
       .child(
         div()
           .relative()

@@ -213,6 +213,7 @@ pub(super) fn slider_row(shell: &WeakEntity<Shell>, cx: &App) -> Option<impl Int
       .rounded(theme::RADIUS)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface_hover()))
+      .active(|s| s.bg(theme::surface_pressed()))
       .on_click(move |_, _, cx| {
         shell
           .update(cx, |shell, cx| shell.toggle_output_mute(cx))

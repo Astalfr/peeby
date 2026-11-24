@@ -830,6 +830,7 @@ impl MultistreamView {
         el.bg(theme::surface_hover())
           .text_color(theme::foreground())
       })
+      .active(|el| el.bg(theme::surface_pressed()))
       .on_click(cx.listener(|this, _, window, cx| this.open_add(window, cx)))
       .child(gpui_component::Icon::new(Icon::Plus).size(px(28.)))
       .child(div().text_sm().child(t("Add a live", "Ajouter un live")))
@@ -855,6 +856,7 @@ impl MultistreamView {
           .bg(theme::accent_soft())
           .text_color(theme::accent())
           .hover(|el| el.bg(theme::accent()).text_color(theme::on_accent()))
+          .active(|el| el.bg(theme::accent_active()))
           .on_click(cx.listener(|this, _, window, cx| this.open_add(window, cx)))
           .child(gpui_component::Icon::new(Icon::Plus).size(px(44.))),
       )
@@ -929,12 +931,15 @@ impl MultistreamView {
             el.bg(theme::accent_soft())
               .text_color(theme::accent_hover())
           })
+          .active(|el| el.bg(theme::accent().opacity(0.24)))
       })
       .when(!merged_mode, |el| {
-        el.text_color(theme::muted()).hover(|el| {
-          el.bg(theme::surface_hover())
-            .text_color(theme::foreground())
-        })
+        el.text_color(theme::muted())
+          .hover(|el| {
+            el.bg(theme::surface_hover())
+              .text_color(theme::foreground())
+          })
+          .active(|el| el.bg(theme::surface_pressed()))
       })
       .child(gpui_component::Icon::new(Icon::Merge).size(px(16.)))
       .tooltip(move |window, cx| {
@@ -1076,6 +1081,7 @@ impl MultistreamView {
       .when(chosen, |el| el.bg(theme::surface_hover()))
       .when(hidden, |el| el.opacity(0.5))
       .hover(|el| el.bg(theme::surface_hover()))
+      .active(|el| el.bg(theme::surface_pressed()))
       .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
       .on_click(cx.listener(move |this, _, _, cx| this.choose_chat(login.clone(), cx)))
       .child(face)
@@ -1429,6 +1435,7 @@ impl AddLive {
       .when(!taken, |el| {
         el.cursor_pointer()
           .hover(|el| el.bg(theme::surface_hover()))
+          .active(|el| el.bg(theme::surface_pressed()))
           .on_click(cx.listener(move |_, _, _, cx| cx.emit(AddLiveEvent::Pick(login.clone()))))
       })
       .when(taken, |el| el.opacity(0.5))
@@ -1523,6 +1530,7 @@ impl Render for AddLive {
         el.bg(theme::surface_hover())
           .text_color(theme::foreground())
       })
+      .active(|el| el.bg(theme::surface_pressed()))
       .child(gpui_component::Icon::new(Icon::Close).size(px(16.)))
       .on_click(cx.listener(|_, _, _, cx| cx.emit(AddLiveEvent::Close)));
     div()

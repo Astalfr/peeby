@@ -136,6 +136,7 @@ pub fn bell_button(
                 .cursor_pointer()
                 .text_sm()
                 .hover(|s| s.bg(theme::surface_hover()))
+                .active(|s| s.bg(theme::surface_pressed()))
                 .when(level == current, |el| el.text_color(theme::accent()))
                 .on_click(cx.listener(move |state, _, window, cx| {
                   state.dismiss(window, cx);

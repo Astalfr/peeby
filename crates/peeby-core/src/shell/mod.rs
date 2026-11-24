@@ -203,6 +203,7 @@ impl Shell {
     subscriptions.push(cx.observe_window_activation(window, |shell, window, cx| {
       if window.is_window_active() {
         windows::used(shell.window, cx);
+        crate::desktop::follow_animation_setting(cx);
       }
     }));
     // Another player started in this window: the mini-player shows only the one that plays.
@@ -1315,6 +1316,7 @@ impl Shell {
           .justify_center()
           .cursor_pointer()
           .hover(|s| s.bg(gpui::white().opacity(0.08)))
+          .active(|s| s.bg(gpui::white().opacity(0.14)))
           .child(assets::color_svg(info.icon, 18., window, cx))
           .tooltip(move |window, cx| {
             gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
@@ -1391,6 +1393,7 @@ impl Shell {
                 .cursor_pointer()
                 .text_sm()
                 .hover(|s| s.bg(theme::surface_hover()))
+                .active(|s| s.bg(theme::surface_pressed()))
                 .child(assets::color_svg(info.icon, 18., window, cx))
                 .child(info.name.clone())
                 .on_click(cx.listener(move |state, _, window, cx| {
@@ -1516,6 +1519,7 @@ impl Shell {
             .cursor_pointer()
             .text_sm()
             .hover(|s| s.bg(theme::surface_hover()))
+            .active(|s| s.bg(theme::surface_pressed()))
             .when(selected, |el| el.text_color(theme::accent()))
             .on_click(cx.listener(move |state, _, window, cx| {
               state.dismiss(window, cx);
@@ -1789,6 +1793,7 @@ fn sidebar_entry(id: SharedString, active: bool, collapsed: bool) -> gpui::State
       s.bg(gpui::white().opacity(0.04))
         .text_color(theme::foreground())
     })
+    .active(|s| s.bg(gpui::white().opacity(0.09)))
 }
 
 /// The red of a live, whatever the space's accent.

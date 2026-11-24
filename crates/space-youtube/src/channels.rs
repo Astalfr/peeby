@@ -130,6 +130,7 @@ impl ChannelsView {
       .rounded(theme::RADIUS_LG)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface()))
+      .active(|s| s.bg(theme::surface_pressed()))
       .on_aux_click(middle_click({
         let (nav, route) = (nav.clone(), route.clone());
         move |cx| nav.open_in_new_tab(route.clone(), None, cx)

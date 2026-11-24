@@ -12,8 +12,9 @@
 //! The ids of the videos in "Watch later" are kept ([`load_watch_later`], then every change),
 //! so the thumbnails' shortcut shows a check on those already in it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
@@ -157,10 +158,15 @@ pub fn edits(cx: &mut App) -> Entity<Edits> {
   edits
 }
 
-/// Changes waiting for YouTube's answer: their buttons show a spinner, and a second click
-/// sends nothing.
+/// Changes waiting for YouTube's answer, with when they were sent: they show at once (the
+/// check, the row gone), a second click sends nothing, and their buttons show a spinner only
+/// past [`SPINNER_AFTER`].
 #[derive(Default)]
-struct Pending(HashSet<String>);
+struct Pending(HashMap<String, Instant>);
+
+/// How long a change waits for YouTube before its button shows a spinner: shorter answers
+/// would only make it flicker.
+pub(crate) const SPINNER_AFTER: Duration = Duration::from_millis(400);
 
 impl Global for Pending {}
 
@@ -174,11 +180,40 @@ fn change_key(playlist_id: &str, change: &Change) -> String {
 
 fn is_pending(key: &str, cx: &App) -> bool {
   cx.try_global::<Pending>()
-    .is_some_and(|p| p.0.contains(key))
+    .is_some_and(|p| p.0.contains_key(key))
+}
+
+/// Whether the change `key` has waited long enough for a spinner.
+fn is_slow(key: &str, cx: &App) -> bool {
+  cx.try_global::<Pending>()
+    .and_then(|p| p.0.get(key))
+    .is_some_and(|sent| sent.elapsed() >= SPINNER_AFTER)
+}
+
+/// Whether the entry `set_video_id` of `playlist_id` is being removed: its row is hidden
+/// meanwhile, and comes back if YouTube refuses.
+pub fn removing(playlist_id: &str, set_video_id: &str, cx: &App) -> bool {
+  let change = Change::RemoveEntry {
+    entry: set_video_id.to_owned(),
+    video: String::new(),
+  };
+  is_pending(&change_key(playlist_id, &change), cx)
+}
+
+/// Adds or removes `video_id` in the known "Watch later" ids.
+fn set_in_watch_later(video_id: &str, saved: bool, cx: &mut App) {
+  let ids = &mut cx.default_global::<WatchLater>().ids;
+  if saved {
+    ids.insert(video_id.to_owned());
+  } else {
+    ids.remove(video_id);
+  }
 }
 
 /// Applies `change` to a playlist, then shows a toast in `window`. `done` gets the outcome,
 /// e.g. to undo an optimistic change. Nothing is sent while the same change is pending.
+/// "Watch later" changes at once (its button shows the outcome), and goes back if YouTube
+/// refuses.
 fn edit(
   playlist_id: String,
   playlist_title: String,
@@ -191,11 +226,29 @@ fn edit(
     return;
   };
   let key = change_key(&playlist_id, &change);
-  if !cx.default_global::<Pending>().0.insert(key.clone()) {
+  let pending = &mut cx.default_global::<Pending>().0;
+  if pending.contains_key(&key) {
     return;
   }
-  cx.refresh_windows();
+  pending.insert(key.clone(), Instant::now());
   let adding = matches!(change, Change::Add(_));
+  if playlist_id == WATCH_LATER {
+    set_in_watch_later(change.video(), adding, cx);
+  }
+  cx.refresh_windows();
+  // A slow answer: the button shows its spinner.
+  cx.spawn({
+    let key = key.clone();
+    async move |cx| {
+      cx.background_executor().timer(SPINNER_AFTER).await;
+      cx.update(|cx| {
+        if is_pending(&key, cx) {
+          cx.refresh_windows();
+        }
+      });
+    }
+  })
+  .detach();
   let removed_entry = match &change {
     Change::RemoveEntry { entry, .. } => Some(entry.clone()),
     _ => None,
@@ -227,13 +280,9 @@ fn edit(
     };
     cx.update(|cx| {
       cx.default_global::<Pending>().0.remove(&key);
-      if result.is_ok() && playlist_id == WATCH_LATER {
-        let ids = &mut cx.default_global::<WatchLater>().ids;
-        if adding {
-          ids.insert(video_id);
-        } else {
-          ids.remove(&video_id);
-        }
+      if playlist_id == WATCH_LATER {
+        // Refused: back to what it was.
+        set_in_watch_later(&video_id, adding == result.is_ok(), cx);
       }
       cx.refresh_windows();
       if result.is_ok()
@@ -276,7 +325,7 @@ fn save_error(error: &Error, adding: bool) -> String {
 }
 
 /// The "x" of a playlist's entry: removes it from the playlist; on success the pages showing
-/// the playlist drop it ([`EntryRemoved`]). Busy while the request runs.
+/// the playlist drop it ([`EntryRemoved`]); meanwhile the pages hide it ([`removing`]).
 pub fn removal(
   playlist_id: &str,
   playlist_title: &str,
@@ -288,7 +337,7 @@ pub fn removal(
     entry: set_video_id.to_owned(),
     video: video_id.to_owned(),
   };
-  let busy = is_pending(&change_key(playlist_id, &change()), cx);
+  let busy = is_slow(&change_key(playlist_id, &change()), cx);
   let (playlist_id, playlist_title, entry, video) = (
     playlist_id.to_owned(),
     playlist_title.to_owned(),
@@ -316,6 +365,10 @@ pub fn removal(
 
 /// Adds `video_id` to "Watch later", or removes it when it is in already.
 pub fn toggle_watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
+  // The button already shows the pending change: a second click would undo it unseen.
+  if watch_later_busy(video_id, false, cx) {
+    return;
+  }
   let change = if in_watch_later(video_id, cx) {
     Change::Remove(video_id.into())
   } else {
@@ -331,20 +384,29 @@ pub fn toggle_watch_later(video_id: &str, window: &mut Window, cx: &mut App) {
   );
 }
 
-/// Whether a "Watch later" change of `video_id` is waiting for YouTube.
-fn watch_later_busy(video_id: &str, cx: &App) -> bool {
+/// Whether a "Watch later" change of `video_id` is waiting for YouTube (`slow`: for longer
+/// than [`SPINNER_AFTER`]).
+fn watch_later_busy(video_id: &str, slow: bool, cx: &App) -> bool {
   let video = video_id.to_owned();
   [Change::Add(video.clone()), Change::Remove(video)]
     .iter()
-    .any(|change| is_pending(&change_key(WATCH_LATER, change), cx))
+    .map(|change| change_key(WATCH_LATER, change))
+    .any(|key| {
+      if slow {
+        is_slow(&key, cx)
+      } else {
+        is_pending(&key, cx)
+      }
+    })
 }
 
 /// The round "Watch later" button over a thumbnail's top right corner, faded in by `t` (the
 /// card's hover): a clock, or a check when the video is in "Watch later" already (a click
-/// then removes it), and a spinner while YouTube answers. Its clicks are its own, not the
-/// card's.
+/// then removes it), shown at the click, and a spinner while a slow answer is awaited. Its
+/// clicks are its own, not the card's.
 pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl IntoElement {
-  let busy = watch_later_busy(video_id, cx);
+  let pending = watch_later_busy(video_id, false, cx);
+  let busy = watch_later_busy(video_id, true, cx);
   let saved = in_watch_later(video_id, cx);
   let video_id = video_id.to_owned();
   div()
@@ -357,19 +419,20 @@ pub fn watch_later_button(id: &str, video_id: &str, t: f32, cx: &App) -> impl In
     .flex()
     .items_center()
     .justify_center()
-    // Kept in view while busy, even once the mouse has left the card.
-    .opacity(if busy { 1. } else { t })
+    // Kept in view while YouTube answers, even once the mouse has left the card.
+    .opacity(if pending { 1. } else { t })
     .bg(gpui::black().opacity(0.75))
     .text_color(gpui::white())
-    .when(!busy, |el| {
+    .when(!pending, |el| {
       el.hover(|s| s.bg(theme::accent()).text_color(theme::on_accent()))
+        .active(|s| s.bg(theme::accent_active()))
         .cursor_pointer()
     })
     // The card opens the video on click: keep this click from reaching it.
     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     .on_click(move |_, window, cx| {
       cx.stop_propagation();
-      if !watch_later_busy(&video_id, cx) {
+      if !watch_later_busy(&video_id, false, cx) {
         toggle_watch_later(&video_id, window, cx);
       }
     })
@@ -490,6 +553,7 @@ fn picker_content(
       .cursor_pointer()
       .text_sm()
       .hover(|s| s.bg(theme::surface_hover()))
+      .active(|s| s.bg(theme::surface_pressed()))
       .child(gpui_component::Icon::new(icon).size(px(16.)))
       .child(label)
   };
@@ -685,6 +749,7 @@ impl Render for Picker {
             .cursor_pointer()
             .text_sm()
             .hover(|s| s.bg(theme::surface_hover()))
+            .active(|s| s.bg(theme::surface_pressed()))
             .on_click(cx.listener(move |this, _, window, cx| this.toggle(i, window, cx)))
             .child(
               div()

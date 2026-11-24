@@ -25,8 +25,8 @@ use crate::{Nav, Route};
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::middle_click;
 use ui::assets::Icon;
-use ui::card::WIDE;
 use ui::card::skeleton_card;
+use ui::card::{Hover, WIDE, press_shade};
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
@@ -195,16 +195,8 @@ fn playlist_card(
   cx: &mut App,
 ) -> AnyElement {
   let id = format!("playlist-{}", playlist.id);
-  let hovered = motion::hover_state(SharedString::from(format!("{id}-hover")), window, cx);
-  let is_hovered = *hovered.read(cx);
-  let t = motion::tween(
-    SharedString::from(format!("{id}-lift")),
-    0.,
-    if is_hovered { 1. } else { 0. },
-    theme::FAST,
-    window,
-    cx,
-  );
+  let hover = Hover::new(&id, window, cx);
+  let t = hover.t;
   let thumb = image_fill(
     &convert::picture(&playlist.thumbnails),
     CARD_WIDTH,
@@ -230,15 +222,13 @@ fn playlist_card(
       .rounded_t(theme::RADIUS)
       .bg(theme::muted().opacity(opacity))
   };
-  div()
+  let frame = div()
     .id(ElementId::Name(id.into()))
     .w(px(CARD_WIDTH))
     .flex_none()
-    .cursor_pointer()
-    .on_hover(move |hover, window, cx| {
-      hovered.update(cx, |h, _| *h = *hover);
-      window.refresh();
-    })
+    .cursor_pointer();
+  hover
+    .track(frame, None)
     .on_aux_click(middle_click({
       let (nav, route) = (nav.clone(), route.clone());
       move |cx| nav.open_in_new_tab(route.clone(), None, cx)
@@ -249,7 +239,7 @@ fn playlist_card(
       v_flex()
         .w_full()
         .relative()
-        .top(px(-4. * t))
+        .top(hover.lift())
         .child(
           div()
             .relative()
@@ -267,6 +257,7 @@ fn playlist_card(
                 .rounded(theme::RADIUS_LG)
                 .when(t > 0.01, |el| el.shadow_lg())
                 .child(thumb)
+                .children(press_shade(theme::RADIUS_LG, hover.pressed))
                 .children(playlist.count.clone().map(|count| {
                   h_flex()
                     .absolute()
@@ -290,7 +281,7 @@ fn playlist_card(
                     .inset_0()
                     .rounded(theme::RADIUS_LG)
                     .border_2()
-                    .border_color(theme::accent().opacity(t)),
+                    .border_color(theme::accent().opacity(hover.ring())),
                 ),
             ),
         )
@@ -303,7 +294,7 @@ fn playlist_card(
                 .line_height(px(20.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .line_clamp(2)
-                .text_color(if is_hovered {
+                .text_color(if hover.hovered {
                   theme::accent_hover()
                 } else {
                   theme::foreground()
@@ -727,9 +718,21 @@ impl Render for PlaylistView {
         };
         // Ids carry the place: a playlist may hold the same video twice. Numbers stay the
         // playlist's own, so a reversed list counts down.
+        // An entry being removed is hidden, and comes back if YouTube refuses.
+        let hidden: Vec<bool> = playlist
+          .videos
+          .iter()
+          .map(|video| {
+            video
+              .set_video_id
+              .as_deref()
+              .is_some_and(|entry| save::removing(&playlist.id, entry, cx))
+          })
+          .collect();
         let rows: Vec<_> = order
           .into_iter()
           .enumerate()
+          .filter(|&(_, i)| !hidden[i])
           .map(|(shown, i)| {
             let video = &playlist.videos[i];
             let view = view.clone();

@@ -19,6 +19,7 @@ mod rating;
 mod rotation;
 mod save;
 mod search;
+mod seed;
 mod settings_page;
 mod shorts;
 mod subscribe;
@@ -548,6 +549,9 @@ impl YouTubeSpace {
     else {
       return;
     };
+    if let Some(video) = queue.read(cx).current_video().cloned() {
+      seed::offer(&video, cx);
+    }
     let Some(t) = self.tabs.get(tab) else {
       return;
     };

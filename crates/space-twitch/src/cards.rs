@@ -317,6 +317,7 @@ pub fn channel_chip(chip: Chip<'_>, nav: &Nav, window: &mut Window, cx: &mut App
     .rounded(theme::RADIUS)
     .cursor_pointer()
     .hover(|el| el.bg(theme::surface_hover()))
+    .active(|el| el.bg(theme::surface_pressed()))
     .on_aux_click(middle_click({
       let (nav, login) = (nav.clone(), login.clone());
       move |cx| nav.open_in_new_tab(Route::Channel(login.clone()), None, cx)

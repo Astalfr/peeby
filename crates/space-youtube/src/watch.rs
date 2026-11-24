@@ -39,6 +39,7 @@ use crate::convert::{self, error_text};
 use crate::history::{self, Reporter};
 use crate::queue::{Queue, QueueEvent};
 use crate::rating::{self, DISLIKE_RED, LIKE_BLUE, Rating};
+use crate::seed::{self, Seed};
 use crate::{Nav, Route};
 use crate::{bell, chat, prefetch, save, subscribe, tools};
 use peeby_core::settings::{Player, SegmentAction, Settings, YouTubePlayer};
@@ -95,6 +96,8 @@ pub struct WatchView {
   nav: Nav,
   player: Entity<PlayerView>,
   page: Option<WatchPage>,
+  /// What the card clicked showed, until `page` comes ([`seed`]).
+  seed: Option<Seed>,
   /// The whole description is shown ("Show more").
   description_open: bool,
   /// The description's link under the pointer.
@@ -137,6 +140,11 @@ impl WatchView {
     };
     let theater = settings.theater;
     let player = cx.new(|cx| PlayerView::new(prefs, theater, cx));
+    let seed = seed::take(&video_id, cx);
+    if let Some(seed) = &seed {
+      let poster = convert::picture(&seed.thumbnails);
+      player.update(cx, |player, cx| player.set_poster(Some(poster), cx));
+    }
     let focus = player.read(cx).focus_handle().clone();
     window.focus(&focus, cx);
     let votes = cx
@@ -237,6 +245,7 @@ impl WatchView {
       nav,
       player,
       page: None,
+      seed,
       votes,
       rating: Rating::default(),
       comments,
@@ -306,11 +315,18 @@ impl WatchView {
     let (current, playing) = (queue.place(), queue.playing_place());
     let start = current.saturating_sub(QUEUE_BEFORE);
     let end = (current + QUEUE_AFTER + 1).min(total);
-    let entries: Vec<_> = queue.order()[start..end]
+    let mut entries: Vec<_> = queue.order()[start..end]
       .iter()
       .enumerate()
       .map(|(offset, &index)| (start + offset, index, queue.items()[index].clone()))
       .collect();
+    // An entry being removed is hidden, and comes back if YouTube refuses.
+    entries.retain(|(_, _, video)| {
+      !video
+        .set_video_id
+        .as_deref()
+        .is_some_and(|entry| save::removing(&playlist_id, entry, cx))
+    });
     let rows: Vec<_> = entries
       .into_iter()
       .map(|(place, index, video)| {
@@ -676,6 +692,7 @@ impl WatchView {
           let color = gpui::Hsla::from(gpui::rgb(color));
           s.bg(color.opacity(0.14)).text_color(color)
         })
+        .active(move |s| s.bg(gpui::Hsla::from(gpui::rgb(color)).opacity(0.24)))
         .when(current == status, |el| el.text_color(gpui::rgb(color)))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
         .on_click(cx.listener(move |this, _, window, cx| this.rate(status, window, cx)))
@@ -964,7 +981,7 @@ impl WatchView {
 
   fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
-      return skeleton_details();
+      return skeleton_details(self.seed.as_ref(), window, cx);
     };
     let collaboration = !page.collaborators.is_empty();
     let collaboration_subscribe = self
@@ -1685,21 +1702,59 @@ fn resume(source: &mut ui::player::Source, start: Option<f64>) {
   }
 }
 
-fn skeleton_details() -> gpui::Div {
+/// The details while `next` runs: skeletons, or what the card showed (`seed`: its title, its
+/// channel with its avatar) laid out as the details will be, so nothing moves when they come.
+fn skeleton_details(seed: Option<&Seed>, window: &mut Window, cx: &mut App) -> gpui::Div {
+  let title = match seed {
+    Some(seed) => div()
+      .text_xl()
+      .font_weight(FontWeight::BOLD)
+      .child(seed.title.clone())
+      .into_any_element(),
+    None => Skeleton::new()
+      .w(relative(0.7))
+      .h(px(26.))
+      .into_any_element(),
+  };
+  let avatar = match seed.filter(|s| !s.avatar.is_empty()) {
+    Some(seed) => div()
+      .size(px(40.))
+      .flex_none()
+      .child(image_fill(
+        &convert::picture(&seed.avatar),
+        40.,
+        1.,
+        px(20.),
+        window,
+        cx,
+      ))
+      .into_any_element(),
+    None => Skeleton::new()
+      .size(px(40.))
+      .rounded_full()
+      .into_any_element(),
+  };
+  let channel = match seed.and_then(|s| s.channel.clone()) {
+    Some(channel) => v_flex()
+      .child(div().font_weight(FontWeight::SEMIBOLD).child(channel))
+      .child(Skeleton::new().w(px(100.)).h(px(12.)).mt_1())
+      .into_any_element(),
+    None => v_flex()
+      .gap_2()
+      .child(Skeleton::new().w(px(160.)).h(px(16.)))
+      .child(Skeleton::new().w(px(100.)).h(px(12.)))
+      .into_any_element(),
+  };
   v_flex()
     .gap_4()
-    .child(Skeleton::new().w(relative(0.7)).h(px(26.)))
+    .child(title)
     .child(
       h_flex()
+        .h(px(40.))
         .gap_3()
         .items_center()
-        .child(Skeleton::new().size(px(40.)).rounded_full())
-        .child(
-          v_flex()
-            .gap_2()
-            .child(Skeleton::new().w(px(160.)).h(px(16.)))
-            .child(Skeleton::new().w(px(100.)).h(px(12.))),
-        ),
+        .child(avatar)
+        .child(channel),
     )
     .child(
       Skeleton::new()

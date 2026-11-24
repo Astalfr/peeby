@@ -6,7 +6,8 @@
 //! the channel ([`Subscriptions`]), the bell with it, and goes back with a toast if YouTube
 //! refuses.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{Anchor, App, ElementId, Global, Window, div, px};
@@ -17,18 +18,18 @@ use gpui_component::{Sizable, WindowExt, h_flex, v_flex};
 use innertube::{Error, Subscription};
 
 use crate::convert::error_text;
-use crate::save::Session;
+use crate::save::{SPINNER_AFTER, Session};
 use ui::assets::Icon;
 use ui::i18n::t;
 use ui::widgets::loader;
 use ui::{runtime, tf, theme};
 
 /// Subscriptions changed in this session, by channel id, over the states the pages parsed, and
-/// the channels whose change is waiting for YouTube's answer.
+/// the channels whose change is waiting for YouTube's answer, with when it was sent.
 #[derive(Default)]
 struct Subscriptions {
   subscribed: HashMap<String, bool>,
-  pending: HashSet<String>,
+  pending: HashMap<String, Instant>,
 }
 
 impl Global for Subscriptions {}
@@ -46,9 +47,12 @@ pub fn is_subscribed(channel_id: &str, subscription: &Subscription, cx: &App) ->
     .unwrap_or(subscription.subscribed)
 }
 
-fn is_pending(channel_id: &str, cx: &App) -> bool {
+/// Whether a change of `channel_id` has waited for YouTube long enough for a spinner (the
+/// button changed at the click already).
+fn is_slow(channel_id: &str, cx: &App) -> bool {
   cx.try_global::<Subscriptions>()
-    .is_some_and(|s| s.pending.contains(channel_id))
+    .and_then(|s| s.pending.get(channel_id))
+    .is_some_and(|sent| sent.elapsed() >= SPINNER_AFTER)
 }
 
 /// The subscribe button of `channel_id` (named `channel`), whose page parsed `subscription`.
@@ -63,7 +67,7 @@ pub fn subscribe_button(
 ) -> impl IntoElement + use<> {
   let key = format!("subscribe-{id}");
   let subscribed = is_subscribed(channel_id, subscription, cx);
-  let busy = is_pending(channel_id, cx);
+  let busy = is_slow(channel_id, cx);
   let (channel_id, channel, subscription) = (
     channel_id.to_owned(),
     channel.to_owned(),
@@ -112,6 +116,7 @@ pub fn subscribe_button(
             .cursor_pointer()
             .text_sm()
             .hover(|s| s.bg(theme::surface_hover()))
+            .active(|s| s.bg(theme::surface_pressed()))
             .on_click(cx.listener(move |state, _, window, cx| {
               state.dismiss(window, cx);
               set_subscribed(&channel_id, false, &subscription, window, cx);
@@ -151,13 +156,30 @@ fn set_subscribed(
     );
   }
   let subscriptions = cx.default_global::<Subscriptions>();
-  if !subscriptions.pending.insert(channel_id.to_owned()) {
+  if subscriptions.pending.contains_key(channel_id) {
     return;
   }
+  subscriptions
+    .pending
+    .insert(channel_id.to_owned(), Instant::now());
   subscriptions
     .subscribed
     .insert(channel_id.to_owned(), subscribe);
   cx.refresh_windows();
+  // A slow answer: the button shows its spinner.
+  cx.spawn({
+    let channel_id = channel_id.to_owned();
+    async move |cx| {
+      cx.background_executor().timer(SPINNER_AFTER).await;
+      cx.update(|cx| {
+        let pending = cx.try_global::<Subscriptions>();
+        if pending.is_some_and(|s| s.pending.contains_key(&channel_id)) {
+          cx.refresh_windows();
+        }
+      });
+    }
+  })
+  .detach();
   let params = subscription.params(subscribe).map(str::to_owned);
   let target = channel_id.to_owned();
   let task = runtime::spawn(cx, async move {

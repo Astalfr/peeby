@@ -30,6 +30,7 @@ impl Global for TrayShown {}
 /// Starts the integration, before the main window opens: the toasts, the icon, and in the
 /// background the toasts' registration and the `Run` key.
 pub fn init(cx: &mut App) {
+  follow_animation_setting(cx);
   toast::init(cx);
   let shown = tray::init(cx);
   cx.set_global(TrayShown(shown));
@@ -50,6 +51,13 @@ pub fn init(cx: &mut App) {
   // The menu follows the interface's language.
   cx.observe_global::<Settings>(|cx| tray::relabel(cx))
     .detach();
+}
+
+/// GPUI's `reduce_motion` follows Windows' "Animation effects" setting: read at startup, and
+/// again whenever a window becomes active (the user changes it in Windows' settings, then comes
+/// back). Reading it is a cheap system call, done on the UI thread.
+pub fn follow_animation_setting(cx: &mut App) {
+  cx.set_reduce_motion(!sys::animations_enabled());
 }
 
 /// The setting changed: the `Run` key follows, in the background.

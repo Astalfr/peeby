@@ -1630,6 +1630,7 @@ impl PointsView {
             .when(votable, |el| {
               el.cursor_pointer()
                 .hover(|s| s.bg(theme::surface_hover()))
+                .active(|s| s.bg(theme::surface_pressed()))
                 .on_click(cx.listener(move |this, _, _, cx| {
                   this.vote(poll_id.clone(), choice_id.clone(), cx)
                 }))
@@ -1997,9 +1998,10 @@ impl PointsView {
   /// only ignores clicks (leaving).
   fn bonus_button(&self, look: BonusLook, inert: bool, cx: &mut Context<Self>) -> AnyElement {
     let theme = cx.theme();
-    let (background, hover, foreground, radius) = (
+    let (background, hover, active, foreground, radius) = (
       theme.button_primary,
       theme.button_primary_hover,
+      theme.button_primary_active,
       theme.button_primary_foreground,
       theme.radius,
     );
@@ -2032,6 +2034,7 @@ impl PointsView {
         button
           .cursor_pointer()
           .hover(move |style| style.bg(hover))
+          .active(move |style| style.bg(active))
           .on_click(move |_, _, cx| {
             this.update(cx, |this, cx| this.claim_bonus(cx)).ok();
           })

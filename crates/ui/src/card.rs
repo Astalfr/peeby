@@ -8,8 +8,8 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, App, ElementId, Entity, FontWeight, Hsla, Pixels, SharedString, Window, div, px,
-  relative,
+  AnyElement, App, ElementId, Entity, FontWeight, Hsla, MouseButton, Pixels, SharedString, Window,
+  div, px, relative,
 };
 use gpui_component::h_flex;
 use gpui_component::skeleton::Skeleton;
@@ -51,7 +51,11 @@ pub struct Hover {
   pub hovered: bool,
   /// The hover animation, 0 (out) to 1 (in).
   pub t: f32,
+  /// The press: 1 at once while the left button is down on the card, back to 0 in
+  /// [`theme::FASTER`] once released.
+  pub pressed: f32,
   state: Entity<bool>,
+  down: Entity<bool>,
 }
 
 impl Hover {
@@ -60,7 +64,10 @@ impl Hover {
   pub fn new(id: &str, window: &mut Window, cx: &mut App) -> Self {
     let state: Entity<bool> =
       motion::hover_state(SharedString::from(format!("{id}-hover")), window, cx);
+    let down: Entity<bool> =
+      motion::hover_state(SharedString::from(format!("{id}-down")), window, cx);
     let hovered = *state.read(cx);
+    let is_down = *down.read(cx) && hovered;
     let t = motion::tween(
       SharedString::from(format!("{id}-lift")),
       0.,
@@ -69,8 +76,86 @@ impl Hover {
       window,
       cx,
     );
-    Self { hovered, t, state }
+    let pressed = motion::press(
+      SharedString::from(format!("{id}-press")),
+      is_down,
+      window,
+      cx,
+    );
+    Self {
+      hovered,
+      t,
+      pressed,
+      state,
+      down,
+    }
   }
+
+  /// Follows the mouse on `frame`, the card's clickable box: its hover (and `on_hover`, as
+  /// GPUI takes a single hover listener per element) and the left button's press.
+  pub fn track(
+    &self,
+    frame: gpui::Stateful<gpui::Div>,
+    on_hover: Option<Box<HoverHandler>>,
+  ) -> gpui::Stateful<gpui::Div> {
+    let (state, down) = (self.state.clone(), self.down.clone());
+    let set_down = |down: &Entity<bool>, to: bool| {
+      let down = down.clone();
+      move |window: &mut Window, cx: &mut App| {
+        if *down.read(cx) != to {
+          down.update(cx, |d, _| *d = to);
+          window.refresh();
+        }
+      }
+    };
+    let (press, release, release_out) = (
+      set_down(&down, true),
+      set_down(&down, false),
+      set_down(&down, false),
+    );
+    frame
+      .on_hover(move |hover, window, cx| {
+        if let Some(on_hover) = &on_hover {
+          on_hover(*hover, cx);
+        }
+        state.update(cx, |h, _| *h = *hover);
+        window.refresh();
+      })
+      .on_mouse_down(MouseButton::Left, move |_, window, cx| press(window, cx))
+      .on_mouse_up(MouseButton::Left, move |_, window, cx| release(window, cx))
+      .on_mouse_up_out(MouseButton::Left, move |_, window, cx| {
+        release_out(window, cx)
+      })
+  }
+
+  /// How high the card's content rises: 4 px hovered, 2 px while pressed.
+  pub fn lift(&self) -> Pixels {
+    px(-4. * self.t + 2. * self.pressed)
+  }
+
+  /// The hover ring's opacity: full hovered, dimmed while pressed.
+  pub fn ring(&self) -> f32 {
+    self.t * (1. - 0.4 * self.pressed)
+  }
+}
+
+/// A hovered surface, one step darker while pressed: `hover` and `press` from [`Hover`].
+fn surface_pressed(base: Hsla, hover: f32, press: f32) -> Hsla {
+  base
+    .opacity(hover)
+    .blend(theme::surface_pressed().opacity(press))
+}
+
+/// Darkens a card's picture while it is pressed (`press` from [`Hover`]): laid over the
+/// picture, under its badges and buttons.
+pub fn press_shade(radius: Pixels, press: f32) -> Option<gpui::Div> {
+  (press > 0.).then(|| {
+    div()
+      .absolute()
+      .inset_0()
+      .rounded(radius)
+      .bg(gpui::black().opacity(0.2 * press))
+  })
 }
 
 /// An action of a row, such as removing it from its playlist: what it does, its tooltip, and
@@ -317,21 +402,13 @@ impl MediaCard {
 
   /// The clickable box of the card.
   fn frame(&mut self) -> gpui::Stateful<gpui::Div> {
-    let state = self.hover.state.clone();
     let on_hover = self.on_hover.take();
     let on_click = self.on_click.take();
     let on_middle_click = self.on_middle_click.take();
-    div()
-      .id(ElementId::Name(self.id.clone()))
-      .cursor_pointer()
-      // GPUI takes a single hover listener per element: the hover flag and the caller's share it.
-      .on_hover(move |hover, window, cx| {
-        if let Some(on_hover) = &on_hover {
-          on_hover(*hover, cx);
-        }
-        state.update(cx, |h, _| *h = *hover);
-        window.refresh();
-      })
+    let frame = div().id(ElementId::Name(self.id.clone())).cursor_pointer();
+    self
+      .hover
+      .track(frame, on_hover)
       .when_some(on_click, |el, on_click| {
         el.on_click(move |_, window, cx| on_click(window, cx))
       })
@@ -407,6 +484,7 @@ impl MediaCard {
       .rounded(radius)
       .children(layers.into_iter().flatten())
       .child(image_fill(&self.picture, width, aspect, radius, window, cx))
+      .children(press_shade(radius, self.hover.pressed))
       .children(play.map(|size| play_overlay(t, size, radius)))
       .children(self.progress.map(progress_bar))
       .children(self.corner.map(corner))
@@ -433,6 +511,7 @@ impl MediaCard {
   /// rises a little, a ring and a play button fade in, and the title takes the accent.
   pub fn grid(mut self, width: f32, window: &mut Window, cx: &mut App) -> AnyElement {
     let t = self.hover.t;
+    let ring = self.hover.ring();
     let title_color = self.title_color(false);
     let avatar = self.avatar.take().map(|a| avatar(&a, AVATAR, window, cx));
     let thumb = self
@@ -445,7 +524,7 @@ impl MediaCard {
           .inset_0()
           .rounded(theme::RADIUS_LG)
           .border_2()
-          .border_color(theme::accent().opacity(t)),
+          .border_color(theme::accent().opacity(ring)),
       );
     let lines = v_flex()
       .text_color(theme::muted())
@@ -463,7 +542,7 @@ impl MediaCard {
         v_flex()
           .w_full()
           .relative()
-          .top(px(-4. * t))
+          .top(self.hover.lift())
           .child(thumb)
           .child(
             h_flex()
@@ -504,6 +583,7 @@ impl MediaCard {
     cx: &mut App,
   ) -> AnyElement {
     let t = self.hover.t;
+    let ring = self.hover.ring();
     let title_color = self.title_color(false);
     let picture = self
       .picture_box(width, aspect, theme::RADIUS, Some(44.), window, cx)
@@ -514,7 +594,7 @@ impl MediaCard {
           .inset_0()
           .rounded(theme::RADIUS)
           .border_2()
-          .border_color(theme::accent().opacity(t)),
+          .border_color(theme::accent().opacity(ring)),
       );
     let title_id = SharedString::from(format!("{}-title", self.id));
     let title_middle_click = self.title_middle_click.take();
@@ -556,7 +636,7 @@ impl MediaCard {
         v_flex()
           .w_full()
           .relative()
-          .top(px(-4. * t))
+          .top(self.hover.lift())
           .child(picture)
           .child(
             div()
@@ -592,7 +672,7 @@ impl MediaCard {
       .w_full()
       .p_1()
       .rounded(theme::RADIUS_LG)
-      .bg(theme::surface().opacity(t))
+      .bg(surface_pressed(theme::surface(), t, self.hover.pressed))
       .child(
         h_flex().gap_3().items_start().child(thumb).child(
           v_flex()
@@ -638,7 +718,9 @@ impl MediaCard {
       .p_2()
       .rounded(theme::RADIUS_LG)
       // The surface switches at once; the rest of the hover keeps its transition.
-      .when(hovered, |el| el.bg(theme::surface()))
+      .when(hovered, |el| {
+        el.bg(surface_pressed(theme::surface(), 1., self.hover.pressed))
+      })
       .child(
         h_flex()
           .gap_4()
@@ -707,7 +789,9 @@ impl MediaCard {
       .py_1p5()
       .rounded(theme::RADIUS_LG)
       .when(current, |el| el.bg(theme::accent_soft()))
-      .when(!current, |el| el.bg(theme::surface().opacity(t)))
+      .when(!current, |el| {
+        el.bg(surface_pressed(theme::surface(), t, self.hover.pressed))
+      })
       .child(
         h_flex()
           .gap_3()
@@ -941,6 +1025,7 @@ fn remove_button(id: &str, t: f32, remove: RowAction) -> impl IntoElement {
     .text_color(theme::muted())
     .when(!busy, |el| {
       el.hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+        .active(|s| s.bg(theme::surface_pressed()))
         .cursor_pointer()
     })
     // The row opens its item on click: keep this click from reaching it.

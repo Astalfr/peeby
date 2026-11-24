@@ -70,6 +70,11 @@ pub fn scroll_row(
       })
       .child(
         div()
+          .id(if left {
+            "row-left-disc"
+          } else {
+            "row-right-disc"
+          })
           .size(px(36.))
           .rounded_full()
           .flex()
@@ -79,6 +84,7 @@ pub fn scroll_row(
           .border_1()
           .border_color(theme::border())
           .hover(|s| s.bg(theme::accent()).text_color(theme::on_accent()))
+          .active(|s| s.bg(theme::accent_active()))
           .child(
             gpui_component::Icon::new(if left {
               Icon::ChevronLeft

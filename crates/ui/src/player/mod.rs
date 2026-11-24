@@ -48,6 +48,9 @@ use crate::{motion, tf, theme};
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(1);
 /// The controls fade in and out over this long.
 const CONTROLS_FADE: Duration = Duration::from_millis(200);
+/// Widest a poster is asked for ([`PlayerView::set_poster`]), as a large card: it shows a
+/// second at most, under the spinner.
+const POSTER_WIDTH: f32 = 640.;
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
 /// Space or the left button held on the picture this long plays at [`HOLD_SPEED`] until the
@@ -349,6 +352,9 @@ pub struct PlayerView {
   layout: Layout,
   /// The mini-player shows the picture (picture-in-picture): the page shows a placeholder.
   in_pip: bool,
+  /// Shown over the black picture until mpv's first frame, then faded out: the card's
+  /// thumbnail, so the click lands on the video it showed ([`Self::set_poster`]).
+  poster: Option<Picture>,
   /// The window the page shows in, from the last render (the mini-player draws only the
   /// picture, never this view): its other players pause when this one starts.
   window: Option<WindowId>,
@@ -548,6 +554,7 @@ impl PlayerView {
       time_shown: true,
       layout: Layout::Embedded,
       in_pip: false,
+      poster: None,
       window: None,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
@@ -1470,6 +1477,12 @@ impl PlayerView {
   /// Whether the player is a multistream's secondary picture ([`Self::set_secondary`]).
   pub fn is_secondary(&self) -> bool {
     self.secondary
+  }
+
+  /// The picture shown until the first frame (a card's thumbnail), or none.
+  pub fn set_poster(&mut self, poster: Option<Picture>, cx: &mut Context<Self>) {
+    self.poster = poster.filter(|p| !p.is_empty());
+    cx.notify();
   }
 
   /// Switches theater mode on or off (the corners follow).
@@ -2846,6 +2859,7 @@ impl PlayerView {
           el.border_color(gpui::white().opacity(0.4))
             .text_color(gpui::white().opacity(0.8))
             .hover(|el| el.bg(gpui::white().opacity(0.15)))
+            .active(|el| el.bg(gpui::white().opacity(0.25)))
         }
       })
       .child("Boost")
@@ -3628,6 +3642,51 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 impl PlayerView {
+  /// The poster over the black picture until the video's first frame, fading out then
+  /// ([`theme::FAST`]); nothing once gone, in picture-in-picture, or without one.
+  fn render_poster(
+    &self,
+    radii: gpui::Corners<Pixels>,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    let poster = self.poster.as_ref().filter(|_| !self.in_pip)?;
+    let framed = self.video.as_ref().is_some_and(|v| v.read(cx).has_frame());
+    let shown = motion::tween(
+      "poster",
+      1.,
+      if framed { 0. } else { 1. },
+      theme::FAST,
+      window,
+      cx,
+    );
+    if shown <= 0. {
+      return None;
+    }
+    // Asked at a card's size: the thumbnail its card loaded is likely in the image cache.
+    let width = f32::from(self.bounds.get().size.width).clamp(1., POSTER_WIDTH);
+    Some(
+      div()
+        .absolute()
+        .inset_0()
+        .overflow_hidden()
+        .rounded_tl(radii.top_left)
+        .rounded_tr(radii.top_right)
+        .rounded_br(radii.bottom_right)
+        .rounded_bl(radii.bottom_left)
+        .opacity(shown)
+        .child(picture::image_fill(
+          poster,
+          width,
+          16. / 9.,
+          radii.top_left,
+          window,
+          cx,
+        ))
+        .into_any_element(),
+    )
+  }
+
   /// A secondary player ([`Self::set_secondary`]): its picture, with its page's notice, a
   /// spinner while it loads, or why it cannot play; no controls, no handlers.
   fn render_secondary(&self, radii: Corners<Pixels>) -> Stateful<Div> {
@@ -3743,6 +3802,7 @@ impl Render for PlayerView {
           .filter(move |_| shown)
           .map(|video| div().absolute().inset_0().child(video))
       })
+      .children(self.render_poster(radii, window, cx))
       .when(self.in_pip, |root| {
         root.child(
           v_flex()

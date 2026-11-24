@@ -13,6 +13,8 @@ use gpui::{
 };
 use gpui_component::{Root, Theme, ThemeMode, ThemeTokens};
 
+/// Micro feedback: a press released (Fluent's "faster" duration).
+pub const FASTER: Duration = Duration::from_millis(83);
 /// Fast transitions: hover, fades of small elements.
 pub const FAST: Duration = Duration::from_millis(150);
 /// Normal transitions: image fade-in, page change.
@@ -91,6 +93,11 @@ pub fn surface() -> Hsla {
 /// Hovered surfaces.
 pub fn surface_hover() -> Hsla {
   accent_tinted(0x27272b, 1.)
+}
+/// Pressed rows, entries and cards (`.active`, `card::Hover::pressed`): a clear step over
+/// [`surface_hover`], so a press shows even on a quick click.
+pub fn surface_pressed() -> Hsla {
+  accent_tinted(0x35353b, 1.)
 }
 /// Borders and separators.
 pub fn border() -> Hsla {

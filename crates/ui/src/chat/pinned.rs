@@ -123,6 +123,7 @@ fn item_element(item: Pinned, on_toggle: OnToggle) -> AnyElement {
     .items_center()
     .cursor_pointer()
     .hover(|s| s.bg(theme::surface_hover()))
+    .active(|s| s.bg(theme::surface_pressed()))
     .on_click(move |_, window, cx| on_toggle(&id, window, cx))
     // Under the bar's content: drawn first.
     .children(item.fill.map(|share| {

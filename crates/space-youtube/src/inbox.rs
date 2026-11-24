@@ -636,6 +636,7 @@ impl InboxPanel {
       .rounded(theme::RADIUS)
       .cursor_pointer()
       .hover(|s| s.bg(theme::surface_hover()))
+      .active(|s| s.bg(theme::surface_pressed()))
       .on_click(cx.listener(move |this, _, window, cx| this.open(item, window, cx)))
       .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
         if event.is_middle_click() {

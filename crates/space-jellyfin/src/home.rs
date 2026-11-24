@@ -298,6 +298,7 @@ impl HomeView {
             gpui::white().opacity(0.35)
           })
           .hover(|s| s.bg(gpui::white().opacity(0.7)))
+          .active(|s| s.bg(gpui::white().opacity(0.9)))
           .on_click(cx.listener(move |this, _, _, cx| this.show_slide(i, cx)))
       }));
 

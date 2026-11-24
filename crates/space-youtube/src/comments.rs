@@ -1191,6 +1191,7 @@ fn thumb(
     .rounded_full()
     .cursor_pointer()
     .hover(move |s| s.bg(color.opacity(0.14)).text_color(color))
+    .active(move |s| s.bg(color.opacity(0.24)))
     .when(current, |el| el.text_color(color))
     .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
     .on_click(move |_, window, cx| {
@@ -1219,6 +1220,7 @@ fn text_action(
     .when(enabled, |el| {
       el.cursor_pointer()
         .hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+        .active(|s| s.bg(theme::surface_pressed()))
         .on_click(move |_, window, cx| on_click(window, cx))
     })
     .child(label)
@@ -1249,6 +1251,7 @@ fn translate_button(
     .when(!loading, |el| {
       el.cursor_pointer()
         .hover(|s| s.bg(theme::surface_hover()).text_color(theme::foreground()))
+        .active(|s| s.bg(theme::surface_pressed()))
     })
     .on_click(move |_, window, cx| {
       section

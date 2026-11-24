@@ -410,6 +410,7 @@ impl LivesView {
       .rounded(theme::RADIUS)
       .cursor_pointer()
       .hover(move |s| s.bg(accent.base.opacity(0.14)))
+      .active(move |s| s.bg(accent.base.opacity(0.24)))
       .on_click(cx.listener(move |this, _, _, cx| this.open_live(space.clone(), id.clone(), cx)))
       // The preview, the uptime over its corner as on Twitch.
       .child(
@@ -555,6 +556,7 @@ impl Render for LivesView {
           .text_color(theme::muted())
           .cursor_pointer()
           .hover(|s| s.text_color(theme::foreground()).bg(theme::surface_hover()))
+          .active(|s| s.bg(theme::surface_pressed()))
           .on_click(|_, _, cx| {
             cx.defer(|cx| {
               close(cx);

@@ -546,6 +546,7 @@ fn row(id: ElementId, new: bool, picture: AnyElement, lines: AnyElement) -> Stat
     .rounded(theme::RADIUS)
     .cursor_pointer()
     .hover(|s| s.bg(theme::surface_hover()))
+    .active(|s| s.bg(theme::surface_pressed()))
     .child(
       div()
         .mt(px(16.))

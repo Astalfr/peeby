@@ -329,6 +329,7 @@ fn button(
     .text_color(gpui::white())
     .bg(gpui::black().opacity(0.45))
     .hover(|s| s.bg(gpui::black().opacity(0.7)))
+    .active(|s| s.bg(gpui::black().opacity(0.85)))
     .child(gpui_component::Icon::new(icon).size(px(size * 0.5)))
 }
 

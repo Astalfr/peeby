@@ -8,16 +8,19 @@ use innertube::{PlaylistSummary, ShortItem, VideoItem};
 use ui::card::{Hover, MediaCard, RowAction};
 
 use crate::{Nav, Route};
-use crate::{convert, history, save};
+use crate::{convert, history, save, seed};
 
 /// Opens the watch page of `video`.
 fn open_video(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &mut App) + use<> {
   let nav = nav.clone();
   let route = Route::Watch(video.id.clone());
   let (id, resume) = (video.id.clone(), history::card_resume(video));
+  let video = video.clone();
   move |window, cx| {
     // Where YouTube resumes it, as a click on youtube.com.
     history::offer(&id, resume, cx);
+    // What the page shows until YouTube answers.
+    seed::offer(&video, cx);
     nav.open(route.clone(), window, cx);
   }
 }
@@ -28,8 +31,10 @@ fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &
   let route = Route::Watch(video.id.clone());
   let title = gpui::SharedString::from(video.title.clone());
   let (id, resume) = (video.id.clone(), history::card_resume(video));
+  let video = video.clone();
   move |_, cx| {
     history::offer(&id, resume, cx);
+    seed::offer(&video, cx);
     nav.open_in_new_tab(route.clone(), Some(title.clone()), cx);
   }
 }

@@ -37,7 +37,8 @@ fn ease_out_cubic(t: f32) -> f32 {
 }
 
 /// The current value of an animation toward `target`, starting at `initial` the first time
-/// the id is seen.
+/// the id is seen. With reduced motion (GPUI's `reduce_motion`, Windows' "Animation effects"
+/// off), the value is the target at once.
 pub fn tween(
   id: impl Into<ElementId>,
   initial: f32,
@@ -46,6 +47,7 @@ pub fn tween(
   window: &mut Window,
   cx: &mut App,
 ) -> f32 {
+  let reduced = cx.reduce_motion();
   let now = Instant::now();
   let state = window.use_keyed_state(id.into(), cx, |_, _| Tween {
     from: initial,
@@ -54,7 +56,14 @@ pub fn tween(
     duration,
   });
   let (value, done) = state.update(cx, |tween, _| {
-    if tween.to != target {
+    if reduced {
+      *tween = Tween {
+        from: target,
+        to: target,
+        started: now,
+        duration: Duration::ZERO,
+      };
+    } else if tween.to != target {
       let (current, _) = tween.value(now);
       *tween = Tween {
         from: current,
@@ -69,6 +78,16 @@ pub fn tween(
     window.request_animation_frame();
   }
   value
+}
+
+/// A press's animation: 1 at once while `down`, back to 0 in [`theme::FASTER`] once released
+/// (instant feedback on the press, a soft release).
+pub fn press(id: impl Into<ElementId>, down: bool, window: &mut Window, cx: &mut App) -> f32 {
+  if down {
+    tween(id, 1., 1., Duration::ZERO, window, cx)
+  } else {
+    tween(id, 0., 0., theme::FASTER, window, cx)
+  }
 }
 
 /// A hover flag per element id, for [`tween`]. Set it from `on_hover`.

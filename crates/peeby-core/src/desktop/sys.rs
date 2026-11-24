@@ -32,10 +32,11 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetDoubleClickTime, ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
   GetClientRect, GetCursorPos, GetWindowRect, HTCAPTION, HWND_TOP, IsIconic, PostMessageW, SC_MOVE,
-  SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-  SWP_NOZORDER, SendMessageW, SetWindowPos, ShowWindow, WM_CANCELMODE, WM_CLOSE, WM_SYSCOMMAND,
+  SPI_GETCLIENTAREAANIMATION, SW_HIDE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
+  SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SendMessageW,
+  SetWindowPos, ShowWindow, SystemParametersInfoW, WM_CANCELMODE, WM_CLOSE, WM_SYSCOMMAND,
 };
-use windows::core::{HSTRING, PCWSTR};
+use windows::core::{BOOL, HSTRING, PCWSTR};
 
 /// The pipes' folder. A pipe is named after the profile and the user: pipe names are
 /// machine-wide, and another user's Peeby (or a debug build) is another instance.
@@ -216,6 +217,23 @@ pub fn ui_primary_language() -> u16 {
 pub fn double_click_time() -> Duration {
   // SAFETY: no arguments; it only reads a setting.
   Duration::from_millis(unsafe { GetDoubleClickTime() }.into())
+}
+
+/// Whether Windows' "Animation effects" setting (Accessibility, Visual effects) is on. On when
+/// it cannot be read.
+pub fn animations_enabled() -> bool {
+  let mut on = BOOL(1);
+  // SAFETY: `SPI_GETCLIENTAREAANIMATION` writes one `BOOL` to `pvparam`, which points to `on`,
+  // alive for the call.
+  let read = unsafe {
+    SystemParametersInfoW(
+      SPI_GETCLIENTAREAANIMATION,
+      0,
+      Some((&raw mut on).cast()),
+      SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+    )
+  };
+  read.is_err() || on.as_bool()
 }
 
 /// The screen at the physical point `(x, y)`, or the nearest one: its handle (GPUI's
