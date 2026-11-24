@@ -51,6 +51,7 @@ use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{PlayerEvent, PlayerView, Prefs, UpNextItem};
+use ui::selectable::SelectableText;
 use ui::{runtime, theme};
 
 /// Width of the related videos column.
@@ -1078,7 +1079,7 @@ impl WatchView {
         div()
           .text_xl()
           .font_weight(FontWeight::BOLD)
-          .child(page.title.clone()),
+          .child(SelectableText::text("title", page.title.clone())),
       )
       .child(
         h_flex()

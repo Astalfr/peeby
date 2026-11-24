@@ -37,6 +37,7 @@ use crate::assets::Icon;
 use crate::i18n::t;
 use crate::images::{Effects, Fit, Images, Turn};
 use crate::picture::Picture;
+use crate::selectable::{self, SelectableText, SelectionGroup};
 use crate::{tf, theme};
 
 /// Messages kept; older ones are dropped (and held ones beyond it, while scrolled up).
@@ -871,6 +872,8 @@ impl ChatPanel {
     };
 
     let mut line = h_flex().flex_wrap().items_center().text_sm().min_w_0();
+    // The line's text (name, words, mentions, links) is one selectable document.
+    let group = SelectionGroup::new();
     // A merged chat's line starts with its channel's picture, its name on hover.
     if let Some(source) = &message.source {
       let picture = source
@@ -957,6 +960,8 @@ impl ChatPanel {
           .collect();
         StyledText::new(name.clone()).with_highlights(highlights)
       });
+      let name_id =
+        |part: &'static str| ElementId::NamedInteger(format!("{}:{part}", message.id).into(), 0);
       let after = if action { " " } else { t(": ", " : ") };
       // A click opens their card.
       let query = UserQuery {
@@ -971,12 +976,24 @@ impl ChatPanel {
           .text_color(color)
           .cursor_pointer()
           .hover(|s| s.underline())
-          .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-            this.toggle_card(query.clone(), event.position(), cx)
-          }))
+          .on_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+              // A drag that selects from the name does not open the card.
+              if !selectable::has_selection(window, cx) {
+                this.toggle_card(query.clone(), event.position(), cx)
+              }
+            }),
+          )
           .child(match painted {
-            Some(painted) => h_flex().child(painted).child(after).into_any_element(),
-            None => format!("{name}{after}").into_any_element(),
+            Some(painted) => h_flex()
+              .child(
+                SelectableText::styled(name_id("painted"), name.clone(), painted).in_group(&group),
+              )
+              .child(SelectableText::text(name_id("after"), after).in_group(&group))
+              .into_any_element(),
+            None => SelectableText::text(name_id("plain"), format!("{name}{after}"))
+              .in_group(&group)
+              .into_any_element(),
           }),
       );
     }
@@ -1006,8 +1023,10 @@ impl ChatPanel {
       action,
       streamer.as_ref(),
       &panel,
+      &group,
       &mut image,
     );
+    let line = group.wrap(SharedString::from(format!("{}:line", message.id)), line);
     // A message naming the viewer, from someone else.
     let me = self.viewer.as_ref().and_then(|viewer| viewer(cx));
     let mentions_me = me.is_some_and(|me| !message.deleted && mentions_viewer(message, &me));
@@ -1083,6 +1102,9 @@ fn mentions_viewer(message: &ChatMessage, me: &str) -> bool {
 /// a mention opens its user's card in `panel` (red when it names the `streamer`), a link the browser, an emote shows its preview
 /// on hover; `image` gives an emote's image with its effects, for a width and a height in
 /// logical pixels.
+// Each argument is a part of the line's context, shared by its two callers (the panel, a user's
+// card): a struct would only rename them.
+#[allow(clippy::too_many_arguments)]
 fn push_fragments(
   mut line: gpui::Div,
   message: &ChatMessage,
@@ -1090,6 +1112,7 @@ fn push_fragments(
   action: bool,
   streamer: Option<&SharedString>,
   panel: &WeakEntity<ChatPanel>,
+  group: &SelectionGroup,
   image: &mut impl FnMut(&Picture, Effects, f32, f32) -> Option<Arc<RenderImage>>,
 ) -> gpui::Div {
   let fragments = &message.fragments;
@@ -1097,13 +1120,14 @@ fn push_fragments(
   while index < fragments.len() {
     match &fragments[index] {
       Fragment::Text(text) => {
-        for word in text.split_inclusive(' ') {
+        for (at, word) in text.split_inclusive(' ').enumerate() {
+          let id = ElementId::NamedInteger(format!("{}:{index}", message.id).into(), at as u64);
           line = line.child(
             div()
               .max_w_full()
               .text_color(text_color)
               .when(action, |el| el.italic())
-              .child(SharedString::from(word.to_owned())),
+              .child(SelectableText::text(id, word.to_owned()).in_group(group)),
           );
         }
       }
@@ -1128,13 +1152,16 @@ fn push_fragments(
             })
             .cursor_pointer()
             .hover(|s| s.underline())
-            .on_click(move |event, _, cx| {
+            .on_click(move |event, window, cx| {
+              if selectable::has_selection(window, cx) {
+                return;
+              }
               let at = event.position();
               panel
                 .update(cx, |panel, cx| panel.toggle_card(query.clone(), at, cx))
                 .ok();
             })
-            .child(name.clone()),
+            .child(SelectableText::text("text", name.clone()).in_group(group)),
         );
       }
       Fragment::Link(url) => {
@@ -1153,9 +1180,13 @@ fn push_fragments(
             .when(!message.deleted, |el| {
               el.cursor_pointer()
                 .hover(|s| s.text_color(theme::accent()))
-                .on_click(move |_, _, cx| cx.open_url(&target))
+                .on_click(move |_, window, cx| {
+                  if !selectable::has_selection(window, cx) {
+                    cx.open_url(&target)
+                  }
+                })
             })
-            .child(url.clone()),
+            .child(SelectableText::text("text", url.clone()).in_group(group)),
         );
       }
       Fragment::Gif(gif) => {

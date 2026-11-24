@@ -21,6 +21,7 @@ use crate::chat::{Author, ChatMessage, MessageKind, UserQuery, name_color, same_
 use crate::i18n::{Lang, lang, t};
 use crate::images::{Effects, Images};
 use crate::picture::{self, Picture};
+use crate::selectable::SelectionGroup;
 use crate::{tf, theme};
 
 /// Most of a user's messages the card lists, newest last.
@@ -345,15 +346,21 @@ impl ChatPanel {
             .text_color(theme::subtle())
             .child(sent_at(message.time, today)),
         )
-        .child(push_fragments(
-          line,
-          message,
-          text_color,
-          action,
-          streamer.as_ref(),
-          &panel,
-          &mut image,
-        ))
+        .child({
+          // The message's text is one selectable document.
+          let group = SelectionGroup::new();
+          let line = push_fragments(
+            line,
+            message,
+            text_color,
+            action,
+            streamer.as_ref(),
+            &panel,
+            &group,
+            &mut image,
+          );
+          group.wrap(SharedString::from(format!("{}:card", message.id)), line)
+        })
     });
     let scroll = card.scroll.clone();
     let (top, bottom, max_height) = card_place(self.messages_area.get(), card.at);

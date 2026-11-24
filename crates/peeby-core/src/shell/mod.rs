@@ -242,12 +242,20 @@ impl Shell {
     // (or nothing); only in this window, and not in fullscreen, which belongs to the player.
     let main = window.window_handle().window_id();
     subscriptions.push(cx.observe_keystrokes(move |shell, event, window, cx| {
-      if window.window_handle().window_id() != main || window.is_fullscreen() {
+      if window.window_handle().window_id() != main {
         return;
       }
       let keystroke = &event.keystroke;
       let m = &keystroke.modifiers;
       let ctrl = m.control && !m.alt && !m.platform;
+      // Ctrl+C copies the selected text (titles, comments, chat), whatever has the focus.
+      if keystroke.key == "c" && ctrl && !m.shift {
+        ui::selectable::copy(window, cx);
+        return;
+      }
+      if window.is_fullscreen() {
+        return;
+      }
       match keystroke.key.as_str() {
         "f5" if !m.control && !m.alt && !m.shift && !m.platform => shell.reload(cx),
         "r" if ctrl && !m.shift => shell.reload(cx),

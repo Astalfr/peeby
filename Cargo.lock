@@ -8056,6 +8056,7 @@ dependencies = [
  "blurhash",
  "chrono",
  "dirs 6.0.0",
+ "gpui-base",
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",

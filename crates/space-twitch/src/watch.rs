@@ -34,6 +34,7 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
 use ui::player::{Author, LiveInfo, PlayerEvent, PlayerView, Rewind, Source};
+use ui::selectable::SelectableText;
 use ui::{runtime, tf, theme};
 
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
@@ -1067,13 +1068,19 @@ impl WatchView {
           .flex_1()
           .min_w_0()
           .gap_1()
-          .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
-            if header.title.is_empty() {
-              header.name.clone()
-            } else {
-              header.title.clone()
-            },
-          ))
+          .child(
+            div()
+              .text_lg()
+              .font_weight(FontWeight::SEMIBOLD)
+              .child(SelectableText::text(
+                "title",
+                if header.title.is_empty() {
+                  header.name.clone()
+                } else {
+                  header.title.clone()
+                },
+              )),
+          )
           .child(
             div()
               .id("twitch-watch-channel")

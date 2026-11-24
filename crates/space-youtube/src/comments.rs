@@ -34,6 +34,7 @@ use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::PlayerView;
+use ui::selectable::{self, SelectableText};
 use ui::widgets::{loading_more, near_scroll_end, sort_choices};
 use ui::{runtime, tf, theme};
 
@@ -1273,21 +1274,23 @@ pub fn linked_text(
     .as_ref()
     .filter(|(text_id, _)| *text_id == id)
     .map(|(_, index)| *index);
-  let styled = StyledText::new(text).with_highlights(links.iter().enumerate().map(|(i, l)| {
-    let style = HighlightStyle {
-      color: Some(theme::accent_hover()),
-      underline: (hovered == Some(i)).then(|| UnderlineStyle {
-        thickness: px(1.),
+  let styled =
+    StyledText::new(text.clone()).with_highlights(links.iter().enumerate().map(|(i, l)| {
+      let style = HighlightStyle {
         color: Some(theme::accent_hover()),
-        wavy: false,
-      }),
-      ..Default::default()
-    };
-    (l.range.clone(), style)
-  }));
+        underline: (hovered == Some(i)).then(|| UnderlineStyle {
+          thickness: px(1.),
+          color: Some(theme::accent_hover()),
+          wavy: false,
+        }),
+        ..Default::default()
+      };
+      (l.range.clone(), style)
+    }));
   let ranges: Vec<_> = links.iter().map(|l| l.range.clone()).collect();
   let targets: Vec<LinkTarget> = links.iter().map(|l| l.target.clone()).collect();
-  let text = InteractiveText::new(id.clone(), styled)
+  let layout = styled.layout().clone();
+  let interactive = InteractiveText::new(id.clone(), styled)
     .on_hover({
       let follow = follow.clone();
       let ranges = ranges.clone();
@@ -1300,11 +1303,20 @@ pub fn linked_text(
     .on_click(ranges, {
       let follow = follow.clone();
       move |index, window, cx| {
-        if let Some(target) = targets.get(index).cloned() {
+        // A drag that selects from a link does not follow it.
+        if let Some(target) = targets.get(index).cloned()
+          && !selectable::has_selection(window, cx)
+        {
           follow.follow(target, window, cx);
         }
       }
     });
+  let text = SelectableText::wrapping(
+    SharedString::from(format!("{id}-text")),
+    text,
+    layout,
+    interactive,
+  );
   // The text reports moves over it only: leaving it clears its underline.
   div()
     .id(SharedString::from(format!("{id}-links")))
