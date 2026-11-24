@@ -602,6 +602,7 @@ impl YouTubeSpace {
   fn entry_route(id: &str) -> Option<Route> {
     Some(match id {
       "home" => Route::Home,
+      "search" => Route::Search,
       "subscriptions" => Route::Subscriptions,
       "shorts" => Route::Shorts,
       "history" => Route::History,
@@ -685,6 +686,7 @@ impl Space for YouTubeSpace {
       .and_then(|t| t.section(Route::is_top_level).cloned());
     [
       ("home", t("Home", "Accueil"), Icon::Home, false),
+      ("search", t("Search", "Rechercher"), Icon::Search, false),
       (
         "subscriptions",
         t("Subscriptions", "Abonnements"),
@@ -724,10 +726,6 @@ impl Space for YouTubeSpace {
     if let Some(route) = Self::entry_route(id) {
       self.open_in_new_tab(tab, route, None, cx);
     }
-  }
-
-  fn search_route(&self) -> Option<Route> {
-    Some(Route::Search)
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {

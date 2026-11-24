@@ -817,6 +817,7 @@ impl TwitchSpace {
   fn entry_route(id: &str) -> Option<Route> {
     match id {
       "following" => Some(Route::Following),
+      "search" => Some(Route::Search),
       "browse" => Some(Route::Browse),
       "multistream" => Some(Route::Multistream),
       #[cfg(debug_assertions)]
@@ -1305,7 +1306,7 @@ impl Space for TwitchSpace {
       .unwrap_or_else(|| "Twitch".into())
   }
 
-  /// "Suivies", "Parcourir", the followed channels on air (with Helix), then the account
+  /// "Suivies", "Rechercher" (once the catalog is up), "Parcourir", the followed channels on air (with Helix), then the account
   /// (opening the settings) and sign-out at the bottom, or "Se connecter" without any.
   fn menu(&self, tab: TabId, _cx: &App) -> Vec<MenuEntry> {
     let signed = match &self.state {
@@ -1329,6 +1330,10 @@ impl Space for TwitchSpace {
         ..MenuEntry::new("multistream", "Multistream", Icon::Multistream)
       },
     ];
+    // Search needs the catalog.
+    if self.catalog.is_some() {
+      entries.insert(1, MenuEntry::search(root == Some(&Route::Search)));
+    }
     let live = signed.and_then(|s| s.live.as_deref()).unwrap_or_default();
     for (i, stream) in live.iter().take(SIDEBAR_LIVE).enumerate() {
       let initial: SharedString = stream
@@ -1430,10 +1435,6 @@ impl Space for TwitchSpace {
     if let Some(route) = Self::entry_route(id) {
       self.open_in_new_tab(tab, route, None, cx);
     }
-  }
-
-  fn search_route(&self) -> Option<Route> {
-    self.catalog.is_some().then_some(Route::Search)
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {

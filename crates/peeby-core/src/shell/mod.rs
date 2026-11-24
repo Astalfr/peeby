@@ -1,5 +1,5 @@
 //! The window's root: a top bar shared by every space (menu button, back and forward, logo, the
-//! open tabs and "+" to open one of any space, search, audio output, notifications, settings),
+//! open tabs and "+" to open one of any space, audio output, notifications, settings),
 //! the sidebar with the entries of the tab's space, and the tab's current page in the content
 //! panel: the space's, or the settings page, which opens in a tab of its own (an entry of its
 //! history, which pages opened from there follow). Switching tabs or opening the settings
@@ -881,17 +881,6 @@ impl Shell {
     cx.notify();
   }
 
-  /// The top bar's search: the search page of the shown tab's space, in a new tab after it,
-  /// shown (a video playing goes to the mini-player).
-  fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    let Some(current) = self.active else {
-      return;
-    };
-    if let Some(id) = self.spaces[current.space].search_tab(cx) {
-      self.add_tab(current.space, id, Some(current.id), true, window, cx);
-    }
-  }
-
   fn open_entry(&mut self, id: SharedString, window: &mut Window, cx: &mut Context<Self>) {
     if let Some((tab, space)) = self.current() {
       space.clone().open_entry(tab, &id, window, cx);
@@ -952,10 +941,6 @@ impl Shell {
       .current()
       .is_some_and(|(tab, s)| s.can_go_forward(tab, cx));
     let in_settings = self.in_settings(cx);
-    let search = self
-      .current()
-      .filter(|(_, s)| s.searchable(cx))
-      .map(|(_, s)| s.info(cx).name);
     // Always present (disabled when there is nowhere to go) so the bar does not shift.
     let back = Button::new("back")
       .ghost()
@@ -1004,18 +989,6 @@ impl Shell {
             .mr_2()
             .gap_1()
             .children(update_button(cx))
-            .child(
-              // Each space searches its own catalog.
-              Button::new("search")
-                .ghost()
-                .icon(Icon::Search)
-                .disabled(search.is_none())
-                .tooltip(match &search {
-                  Some(name) => tf!("Search {name}", "Rechercher dans {name}"),
-                  None => t("Search (soon)", "Recherche (bientôt)").to_owned(),
-                })
-                .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
-            )
             .child(self.audio_output(cx))
             .child(self.bell(cx))
             .child(

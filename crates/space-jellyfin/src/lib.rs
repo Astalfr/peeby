@@ -586,6 +586,7 @@ impl JellyfinSpace {
   fn entry_route(id: &str) -> Option<Route> {
     match id {
       "home" => Some(Route::Home),
+      "search" => Some(Route::Search),
       _ => id
         .strip_prefix("library:")
         .map(|library| Route::Library(library.into())),
@@ -723,7 +724,7 @@ impl Space for JellyfinSpace {
       .unwrap_or_else(|| "Jellyfin".into())
   }
 
-  /// Home, the video libraries, then the user (opening the settings) and sign-out at the bottom.
+  /// Home, Search, the video libraries, then the user (opening the settings) and sign-out at the bottom.
   fn menu(&self, tab: TabId, _cx: &App) -> Vec<MenuEntry> {
     let Some(signed) = &self.signed else {
       return Vec::new();
@@ -733,10 +734,13 @@ impl Space for JellyfinSpace {
       .get(tab)
       .and_then(|t| t.section(Route::is_top_level).cloned());
     let active = |id: &str| root.is_some() && root == Self::entry_route(id);
-    let mut entries = vec![MenuEntry {
-      active: active("home"),
-      ..MenuEntry::new("home", t("Home", "Accueil"), Icon::Home)
-    }];
+    let mut entries = vec![
+      MenuEntry {
+        active: active("home"),
+        ..MenuEntry::new("home", t("Home", "Accueil"), Icon::Home)
+      },
+      MenuEntry::search(active("search")),
+    ];
     for (index, library) in self.video_libraries().enumerate() {
       let id = format!("library:{}", library.id);
       let icon = match library.collection_type {
@@ -804,10 +808,6 @@ impl Space for JellyfinSpace {
     if let Some(route) = Self::entry_route(id) {
       self.open_in_new_tab(tab, route, None, cx);
     }
-  }
-
-  fn search_route(&self) -> Option<Route> {
-    self.signed.is_some().then_some(Route::Search)
   }
 
   fn settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {

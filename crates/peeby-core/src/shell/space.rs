@@ -117,6 +117,14 @@ impl MenuEntry {
       hover: None,
     }
   }
+
+  /// The "Search" entry, the second of a space that has a search page: its id is `search`.
+  pub fn search(active: bool) -> Self {
+    Self {
+      active,
+      ..Self::new("search", t("Search", "Rechercher"), Icon::Search)
+    }
+  }
 }
 
 /// A followed channel on air, in the list of lives the notification area's icon opens.
@@ -774,21 +782,6 @@ pub trait Space: Render + EventEmitter<SpaceEvent> + Sized {
     self.history().get(tab).is_some_and(Tab::settings_shown)
   }
 
-  /// The space's search page, when the top bar's search button searches this space (signed
-  /// in, with a search page).
-  fn search_route(&self) -> Option<Self::Route> {
-    None
-  }
-
-  /// Opens a tab of the space on its search page (built when it shows); `None` when the space
-  /// has none.
-  fn search_tab(&mut self, cx: &mut Context<Self>) -> Option<TabId> {
-    let route = self.search_route()?;
-    let id = self.history_mut().add(vec![route], None);
-    cx.notify();
-    Some(id)
-  }
-
   /// The player of the page on top of `tab`, if it has one. The shell moves it to the
   /// mini-player when another tab opens while it plays.
   fn player(&self, _tab: TabId, _cx: &App) -> Option<Entity<PlayerView>> {
@@ -897,10 +890,6 @@ pub trait AnySpace {
   fn reload(&self, tab: TabId, cx: &mut App);
   /// See [`Space::settings_shown`].
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool;
-  /// Whether the space has a [`Space::search_route`].
-  fn searchable(&self, cx: &App) -> bool;
-  /// See [`Space::search_tab`].
-  fn search_tab(&self, cx: &mut App) -> Option<TabId>;
   /// See [`Space::player`].
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>>;
   /// See [`Space::unseen`].
@@ -1038,14 +1027,6 @@ impl<T: Space> AnySpace for Entity<T> {
 
   fn settings_shown(&self, tab: TabId, cx: &App) -> bool {
     self.read(cx).settings_shown(tab)
-  }
-
-  fn searchable(&self, cx: &App) -> bool {
-    self.read(cx).search_route().is_some()
-  }
-
-  fn search_tab(&self, cx: &mut App) -> Option<TabId> {
-    self.update(cx, |space, cx| space.search_tab(cx))
   }
 
   fn player(&self, tab: TabId, cx: &App) -> Option<Entity<PlayerView>> {
