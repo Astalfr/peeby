@@ -5,7 +5,7 @@
 
 use gpui::{AnyElement, App, Window};
 use innertube::{PlaylistSummary, ShortItem, VideoItem};
-use ui::card::{Hover, MediaCard, RowAction};
+use ui::card::{Hover, MediaCard, RowAction, Scrub, ScrubFrame, ScrubTile};
 
 use crate::{Nav, Route};
 use crate::{convert, history, save, seed};
@@ -37,6 +37,52 @@ fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &
     seed::offer(&video, cx);
     nav.open_in_new_tab(route.clone(), Some(title.clone()), cx);
   }
+}
+
+/// Seconds of a duration badge (`12:34`, `1:02:03`).
+fn badge_seconds(badge: &str) -> Option<f64> {
+  badge.split(':').try_fold(0., |total, part| {
+    part
+      .trim()
+      .parse::<u32>()
+      .ok()
+      .map(|n| total * 60. + f64::from(n))
+  })
+}
+
+/// The frames shown as the mouse moves across `video`'s picture: its storyboard when its stream
+/// was prefetched (VISIONOS), else the three frames YouTube picks for every video
+/// (`mq1.jpg` to `mq3.jpg`, at about a quarter, half and three quarters, from the thumbnails'
+/// server: no InnerTube request). None for a live.
+fn scrub(video: &VideoItem) -> Option<Scrub> {
+  if video.live {
+    return None;
+  }
+  let id = video.id.clone();
+  let duration = video.duration.as_deref().and_then(badge_seconds);
+  Some(std::rc::Rc::new(move |at: f32, cx: &App| {
+    let board = crate::prefetch::storyboard(&id, cx);
+    let frame = board.and_then(|board| {
+      let seconds = f64::from(at) * duration.unwrap_or(0.);
+      let frame = board.frame(seconds, duration.unwrap_or(0.))?;
+      Some(ScrubFrame {
+        url: frame.url,
+        tile: Some(ScrubTile {
+          column: frame.column,
+          row: frame.row,
+          width: board.width,
+          height: board.height,
+        }),
+      })
+    });
+    frame.or_else(|| {
+      let n = ((at * 3.).floor() as u32).min(2) + 1;
+      Some(ScrubFrame {
+        url: format!("https://i.ytimg.com/vi/{id}/mq{n}.jpg"),
+        tile: None,
+      })
+    })
+  }))
 }
 
 /// The card of `video` under `id` (which tells apart the same video in two lists): title,
@@ -73,6 +119,7 @@ fn card(id: &str, hover: Hover, video: &VideoItem, nav: Option<&Nav>) -> MediaCa
   )
   .badge_left_icon(video.members_only.then_some(ui::assets::Icon::Star))
   .live(video.live)
+  .scrub(scrub(video))
   .progress(video.progress.map(|p| f32::from(p.percent) / 100.0))
   .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, &pictures, hovered, cx));
   match channel {
@@ -281,4 +328,16 @@ pub fn short_card(
   .on_click(open)
   .on_middle_click(open_in_new_tab)
   .poster(width, 9. / 16., window, cx)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::badge_seconds;
+
+  #[test]
+  fn durations() {
+    assert_eq!(badge_seconds("12:34"), Some(754.));
+    assert_eq!(badge_seconds("1:02:03"), Some(3723.));
+    assert_eq!(badge_seconds("LIVE"), None);
+  }
 }

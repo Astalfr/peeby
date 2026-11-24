@@ -4,6 +4,7 @@
 //! Spaces fill a [`MediaCard`] from their own data. The look and the motion follow
 //! docs/design.md.
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::prelude::*;
@@ -43,6 +44,40 @@ pub type Handler = dyn Fn(&mut Window, &mut App);
 /// Called when the mouse enters (`true`) or leaves a card.
 pub type HoverHandler = dyn Fn(bool, &mut App);
 
+/// A frame of the video under the mouse as it moves across a card's picture: an image of its
+/// own, or a tile of a sheet of them (a storyboard).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScrubFrame {
+  /// The image, or the sheet the tile is on.
+  pub url: String,
+  /// The tile on the sheet; `None`: the whole image.
+  pub tile: Option<ScrubTile>,
+}
+
+/// Where a frame sits on its sheet, in the sheet's pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScrubTile {
+  /// Column of the tile, from 0.
+  pub column: u32,
+  /// Row of the tile, from 0.
+  pub row: u32,
+  /// Width of a tile.
+  pub width: u32,
+  /// Height of a tile.
+  pub height: u32,
+}
+
+/// How long the mouse rests on a card before its picture follows it ([`MediaCard::scrub`]):
+/// sweeping over a grid shows nothing.
+const SCRUB_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
+/// The scrub line's inset from the picture's edges, clear of the rounded corners and of the
+/// hover ring.
+const SCRUB_LINE_INSET: f32 = 8.;
+
+/// The frame at a point across the picture (0 at its left edge, 1 at its right), given by the
+/// space ([`MediaCard::scrub`]).
+pub type Scrub = Rc<dyn Fn(f32, &App) -> Option<ScrubFrame>>;
+
 /// The hover state of a card: whether the mouse is on it, and the hover animation (0 to 1).
 /// Read it before building the card when its buttons fade in with the hover.
 #[derive(Clone)]
@@ -54,8 +89,16 @@ pub struct Hover {
   /// The press: 1 at once while the left button is down on the card, back to 0 in
   /// [`theme::FASTER`] once released.
   pub pressed: f32,
+  /// Where the mouse is across the picture, 0 to 1, while it moves on it, once the card has
+  /// been hovered [`SCRUB_DELAY`].
+  pub scrub: Option<f32>,
   state: Entity<bool>,
   down: Entity<bool>,
+  scrub_at: Entity<Option<f32>>,
+  /// When the mouse came on the card.
+  since: Entity<Option<std::time::Instant>>,
+  /// The picture's bounds, as last painted.
+  picture: Rc<Cell<gpui::Bounds<Pixels>>>,
 }
 
 impl Hover {
@@ -66,7 +109,21 @@ impl Hover {
       motion::hover_state(SharedString::from(format!("{id}-hover")), window, cx);
     let down: Entity<bool> =
       motion::hover_state(SharedString::from(format!("{id}-down")), window, cx);
+    let scrub_at = window.use_keyed_state(SharedString::from(format!("{id}-scrub")), cx, |_, _| {
+      None::<f32>
+    });
+    let picture = window
+      .use_keyed_state(SharedString::from(format!("{id}-picture")), cx, |_, _| {
+        Rc::new(Cell::new(gpui::Bounds::<Pixels>::default()))
+      })
+      .read(cx)
+      .clone();
+    let since = window.use_keyed_state(SharedString::from(format!("{id}-since")), cx, |_, _| {
+      None::<std::time::Instant>
+    });
     let hovered = *state.read(cx);
+    let rested = (*since.read(cx)).is_some_and(|at| at.elapsed() >= SCRUB_DELAY);
+    let scrub = (*scrub_at.read(cx)).filter(|_| hovered && rested);
     let is_down = *down.read(cx) && hovered;
     let t = motion::tween(
       SharedString::from(format!("{id}-lift")),
@@ -86,8 +143,12 @@ impl Hover {
       hovered,
       t,
       pressed,
+      scrub,
       state,
       down,
+      scrub_at,
+      since,
+      picture,
     }
   }
 
@@ -98,7 +159,12 @@ impl Hover {
     frame: gpui::Stateful<gpui::Div>,
     on_hover: Option<Box<HoverHandler>>,
   ) -> gpui::Stateful<gpui::Div> {
-    let (state, down) = (self.state.clone(), self.down.clone());
+    let (state, down, scrub_at, since) = (
+      self.state.clone(),
+      self.down.clone(),
+      self.scrub_at.clone(),
+      self.since.clone(),
+    );
     let set_down = |down: &Entity<bool>, to: bool| {
       let down = down.clone();
       move |window: &mut Window, cx: &mut App| {
@@ -119,6 +185,19 @@ impl Hover {
           on_hover(*hover, cx);
         }
         state.update(cx, |h, _| *h = *hover);
+        if *hover {
+          since.update(cx, |since, _| *since = Some(std::time::Instant::now()));
+          // Drawn again once the delay is over, if the mouse rests there.
+          window
+            .spawn(cx, async move |cx| {
+              cx.background_executor().timer(SCRUB_DELAY).await;
+              cx.update(|window, _| window.refresh()).ok();
+            })
+            .detach();
+        } else {
+          scrub_at.update(cx, |at, _| *at = None);
+          since.update(cx, |since, _| *since = None);
+        }
         window.refresh();
       })
       .on_mouse_down(MouseButton::Left, move |_, window, cx| press(window, cx))
@@ -205,6 +284,7 @@ pub struct MediaCard {
   on_click: Option<Rc<Handler>>,
   on_middle_click: Option<Rc<Handler>>,
   on_hover: Option<Box<HoverHandler>>,
+  scrub: Option<Scrub>,
 }
 
 impl MediaCard {
@@ -241,6 +321,7 @@ impl MediaCard {
       on_click: None,
       on_middle_click: None,
       on_hover: None,
+      scrub: None,
     }
   }
 
@@ -393,6 +474,13 @@ impl MediaCard {
     self
   }
 
+  /// Frames of the video shown as the mouse moves across the picture, with a thin line of
+  /// where it is (docs/design.md, "Card hover").
+  pub fn scrub(mut self, scrub: Option<Scrub>) -> Self {
+    self.scrub = scrub;
+    self
+  }
+
   /// Called when the mouse enters (`true`) or leaves the card, e.g. to prefetch what a click
   /// would open.
   pub fn on_hover(mut self, on_hover: impl Fn(bool, &mut App) + 'static) -> Self {
@@ -453,7 +541,23 @@ impl MediaCard {
     cx: &mut App,
   ) -> gpui::Div {
     let t = self.hover.t;
-    let play = play.filter(|_| self.play);
+    // The frames under the mouse, while it moves on the picture (the play button gives way).
+    let scrub = self.scrub.clone().filter(|_| self.hover.hovered);
+    let frame = scrub
+      .as_ref()
+      .zip(self.hover.scrub)
+      .and_then(|(scrub, at)| scrub(at, cx))
+      .and_then(|frame| scrub_frame(&frame, width, aspect, radius, window, cx));
+    if let Some(scrub) = &scrub {
+      // The frames are loaded as soon as the card is hovered, so moving shows them at once.
+      for at in [0.1, 0.5, 0.9] {
+        if let Some(frame) = scrub(at, cx) {
+          scrub_frame(&frame, width, aspect, radius, window, cx);
+        }
+      }
+    }
+    let scrubbing = frame.is_some();
+    let play = play.filter(|_| self.play && !scrubbing);
     // A stack's layers: narrower, peeking out above the picture, as on the playlists page.
     // They hang out of the box (a margin makes room for them), so that what the layouts put on
     // the box (a hover ring, a shadow) stays on the picture. Painted first, the picture covers
@@ -484,6 +588,52 @@ impl MediaCard {
       .rounded(radius)
       .children(layers.into_iter().flatten())
       .child(image_fill(&self.picture, width, aspect, radius, window, cx))
+      .children(frame)
+      .when_some(self.hover.scrub.filter(|_| scrubbing), |el, at| {
+        // A thin rounded track inset in the picture, white on a faint white.
+        let track = (width - 2. * SCRUB_LINE_INSET).max(0.);
+        el.child(
+          div()
+            .absolute()
+            .left(px(SCRUB_LINE_INSET))
+            .right(px(SCRUB_LINE_INSET))
+            .bottom(px(SCRUB_LINE_INSET))
+            .h(px(3.))
+            .rounded_full()
+            .bg(gpui::white().opacity(0.35))
+            .child(
+              div()
+                .h_full()
+                .w(px(track * at))
+                .rounded_full()
+                .bg(gpui::white()),
+            ),
+        )
+      })
+      .when(scrub.is_some(), |el| {
+        let (bounds, at) = (self.hover.picture.clone(), self.hover.scrub_at.clone());
+        let painted = bounds.clone();
+        el.child(
+          gpui::canvas(move |b, _, _| painted.set(b), |_, _, _, _| {})
+            .absolute()
+            .inset_0(),
+        )
+        .on_mouse_move(move |event, window, cx| {
+          let b = bounds.get();
+          let width = f32::from(b.size.width);
+          // Off the picture (onto the title): the picture comes back.
+          if width <= 0. || !b.contains(&event.position) {
+            if at.read(cx).is_some() {
+              at.update(cx, |at, _| *at = None);
+              window.refresh();
+            }
+            return;
+          }
+          let x = (f32::from(event.position.x - b.origin.x) / width).clamp(0., 1.);
+          at.update(cx, |at, _| *at = Some(x));
+          window.refresh();
+        })
+      })
       .children(press_shade(radius, self.hover.pressed))
       .children(play.map(|size| play_overlay(t, size, radius)))
       .children(self.progress.map(progress_bar))
@@ -1129,4 +1279,69 @@ pub fn skeleton_row() -> impl IntoElement {
         .child(Skeleton::new().w(px(160.)).h(px(14.)))
         .child(Skeleton::new().w(px(200.)).h(px(14.))),
     )
+}
+
+/// A scrubbed frame over a picture `width` wide at `aspect`, once loaded (nothing until then:
+/// the picture shows).
+fn scrub_frame(
+  frame: &ScrubFrame,
+  width: f32,
+  aspect: f32,
+  radius: Pixels,
+  window: &mut Window,
+  cx: &mut App,
+) -> Option<AnyElement> {
+  use gpui::{ImageSource, ObjectFit, img};
+  let images = cx.try_global::<crate::images::Images>()?.clone();
+  match frame.tile {
+    None => {
+      let scale = window.scale_factor();
+      let (w, h) = (
+        (width * scale).round() as u32,
+        (width / aspect * scale).round() as u32,
+      );
+      let image = images.0.update(cx, |store, cx| {
+        store.get_fit(
+          &frame.url,
+          crate::images::Effects::default(),
+          crate::images::Fit::Cover,
+          w,
+          h,
+          cx,
+        )
+      })?;
+      Some(
+        img(ImageSource::Render(image))
+          .absolute()
+          .inset_0()
+          .size_full()
+          .rounded(radius)
+          .object_fit(ObjectFit::Cover)
+          .into_any_element(),
+      )
+    }
+    Some(tile) => {
+      let sheet = images.0.update(cx, |store, cx| store.get(&frame.url, cx))?;
+      // Sized from the sheet itself: the last one is cut after its last tile.
+      let scale = width / tile.width.max(1) as f32;
+      let size = sheet.size(0);
+      Some(
+        div()
+          .absolute()
+          .inset_0()
+          .rounded(radius)
+          .overflow_hidden()
+          .child(
+            img(ImageSource::Render(sheet))
+              .absolute()
+              .left(px(-(tile.column as f32) * width))
+              .top(px(-(tile.row as f32) * tile.height as f32 * scale))
+              .w(px(size.width.0 as f32 * scale))
+              .h(px(size.height.0 as f32 * scale))
+              .object_fit(ObjectFit::Fill),
+          )
+          .into_any_element(),
+      )
+    }
+  }
 }

@@ -187,6 +187,12 @@ loading the next page.
 
 ### 13. Hover scrubbing on thumbnails
 
+Done (2026-11-24), not yet checked in the app. With web_embedded first (the default signed in)
+no stream is prefetched, so no storyboard is known: the cards then scrub through the three
+frames YouTube picks for every video (`mq1.jpg` to `mq3.jpg` on i.ytimg.com, checked to exist
+and differ), which costs no InnerTube request. The storyboard (fine frames) when the stream was
+prefetched (VISIONOS). YouTube only.
+
 Moving the mouse across a hovered thumbnail shows the storyboard's frames at that point (the
 storyboard parsing already serves the seek bar's preview), with a thin progress line at the
 bottom. Only where the storyboard is known without a new request (the prefetched `player`

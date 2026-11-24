@@ -243,6 +243,14 @@ pub fn warm(video_id: &str, cx: &mut App) {
   }
 }
 
+/// The storyboard of `video_id`'s prefetched stream, if it has one (left in the cache), for its
+/// card's scrubbing.
+pub fn storyboard(video_id: &str, cx: &App) -> Option<innertube::Storyboard> {
+  let Handle(streams) = cx.try_global::<Handle>()?;
+  let (_, stream) = streams.read(cx).ready.get(video_id)?;
+  stream.storyboard.clone()
+}
+
 /// A stream resolved recently for `video_id`, taken out of the cache.
 pub fn take(video_id: &str, cx: &mut App) -> Option<Stream> {
   let Handle(streams) = cx.try_global::<Handle>().cloned()?;
