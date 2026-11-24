@@ -152,6 +152,11 @@ direction is known where the shell moves in the tab's history.
 
 ### 10. Sidebar folding
 
+Done (2026-11-24), not yet checked in the app, in 150 ms (`theme::FAST`) rather than 167 ms.
+The chat's column in theater mode folds the same way (the user's request). The headings
+switch to their separators at the end, so a space with headings (Twitch's
+"Live", Jellyfin's libraries) shifts the entries under them once the fold ends.
+
 The sidebar switches from 232 px to its icons at once ([shell/mod.rs](../crates/peeby-core/src/shell/mod.rs),
 the menu button). Tween its width (167 ms, decelerate), the labels fading out in the first half
 on folding and in the second half on unfolding; the content panel follows its width.

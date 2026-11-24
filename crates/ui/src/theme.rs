@@ -43,6 +43,27 @@ pub fn sidebar_width(collapsed: bool) -> Pixels {
   }
 }
 
+thread_local! {
+  /// The sidebar's width as each window drew it last, while it folds or unfolds.
+  static SHOWN_SIDEBAR: std::cell::RefCell<std::collections::HashMap<gpui::WindowId, Pixels>> =
+    std::cell::RefCell::default();
+}
+
+/// The shell drew `window`'s sidebar `width` wide (it eases between its two widths).
+pub fn set_shown_sidebar_width(window: &Window, width: Pixels) {
+  let id = window.window_handle().window_id();
+  SHOWN_SIDEBAR.with(|shown| shown.borrow_mut().insert(id, width));
+}
+
+/// The sidebar's width in `window` now, for pages laid out from the window's width: the width
+/// drawn while it folds or unfolds, else its width when `collapsed` (or not).
+pub fn shown_sidebar_width(window: &Window, collapsed: bool) -> Pixels {
+  let id = window.window_handle().window_id();
+  SHOWN_SIDEBAR
+    .with(|shown| shown.borrow().get(&id).copied())
+    .unwrap_or_else(|| sidebar_width(collapsed))
+}
+
 /// Height of the title bar.
 pub const TITLE_BAR_HEIGHT: Pixels = px(44.);
 

@@ -5,7 +5,9 @@
 //!   letterboxes the video), the chat beside it on the page's height, flush against it, and what
 //!   goes under the player is hidden. The chat's header closes it ([`super::ChatPanelEvent::Hide`]):
 //!   the player then takes the whole page, and the page gives the player a button that reopens
-//!   it ([`crate::player::PlayerView::set_corner_action`]).
+//!   it ([`crate::player::PlayerView::set_corner_action`]). Closing and reopening ease the
+//!   column's width ([`theme::FAST`]), the chat keeping its own width inside it (its lines do not
+//!   wrap again) and fading out, then in.
 //!
 //! Without a chat, the player and what goes under it take the whole width.
 
@@ -18,7 +20,7 @@ use gpui_component::{h_flex, v_flex};
 use crate::assets::Icon;
 use crate::i18n::t;
 use crate::player::{CornerAction, PlayerView};
-use crate::theme;
+use crate::{motion, theme};
 
 /// Width of the chat column.
 pub const CHAT_WIDTH: f32 = 340.;
@@ -44,17 +46,21 @@ pub fn chat_reopen_button(
 }
 
 /// The page: `player` (the player's element, filling what it is given), `below` (the header and
-/// the rest) and the `chat` column if any. In theater mode, `chat_hidden` leaves the chat out.
+/// the rest) and the `chat` column if any. In theater mode, `chat_hidden` folds the chat away.
 pub fn watch_layout(
   player: AnyElement,
   below: AnyElement,
   chat: Option<AnyElement>,
   theater: bool,
   chat_hidden: bool,
+  window: &mut Window,
+  cx: &mut App,
 ) -> AnyElement {
   let chat_width = px(CHAT_WIDTH);
   if theater {
-    let chat = chat.filter(|_| !chat_hidden);
+    let target = if chat_hidden { 1. } else { 0. };
+    let fold = motion::tween("chat-fold", target, target, theme::FAST, window, cx);
+    let chat = chat.filter(|_| fold < 1.);
     return h_flex()
       .size_full()
       .child(
@@ -68,13 +74,14 @@ pub fn watch_layout(
       )
       .children(chat.map(|chat| {
         div()
-          .w(chat_width)
+          .w(chat_width * (1. - fold))
           .flex_none()
           .h_full()
+          .overflow_hidden()
           .bg(theme::surface())
           .border_l_1()
           .border_color(theme::border())
-          .child(chat)
+          .child(div().w(chat_width).h_full().opacity(1. - fold).child(chat))
       }))
       .into_any_element();
   }

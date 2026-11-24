@@ -160,7 +160,9 @@ pub fn viewers(n: u64) -> String {
 pub fn stream_width(window: &Window, cx: &App) -> f32 {
   let collapsed = peeby_core::settings::Settings::get(cx).sidebar_collapsed;
   let available =
-    f32::from(window.viewport_size().width - theme::sidebar_width(collapsed)) - PAGE_PADDING - 8.;
+    f32::from(window.viewport_size().width - theme::shown_sidebar_width(window, collapsed))
+      - PAGE_PADDING
+      - 8.;
   let columns = ((available + GAP) / (STREAM_WIDTH + GAP)).floor().max(1.);
   ((available - GAP * (columns - 1.)) / columns).max(STREAM_WIDTH)
 }

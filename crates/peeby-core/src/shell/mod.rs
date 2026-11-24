@@ -1587,8 +1587,23 @@ impl Shell {
   // --- Sidebar ------------------------------------------------------------------------------
 
   /// The open space's entries; folded, each shows its icon alone with its label as a tooltip.
+  /// Folding and unfolding ease its width ([`theme::FAST`]) in the unfolded layout (the icons
+  /// stay put: 20 px from the edge unfolded, 19 px folded), the labels fading out in the first
+  /// half of a fold and in during the second half of an unfold; the folded layout comes once
+  /// the width gets there.
   fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-    let collapsed = Settings::get(cx).sidebar_collapsed;
+    let target = if Settings::get(cx).sidebar_collapsed {
+      1.
+    } else {
+      0.
+    };
+    let fold = motion::tween("sidebar-fold", target, target, theme::FAST, window, cx);
+    let collapsed = fold >= 1.;
+    let folding = fold > 0. && fold < 1.;
+    let labels = (1. - 2. * fold).clamp(0., 1.);
+    let width =
+      theme::SIDEBAR_WIDTH + (theme::SIDEBAR_COLLAPSED_WIDTH - theme::SIDEBAR_WIDTH) * fold;
+    theme::set_shown_sidebar_width(window, width);
     let entries = self
       .current()
       .map(|(tab, s)| s.menu(tab, cx))
@@ -1684,6 +1699,7 @@ impl Shell {
               v_flex()
                 .flex_1()
                 .min_w_0()
+                .opacity(labels)
                 // Tight lines: the detail (a live's category) sits close under the label.
                 .line_height(gpui::relative(1.25))
                 .child(div().truncate().child(entry.label))
@@ -1696,10 +1712,15 @@ impl Shell {
                 })),
             )
             .when(entry.live, |el| {
-              el.child(match entry.viewers {
-                Some(viewers) => live_viewers(viewers).into_any_element(),
-                None => live_pill().into_any_element(),
-              })
+              el.child(
+                div()
+                  .flex_none()
+                  .opacity(labels)
+                  .child(match entry.viewers {
+                    Some(viewers) => live_viewers(viewers).into_any_element(),
+                    None => live_pill().into_any_element(),
+                  }),
+              )
             })
           }
         })
@@ -1722,9 +1743,11 @@ impl Shell {
     let top: Vec<_> = top.into_iter().map(|e| item(e, window, cx)).collect();
     let bottom: Vec<_> = bottom.into_iter().map(|e| item(e, window, cx)).collect();
     v_flex()
-      .w(theme::sidebar_width(collapsed))
+      .w(width)
       .h_full()
       .flex_none()
+      // The labels go under the edge while it narrows; a hover card hangs out of it otherwise.
+      .when(folding, |el| el.overflow_hidden())
       .child(
         v_flex()
           .id("sidebar")

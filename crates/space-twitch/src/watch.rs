@@ -1153,6 +1153,8 @@ impl Render for WatchView {
       self.chat.clone().map(|chat| chat.into_any_element()),
       theater,
       chat_hidden,
+      window,
+      cx,
     )
   }
 }

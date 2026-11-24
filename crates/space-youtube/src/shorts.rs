@@ -555,7 +555,7 @@ fn short_size(comments_open: bool, window: &Window, cx: &App) -> (Pixels, Pixels
     0.
   };
   let wide = viewport.width
-    - theme::sidebar_width(Settings::get(cx).sidebar_collapsed)
+    - theme::shown_sidebar_width(window, Settings::get(cx).sidebar_collapsed)
     - px(2. * (GAP + ARROWS_WIDTH + GAP) + ACTIONS_WIDTH + GAP + panel);
   let height = tall.min(wide * (16. / 9.)).max(px(MIN_HEIGHT));
   (height * (9. / 16.), height)

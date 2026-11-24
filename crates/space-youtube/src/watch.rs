@@ -1878,13 +1878,16 @@ impl Render for WatchView {
         Some(panel.clone().into_any_element()),
         theater,
         chat_hidden,
+        window,
+        cx,
       );
     }
     let player = if theater {
       // Across the whole page on black, 16:9 but short enough to leave the title in view;
       // mpv letterboxes the picture inside.
       let viewport = window.viewport_size();
-      let width = viewport.width - theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
+      let width =
+        viewport.width - theme::shown_sidebar_width(window, Settings::get(cx).sidebar_collapsed);
       let room = viewport.height - theme::TITLE_BAR_HEIGHT - px(THEATER_BELOW);
       div()
         .w_full()

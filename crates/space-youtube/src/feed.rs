@@ -1323,7 +1323,7 @@ fn grid(window: &Window, cx: &gpui::App) -> (usize, f32) {
 
 /// The page's width between its margins.
 fn content_width(window: &Window, cx: &gpui::App) -> f32 {
-  let sidebar = theme::sidebar_width(Settings::get(cx).sidebar_collapsed);
+  let sidebar = theme::shown_sidebar_width(window, Settings::get(cx).sidebar_collapsed);
   f32::from(window.viewport_size().width - sidebar) - 2. * PAGE_MARGIN
 }
 
