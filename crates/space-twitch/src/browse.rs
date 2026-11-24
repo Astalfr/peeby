@@ -67,13 +67,13 @@ impl BrowseView {
 impl Render for BrowseView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let body = match &self.categories {
-      Some(Ok(categories)) => cards::wrap(
-        categories
+      Some(Ok(categories)) => {
+        let list = categories
           .iter()
           .map(|c| cards::category_card(c, &self.nav, window, cx))
-          .collect(),
-      )
-      .into_any_element(),
+          .collect();
+        cards::wrap("categories", list, window, cx).into_any_element()
+      }
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
       None => cards::loading().into_any_element(),
     };
@@ -127,13 +127,13 @@ impl Render for CategoryView {
         "Personne n'est en direct dans cette catégorie.",
       ))
       .into_any_element(),
-      Some(Ok((streams, avatars))) => cards::wrap(
-        streams
+      Some(Ok((streams, avatars))) => {
+        let list = streams
           .iter()
           .map(|s| cards::stream_card(s, width, avatars.get(&s.user_id), &self.nav, window, cx))
-          .collect(),
-      )
-      .into_any_element(),
+          .collect();
+        cards::wrap("streams", list, window, cx).into_any_element()
+      }
       Some(Err(error)) => cards::note(error.clone()).into_any_element(),
       None => cards::loading().into_any_element(),
     };

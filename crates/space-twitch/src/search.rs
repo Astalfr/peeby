@@ -116,19 +116,16 @@ impl Render for SearchView {
           .iter()
           .map(|c| cards::category_card(c, &self.nav, window, cx))
           .collect();
+        let (any_channels, any_categories) = (!channels.is_empty(), !categories.is_empty());
+        let channels = cards::wrap("channels", channels, window, cx);
+        let categories = cards::wrap("categories", categories, window, cx);
         v_flex()
           .gap_10()
-          .when(!channels.is_empty(), |el| {
-            el.child(cards::section(
-              t("Channels", "Chaînes"),
-              cards::wrap(channels),
-            ))
+          .when(any_channels, |el| {
+            el.child(cards::section(t("Channels", "Chaînes"), channels))
           })
-          .when(!categories.is_empty(), |el| {
-            el.child(cards::section(
-              t("Categories", "Catégories"),
-              cards::wrap(categories),
-            ))
+          .when(any_categories, |el| {
+            el.child(cards::section(t("Categories", "Catégories"), categories))
           })
           .into_any_element()
       }

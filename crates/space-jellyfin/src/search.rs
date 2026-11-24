@@ -133,6 +133,9 @@ impl Render for SearchView {
     };
     let title_cards = cards("titles", &titles, Shape::Poster, window);
     let episode_cards = cards("episodes", &episodes, Shape::Thumb, window);
+    let title_cards = ui::motion::cascade(cx.entity_id(), "titles", 0, title_cards, window, cx);
+    let episode_cards =
+      ui::motion::cascade(cx.entity_id(), "episodes", 0, episode_cards, window, cx);
     let empty = self.searched.is_some() && self.results.is_empty();
 
     v_flex()

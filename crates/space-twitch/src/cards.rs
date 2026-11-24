@@ -391,8 +391,15 @@ pub fn section(title: &str, content: impl IntoElement) -> impl IntoElement {
     .child(content)
 }
 
-/// Cards wrapping in rows.
-pub fn wrap(cards: Vec<AnyElement>) -> impl IntoElement {
+/// Cards wrapping in rows, coming in one after another the first time the page shows them
+/// (`key` tells a page's lists apart, `ui::motion::cascade`).
+pub fn wrap<V: 'static>(
+  key: &str,
+  cards: Vec<AnyElement>,
+  window: &mut Window,
+  cx: &mut gpui::Context<V>,
+) -> impl IntoElement + use<V> {
+  let cards = ui::motion::cascade(cx.entity_id(), key, 0, cards, window, cx);
   h_flex()
     .flex_wrap()
     .gap(px(GAP))

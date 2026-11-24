@@ -176,6 +176,11 @@ as the sidebar's hover cards already do. Check first what gpui-component's `Popo
 
 ### 12. A feed's first appearance
 
+Done (2026-11-24) for YouTube's feeds, not yet checked in the app: 12 px over 280 ms rather
+than 8 px over 200 ms (the popups were found too faint). A refresh builds the page again, so it
+plays again there. Twitch's and Jellyfin's grids take it too (`ui::motion::cascade`, keyed by
+view and list).
+
 The first screen of cards fades in rising 8 px, 25 ms apart (the first 12), as the list of lives'
 rows. Only when a feed loads for the first time in its tab: not on going back, refreshing or
 loading the next page.

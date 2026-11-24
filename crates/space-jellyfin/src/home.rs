@@ -505,6 +505,15 @@ impl Render for HomeView {
           )
         })
         .collect();
+      // Each row comes in as it arrives, a little after the one above it.
+      let cards = ui::motion::cascade(
+        cx.entity_id(),
+        &format!("row{index}"),
+        index * 2,
+        cards,
+        window,
+        cx,
+      );
       let row_view = scroll_row(format!("home-row-{index}"), cards, window, cx);
       rows = rows.child(
         v_flex()

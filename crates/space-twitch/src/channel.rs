@@ -302,8 +302,8 @@ impl Render for ChannelView {
         "Aucune rediffusion publique.",
       ))
       .into_any_element(),
-      Tab::Videos => cards::wrap(
-        loaded
+      Tab::Videos => {
+        let list = loaded
           .videos
           .iter()
           .map(|v| {
@@ -311,23 +311,23 @@ impl Render for ChannelView {
             let chapters = loaded.chapters.get(&v.id).map(Vec::as_slice);
             cards::video_card(v, position, chapters, width, &self.nav, window, cx)
           })
-          .collect(),
-      )
-      .into_any_element(),
+          .collect();
+        cards::wrap("videos", list, window, cx).into_any_element()
+      }
       Tab::Clips if self.clips_loading => ui::widgets::loading_more().into_any_element(),
       Tab::Clips if loaded.clips.is_empty() => cards::note(t(
         "No clips over this period.",
         "Aucun clip sur cette période.",
       ))
       .into_any_element(),
-      Tab::Clips => cards::wrap(
-        loaded
+      Tab::Clips => {
+        let list = loaded
           .clips
           .iter()
           .map(|c| cards::clip_card(c, width, &self.nav, window, cx))
-          .collect(),
-      )
-      .into_any_element(),
+          .collect();
+        cards::wrap("clips", list, window, cx).into_any_element()
+      }
       Tab::Schedule => match &loaded.schedule {
         Some(schedule) => schedule_list(schedule, window, cx).into_any_element(),
         None => cards::note(t("No schedule.", "Aucun planning.")).into_any_element(),

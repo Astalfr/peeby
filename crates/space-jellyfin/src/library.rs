@@ -194,6 +194,8 @@ impl Render for LibraryView {
                 )
               })
               .collect();
+            // The first screen comes in one card after another.
+            let cards = ui::motion::cascade(cx.entity_id(), "grid", start, cards, window, cx);
             h_flex()
               .h(px(poster_height(shape.width(), shape.aspect()) + GAP))
               .gap(px(layout.gap))

@@ -10,6 +10,7 @@
 
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
@@ -145,6 +146,9 @@ pub struct FeedView {
   shape: Option<Shape>,
   /// Opacity of the videos as they fade in over the skeleton, set on each render.
   fade: f32,
+  /// When the feed's first page came: its first cards come in one after another from then
+  /// ([`motion::cascade_at`]). Once per page built: a chip, a sort or the next page shows at once.
+  revealed: Option<Instant>,
   /// Width of a grid card, set on each render from the window.
   card_width: f32,
   logged_in: bool,
@@ -222,6 +226,7 @@ impl FeedView {
       list: ListState::new(0, ListAlignment::Top, OVERDRAW),
       shape: None,
       fade: 0.,
+      revealed: None,
       card_width: MIN_CARD_WIDTH,
       logged_in: false,
       message: None,
@@ -408,6 +413,9 @@ impl FeedView {
     }
     self.continuation = feed.continuation;
     self.state = State::Loaded;
+    if !more && self.revealed.is_none() && self.has_items() {
+      self.revealed = Some(Instant::now());
+    }
     match self.shape {
       // From the first item that changed, or the last row (it may take more cards now): the
       // new rows and shelves.
@@ -837,17 +845,28 @@ impl FeedView {
         .into_any_element();
     }
     let cards = &self.cards[start..(start + shape.per_item()).min(self.cards.len())];
+    // The first page's cards come in one after another (list rows: one per row).
+    let reveals: Vec<Option<(f32, f32)>> = (start..start + cards.len())
+      .map(|i| self.reveal_of(i, cx))
+      .collect();
+    if reveals.iter().any(Option::is_some) {
+      window.request_animation_frame();
+    }
     let row = if shape.list {
-      div().pb_2().child(match &cards[0] {
-        Related::Video(video) if self.dismissed.contains(&video.id) => {
-          self.dismissed_notice(video, None, cx)
-        }
-        Related::Video(video) => {
-          let not_interested = self.not_interested_action(video, cx);
-          video_row(video, &self.nav, not_interested, window, cx)
-        }
-        Related::Playlist(playlist) => playlist_result_row(playlist, &self.nav, window, cx),
-      })
+      let first = reveals.first().copied().flatten();
+      div().pb_2().child(motion::cascaded(
+        match &cards[0] {
+          Related::Video(video) if self.dismissed.contains(&video.id) => {
+            self.dismissed_notice(video, None, cx)
+          }
+          Related::Video(video) => {
+            let not_interested = self.not_interested_action(video, cx);
+            video_row(video, &self.nav, not_interested, window, cx)
+          }
+          Related::Playlist(playlist) => playlist_result_row(playlist, &self.nav, window, cx),
+        },
+        first,
+      ))
     } else {
       // `h_flex` centers its children vertically: cards whose title takes one line would sit
       // lower than their neighbors.
@@ -855,24 +874,27 @@ impl FeedView {
         .pb_8()
         .items_start()
         .gap_x_4()
-        .children(cards.iter().map(|card| match card {
-          Related::Video(video) if self.dismissed.contains(&video.id) => {
-            self.dismissed_notice(video, Some(self.card_width), cx)
-          }
-          Related::Video(video) => {
-            let not_interested = self.not_interested_action(video, cx);
-            video_card(
-              video,
-              self.card_width,
-              &self.nav,
-              not_interested,
-              window,
-              cx,
-            )
-          }
-          Related::Playlist(playlist) => {
-            playlist_grid_card(playlist, self.card_width, &self.nav, window, cx)
-          }
+        .children(cards.iter().enumerate().map(|(i, card)| {
+          let card = match card {
+            Related::Video(video) if self.dismissed.contains(&video.id) => {
+              self.dismissed_notice(video, Some(self.card_width), cx)
+            }
+            Related::Video(video) => {
+              let not_interested = self.not_interested_action(video, cx);
+              video_card(
+                video,
+                self.card_width,
+                &self.nav,
+                not_interested,
+                window,
+                cx,
+              )
+            }
+            Related::Playlist(playlist) => {
+              playlist_grid_card(playlist, self.card_width, &self.nav, window, cx)
+            }
+          };
+          motion::cascaded(card, reveals.get(i).copied().flatten())
         }))
     };
     // Room above the first row: a hovered card rises over its box, and the list clips it.
@@ -882,6 +904,11 @@ impl FeedView {
       .opacity(self.fade)
       .child(row)
       .into_any_element()
+  }
+
+  /// Where card `index` of the first page is in its entrance ([`motion::cascade_at`]).
+  fn reveal_of(&self, index: usize, cx: &gpui::App) -> Option<(f32, f32)> {
+    motion::cascade_at(self.revealed?, index, cx)
   }
 
   /// Loads the thumbnails of row `row`, at the size its cards (or list rows) draw them.

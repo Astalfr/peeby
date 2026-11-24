@@ -7,7 +7,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, ElementId, Window, div};
+use gpui::{AnyElement, App, ElementId, EntityId, SharedString, Window, div, px};
 
 use crate::theme;
 
@@ -130,4 +130,95 @@ pub fn crossfade(
       )
     })
     .into_any_element()
+}
+
+/// The cards of a page's first content come in one after another ([`cascade`]), this far
+/// apart…
+const CASCADE_STEP: Duration = Duration::from_millis(25);
+/// …the first ones only (the last of them brings the rest)…
+const CASCADE_STAGGERED: usize = 12;
+/// …each fading in as it rises this far, over this long.
+const CASCADE_RISE: f32 = 12.;
+const CASCADE: Duration = Duration::from_millis(280);
+/// Cascades remembered; past this they are forgotten (long over by then).
+const CASCADES_KEPT: usize = 1024;
+
+thread_local! {
+  /// When each view's cascades started, by the view and the cascade's key.
+  static CASCADES: std::cell::RefCell<std::collections::HashMap<(EntityId, SharedString), Instant>> =
+    std::cell::RefCell::default();
+}
+
+/// When `owner`'s cascade `key` started: the first time it is asked for. Once per view: a view
+/// built again (a refresh, a page far back in the history) is a new entity, so it cascades
+/// again; the same view shown again does not.
+pub fn cascade_start(owner: EntityId, key: &str) -> Instant {
+  CASCADES.with(|cascades| {
+    let mut cascades = cascades.borrow_mut();
+    if cascades.len() >= CASCADES_KEPT {
+      cascades.clear();
+    }
+    *cascades
+      .entry((owner, SharedString::from(key.to_owned())))
+      .or_insert_with(Instant::now)
+  })
+}
+
+/// Where card `index` of a cascade that started at `started` is: its opacity and how far below
+/// its place it is; `None` once in place, or with reduced motion.
+pub fn cascade_at(started: Instant, index: usize, cx: &App) -> Option<(f32, f32)> {
+  if cx.reduce_motion() {
+    return None;
+  }
+  let delay = CASCADE_STEP * index.min(CASCADE_STAGGERED - 1) as u32;
+  let t = started
+    .elapsed()
+    .checked_sub(delay)
+    .map_or(0., |age| age.as_secs_f32() / CASCADE.as_secs_f32());
+  if t >= 1. {
+    return None;
+  }
+  let eased = 1. - (1. - t).powi(3);
+  Some((eased, CASCADE_RISE * (1. - eased)))
+}
+
+/// `card` at its point of a cascade ([`cascade_at`]).
+pub fn cascaded(card: AnyElement, at: Option<(f32, f32)>) -> AnyElement {
+  match at {
+    Some((opacity, below)) => div()
+      .relative()
+      .top(px(below))
+      .opacity(opacity)
+      .child(card)
+      .into_any_element(),
+    None => card,
+  }
+}
+
+/// `cards` coming in one after another, from the first time `owner` shows its cascade `key`
+/// (docs/design.md, "First content"); `first` is the place of the first of them in the
+/// cascade (a later row of it). Asks for frames until they are in place.
+pub fn cascade(
+  owner: EntityId,
+  key: &str,
+  first: usize,
+  cards: Vec<AnyElement>,
+  window: &mut Window,
+  cx: &App,
+) -> Vec<AnyElement> {
+  let started = cascade_start(owner, key);
+  let mut moving = false;
+  let cards = cards
+    .into_iter()
+    .enumerate()
+    .map(|(i, card)| {
+      let at = cascade_at(started, first + i, cx);
+      moving |= at.is_some();
+      cascaded(card, at)
+    })
+    .collect();
+  if moving {
+    window.request_animation_frame();
+  }
+  cards
 }

@@ -199,7 +199,7 @@ impl Render for FollowingView {
           ))
           .into_any_element()
         } else {
-          cards::wrap(live).into_any_element()
+          cards::wrap("live", live, window, cx).into_any_element()
         };
         v_flex()
           .gap_10()
@@ -209,7 +209,7 @@ impl Render for FollowingView {
               cards::note(t("No channel matches.", "Aucune chaîne ne correspond."))
                 .into_any_element()
             } else {
-              cards::wrap(offline).into_any_element()
+              cards::wrap("offline", offline, window, cx).into_any_element()
             };
             el.child(cards::section(
               t("Offline", "Hors ligne"),
