@@ -19,8 +19,8 @@ use std::collections::HashMap;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter,
-  SharedString, Subscription, Window, div, ease_out_quint, px, rgb,
+  AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter, SharedString, Subscription,
+  Window, div, rgb,
 };
 use gpui_component::v_flex;
 use jellyfin_api::models::{BaseItem, CollectionType, User};
@@ -39,7 +39,8 @@ use library::LibraryView;
 use login::{LoggedIn, LoginView};
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::{
-  Avatar, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, route_key, route_parts,
+  Avatar, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, page_entrance, route_key,
+  route_parts,
 };
 use play::PlayView;
 use search::SearchView;
@@ -878,19 +879,7 @@ impl Render for JellyfinSpace {
     else {
       return div().size_full().into_any_element();
     };
-    let depth = t.position();
     let view = div().size_full().relative().child(view);
-    // A short fade and rise each time a page appears; not for the player (an external texture,
-    // and leaving fullscreen would replay the fade).
-    if playing || window.is_fullscreen() {
-      return view.into_any_element();
-    }
-    view
-      .with_animation(
-        SharedString::from(format!("page-{tab}-{depth}-{:?}", page.route)),
-        Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
-        |el, t| el.opacity(t).top(px(8. * (1. - t))),
-      )
-      .into_any_element()
+    page_entrance(view, page, t.came_back(), window, cx)
   }
 }

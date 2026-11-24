@@ -65,7 +65,7 @@ use multistream::MultistreamView;
 use peeby_core::settings::Settings;
 use peeby_core::shell::space::{
   Avatar, HoverCard, LiveEntry, Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs,
-  route_key, route_parts,
+  page_entrance, route_key, route_parts,
 };
 use search::SearchView;
 use session::Secrets;
@@ -1577,14 +1577,17 @@ impl Render for TwitchSpace {
     {
       t.set_view(view);
     }
-    match tab
-      .and_then(|tab| self.tabs.get(tab))
-      .and_then(|t| t.current())
-      .and_then(|page| page.view.clone())
-    {
-      Some(view) => div().size_full().child(view).into_any_element(),
-      None => div().size_full().into_any_element(),
-    }
+    let Some(t) = tab.and_then(|tab| self.tabs.get(tab)) else {
+      return div().size_full().into_any_element();
+    };
+    let Some((page, view)) = t
+      .current()
+      .and_then(|page| Some((page, page.view.clone()?)))
+    else {
+      return div().size_full().into_any_element();
+    };
+    let view = div().size_full().relative().child(view);
+    page_entrance(view, page, t.came_back(), window, cx)
   }
 }
 

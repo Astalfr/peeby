@@ -28,8 +28,8 @@ mod watch;
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter,
-  SharedString, WeakEntity, Window, div, ease_out_quint, px,
+  AnyElement, AnyView, App, Context, Entity, EntityId, EventEmitter, SharedString, WeakEntity,
+  Window, div,
 };
 use gpui_component::popover::PopoverState;
 use innertube::{Client, Cookies};
@@ -37,9 +37,9 @@ use ui::assets::Icon;
 use ui::i18n::t;
 use ui::images::Images;
 use ui::player::PlayerView;
+use ui::runtime;
 use ui::theme::Accent;
 use ui::widgets::Flash;
-use ui::{runtime, theme};
 
 use account::AccountView;
 use channels::ChannelsView;
@@ -47,7 +47,8 @@ use feed::{FeedView, Source};
 use peeby_core::settings;
 use peeby_core::settings::{Settings, StartPage};
 use peeby_core::shell::space::{
-  Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, route_key, route_parts,
+  Lives, MenuEntry, Page, Space, SpaceEvent, SpaceInfo, TabId, Tabs, page_entrance, route_key,
+  route_parts,
 };
 use playlists::{Kind, PlaylistView, PlaylistsView};
 use queue::Queue;
@@ -801,20 +802,8 @@ impl Render for YouTubeSpace {
     else {
       return div().size_full().into_any_element();
     };
-    let depth = t.position();
     let view = div().size_full().relative().child(view);
-    // A short fade and rise each time a page appears. Not on the watch and Shorts pages: their
-    // video surface is an external texture, and leaving fullscreen would replay the fade.
-    if page.route.plays() || window.is_fullscreen() {
-      return view.into_any_element();
-    }
-    view
-      .with_animation(
-        SharedString::from(format!("page-{tab}-{depth}-{:?}", page.route)),
-        Animation::new(theme::NORMAL).with_easing(ease_out_quint()),
-        |el, t| el.opacity(t).top(px(8. * (1. - t))),
-      )
-      .into_any_element()
+    page_entrance(view, page, t.came_back(), window, cx)
   }
 }
 

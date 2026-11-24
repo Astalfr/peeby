@@ -243,6 +243,9 @@ pub struct Page<R> {
   pub view: Option<AnyView>,
   /// The tab's label while this page shows (a video's title, once known).
   pub title: Option<SharedString>,
+  /// The view whose entrance played, and when it started ([`page_entrance`]): a view built
+  /// again plays it again, the same one never (leaving fullscreen, back from the mini-player).
+  entrance: std::cell::Cell<Option<(gpui::EntityId, std::time::Instant)>>,
 }
 
 impl<R> Page<R> {
@@ -252,6 +255,7 @@ impl<R> Page<R> {
       route,
       view: Some(view.into()),
       title: None,
+      entrance: std::cell::Cell::new(None),
     }
   }
 
@@ -261,6 +265,7 @@ impl<R> Page<R> {
       route,
       view: None,
       title: None,
+      entrance: std::cell::Cell::new(None),
     }
   }
 }
@@ -296,6 +301,8 @@ pub struct Tab<R> {
   entries: Vec<Entry<R>>,
   /// The entry shown; 0 while `entries` is empty.
   current: usize,
+  /// The entry shown was reached with "back": its page comes in from the left.
+  came_back: bool,
 }
 
 impl<R> Tab<R> {
@@ -334,9 +341,14 @@ impl<R> Tab<R> {
     matches!(self.current_entry(), Some(Entry::Settings))
   }
 
-  /// Where the entry shown is in the history (a page's animation key).
+  /// Where the entry shown is in the history.
   pub fn position(&self) -> usize {
     self.current
+  }
+
+  /// Whether the entry shown was reached with "back" ([`page_entrance`]).
+  pub fn came_back(&self) -> bool {
+    self.came_back
   }
 
   /// The route of the section the page shown belongs to (the sidebar entry lit): the last
@@ -387,6 +399,7 @@ impl<R> Tab<R> {
       self.entries.remove(0);
     }
     self.current = self.entries.len() - 1;
+    self.came_back = false;
     self.trim();
   }
 
@@ -436,6 +449,7 @@ impl<R> Tab<R> {
       page.view = None;
     }
     self.current -= 1;
+    self.came_back = true;
     true
   }
 
@@ -457,6 +471,7 @@ impl<R> Tab<R> {
       return false;
     }
     self.current += 1;
+    self.came_back = false;
     self.trim();
     true
   }
@@ -532,6 +547,7 @@ impl<R> Tabs<R> {
       id,
       entries: Vec::new(),
       current: 0,
+      came_back: false,
     };
     tab.reset(routes);
     if let Some(page) = tab.current_mut() {
@@ -548,6 +564,7 @@ impl<R> Tabs<R> {
       id,
       entries: vec![Entry::Settings],
       current: 0,
+      came_back: false,
     });
     id
   }
@@ -1074,6 +1091,48 @@ impl<T: Space> AnySpace for Entity<T> {
 /// A space as the shell holds it.
 pub type SpaceHandle = Rc<dyn AnySpace>;
 
+/// How far a page comes in from: from the left with "back", from the right otherwise.
+const SLIDE: f32 = 24.;
+
+/// `page`'s entrance as it appears in its tab (`view`, its view filling the content panel),
+/// docs/design.md "Page change": it fades in sliding 24 px the way the history went, from the
+/// right for a new page or "forward", from the left for "back" (`came_back`, from
+/// [`Tab::came_back`]). Once per view built: leaving fullscreen or coming back from the
+/// mini-player shows the same view, which does not play it again. Pages that play take it
+/// too: the video surface follows the page's opacity and place like any image. None in
+/// fullscreen (it counts as played) and with reduced motion.
+pub fn page_entrance<R>(
+  view: gpui::Div,
+  page: &Page<R>,
+  came_back: bool,
+  window: &mut Window,
+  cx: &App,
+) -> AnyElement {
+  use gpui::px;
+  let Some(id) = page.view.as_ref().map(AnyView::entity_id) else {
+    return view.into_any_element();
+  };
+  let started = match page.entrance.get() {
+    Some((shown, at)) if shown == id => at,
+    _ => {
+      let now = std::time::Instant::now();
+      page.entrance.set(Some((id, now)));
+      now
+    }
+  };
+  if window.is_fullscreen() || cx.reduce_motion() {
+    return view.into_any_element();
+  }
+  let t = started.elapsed().as_secs_f32() / ui::theme::NORMAL.as_secs_f32();
+  if t >= 1. {
+    return view.into_any_element();
+  }
+  window.request_animation_frame();
+  let t = gpui::ease_out_quint()(t);
+  let from = if came_back { -SLIDE } else { SLIDE };
+  view.opacity(t).left(px(from * (1. - t))).into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
   use gpui::WindowId;
@@ -1116,6 +1175,23 @@ mod tests {
     tab(&mut tabs, id).push(Page::unbuilt("search"));
     assert!(!tab(&mut tabs, id).can_go_forward());
     assert_eq!(routes(&tabs, id), vec!["search", "channel", "home"]);
+  }
+
+  #[test]
+  fn the_page_knows_the_way_it_came() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home"], None);
+    let came_back = |tabs: &Tabs<&str>| tabs.get(id).is_some_and(|t| t.came_back());
+    assert!(!came_back(&tabs));
+    tab(&mut tabs, id).push(Page::unbuilt("channel"));
+    assert!(!came_back(&tabs));
+    tab(&mut tabs, id).back();
+    assert!(came_back(&tabs));
+    tab(&mut tabs, id).forward();
+    assert!(!came_back(&tabs));
+    tab(&mut tabs, id).back();
+    tab(&mut tabs, id).push(Page::unbuilt("search"));
+    assert!(!came_back(&tabs));
   }
 
   #[test]

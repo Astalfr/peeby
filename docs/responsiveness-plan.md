@@ -140,6 +140,12 @@ These are overlays in [overlays.rs](../crates/ui/src/player/overlays.rs), not ne
 
 ### 9. Back and forward directions
 
+Done (2026-11-24), not yet checked in the app: `Tab::came_back` and `space::page_entrance`,
+shared by the three spaces (Twitch had no page entrance until now). A new page and "forward"
+slide in from the right rather than rise (the user's choice). The entrance plays once per view built
+(`Page::entrance` holds the view it played for), so the pages that play take it too: leaving
+fullscreen does not replay it.
+
 Pages fade in rising 8 px whatever the direction. Going back (ADR 0019's history, the mouse's side
 button), the page slides in 24 px from the left instead; forward and new pages keep rising. The
 direction is known where the shell moves in the tab's history.
