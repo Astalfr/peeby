@@ -450,6 +450,11 @@ impl<R> Tab<R> {
     }
     self.current -= 1;
     self.came_back = true;
+    // The page reached kept its view, whose entrance already played: it plays again, from
+    // the left ([`page_entrance`]).
+    if let Some(page) = self.current_mut() {
+      page.entrance.set(None);
+    }
     true
   }
 
@@ -1192,6 +1197,25 @@ mod tests {
     tab(&mut tabs, id).back();
     tab(&mut tabs, id).push(Page::unbuilt("search"));
     assert!(!came_back(&tabs));
+  }
+
+  #[test]
+  fn back_plays_the_entrance_again() {
+    let mut tabs: Tabs<&str> = Tabs::default();
+    let id = tabs.add(vec!["home"], None);
+    // "home" kept its view and played its entrance; "channel" is opened over it.
+    let played = Some((gpui::EntityId::from(1), std::time::Instant::now()));
+    tab(&mut tabs, id).current().unwrap().entrance.set(played);
+    tab(&mut tabs, id).push(Page::unbuilt("channel"));
+    tab(&mut tabs, id).back();
+    assert!(
+      tab(&mut tabs, id)
+        .current()
+        .unwrap()
+        .entrance
+        .get()
+        .is_none()
+    );
   }
 
   #[test]
