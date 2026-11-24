@@ -6,8 +6,8 @@
 use gpui::AnimationExt as _;
 use gpui::prelude::*;
 use gpui::{
-  AnyElement, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea, div,
-  linear_color_stop, linear_gradient, px,
+  AnyElement, App, Context, FontWeight, Pixels, Point, SharedString, Window, WindowControlArea,
+  div, linear_color_stop, linear_gradient, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
@@ -769,25 +769,7 @@ impl PlayerView {
         )
         .into_any_element()
     };
-    // Under what the controls draw at the top while they show (the embedded player's title
-    // bar, the page's top bar), moved with their fade as the "up next" card is.
-    let covered = self.layout.is_page() || self.has_title_bar();
-    let progress = self.controls_changed.map_or(1., |at| {
-      (at.elapsed().as_secs_f32() / super::CONTROLS_FADE.as_secs_f32()).min(1.)
-    });
-    let progress = if reduced { 1. } else { progress };
-    if progress < 1. {
-      window.request_animation_frame();
-    }
-    let shown = if covered && (show_ui || self.controls_fade_task.is_some()) {
-      gpui::ease_out_quint()(if self.controls_visible {
-        progress
-      } else {
-        1. - progress
-      })
-    } else {
-      0.
-    };
+    let shown = self.under_top_bar(show_ui, window, cx);
     let (low, high) = NOW_PLAYING_TOP;
     Some(
       // Clipped at the player's left edge: the page beside it never shows the card.
@@ -801,6 +783,30 @@ impl PlayerView {
         .child(card)
         .into_any_element(),
     )
+  }
+
+  /// How far a card at the top of the picture is pushed down under what the controls draw
+  /// there while they show (the embedded player's title bar, the page's top bar), 0 to 1:
+  /// moved with their fade (its length, its curve), as the "up next" card is, so that both go
+  /// together; drawn again at each frame meanwhile.
+  pub(super) fn under_top_bar(&self, show_ui: bool, window: &mut Window, cx: &App) -> f32 {
+    let covered = self.layout.is_page() || self.has_title_bar();
+    let progress = self.controls_changed.map_or(1., |at| {
+      (at.elapsed().as_secs_f32() / super::CONTROLS_FADE.as_secs_f32()).min(1.)
+    });
+    let progress = if cx.reduce_motion() { 1. } else { progress };
+    if progress < 1. {
+      window.request_animation_frame();
+    }
+    if covered && (show_ui || self.controls_fade_task.is_some()) {
+      gpui::ease_out_quint()(if self.controls_visible {
+        progress
+      } else {
+        1. - progress
+      })
+    } else {
+      0.
+    }
   }
 
   /// The keyboard shortcuts (?).

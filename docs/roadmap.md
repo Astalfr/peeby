@@ -455,6 +455,22 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   memberships (none in the saved responses); the comments of a live page do not load more on scroll (its
   layout scrolls on its own).
 
+## Cards and end screens
+
+- Done (2026-11-25, [ADR 0042](decisions/0042-cards-and-end-screens.md)): a video's cards (from
+  `next`) slide in at the top right of the player at their time for 6 s and are listed under the
+  unfolded description ("Cards" / "Fiches"); the YouTube setting "Cards" (`cards`, on by
+  default) turns the teasers off, applied at once to open pages; its end screen (from the watch page's
+  `ytInitialPlayerResponse`, asked for once playback has started) is drawn over the picture in
+  its last seconds, placed on the picture without mpv's letterbox bars. A click follows the link
+  as the description's would. Shared player: `Teaser` and `Hotspot` ([player/hotspots.md](player/hotspots.md)).
+  Links of cards given without their scheme (`groundnews.com/…`) now open. 4 new tests on 3 new
+  anonymous fixtures (a video card, a channel and a site card, an end screen with a channel, a
+  video and a site); `smoke` checks `end_screen` live (3 elements). **Not verified:** in the
+  running app (teasers, the end screen's place and clicks, the list); whether the signed-in
+  `tracking` answer carries the end screen (it would spare the watch page); a playlist element
+  (none in the samples).
+
 ## Members-only videos
 
 - Done (2026-11-06): cards of members-only videos show a star and "Réservé aux membres" at the thumbnail's

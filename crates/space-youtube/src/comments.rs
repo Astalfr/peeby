@@ -1014,23 +1014,42 @@ impl Links {
   /// A timestamp of this video seeks (and scrolls the player into view), YouTube pages open in
   /// the tab, other sites in the browser.
   fn follow(&self, target: LinkTarget, window: &mut Window, cx: &mut App) {
-    match target {
-      LinkTarget::Video { id, start } if id == self.video_id => {
-        let seconds = f64::from(start.unwrap_or(0));
-        self
-          .player
-          .update(cx, |player, cx| player.seek_to(seconds, cx));
-        if let Some(scroll) = &self.scroll {
-          scroll.set_offset(point(px(0.), px(0.)));
-        }
+    follow(
+      target,
+      &self.video_id,
+      &self.nav,
+      &self.player,
+      self.scroll.as_ref(),
+      window,
+      cx,
+    );
+  }
+}
+
+/// Follows a link of the page of `video_id` (its description, a comment, a card, its end
+/// screen): a timestamp of this video seeks `player` (and scrolls `scroll` back to its top,
+/// where the player is), YouTube pages open in the tab, other sites in the browser.
+pub fn follow(
+  target: LinkTarget,
+  video_id: &str,
+  nav: &Nav,
+  player: &Entity<PlayerView>,
+  scroll: Option<&ScrollHandle>,
+  window: &mut Window,
+  cx: &mut App,
+) {
+  match target {
+    LinkTarget::Video { id, start } if id == video_id => {
+      let seconds = f64::from(start.unwrap_or(0));
+      player.update(cx, |player, cx| player.seek_to(seconds, cx));
+      if let Some(scroll) = scroll {
+        scroll.set_offset(point(px(0.), px(0.)));
       }
-      LinkTarget::Video { id, .. } => self.nav.open(Route::Watch(id), window, cx),
-      LinkTarget::Channel { id, name } => self.nav.open(Route::Channel { id, name }, window, cx),
-      LinkTarget::Playlist { id, title } => {
-        self.nav.open(Route::Playlist { id, title }, window, cx)
-      }
-      LinkTarget::Url(url) | LinkTarget::Page(url) => cx.open_url(&url),
     }
+    LinkTarget::Video { id, .. } => nav.open(Route::Watch(id), window, cx),
+    LinkTarget::Channel { id, name } => nav.open(Route::Channel { id, name }, window, cx),
+    LinkTarget::Playlist { id, title } => nav.open(Route::Playlist { id, title }, window, cx),
+    LinkTarget::Url(url) | LinkTarget::Page(url) => cx.open_url(&url),
   }
 }
 

@@ -120,6 +120,17 @@ pub fn part(
         )
         .into_any_element(),
         row(
+          t("Cards", "Fiches"),
+          t(
+            "The links a creator places at a moment of the video slide in at the player's top right. They stay listed under the description either way.",
+            "Les liens qu'un créateur place à un moment de la vidéo apparaissent en haut à droite du lecteur. Ils restent listés sous la description dans tous les cas.",
+          ),
+          toggle("cards", settings.cards, |on, cx| {
+            Settings::update(cx, |s| s.cards = on)
+          }),
+        )
+        .into_any_element(),
+        row(
           t("Default quality", "Qualité par défaut"),
           t(
             "Highest quality when a video starts; the player's menu changes it at any time. \

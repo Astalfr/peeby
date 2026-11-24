@@ -1,6 +1,6 @@
 //! The video player shared by every space: picture, auto-hiding controls (seek bar with
 //! previews and chapters, volume, buttons, quality, audio, subtitle and chapter menus), skip
-//! button, "up next" card, OSD, shortcut help and keyboard shortcuts. It plays a [`Source`] and
+//! button, "up next" card, a space's teasers and hotspots (`hotspots.rs`), OSD, shortcut help and keyboard shortcuts. It plays a [`Source`] and
 //! tells its page what happens through [`PlayerEvent`]s; it reads no setting itself. Embedded in
 //! a page ([`Layout::Embedded`], YouTube), filling a page of its own ([`Layout::Page`], Jellyfin)
 //! or the window ([`Layout::Window`], the example); fills the window in fullscreen. Controls and
@@ -8,6 +8,7 @@
 
 mod catch_up;
 pub mod chapter_list;
+mod hotspots;
 mod overlays;
 mod running;
 pub mod segments;
@@ -15,6 +16,7 @@ mod source;
 mod stats;
 mod tracks;
 
+pub use hotspots::{Hotspot, OnPick, TEASER_FOR, Teaser};
 pub use overlays::format_step;
 pub use running::{Owner, RunningPlayer, running};
 pub use source::{Author, LIVE_DELAY, LiveInfo, Previews, Quality, Rewind, Source, Subtitle, Tile};
@@ -442,6 +444,12 @@ pub struct PlayerView {
   /// The next item, offered in the "up next" card near the end.
   up_next_item: Option<UpNextItem>,
   up_next: UpNext,
+  /// Links announced at moments of the video ([`Self::set_teasers`]).
+  teasers: Vec<Teaser>,
+  /// Boxes over the picture ([`Self::set_hotspots`]).
+  hotspots: Vec<Hotspot>,
+  /// The picture's width over its height, read from mpv when hotspots first show.
+  video_aspect: Option<f32>,
   countdown_task: Option<Task<()>>,
   /// The video announced at the top left as it starts, a playlist's next one
   /// ([`Self::announce`]), and where its card is.
@@ -649,6 +657,9 @@ impl PlayerView {
       muted_at: None,
       up_next_item: None,
       up_next: UpNext::Hidden,
+      teasers: Vec::new(),
+      hotspots: Vec::new(),
+      video_aspect: None,
       countdown_task: None,
       announced: None,
       announce_task: None,
@@ -4396,7 +4407,10 @@ impl Render for PlayerView {
     } else {
       None
     };
+    let hotspots = self.render_hotspots(window, cx);
     root = root
+      .children(hotspots)
+      .children(self.render_teaser(show_ui, window, cx))
       .children(skip)
       .children(up_next)
       .children(self.render_now_playing(show_ui, window, cx));

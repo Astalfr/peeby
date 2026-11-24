@@ -30,7 +30,8 @@ use gpui_component::skeleton::Skeleton;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{Selectable, h_flex, v_flex};
 use innertube::{
-  Client, LikeStatus, Related, SponsorCategory, SponsorSegment, TextLink, Votes, WatchPage,
+  Client, EndScreenItem, EndScreenKind, InfoCard, LikeStatus, LinkTarget, Related, SponsorCategory,
+  SponsorSegment, TextLink, Votes, WatchPage,
 };
 
 use crate::cards::{compact_card, playlist_compact_card, playlist_row};
@@ -53,7 +54,7 @@ use ui::images::Images;
 use ui::lazy::Lazy;
 use ui::picture::image_fill;
 use ui::player::segments::{Segment, SegmentKind};
-use ui::player::{PlayerEvent, PlayerView, Prefs, UpNextItem};
+use ui::player::{Hotspot, OnPick, PlayerEvent, PlayerView, Prefs, Teaser, UpNextItem};
 use ui::selectable::SelectableText;
 use ui::{runtime, theme};
 
@@ -73,6 +74,8 @@ const QUEUE_BEFORE: usize = 50;
 const QUEUE_AFTER: usize = 150;
 /// Lines of the description shown until it is expanded.
 const DESCRIPTION_LINES: usize = 4;
+/// A card's thumbnail in the description, logical pixels (16:9; an avatar is its height).
+const CARD_THUMB: (f32, f32) = (112., 63.);
 /// Theater mode: height left under the player for the start of the title, and the player's
 /// least height.
 const THEATER_BELOW: f32 = 120.;
@@ -110,6 +113,14 @@ pub struct WatchView {
   scroll: ScrollHandle,
   /// The related videos far out of view are not built.
   lazy: Lazy,
+  /// Playback has started ([`PlayerEvent::Started`]).
+  started: bool,
+  /// Whether the player was given the cards' teasers (the setting "Cards"), once it was.
+  teasers_shown: Option<bool>,
+  /// The page is a live's: no end screen.
+  page_live: bool,
+  /// The end screen was asked for ([`Self::load_end_screen`]).
+  end_screen_asked: bool,
   /// The playlist being played, if any.
   queue: Option<Entity<Queue>>,
   queue_scroll: ScrollHandle,
@@ -197,15 +208,20 @@ impl WatchView {
               queue.update(cx, |q, cx| q.previous(cx));
             }
           }
+          PlayerEvent::Started => {
+            this.started = true;
+            this.load_end_screen(cx);
+          }
           // Reported by `history`; the embedded player has no close button.
-          PlayerEvent::Started
-          | PlayerEvent::Paused(_)
+          PlayerEvent::Paused(_)
           | PlayerEvent::Seeked
           | PlayerEvent::TracksChanged { .. }
           | PlayerEvent::Rewound { .. }
           | PlayerEvent::Close => {}
         }
       }),
+      // The setting "Cards" applies at once.
+      cx.observe_global::<Settings>(|this, cx| this.update_teasers(cx)),
     ];
     let queue_scroll = ScrollHandle::new();
     if let Some(queue) = &queue {
@@ -261,6 +277,10 @@ impl WatchView {
       rating: Rating::default(),
       comments,
       lazy: Lazy::new(scroll.clone()),
+      started: false,
+      teasers_shown: None,
+      page_live: false,
+      end_screen_asked: false,
       scroll,
       description_open: false,
       hovered_link: None,
@@ -603,6 +623,7 @@ impl WatchView {
         player.set_chapters(chapters, cx);
       }
     });
+    self.page_live = page.live_chat.is_some();
     self.rating = Rating::of(&page);
     if let Some(continuation) = page.live_chat.clone() {
       self.start_chat(continuation, page.channel_handle.clone(), cx);
@@ -610,7 +631,124 @@ impl WatchView {
     let token = page.comments_continuation.clone();
     self.comments.update(cx, |c, cx| c.start(token, cx));
     self.page = Some(page);
+    self.update_teasers(cx);
+    self.load_end_screen(cx);
     cx.notify();
+  }
+
+  /// What a click on a card or an end screen's element does: as the same link in the
+  /// description.
+  fn on_pick(&self, target: LinkTarget) -> OnPick {
+    let (video_id, nav, player, scroll) = (
+      self.video_id.clone(),
+      self.nav.clone(),
+      self.player.clone(),
+      self.scroll.clone(),
+    );
+    Rc::new(move |window, cx| {
+      crate::comments::follow(
+        target.clone(),
+        &video_id,
+        &nav,
+        &player,
+        Some(&scroll),
+        window,
+        cx,
+      );
+    })
+  }
+
+  /// The cards' teasers over the player, when the setting "Cards" is on (`None`: not given
+  /// yet); again when it changes.
+  fn update_teasers(&mut self, cx: &mut Context<Self>) {
+    let Some(page) = &self.page else { return };
+    let on = Settings::get(cx).cards;
+    if self.teasers_shown == Some(on) {
+      return;
+    }
+    self.teasers_shown = Some(on);
+    let teasers = if on {
+      page.cards.iter().map(|card| self.teaser(card)).collect()
+    } else {
+      Vec::new()
+    };
+    self
+      .player
+      .update(cx, |player, cx| player.set_teasers(teasers, cx));
+  }
+
+  /// A card's teaser over the player: the creator's words, the card's title under them when
+  /// they differ.
+  fn teaser(&self, card: &InfoCard) -> Teaser {
+    let subtitle = if card.teaser == card.title {
+      card.subtitle.clone()
+    } else {
+      Some(card.title.clone())
+    };
+    Teaser {
+      at: card.start,
+      title: card.teaser.clone().into(),
+      subtitle: subtitle.map(Into::into),
+      picture: (!card.thumbnails.is_empty()).then(|| convert::picture(&card.thumbnails)),
+      round: matches!(card.target, LinkTarget::Channel { .. }),
+      on_click: self.on_pick(card.target.clone()),
+    }
+  }
+
+  /// An end screen's element over the player.
+  fn hotspot(&self, item: &EndScreenItem) -> Hotspot {
+    Hotspot {
+      start: item.start,
+      end: item.end,
+      left: item.left,
+      top: item.top,
+      width: item.width,
+      aspect_ratio: item.aspect_ratio,
+      title: item.title.clone().into(),
+      subtitle: item
+        .subtitle
+        .as_deref()
+        .and_then(|s| s.lines().next())
+        .map(|s| s.to_owned().into()),
+      badge: item.length.clone().map(Into::into),
+      picture: (!item.thumbnails.is_empty()).then(|| convert::picture(&item.thumbnails)),
+      round: matches!(item.kind, EndScreenKind::Channel | EndScreenKind::Link),
+      on_click: self.on_pick(item.target.clone()),
+    }
+  }
+
+  /// The video's end screen, from its watch page (about 2 MB): asked for once, when both the
+  /// page is known (not a live) and playback has started, so that it never slows the start
+  /// down and is there long before the end. A failure leaves the video without.
+  fn load_end_screen(&mut self, cx: &mut Context<Self>) {
+    if self.end_screen_asked
+      || !self.started
+      || self.page.is_none()
+      || self.page_live
+      || self.player.read(cx).is_live()
+    {
+      return;
+    }
+    self.end_screen_asked = true;
+    let (client, id) = (self.client.clone(), self.video_id.clone());
+    cx.spawn(async move |this, cx| {
+      let fetch = cx.update(|cx| runtime::spawn(cx, async move { client.end_screen(&id).await }));
+      let result = fetch.await;
+      this
+        .update(cx, |this, cx| match result {
+          Some(Ok(items)) => {
+            tracing::debug!("end screen: {} elements", items.len());
+            let hotspots = items.iter().map(|item| this.hotspot(item)).collect();
+            this
+              .player
+              .update(cx, |player, cx| player.set_hotspots(hotspots, cx));
+          }
+          Some(Err(e)) => tracing::warn!("end screen: {e}"),
+          None => {}
+        })
+        .ok();
+    })
+    .detach();
   }
 
   fn load_votes(&self, cx: &mut Context<Self>) {
@@ -1046,6 +1184,74 @@ impl WatchView {
       )
   }
 
+  /// A card in the description: its picture, title and subtitle, the moment it shows; a click
+  /// follows it.
+  fn card_row(
+    &self,
+    index: usize,
+    card: &InfoCard,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let round = matches!(card.target, LinkTarget::Channel { .. });
+    let picture = (!card.thumbnails.is_empty()).then(|| convert::picture(&card.thumbnails));
+    let thumbnail = div()
+      .w(px(CARD_THUMB.0))
+      .h(px(CARD_THUMB.1))
+      .flex_none()
+      .flex()
+      .items_center()
+      .justify_center()
+      .children(picture.map(|p| {
+        if round {
+          ui::picture::avatar(&p, CARD_THUMB.1, window, cx)
+        } else {
+          image_fill(
+            &p,
+            CARD_THUMB.0,
+            CARD_THUMB.0 / CARD_THUMB.1,
+            px(6.),
+            window,
+            cx,
+          )
+        }
+      }));
+    let on_click = self.on_pick(card.target.clone());
+    h_flex()
+      .id(SharedString::from(format!("card-{index}")))
+      .gap_3()
+      .p_1()
+      .rounded(theme::RADIUS)
+      .cursor_pointer()
+      .hover(|s| s.bg(theme::surface_hover()))
+      .on_click(move |_, window, cx| on_click(window, cx))
+      .child(thumbnail)
+      .child(
+        v_flex()
+          .flex_1()
+          .min_w_0()
+          .child(
+            div()
+              .font_weight(FontWeight::SEMIBOLD)
+              .line_clamp(2)
+              .child(card.title.clone()),
+          )
+          .children(
+            card
+              .subtitle
+              .clone()
+              .map(|s| div().text_color(theme::muted()).truncate().child(s)),
+          )
+          .children(
+            card
+              .length
+              .clone()
+              .map(|l| div().text_xs().text_color(theme::muted()).child(l)),
+          ),
+      )
+      .into_any_element()
+  }
+
   fn details(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
     let Some(page) = &self.page else {
       return skeleton_details(self.seed.as_ref(), window, cx);
@@ -1141,7 +1347,25 @@ impl WatchView {
         ))
         .into_any_element()
     };
-    let toggle = long.then(|| {
+    // The cards, under the unfolded description (folded, it says it has more).
+    let cards = (self.description_open && !page.cards.is_empty()).then(|| {
+      v_flex()
+        .pt_3()
+        .gap_2()
+        .child(
+          div()
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(t("Cards", "Fiches")),
+        )
+        .children(
+          page
+            .cards
+            .iter()
+            .enumerate()
+            .map(|(i, card)| self.card_row(i, card, window, cx)),
+        )
+    });
+    let toggle = (long || !page.cards.is_empty()).then(|| {
       h_flex().child(
         Button::new("description-toggle")
           .ghost()
@@ -1252,6 +1476,7 @@ impl WatchView {
           .text_sm()
           .child(div().font_weight(FontWeight::SEMIBOLD).child(stats))
           .child(description)
+          .children(cards)
           .children(toggle),
       )
   }

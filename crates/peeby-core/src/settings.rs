@@ -116,6 +116,9 @@ pub struct Settings {
   pub original_titles: bool,
   /// YouTube's Shorts shelves between the videos of Home and the subscriptions.
   pub feed_shorts: bool,
+  /// A video's cards slide in over the player at their time (on by default; they stay listed
+  /// under the description either way).
+  pub cards: bool,
   /// Player volume, 0–100, kept when `player.remember_volume` is on.
   pub volume: f64,
   /// Player muted.
@@ -534,6 +537,7 @@ impl Default for Settings {
       max_height: 1080,
       original_titles: true,
       feed_shorts: true,
+      cards: true,
       volume: 100.0,
       muted: false,
       subscriptions_layout: FeedLayout::Grid,
