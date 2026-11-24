@@ -144,7 +144,14 @@ impl WatchView {
     let seed = seed::take(&video_id, cx);
     if let Some(seed) = &seed {
       let poster = convert::picture(&seed.thumbnails);
-      player.update(cx, |player, cx| player.set_poster(Some(poster), cx));
+      // Opened by a click on its card: the poster grows from it into the player.
+      let launch = ui::card::take_launch(window);
+      player.update(cx, |player, cx| {
+        player.set_poster(Some(poster), cx);
+        if let Some(launch) = launch {
+          player.fly_poster_from(launch, cx);
+        }
+      });
     }
     let focus = player.read(cx).focus_handle().clone();
     window.focus(&focus, cx);

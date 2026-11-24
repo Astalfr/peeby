@@ -228,6 +228,46 @@ fn surface_pressed(base: Hsla, hover: f32, press: f32) -> Hsla {
     .blend(theme::surface_pressed().opacity(press))
 }
 
+/// A click's launch is taken by a page built within this long of it, else it is stale (a page
+/// opened later, by another way, does not fly from an old click).
+const LAUNCH_FRESH: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Where a clicked card's picture was (docs/responsiveness-plan.md, item 15): the page it opens
+/// grows its poster from there (`PlayerView::fly_poster_from`).
+#[derive(Clone, Copy, Debug)]
+pub struct Launch {
+  /// The picture's bounds in its window, when clicked.
+  pub bounds: gpui::Bounds<Pixels>,
+  /// Its corner radius.
+  pub radius: Pixels,
+  window: gpui::WindowId,
+  at: std::time::Instant,
+}
+
+thread_local! {
+  static LAUNCH: Cell<Option<Launch>> = const { Cell::new(None) };
+}
+
+fn launch(bounds: gpui::Bounds<Pixels>, radius: Pixels, window: &Window) {
+  if bounds.size.width <= px(0.) {
+    return;
+  }
+  LAUNCH.set(Some(Launch {
+    bounds,
+    radius,
+    window: window.window_handle().window_id(),
+    at: std::time::Instant::now(),
+  }));
+}
+
+/// The launch of the card just clicked in `window`, once; none past [`LAUNCH_FRESH`] or from
+/// another window.
+pub fn take_launch(window: &Window) -> Option<Launch> {
+  LAUNCH
+    .take()
+    .filter(|l| l.window == window.window_handle().window_id() && l.at.elapsed() < LAUNCH_FRESH)
+}
+
 /// Darkens a card's picture while it is pressed (`press` from [`Hover`]): laid over the
 /// picture, under its badges and buttons.
 pub fn press_shade(radius: Pixels, press: f32) -> Option<gpui::Div> {
@@ -288,6 +328,8 @@ pub struct MediaCard {
   on_middle_click: Option<Rc<Handler>>,
   on_hover: Option<Box<HoverHandler>>,
   scrub: Option<Scrub>,
+  /// The picture's corner radius, as last drawn, for a click's launch.
+  picture_radius: Rc<Cell<Pixels>>,
 }
 
 impl MediaCard {
@@ -325,6 +367,7 @@ impl MediaCard {
       on_middle_click: None,
       on_hover: None,
       scrub: None,
+      picture_radius: Rc::default(),
     }
   }
 
@@ -497,11 +540,16 @@ impl MediaCard {
     let on_click = self.on_click.take();
     let on_middle_click = self.on_middle_click.take();
     let frame = div().id(ElementId::Name(self.id.clone())).cursor_pointer();
+    let (picture, radius) = (self.hover.picture.clone(), self.picture_radius.clone());
     self
       .hover
       .track(frame, on_hover)
       .when_some(on_click, |el, on_click| {
-        el.on_click(move |_, window, cx| on_click(window, cx))
+        el.on_click(move |_, window, cx| {
+          // Where the picture was, for the page it opens to grow it from ([`take_launch`]).
+          launch(picture.get(), radius.get(), window);
+          on_click(window, cx)
+        })
       })
       .when_some(on_middle_click, |el, on_click| {
         el.on_aux_click(move |event, window, cx| {
@@ -561,6 +609,7 @@ impl MediaCard {
     }
     let scrubbing = frame.is_some();
     let play = play.filter(|_| self.play && !scrubbing);
+    self.picture_radius.set(radius);
     // A stack's layers: narrower, peeking out above the picture, as on the playlists page.
     // They hang out of the box (a margin makes room for them), so that what the layouts put on
     // the box (a hover ring, a shadow) stays on the picture. Painted first, the picture covers
@@ -613,15 +662,16 @@ impl MediaCard {
             ),
         )
       })
+      // The picture's bounds, for the scrub and for a click's launch ([`take_launch`]).
+      .child({
+        let painted = self.hover.picture.clone();
+        gpui::canvas(move |b, _, _| painted.set(b), |_, _, _, _| {})
+          .absolute()
+          .inset_0()
+      })
       .when(scrub.is_some(), |el| {
         let (bounds, at) = (self.hover.picture.clone(), self.hover.scrub_at.clone());
-        let painted = bounds.clone();
-        el.child(
-          gpui::canvas(move |b, _, _| painted.set(b), |_, _, _, _| {})
-            .absolute()
-            .inset_0(),
-        )
-        .on_mouse_move(move |event, window, cx| {
+        el.on_mouse_move(move |event, window, cx| {
           let b = bounds.get();
           let width = f32::from(b.size.width);
           // Off the picture (onto the title): the picture comes back.

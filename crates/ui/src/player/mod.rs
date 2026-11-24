@@ -51,6 +51,17 @@ const CONTROLS_FADE: Duration = Duration::from_millis(200);
 /// Widest a poster is asked for ([`PlayerView::set_poster`]), as a large card: it shows a
 /// second at most, under the spinner.
 const POSTER_WIDTH: f32 = 640.;
+/// The poster growing from the card clicked to the player ([`PlayerView::fly_poster_from`]).
+const FLIGHT: Duration = Duration::from_millis(250);
+
+/// The poster's flight from a card ([`PlayerView::fly_poster_from`]).
+struct Flight {
+  /// The card's picture, in the window, and its corner radius.
+  from: Bounds<Pixels>,
+  radius: Pixels,
+  /// When it left: the first frame the player knew its own place.
+  started: Cell<Option<Instant>>,
+}
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
 /// How long a seek by key shows beside the picture's edge ([`SeekPulse`]).
@@ -369,6 +380,8 @@ pub struct PlayerView {
   /// Shown over the black picture until mpv's first frame, then faded out: the card's
   /// thumbnail, so the click lands on the video it showed ([`Self::set_poster`]).
   poster: Option<Picture>,
+  /// The poster growing from its card into place, once.
+  flight: Option<Flight>,
   /// The window the page shows in, from the last render (the mini-player draws only the
   /// picture, never this view): its other players pause when this one starts.
   window: Option<WindowId>,
@@ -577,6 +590,7 @@ impl PlayerView {
       layout: Layout::Embedded,
       in_pip: false,
       poster: None,
+      flight: None,
       window: None,
       subtitle: SharedString::default(),
       tracks: Vec::new(),
@@ -1507,6 +1521,18 @@ impl PlayerView {
   /// The picture shown until the first frame (a card's thumbnail), or none.
   pub fn set_poster(&mut self, poster: Option<Picture>, cx: &mut Context<Self>) {
     self.poster = poster.filter(|p| !p.is_empty());
+    cx.notify();
+  }
+
+  /// The poster grows from the card clicked ([`crate::card::take_launch`]) to the player's
+  /// place before it rests there (docs/design.md, "Watch page opening"). Never in fullscreen,
+  /// with reduced motion or once the first frame is there: it never holds back the video.
+  pub fn fly_poster_from(&mut self, launch: crate::card::Launch, cx: &mut Context<Self>) {
+    self.flight = Some(Flight {
+      from: launch.bounds,
+      radius: launch.radius,
+      started: Cell::new(None),
+    });
     cx.notify();
   }
 
@@ -3911,8 +3937,43 @@ impl PlayerView {
     if shown <= 0. {
       return None;
     }
+    let target = self.bounds.get();
     // Asked at a card's size: the thumbnail its card loaded is likely in the image cache.
-    let width = f32::from(self.bounds.get().size.width).clamp(1., POSTER_WIDTH);
+    let mut width = f32::from(target.size.width).clamp(1., POSTER_WIDTH);
+    if let Some(flight) = &self.flight {
+      // The card's own image (loaded at its width) flies, and stays until the larger one is
+      // there: never a flat surface in between.
+      let card_width = f32::from(flight.from.size.width).max(1.);
+      if !picture::is_loaded(poster, width, 16. / 9., window, cx) {
+        width = card_width;
+      }
+      if let Some((bounds, radius)) = self.flight_at(framed, target, radii.top_left, window, cx) {
+        window.request_animation_frame();
+        return Some(
+          gpui::deferred(
+            gpui::anchored()
+              .position_mode(gpui::AnchoredPositionMode::Window)
+              .position(bounds.origin)
+              .child(
+                div()
+                  .w(bounds.size.width)
+                  .h(bounds.size.height)
+                  .rounded(radius)
+                  .shadow_lg()
+                  .child(picture::image_fill(
+                    poster,
+                    card_width,
+                    16. / 9.,
+                    radius,
+                    window,
+                    cx,
+                  )),
+              ),
+          )
+          .into_any_element(),
+        );
+      }
+    }
     Some(
       div()
         .absolute()
@@ -3933,6 +3994,42 @@ impl PlayerView {
         ))
         .into_any_element(),
     )
+  }
+
+  /// Where the flying poster is ([`Self::fly_poster_from`]), toward `target` (the player's place
+  /// at the last frame, whose corners are `to_radius`), and its corner radius; `None` once
+  /// landed, or when it does not fly.
+  fn flight_at(
+    &self,
+    framed: bool,
+    target: Bounds<Pixels>,
+    to_radius: Pixels,
+    window: &Window,
+    cx: &App,
+  ) -> Option<(Bounds<Pixels>, Pixels)> {
+    let flight = self.flight.as_ref()?;
+    if framed || window.is_fullscreen() || cx.reduce_motion() {
+      return None;
+    }
+    // Not laid out yet: still on the card. The clock starts once the place is known.
+    if target.size.width <= px(0.) {
+      return flight
+        .started
+        .get()
+        .is_none()
+        .then_some((flight.from, flight.radius));
+    }
+    let started = flight.started.get().unwrap_or_else(Instant::now);
+    flight.started.set(Some(started));
+    let t = started.elapsed().as_secs_f32() / FLIGHT.as_secs_f32();
+    if t >= 1. {
+      return None;
+    }
+    Some(in_flight(
+      (flight.from, flight.radius),
+      (target, to_radius),
+      t,
+    ))
   }
 
   /// A secondary player ([`Self::set_secondary`]): its picture, with its page's notice, a
@@ -4229,11 +4326,50 @@ impl Render for PlayerView {
   }
 }
 
+/// A flying poster's bounds and corner radius at `t` (0 to 1) of its way from `from` to `to`,
+/// decelerating (ease out, cubic).
+fn in_flight(
+  from: (Bounds<Pixels>, Pixels),
+  to: (Bounds<Pixels>, Pixels),
+  t: f32,
+) -> (Bounds<Pixels>, Pixels) {
+  let e = 1. - (1. - t.clamp(0., 1.)).powi(3);
+  let mix = |a: Pixels, b: Pixels| a + (b - a) * e;
+  let (a, b) = (from.0, to.0);
+  (
+    Bounds {
+      origin: gpui::point(mix(a.origin.x, b.origin.x), mix(a.origin.y, b.origin.y)),
+      size: gpui::size(
+        mix(a.size.width, b.size.width),
+        mix(a.size.height, b.size.height),
+      ),
+    },
+    mix(from.1, to.1),
+  )
+}
+
 #[cfg(test)]
 mod tests {
   use std::time::{Duration, Instant};
 
-  use super::{SeekPulse, group_thousands, pulse, speed_label};
+  use gpui::{Bounds, point, px, size};
+
+  use super::{SeekPulse, group_thousands, in_flight, pulse, speed_label};
+
+  #[test]
+  fn a_poster_flies_from_its_card_to_the_player() {
+    let card = Bounds::new(point(px(100.), px(400.)), size(px(320.), px(180.)));
+    let player = Bounds::new(point(px(24.), px(80.)), size(px(1280.), px(720.)));
+    let from = (card, px(12.));
+    let to = (player, px(8.));
+    assert_eq!(in_flight(from, to, 0.), from);
+    assert_eq!(in_flight(from, to, 1.), to);
+    // Decelerating: past halfway at mid-time, and between the two all along.
+    let (mid, radius) = in_flight(from, to, 0.5);
+    assert!(mid.size.width > px(800.) && mid.size.width < px(1280.));
+    assert!(mid.origin.y < px(240.) && mid.origin.y > px(80.));
+    assert!(radius < px(12.) && radius > px(8.));
+  }
 
   #[test]
   fn thousands() {

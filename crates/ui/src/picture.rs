@@ -153,6 +153,28 @@ pub fn image_fill(
     .into_any_element()
 }
 
+/// Whether `picture` is loaded as [`image_fill`] draws it `width` wide at `aspect`; asks for it
+/// otherwise.
+pub fn is_loaded(
+  picture: &Picture,
+  width: f32,
+  aspect: f32,
+  window: &mut Window,
+  cx: &mut App,
+) -> bool {
+  let (Some((url, pixels, height)), Some(images)) = (
+    sized_url(picture, width, aspect, window.scale_factor()),
+    cx.try_global::<Images>().cloned(),
+  ) else {
+    return false;
+  };
+  images.0.update(cx, |store, cx| {
+    store
+      .get_fit(&url, Effects::default(), Fit::Cover, pixels, height, cx)
+      .is_some()
+  })
+}
+
 /// A transparent picture (a title's logo) scaled to fit `max_width` × `max_height` logical
 /// pixels, keeping its ratio. `None` until it has loaded, so the caller shows the title meanwhile.
 pub fn logo(
