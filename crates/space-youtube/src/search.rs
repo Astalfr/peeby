@@ -1,9 +1,10 @@
-//! Search (opened from the top bar): a query run on Enter, then the videos and channels found,
-//! as list rows, with the next pages loaded while scrolling.
+//! Search (the sidebar's "Rechercher"): a query run on Enter, then the videos and channels
+//! found, as list rows, with the next pages loaded while scrolling.
 //!
 //! While typing, YouTube's suggestions show under the field, as on youtube.com
 //! (`Client::search_suggestions`, asked once the typing pauses): the arrows move through them,
-//! Enter or a click runs the one picked (a channel's opens its page), Escape closes them.
+//! Enter or a click runs the one picked (a channel's opens its page), Escape closes them. A
+//! search closes them until the user types again or clicks in the field.
 
 use gpui::prelude::*;
 use std::time::Duration;
@@ -92,7 +93,7 @@ impl SearchView {
           InputEvent::PressEnter { .. } => match this.highlighted_suggestion() {
             Some(suggestion) => this.pick(suggestion, window, cx),
             None => {
-              this.close_suggestions(cx);
+              this.dismiss_suggestions(cx);
               this.search(cx);
             }
           },
@@ -220,10 +221,28 @@ impl SearchView {
     }
   }
 
+  /// A search ran: the suggestions close, and those still asked for (the typing had not paused,
+  /// or their answer is on its way) never open them again. Typing or a click in the field
+  /// brings them back.
+  fn dismiss_suggestions(&mut self, cx: &mut Context<Self>) {
+    self.suggest_generation += 1;
+    self._suggest_task = None;
+    self.close_suggestions(cx);
+  }
+
+  /// A click in the field, focused already (no `Focus` then): the suggestions of what it holds
+  /// show again.
+  fn reopen_suggestions(&mut self, cx: &mut Context<Self>) {
+    if !self.suggestions_open && !self.suggestions.is_empty() {
+      self.suggestions_open = true;
+      cx.notify();
+    }
+  }
+
   /// Runs `suggestion`: a channel's opens its page, any other is searched for, written in the
   /// field.
   fn pick(&mut self, suggestion: SearchSuggestion, window: &mut Window, cx: &mut Context<Self>) {
-    self.close_suggestions(cx);
+    self.dismiss_suggestions(cx);
     if let Some(channel) = suggestion.channel {
       self.nav.open(
         Route::Channel {
@@ -614,7 +633,14 @@ impl Render for SearchView {
                 div()
                   .relative()
                   .max_w(px(FIELD_WIDTH))
-                  .child(Input::new(&self.input))
+                  .child(
+                    // Captured: the field may stop the click from bubbling up.
+                    div()
+                      .capture_any_mouse_down(
+                        cx.listener(|this, _, _, cx| this.reopen_suggestions(cx)),
+                      )
+                      .child(Input::new(&self.input)),
+                  )
                   .children(suggestions),
               )
               .child(body),
