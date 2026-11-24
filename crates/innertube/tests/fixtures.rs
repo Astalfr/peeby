@@ -5,11 +5,12 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use innertube::{
-  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, Error, LikeStatus, LinkTarget, NotificationKind,
-  NotificationLevel, Progress, Related, SearchResult, Watchtime, hls, hls_manifest_url, is_mix,
-  parse_channel_search, parse_feed, parse_members_only, parse_mix, parse_mixes, parse_oembed_title,
-  parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists, parse_search,
-  parse_shorts_seed, parse_shorts_sequence, parse_tracking, parse_watch,
+  ChatAction, ChatBadgeKind, ChatMessage, ChatRun, EndScreenKind, Error, LikeStatus, LinkTarget,
+  NotificationKind, NotificationLevel, Progress, Related, SearchResult, Watchtime, hls,
+  hls_manifest_url, is_mix, parse_channel_search, parse_feed, parse_members_only, parse_mix,
+  parse_mixes, parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page,
+  parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence, parse_tracking,
+  parse_watch,
 };
 use serde_json::Value;
 
@@ -1657,4 +1658,104 @@ fn tv_player_offers_its_direct_formats() {
   let solved = innertube::with_query_n(&videos[0].url, "solved");
   assert_eq!(innertube::query_n(&solved), Some("solved"));
   assert_eq!(solved.len(), videos[0].url.len() - n.len() + "solved".len());
+}
+
+#[test]
+fn watch_page_cards() {
+  // The cards of three videos (captured 2026-11-25, en/US, anonymous; trimmed to the cards and
+  // the description panel's card section): a video, a channel then a site, and the existing
+  // `next.json`'s site behind YouTube's redirect.
+  let video = parse_watch("uXuQF_PPg5U", &fixture("next_cards_video.json")).cards;
+  assert_eq!(video.len(), 1);
+  assert_eq!(video[0].start, 1899.729);
+  assert_eq!(video[0].teaser, "There Is Something Faster Than Light");
+  assert_eq!(
+    video[0].subtitle.as_deref(),
+    Some("by Veritasium · 17M views · 11 months ago")
+  );
+  assert_eq!(video[0].length.as_deref(), Some("44:16"));
+  assert!(!video[0].thumbnails.is_empty());
+  assert_eq!(
+    video[0].target,
+    LinkTarget::Video {
+      id: "NIk_0AW5hFU".into(),
+      start: None
+    }
+  );
+
+  let both = parse_watch("vjDYfvPW4mA", &fixture("next_cards_channel.json")).cards;
+  let summary: Vec<_> = both
+    .iter()
+    .map(|c| (c.start, c.teaser.as_str(), c.title.as_str()))
+    .collect();
+  assert_eq!(
+    summary,
+    [
+      (1009.0, "Check out Mentour Pilot!", "Mentour Pilot"),
+      (1048.409, "Ground News", "Ground News"),
+    ]
+  );
+  assert_eq!(
+    both[0].target,
+    LinkTarget::Channel {
+      id: "UCwpHKudUkP5tNgmMdexB3ow".into(),
+      name: "Mentour Pilot".into()
+    }
+  );
+  assert_eq!(both[0].subtitle.as_deref(), Some("2.55M subscribers"));
+  // The redirect's target has no scheme.
+  assert_eq!(
+    both[1].target,
+    LinkTarget::Url("https://groundnews.com/Ver".into())
+  );
+
+  let site = parse_watch("dQw4w9WgXcQ", &fixture("next.json")).cards;
+  assert_eq!(site.len(), 1);
+  assert!(
+    matches!(&site[0].target, LinkTarget::Url(url) if url.starts_with("https://RickAstley.lnk.to/"))
+  );
+  assert!(
+    parse_watch("rfscVS0vtbw", &fixture("next_chapters.json"))
+      .cards
+      .is_empty()
+  );
+}
+
+#[test]
+fn end_screen() {
+  // A video's end screen from its watch page's player answer (captured 2026-11-25, en/US,
+  // anonymous; trimmed to `endscreen`): the channel, a video and a site.
+  let items = innertube::parse_end_screen(&fixture("player_endscreen.json"));
+  let summary: Vec<_> = items.iter().map(|i| (i.kind, i.title.as_str())).collect();
+  assert_eq!(
+    summary,
+    [
+      (EndScreenKind::Channel, "Veritasium"),
+      (
+        EndScreenKind::Video,
+        "Does adding helium reduce a balloon’s mass?"
+      ),
+      (
+        EndScreenKind::Link,
+        "Elements of Truth - The Official Veritasium Tabletop Game"
+      ),
+    ]
+  );
+  let video = &items[1];
+  assert_eq!((video.start, video.end), (2307.45, 2327.45));
+  assert!((video.left - 0.0228).abs() < 1e-3 && (video.top - 0.5245).abs() < 1e-3);
+  assert!((video.width - 0.3228).abs() < 1e-3);
+  assert!((video.aspect_ratio - 16. / 9.).abs() < 1e-3);
+  assert_eq!(video.subtitle.as_deref(), Some("426,821 views"));
+  assert_eq!(video.length.as_deref(), Some("1:33"));
+  assert_eq!(
+    video.target,
+    LinkTarget::Video {
+      id: "HZjRoKgDnow".into(),
+      start: None
+    }
+  );
+  assert_eq!(items[0].aspect_ratio, 1.0);
+  assert!(matches!(&items[2].target, LinkTarget::Url(url) if url.contains("elementsoftruth")));
+  assert!(innertube::parse_end_screen(&fixture("next.json")).is_empty());
 }

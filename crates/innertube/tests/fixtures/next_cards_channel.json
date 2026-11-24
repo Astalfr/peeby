@@ -1,0 +1,228 @@
+{
+  "cards": {
+    "cardCollectionRenderer": {
+      "cards": [
+        {
+          "cardRenderer": {
+            "teaser": {
+              "simpleCardTeaserRenderer": {
+                "message": {
+                  "simpleText": "Check out Mentour Pilot!"
+                },
+                "trackingParams": "CAYQ0DYiEwij1YK73qGYAxVmCBQGHS0PGdo=",
+                "onTapCommand": {
+                  "clickTrackingParams": "CAYQ0DYiEwij1YK73qGYAxVmCBQGHS0PGdrKAQTyJRdz",
+                  "showEngagementPanelEndpoint": {
+                    "panelIdentifier": "engagement-panel-structured-description",
+                    "forcePortrait": false,
+                    "engagementPanelExtras": {
+                      "sectionListEngagementPanelExtras": {
+                        "scrollToItemSectionIdentifier": "infocards-item-section",
+                        "scrollToItemSectionOffsetDistance": 88
+                      }
+                    }
+                  }
+                },
+                "channelAvatar": {
+                  "thumbnails": [
+                    {
+                      "url": "https://yt3.ggpht.com/7vCbvtCqtjQ3YLgsJt7Y952MQV1sBvhllSCSxHP8_sVZdcPCBrITfhkN2RdyCuwPnsByq-1GoA=s48-c-k-c0x00ffffff-no-rj",
+                      "width": 48,
+                      "height": 48
+                    }
+                  ]
+                }
+              }
+            },
+            "cueRanges": [
+              {
+                "startCardActiveMs": "1009000",
+                "endCardActiveMs": "0",
+                "teaserDurationMs": "6000"
+              }
+            ],
+            "trackingParams": "CAUQs5cBGAAiEwij1YK73qGYAxVmCBQGHS0PGdo="
+          }
+        },
+        {
+          "cardRenderer": {
+            "teaser": {
+              "simpleCardTeaserRenderer": {
+                "message": {
+                  "simpleText": "Ground News"
+                },
+                "trackingParams": "CAQQ0DYiEwij1YK73qGYAxVmCBQGHS0PGdo=",
+                "onTapCommand": {
+                  "clickTrackingParams": "CAQQ0DYiEwij1YK73qGYAxVmCBQGHS0PGdrKAQTyJRdz",
+                  "showEngagementPanelEndpoint": {
+                    "panelIdentifier": "engagement-panel-structured-description",
+                    "forcePortrait": false,
+                    "engagementPanelExtras": {
+                      "sectionListEngagementPanelExtras": {
+                        "scrollToItemSectionIdentifier": "infocards-item-section",
+                        "scrollToItemSectionOffsetDistance": 190
+                      }
+                    }
+                  }
+                },
+                "channelAvatar": {
+                  "thumbnails": [
+                    {
+                      "url": "https://yt3.ggpht.com/7vCbvtCqtjQ3YLgsJt7Y952MQV1sBvhllSCSxHP8_sVZdcPCBrITfhkN2RdyCuwPnsByq-1GoA=s48-c-k-c0x00ffffff-no-rj",
+                      "width": 48,
+                      "height": 48
+                    }
+                  ]
+                }
+              }
+            },
+            "cueRanges": [
+              {
+                "startCardActiveMs": "1048409",
+                "endCardActiveMs": "0",
+                "teaserDurationMs": "6000"
+              }
+            ],
+            "trackingParams": "CAMQvJcBGAEiEwij1YK73qGYAxVmCBQGHS0PGdo="
+          }
+        }
+      ],
+      "headerText": {
+        "simpleText": "More from Veritasium"
+      },
+      "trackingParams": "CAIQwjciEwij1YK73qGYAxVmCBQGHS0PGdo=",
+      "onIconTapCommand": {
+        "clickTrackingParams": "CAIQwjciEwij1YK73qGYAxVmCBQGHS0PGdrKAQTyJRdz",
+        "showEngagementPanelEndpoint": {
+          "panelIdentifier": "engagement-panel-structured-description",
+          "forcePortrait": false,
+          "engagementPanelExtras": {
+            "sectionListEngagementPanelExtras": {
+              "scrollToItemSectionIdentifier": "infocards-item-section"
+            }
+          }
+        }
+      }
+    }
+  },
+  "engagementPanels": [
+    {
+      "engagementPanelSectionListRenderer": {
+        "panelIdentifier": "engagement-panel-structured-description",
+        "content": {
+          "structuredDescriptionContentRenderer": {
+            "items": [
+              {
+                "videoDescriptionInfocardsSectionRenderer": {
+                  "infocards": [
+                    {
+                      "compactInfocardRenderer": {
+                        "content": {
+                          "structuredDescriptionChannelLockupRenderer": {
+                            "thumbnail": {
+                              "thumbnails": [
+                                {
+                                  "url": "https://yt3.ggpht.com/fGvWBj_aMZpY0aIKj0QqHC-1H77mdaNOEaCnhNgsWJaR5FTV1MD19weFhWUIGR97FHtuIRCE=s64-c-k-c0x00ffffff-no-rj",
+                                  "width": 64,
+                                  "height": 64
+                                },
+                                {
+                                  "url": "https://yt3.ggpht.com/fGvWBj_aMZpY0aIKj0QqHC-1H77mdaNOEaCnhNgsWJaR5FTV1MD19weFhWUIGR97FHtuIRCE=s128-c-k-c0x00ffffff-no-rj",
+                                  "width": 128,
+                                  "height": 128
+                                }
+                              ]
+                            },
+                            "title": {
+                              "simpleText": "Mentour Pilot"
+                            },
+                            "subscriberCountText": {
+                              "simpleText": "2.55M subscribers"
+                            },
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "CCEQ1TYiEwij1YK73qGYAxVmCBQGHS0PGdrKAQTyJRdz",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/channel/UCwpHKudUkP5tNgmMdexB3ow",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCwpHKudUkP5tNgmMdexB3ow"
+                              }
+                            },
+                            "trackingParams": "CCEQ1TYiEwij1YK73qGYAxVmCBQGHS0PGdo=",
+                            "disableNavigationEndpoint": true,
+                            "thumbnailWidth": 112,
+                            "maxLinesTitle": 2,
+                            "maxLinesSubscriberCountText": 1
+                          }
+                        },
+                        "trackingParams": "CCAQs5cBGAAiEwij1YK73qGYAxVmCBQGHS0PGdo="
+                      }
+                    },
+                    {
+                      "compactInfocardRenderer": {
+                        "content": {
+                          "mediaLockupRenderer": {
+                            "title": {
+                              "simpleText": "Ground News"
+                            },
+                            "subtitle": {
+                              "simpleText": "Check out Ground News"
+                            },
+                            "thumbnailDetails": {
+                              "thumbnails": [
+                                {
+                                  "url": "https://i.ytimg.com/an/vjDYfvPW4mA/3147817935015030619_mq.jpg?v=66d393e8",
+                                  "width": 112,
+                                  "height": 64
+                                },
+                                {
+                                  "url": "https://i.ytimg.com/an/vjDYfvPW4mA/3147817935015030619_mq.jpg?v=66d393e8",
+                                  "width": 224,
+                                  "height": 128
+                                }
+                              ]
+                            },
+                            "endpoint": {
+                              "clickTrackingParams": "CB8Q1TYiEwij1YK73qGYAxVmCBQGHS0PGdrKAQTyJRdz",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "https://www.youtube.com/redirect?event=infocard&redir_token=QUlxb01IYk5FR1hJaEl1YnV0aTRJLWNVV0Z2OXxBQnJ0NjlrZHZwZ2ZQUzNsdUVzdnZTdmhnb1FjZ3JPTHZ6YmhLLTlzYzdBUWdZM3VXajVOWEVhWmpDT1Baand3QzdRX1ZLQUFCUGdvSXNrc1JXbUUwZUpLbEpaUTZWTWhTNEdf&q=groundnews.com%2FVer",
+                                  "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                  "rootVe": 83769
+                                }
+                              },
+                              "urlEndpoint": {
+                                "url": "https://www.youtube.com/redirect?event=infocard&redir_token=QUlxb01IYk5FR1hJaEl1YnV0aTRJLWNVV0Z2OXxBQnJ0NjlrZHZwZ2ZQUzNsdUVzdnZTdmhnb1FjZ3JPTHZ6YmhLLTlzYzdBUWdZM3VXajVOWEVhWmpDT1Baand3QzdRX1ZLQUFCUGdvSXNrc1JXbUUwZUpLbEpaUTZWTWhTNEdf&q=groundnews.com%2FVer",
+                                "target": "TARGET_NEW_WINDOW"
+                              }
+                            },
+                            "trackingParams": "CB8Q1TYiEwij1YK73qGYAxVmCBQGHS0PGdo=",
+                            "enableSubtitleLaunchIcon": true,
+                            "uiTweaks": {
+                              "useZeroPadding": true,
+                              "thumbnailWidth": 112,
+                              "thumbnailHeight": 62.99567
+                            },
+                            "maxLinesTitle": 2,
+                            "maxLinesSubtitle": 1,
+                            "disableEndpoint": true
+                          }
+                        },
+                        "trackingParams": "CB4QvJcBGAEiEwij1YK73qGYAxVmCBQGHS0PGdo="
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

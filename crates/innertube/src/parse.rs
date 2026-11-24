@@ -26,7 +26,12 @@
 //!   `itemSectionRenderer`, a next page in `appendContinuationItemsAction`;
 //! - the Shorts feed: a `reelWatchEndpoint` per Short, the first in the `replacementEndpoint`
 //!   of `reel/reel_item_watch` beside the `sequenceContinuation`, the next ones in the `entries`
-//!   of `reel/reel_watch_sequence` beside a `continuationEndpoint`.
+//!   of `reel/reel_watch_sequence` beside a `continuationEndpoint`;
+//! - a video's cards: their teasers in `next`'s `cards.cardCollectionRenderer` (each a
+//!   `cardRenderer` with its `cueRanges`), their content in the same order in the description
+//!   panel's `videoDescriptionInfocardsSectionRenderer`, a `compactInfocardRenderer` each;
+//! - a video's end screen: `endscreen.endscreenRenderer` of the WEB player answer (the watch
+//!   page's `ytInitialPlayerResponse`), an `endscreenElementRenderer` per element.
 
 use serde_json::Value;
 
@@ -34,12 +39,12 @@ use std::collections::HashMap;
 
 use crate::models::{
   Caption, Channel, ChannelNotifications, Chapter, ChatAction, ChatBadge, ChatBadgeKind,
-  ChatMessage, ChatRun, Collaborator, Comment, CommentActions, CommentPage, Feed, FeedChip,
-  LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage, LiveFormat, NotInterested, Notification,
-  NotificationKind, NotificationLevel, NotificationPage, NotificationSection, Playlist,
-  PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage, SearchResult, ShortsPage,
-  SponsorCategory, SponsorSegment, Storyboard, Subscription, TextLink, Thumbnail, Tracking,
-  VideoItem, WatchPage,
+  ChatMessage, ChatRun, Collaborator, Comment, CommentActions, CommentPage, EndScreenItem,
+  EndScreenKind, Feed, FeedChip, InfoCard, LikeParams, LikeStatus, LinkTarget, Live, LiveChatPage,
+  LiveFormat, NotInterested, Notification, NotificationKind, NotificationLevel, NotificationPage,
+  NotificationSection, Playlist, PlaylistChoice, PlaylistSummary, Progress, Related, SearchPage,
+  SearchResult, ShortsPage, SponsorCategory, SponsorSegment, Storyboard, Subscription, TextLink,
+  Thumbnail, Tracking, VideoItem, WatchPage,
 };
 
 /// Parses a browse response or a browse continuation into a feed.
@@ -416,6 +421,7 @@ pub fn parse_watch(video_id: &str, response: &Value) -> WatchPage {
     notifications: parse_notification_bell(&secondary["subscribeButton"]),
     live_chat,
     chapters: parse_chapters(response),
+    cards: parse_cards(response),
     collaborators: if collaborators.len() > 1 {
       collaborators
     } else {
@@ -491,6 +497,136 @@ fn parse_chapters(response: &Value) -> Vec<Chapter> {
     .collect();
   chapters.sort_by(|a, b| a.start.total_cmp(&b.start));
   chapters
+}
+
+/// The cards of a `next` answer, by start. A teaser that opens the description panel's cards
+/// goes with the next card listed there; others (YouTube's own, such as "View corrections") are
+/// skipped, as are cards without a target.
+fn parse_cards(response: &Value) -> Vec<InfoCard> {
+  let mut sections = Vec::new();
+  find_all(
+    &response["engagementPanels"],
+    "videoDescriptionInfocardsSectionRenderer",
+    &mut sections,
+  );
+  let contents = sections
+    .first()
+    .and_then(|s| s["infocards"].as_array())
+    .map(Vec::as_slice)
+    .unwrap_or_default();
+  let teasers = response["cards"]["cardCollectionRenderer"]["cards"]
+    .as_array()
+    .map(Vec::as_slice)
+    .unwrap_or_default()
+    .iter()
+    .map(|c| &c["cardRenderer"])
+    .filter(|card| {
+      card["teaser"]["simpleCardTeaserRenderer"]["onTapCommand"]["showEngagementPanelEndpoint"]
+        .is_object()
+    });
+  let mut cards: Vec<InfoCard> = teasers
+    .zip(contents)
+    .filter_map(|(card, content)| {
+      let content = content["compactInfocardRenderer"]["content"]
+        .as_object()?
+        .values()
+        .next()?;
+      let title = text(&content["title"]);
+      let endpoint = if content["navigationEndpoint"].is_object() {
+        &content["navigationEndpoint"]
+      } else {
+        &content["endpoint"]
+      };
+      let subtitle = [
+        &content["shortBylineText"],
+        &content["metadataDetails"],
+        &content["subscriberCountText"],
+        &content["subtitle"],
+      ]
+      .into_iter()
+      .filter_map(|t| non_empty(text(t)))
+      .collect::<Vec<_>>()
+      .join(" · ");
+      let thumbnail = if content["thumbnail"].is_object() {
+        &content["thumbnail"]
+      } else {
+        &content["thumbnailDetails"]
+      };
+      Some(InfoCard {
+        start: number(&card["cueRanges"][0]["startCardActiveMs"])? / 1000.0,
+        teaser: non_empty(text(&card["teaser"]["simpleCardTeaserRenderer"]["message"]))
+          .unwrap_or_else(|| title.clone()),
+        target: link_target(endpoint, &title)?,
+        title,
+        subtitle: non_empty(subtitle),
+        thumbnails: thumbnails(&thumbnail["thumbnails"]),
+        length: non_empty(text(&content["lengthText"])),
+      })
+    })
+    .collect();
+  cards.sort_by(|a, b| a.start.total_cmp(&b.start));
+  cards
+}
+
+/// The end screen of a WEB player answer, by start; empty when the video has none. Elements
+/// without a place, a time or a target are skipped.
+pub fn parse_end_screen(player: &Value) -> Vec<EndScreenItem> {
+  let mut items: Vec<EndScreenItem> = player["endscreen"]["endscreenRenderer"]["elements"]
+    .as_array()
+    .map(Vec::as_slice)
+    .unwrap_or_default()
+    .iter()
+    .filter_map(|element| {
+      let e = &element["endscreenElementRenderer"];
+      let kind = match e["style"].as_str()? {
+        "VIDEO" => EndScreenKind::Video,
+        "PLAYLIST" => EndScreenKind::Playlist,
+        "CHANNEL" => EndScreenKind::Channel,
+        "WEBSITE" => EndScreenKind::Link,
+        _ => return None,
+      };
+      let title = text(&e["title"]);
+      let fraction = |v: &Value| v.as_f64().map(|f| f as f32).filter(|f| f.is_finite());
+      let length = e["thumbnailOverlays"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find_map(|o| non_empty(text(&o["thumbnailOverlayTimeStatusRenderer"]["text"])));
+      Some(EndScreenItem {
+        start: number(&e["startMs"])? / 1000.0,
+        end: number(&e["endMs"])? / 1000.0,
+        left: fraction(&e["left"])?,
+        top: fraction(&e["top"])?,
+        width: fraction(&e["width"]).filter(|w| *w > 0.0)?,
+        aspect_ratio: fraction(&e["aspectRatio"]).filter(|a| *a > 0.0)?,
+        kind,
+        target: link_target(&e["endpoint"], &title)?,
+        subtitle: non_empty(text(&e["metadata"])),
+        thumbnails: thumbnails(&e["image"]["thumbnails"]),
+        length,
+        title,
+      })
+    })
+    .collect();
+  items.sort_by(|a, b| a.start.total_cmp(&b.start));
+  items
+}
+
+/// The player answer a watch page's HTML holds (`var ytInitialPlayerResponse = {…};`).
+pub(crate) fn initial_player_response(html: &str) -> Option<Value> {
+  const MARK: &str = "ytInitialPlayerResponse = ";
+  let start = html.find(MARK)? + MARK.len();
+  serde_json::Deserializer::from_str(&html[start..])
+    .into_iter::<Value>()
+    .next()?
+    .ok()
+}
+
+/// A number YouTube sends as a string (`"1899729"`) or as a number.
+fn number(value: &Value) -> Option<f64> {
+  value
+    .as_f64()
+    .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
 }
 
 /// Parses a page of a live's chat (`live_chat/get_live_chat`). Text messages and removals are
@@ -1767,7 +1903,21 @@ fn link_target(command: &Value, label: &str) -> Option<LinkTarget> {
     });
   }
   if let Some(url) = command["urlEndpoint"]["url"].as_str() {
-    return web(unredirect(url)).map(LinkTarget::Url);
+    let url = unredirect(url);
+    // Cards give some sites without their scheme (`groundnews.com/Ver`); another scheme
+    // (`ms-msdt:`) stays, for `web` to refuse.
+    let scheme = url.split_once(':').is_some_and(|(scheme, _)| {
+      !scheme.is_empty()
+        && scheme
+          .chars()
+          .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+    });
+    let url = if scheme {
+      url
+    } else {
+      format!("https://{url}")
+    };
+    return web(url).map(LinkTarget::Url);
   }
   let browse = &command["browseEndpoint"];
   if let Some(id) = browse["browseId"].as_str() {
@@ -2089,6 +2239,15 @@ mod tests {
     assert_eq!(notification_kind(live), NotificationKind::Live);
     assert_eq!(notification_kind(upload), NotificationKind::Upload);
     assert_eq!(notification_kind(""), NotificationKind::Other);
+  }
+
+  #[test]
+  fn a_watch_page_holds_its_player_answer() {
+    let html =
+      r#"<script>var ytInitialPlayerResponse = {"endscreen":{"a":"};"}};var meta = 1;</script>"#;
+    let player = initial_player_response(html).unwrap_or_default();
+    assert_eq!(player["endscreen"]["a"], "};");
+    assert!(initial_player_response("<html></html>").is_none());
   }
 
   #[test]

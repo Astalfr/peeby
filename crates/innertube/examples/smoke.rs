@@ -9,6 +9,8 @@
 use innertube::{Client, Cookies};
 
 const VIDEO: &str = "dQw4w9WgXcQ";
+/// A video with an end screen (a channel, a video, a site).
+const END_SCREEN_VIDEO: &str = "uXuQF_PPg5U";
 const CHANNEL: &str = "UCuAXFkgsw1L7xaCfnd5JJOw";
 const LIVE_QUERY: &str = "lofi hip hop radio";
 
@@ -221,7 +223,14 @@ async fn main() {
     .and_then(|w| w.comments_continuation.clone());
   check(
     "watch",
-    watch.map(|w| format!("{} related", w.related.len())),
+    watch.map(|w| format!("{} related · {} cards", w.related.len(), w.cards.len())),
+  );
+  check(
+    "end_screen",
+    client
+      .end_screen(END_SCREEN_VIDEO)
+      .await
+      .map(|items| format!("{} items", items.len())),
   );
   if let Some(token) = comments_token {
     check(

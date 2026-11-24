@@ -1,0 +1,151 @@
+{
+  "cards": {
+    "cardCollectionRenderer": {
+      "cards": [
+        {
+          "cardRenderer": {
+            "teaser": {
+              "simpleCardTeaserRenderer": {
+                "message": {
+                  "simpleText": "There Is Something Faster Than Light"
+                },
+                "trackingParams": "CAMQ0DYiEwi6m-q53qGYAxV66FYDHRTwERo=",
+                "onTapCommand": {
+                  "clickTrackingParams": "CAMQ0DYiEwi6m-q53qGYAxV66FYDHRTwERrKAQROi1eA",
+                  "showEngagementPanelEndpoint": {
+                    "panelIdentifier": "engagement-panel-structured-description",
+                    "forcePortrait": false,
+                    "engagementPanelExtras": {
+                      "sectionListEngagementPanelExtras": {
+                        "scrollToItemSectionIdentifier": "infocards-item-section",
+                        "scrollToItemSectionOffsetDistance": 88
+                      }
+                    }
+                  }
+                },
+                "channelAvatar": {
+                  "thumbnails": [
+                    {
+                      "url": "https://yt3.ggpht.com/7vCbvtCqtjQ3YLgsJt7Y952MQV1sBvhllSCSxHP8_sVZdcPCBrITfhkN2RdyCuwPnsByq-1GoA=s48-c-k-c0x00ffffff-no-rj",
+                      "width": 48,
+                      "height": 48
+                    }
+                  ]
+                }
+              }
+            },
+            "cueRanges": [
+              {
+                "startCardActiveMs": "1899729",
+                "endCardActiveMs": "0",
+                "teaserDurationMs": "6000"
+              }
+            ],
+            "trackingParams": "CAIQwJcBGAAiEwi6m-q53qGYAxV66FYDHRTwERo="
+          }
+        }
+      ],
+      "headerText": {
+        "simpleText": "More from Veritasium"
+      },
+      "trackingParams": "CAEQwjciEwi6m-q53qGYAxV66FYDHRTwERo=",
+      "onIconTapCommand": {
+        "clickTrackingParams": "CAEQwjciEwi6m-q53qGYAxV66FYDHRTwERrKAQROi1eA",
+        "showEngagementPanelEndpoint": {
+          "panelIdentifier": "engagement-panel-structured-description",
+          "forcePortrait": false,
+          "engagementPanelExtras": {
+            "sectionListEngagementPanelExtras": {
+              "scrollToItemSectionIdentifier": "infocards-item-section"
+            }
+          }
+        }
+      }
+    }
+  },
+  "engagementPanels": [
+    {
+      "engagementPanelSectionListRenderer": {
+        "panelIdentifier": "engagement-panel-structured-description",
+        "content": {
+          "structuredDescriptionContentRenderer": {
+            "items": [
+              {
+                "videoDescriptionInfocardsSectionRenderer": {
+                  "infocards": [
+                    {
+                      "compactInfocardRenderer": {
+                        "content": {
+                          "structuredDescriptionVideoLockupRenderer": {
+                            "thumbnail": {
+                              "thumbnails": [
+                                {
+                                  "url": "https://yt3.ggpht.com/proxy/Dktn-qVe9Rt751WLiL7714XHmM6FfaXdpkoqfRxF7nkCVH4-v0bYclIkW1uERGFwHEGMJ8Gj6yVW_WsyFMtbjirj8E07=s112-w112-h64-nd",
+                                  "width": 112,
+                                  "height": 64
+                                },
+                                {
+                                  "url": "https://yt3.ggpht.com/proxy/Dktn-qVe9Rt751WLiL7714XHmM6FfaXdpkoqfRxF7nkCVH4-v0bYclIkW1uERGFwHEGMJ8Gj6yVW_WsyFMtbjirj8E07=s224-w224-h128-nd",
+                                  "width": 224,
+                                  "height": 128
+                                }
+                              ]
+                            },
+                            "title": {
+                              "simpleText": "There Is Something Faster Than Light"
+                            },
+                            "shortBylineText": {
+                              "simpleText": "by Veritasium"
+                            },
+                            "metadataDetails": {
+                              "simpleText": "17M views · 11 months ago"
+                            },
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "CBwQ1TYiEwi6m-q53qGYAxV66FYDHRTwERrKAQROi1eA",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/watch?v=NIk_0AW5hFU",
+                                  "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                  "rootVe": 3832
+                                }
+                              },
+                              "watchEndpoint": {
+                                "videoId": "NIk_0AW5hFU"
+                              }
+                            },
+                            "lengthText": {
+                              "simpleText": "44:16"
+                            },
+                            "trackingParams": "CBwQ1TYiEwi6m-q53qGYAxV66FYDHRTwERo=",
+                            "isLiveVideo": false,
+                            "disableNavigationEndpoint": true,
+                            "maxLinesTitle": 2,
+                            "maxLinesShortBylineText": 1,
+                            "maxLinesMetadataDetails": 1,
+                            "thumbnailWidth": 112,
+                            "aspectRatio": 1.7779,
+                            "thumbnailOverlays": [
+                              {
+                                "thumbnailOverlayTimeStatusRenderer": {
+                                  "text": {
+                                    "simpleText": "44:16"
+                                  },
+                                  "style": "DEFAULT"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "trackingParams": "CBsQwJcBGAAiEwi6m-q53qGYAxV66FYDHRTwERo="
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

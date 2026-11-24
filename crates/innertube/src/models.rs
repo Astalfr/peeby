@@ -377,6 +377,70 @@ pub struct WatchPage {
   pub live_chat: Option<String>,
   /// Chapters shown on the player's seek bar, by start; empty when the video has none.
   pub chapters: Vec<Chapter>,
+  /// The creator's cards, by start; empty when the video has none.
+  pub cards: Vec<InfoCard>,
+}
+
+/// A card (an "info card"): a link the creator placed at a moment of the video, announced by a
+/// teaser over the picture and listed under the description.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InfoCard {
+  /// When its teaser shows, seconds.
+  pub start: f64,
+  /// The teaser's text: the card's title or the creator's own words.
+  pub teaser: String,
+  /// Title (a video's, a channel's name, a link's).
+  pub title: String,
+  /// Under the title: a video's channel and views, a channel's subscribers, a link's text.
+  pub subtitle: Option<String>,
+  /// Thumbnail sizes (a channel's avatar).
+  pub thumbnails: Vec<Thumbnail>,
+  /// A video's length, e.g. `44:16`.
+  pub length: Option<String>,
+  /// Where it leads.
+  pub target: LinkTarget,
+}
+
+/// An element of a video's end screen: a box over the last seconds of the picture.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EndScreenItem {
+  /// When it shows and leaves, seconds.
+  pub start: f64,
+  /// See [`EndScreenItem::start`].
+  pub end: f64,
+  /// Its left edge, as a share of the picture's width.
+  pub left: f32,
+  /// Its top edge, as a share of the picture's height.
+  pub top: f32,
+  /// Its width, as a share of the picture's width.
+  pub width: f32,
+  /// Its width over its height.
+  pub aspect_ratio: f32,
+  /// What it is.
+  pub kind: EndScreenKind,
+  /// Title (a video's, a channel's name, a site's).
+  pub title: String,
+  /// Under the title: a video's views, a channel's or a site's description.
+  pub subtitle: Option<String>,
+  /// Picture sizes: a video's thumbnail, a channel's avatar, a site's icon.
+  pub thumbnails: Vec<Thumbnail>,
+  /// A video's length, e.g. `12:34`.
+  pub length: Option<String>,
+  /// Where it leads.
+  pub target: LinkTarget,
+}
+
+/// What an [`EndScreenItem`] shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndScreenKind {
+  /// A video, as a thumbnail.
+  Video,
+  /// A playlist, as its first video's thumbnail.
+  Playlist,
+  /// A channel, as a round avatar (its subscribe element when it is the video's own).
+  Channel,
+  /// A web site, as a round icon.
+  Link,
 }
 
 /// A link in a description or a comment.

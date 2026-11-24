@@ -12,18 +12,18 @@ use crate::error::{Error, Result};
 use crate::hls;
 use crate::live::LiveProxy;
 use crate::models::{
-  Channel, CommentPage, DirectOffer, Feed, LikeStatus, Live, LiveChatPage, NotificationPage,
-  Playlist, PlaylistChoice, PlaylistSummary, Related, SearchPage, SearchResult, ShortsPage, Stream,
-  Tracking, VideoItem, Votes, WatchPage, Watchtime,
+  Channel, CommentPage, DirectOffer, EndScreenItem, Feed, LikeStatus, Live, LiveChatPage,
+  NotificationPage, Playlist, PlaylistChoice, PlaylistSummary, Related, SearchPage, SearchResult,
+  ShortsPage, Stream, Tracking, VideoItem, Votes, WatchPage, Watchtime,
 };
 use crate::parse::{
-  find_continuation, is_mix, parse_account_handle, parse_captions, parse_channel_search,
-  parse_channels, parse_comment_action, parse_comment_translation, parse_comments, parse_feed,
-  parse_feedback, parse_live, parse_live_chat, parse_live_formats, parse_members_only, parse_mix,
-  parse_mixes, parse_notifications, parse_oembed_title, parse_playlist, parse_playlist_choices,
-  parse_playlist_page, parse_playlists, parse_search, parse_shorts_seed, parse_shorts_sequence,
-  parse_storyboard, parse_subscribed, parse_subscriptions, parse_tracking, parse_unseen_count,
-  parse_watch, tracking_param,
+  find_continuation, initial_player_response, is_mix, parse_account_handle, parse_captions,
+  parse_channel_search, parse_channels, parse_comment_action, parse_comment_translation,
+  parse_comments, parse_end_screen, parse_feed, parse_feedback, parse_live, parse_live_chat,
+  parse_live_formats, parse_members_only, parse_mix, parse_mixes, parse_notifications,
+  parse_oembed_title, parse_playlist, parse_playlist_choices, parse_playlist_page, parse_playlists,
+  parse_search, parse_shorts_seed, parse_shorts_sequence, parse_storyboard, parse_subscribed,
+  parse_subscriptions, parse_tracking, parse_unseen_count, parse_watch, tracking_param,
 };
 
 /// "My Mix": the account's own mix, in no feed.
@@ -826,6 +826,30 @@ impl Client {
       .collect();
     self.untranslate_titles(titles).await;
     Ok(page)
+  }
+
+  /// The end screen of `video_id`, from its watch page's player answer
+  /// (`ytInitialPlayerResponse`): no player client gives it anonymously (WEB's `player` refuses
+  /// the video, VISIONOS's has none). Anonymous; the page weighs about 2 MB.
+  pub async fn end_screen(&self, video_id: &str) -> Result<Vec<EndScreenItem>> {
+    let (hl, gl) = &*self.language;
+    let response = self
+      .http
+      .get(format!("{ORIGIN}/watch?v={video_id}&hl={hl}&gl={gl}"))
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      return Err(Error::Status {
+        status: response.status().as_u16(),
+        endpoint: "watch",
+      });
+    }
+    let html = response.text().await?;
+    let player = initial_player_response(&html).ok_or(Error::Parse {
+      endpoint: "watch",
+      detail: "no ytInitialPlayerResponse".into(),
+    })?;
+    Ok(parse_end_screen(&player))
   }
 
   /// The page of a live's chat after `continuation` ([`WatchPage::live_chat`], then each page's
