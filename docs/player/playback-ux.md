@@ -96,6 +96,8 @@ With the player setting "Minuterie de mise en veille" on (off by default, `[play
 - Click the picture to play or pause. Double-click toggles fullscreen and undoes the pause from the first click.
 - Each play/pause change, whatever triggered it (click, Space, button), shows the new state's icon in the middle of the picture: a dark disc that grows and fades out in 600 ms. The state the file opens in shows nothing.
 - The wheel over the picture changes the volume.
+- A seek by key (← → J L) shows beside the edge it goes toward: a dark pill with the way's icon and `+10 s` / `−10 s`, adding up while the key comes again the same way within 1 s (`+30 s`). The pill comes in 150 ms, sliding 16 px toward its edge and fading in, then stays still; its icon in the space's accent; each seek turns it a whole turn the seek's way (clockwise forward, 450 ms, ease out; quick seeks add turns to the one running, `motion::tween`); it fades out over the last 30 % of 0.9 s after the last seek (still, then gone, with reduced motion).
+- A volume change by key or by the wheel over the picture shows a ring where the messages show: a dark disc fading in (150 ms) with the volume as an arc in the space's accent (of the slider's range, empty when muted) that runs from the last volume to the new one (150 ms, ease out, `motion::tween`), and the percentage inside as rolling digits (`ui::widgets::odometer`: each place a strip of digits sliding up as the volume grows and down as it shrinks, 200 ms; 95 to 100 rolls every place through its 0, the hundreds fading in), fading out over the last 30 % of 1.2 s after the last change; the message "Volume N %" stays for the slider's wheel and the boost.
 - After 1 s without mouse movement the controls fade out (200 ms, eased) and the mouse cursor hides; the next move fades the controls back in and brings the cursor back (`gpui_video::hide_cursor_until_mouse_moves`, from the vendored GPUI patch). They stay visible while paused, while a menu or the help is open, or while the mouse is over them.
 
 | Keys | Action |
@@ -116,7 +118,7 @@ With the player setting "Minuterie de mise en veille" on (off by default, `[play
 | Esc | Close menu or help, else leave fullscreen, else go back |
 | ? | Shortcut help |
 
-Feedback for keys with no visible control (volume, delay, track, chapter) shows as a short message at the top.
+Feedback for keys with no visible control (delay, track, chapter, speed) shows as a short message at the top; the volume as its ring, the same place.
 
 ## Live streams
 

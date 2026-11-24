@@ -133,46 +133,74 @@ pub fn loader(size: f32, color: gpui::Hsla) -> impl IntoElement {
   )
 }
 
+/// A ring drawn in `bounds`: its stroke `width` and the point at an angle on it.
+struct Ring {
+  center: gpui::Point<gpui::Pixels>,
+  radius: f32,
+  width: f32,
+}
+
+impl Ring {
+  /// The ring filling `bounds`, its stroke `thickness` of its side (2 px at least).
+  fn new(bounds: gpui::Bounds<gpui::Pixels>, thickness: f32) -> Self {
+    let side = f32::from(bounds.size.width.min(bounds.size.height));
+    let width = (side * thickness).max(2.);
+    Self {
+      center: bounds.center(),
+      radius: (side - width) / 2.,
+      width,
+    }
+  }
+
+  /// The point at `degrees`, clockwise from the top.
+  fn point(&self, degrees: f32) -> gpui::Point<gpui::Pixels> {
+    let a = degrees.to_radians();
+    gpui::point(
+      self.center.x + px(self.radius * a.sin()),
+      self.center.y - px(self.radius * a.cos()),
+    )
+  }
+
+  /// The whole ring: two half circles (an arc cannot end where it starts).
+  fn paint_track(&self, color: gpui::Hsla, window: &mut Window) {
+    let radii = gpui::point(px(self.radius), px(self.radius));
+    let mut ring = gpui::PathBuilder::stroke(px(self.width));
+    ring.move_to(self.point(0.));
+    ring.arc_to(radii, px(0.), false, true, self.point(180.));
+    ring.arc_to(radii, px(0.), false, true, self.point(360.));
+    if let Ok(path) = ring.build() {
+      window.paint_path(path, color);
+    }
+  }
+
+  /// A round-capped arc clockwise from `start` to `end` degrees (less than a turn).
+  fn paint_arc(&self, start: f32, end: f32, color: gpui::Hsla, window: &mut Window) {
+    let radii = gpui::point(px(self.radius), px(self.radius));
+    let mut arc = gpui::PathBuilder::stroke(px(self.width));
+    arc.move_to(self.point(start));
+    arc.arc_to(radii, px(0.), end - start > 180., true, self.point(end));
+    if let Ok(path) = arc.build() {
+      window.paint_path(path, color);
+    }
+    // Round caps: lyon's caps are not reachable through GPUI, so a disc ends each side.
+    for degrees in [start, end] {
+      let cap = gpui::Bounds::centered_at(
+        self.point(degrees),
+        gpui::size(px(self.width), px(self.width)),
+      );
+      window.paint_quad(gpui::fill(cap, color).corner_radii(px(self.width / 2.)));
+    }
+  }
+}
+
 fn paint_loader(bounds: gpui::Bounds<gpui::Pixels>, color: gpui::Hsla, window: &mut Window) {
   static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
   let time = EPOCH
     .get_or_init(std::time::Instant::now)
     .elapsed()
     .as_secs_f32();
-
-  let side = f32::from(bounds.size.width.min(bounds.size.height));
-  let width = (side * 0.14).max(2.);
-  let radius = (side - width) / 2.;
-  let center = bounds.center();
-  // Clockwise from the top, in degrees.
-  let point = |degrees: f32| {
-    let a = degrees.to_radians();
-    gpui::point(
-      center.x + px(radius * a.sin()),
-      center.y - px(radius * a.cos()),
-    )
-  };
-
-  // The track: two half circles (an arc cannot end where it starts).
-  let mut ring = gpui::PathBuilder::stroke(px(width));
-  ring.move_to(point(0.));
-  ring.arc_to(
-    gpui::point(px(radius), px(radius)),
-    px(0.),
-    false,
-    true,
-    point(180.),
-  );
-  ring.arc_to(
-    gpui::point(px(radius), px(radius)),
-    px(0.),
-    false,
-    true,
-    point(360.),
-  );
-  if let Ok(path) = ring.build() {
-    window.paint_path(path, color.opacity(0.18));
-  }
+  let ring = Ring::new(bounds, 0.14);
+  ring.paint_track(color.opacity(0.18), window);
 
   // The arc: in the first half of a cycle its head runs ahead, in the second its tail catches
   // up; each cycle starts where the last one's tail stopped, on top of a steady rotation.
@@ -192,24 +220,87 @@ fn paint_loader(bounds: gpui::Bounds<gpui::Pixels>, color: gpui::Hsla, window: &
     (LOADER_MAX_ARC, stretch * ease(t * 2. - 1.))
   };
   let offset = (cycle * stretch + time / LOADER_TURN * 360.) % 360.;
-  let (start, end) = (offset + tail, offset + head);
-  let mut arc = gpui::PathBuilder::stroke(px(width));
-  arc.move_to(point(start));
-  arc.arc_to(
-    gpui::point(px(radius), px(radius)),
-    px(0.),
-    end - start > 180.,
-    true,
-    point(end),
-  );
-  if let Ok(path) = arc.build() {
-    window.paint_path(path, color);
+  ring.paint_arc(offset + tail, offset + head, color, window);
+}
+
+/// Places an [`odometer`] shows at most (the player's volume goes up to 200).
+const ODOMETER_PLACES: u32 = 3;
+
+/// `value` as rolling digits: each place is a strip of digits sliding up when it grows and
+/// down when it shrinks, `digit_width`×`line_height` pixels a digit, in the parent's text style.
+/// A place follows the count it stands for (the tens of 95 are 9, of 100 are 10), so 99 to 100
+/// rolls every digit up through its 0, as a counter does; a leading place fades in and out as
+/// it rolls between nothing and 1. Call it on every render, shown or not (`motion::tween` keeps
+/// each place's value only while it is asked for): the digits then run from the value last
+/// rendered.
+pub fn odometer(
+  id: &str,
+  value: u32,
+  digit_width: f32,
+  line_height: f32,
+  window: &mut Window,
+  cx: &mut gpui::App,
+) -> gpui::AnyElement {
+  let mut columns = Vec::new();
+  for place in (0..ODOMETER_PLACES).rev() {
+    let target = (value / 10u32.pow(place)) as f32;
+    let count = crate::motion::tween(
+      SharedString::from(format!("{id}-{place}")),
+      target,
+      target,
+      theme::NORMAL,
+      window,
+      cx,
+    );
+    if place > 0 && count < 0.001 {
+      continue;
+    }
+    // Digits 0 to 9 then 0 again, so that 9 rolls on into 10's 0.
+    let roll = count.rem_euclid(10.);
+    let strip = v_flex()
+      .absolute()
+      .left_0()
+      .right_0()
+      .top(px(-roll * line_height))
+      .children((0..=10).map(|digit| {
+        div()
+          .h(px(line_height))
+          .line_height(px(line_height))
+          .flex()
+          .justify_center()
+          .child((digit % 10).to_string())
+      }));
+    columns.push(
+      div()
+        .relative()
+        .w(px(digit_width))
+        .h(px(line_height))
+        .overflow_hidden()
+        .when(place > 0, |el| el.opacity(count.min(1.)))
+        .child(strip),
+    );
   }
-  // Round caps: lyon's caps are not reachable through GPUI, so a disc ends each side.
-  for degrees in [start, end] {
-    let cap = gpui::Bounds::centered_at(point(degrees), gpui::size(px(width), px(width)));
-    window.paint_quad(gpui::fill(cap, color).corner_radii(px(width / 2.)));
-  }
+  h_flex().children(columns).into_any_element()
+}
+
+/// A still gauge of `size` pixels: a faint ring, and a round-capped arc clockwise from the top
+/// over `fraction` of it (the player's volume).
+pub fn gauge(size: f32, fraction: f32, color: gpui::Hsla) -> impl IntoElement {
+  let fraction = fraction.clamp(0., 1.);
+  div().size(px(size)).flex_none().child(
+    gpui::canvas(
+      |_, _, _| {},
+      move |bounds, _, window, _| {
+        let ring = Ring::new(bounds, 0.1);
+        ring.paint_track(color.opacity(0.25), window);
+        if fraction > 0. {
+          // A whole turn would end where it starts: an arc needs two distinct points.
+          ring.paint_arc(0., (fraction * 360.).min(359.5), color, window);
+        }
+      },
+    )
+    .size_full(),
+  )
 }
 
 /// Whether a scroll area is within about a screen of its end, to load the next page early.

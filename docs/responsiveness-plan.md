@@ -128,6 +128,10 @@ ready when they scroll in.
 
 ### 8. Player feedback
 
+Done (2026-11-24), not yet checked in the app: `SeekPulse` and the volume ring
+(`ui::widgets::gauge`, drawn with the loader's `Ring`); timed in the render rather than
+`with_animation`, so reduced motion still shows them (still, then gone).
+
 - Play/pause: already there (`pause_pulse`: the new state's icon grows and fades out).
 - Seek by keys: `+10 s` / `−10 s` on the side that moved, adding up while the key is pressed again
   within a second (`+30 s`), then fading out.

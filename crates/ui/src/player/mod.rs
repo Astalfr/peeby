@@ -53,6 +53,20 @@ const CONTROLS_FADE: Duration = Duration::from_millis(200);
 const POSTER_WIDTH: f32 = 640.;
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
+/// How long a seek by key shows beside the picture's edge ([`SeekPulse`]).
+const SEEK_PULSE: Duration = Duration::from_millis(900);
+/// A seek the same way within this adds up with the one shown (`+30 s` after three).
+const SEEK_PULSE_GROUP: Duration = Duration::from_millis(1000);
+/// How long a volume change shows its ring.
+const VOLUME_PULSE: Duration = Duration::from_millis(1200);
+/// Size of the volume ring.
+const VOLUME_RING: f32 = 56.;
+/// A pulse comes in this fast (the seek's pill sliding to its place, the ring fading in).
+const PULSE_ENTER: Duration = Duration::from_millis(150);
+/// How far the seek's pill slides in from, toward the middle of the picture.
+const SEEK_ENTER_SLIDE: f32 = 16.;
+/// Each seek turns the pill's icon a whole turn its way (clockwise forward) in this long.
+const SEEK_SPIN: Duration = Duration::from_millis(450);
 /// Space or the left button held on the picture this long plays at [`HOLD_SPEED`] until the
 /// release; released sooner, it plays or pauses.
 const HOLD_DELAY: Duration = Duration::from_millis(350);
@@ -416,6 +430,14 @@ pub struct PlayerView {
   /// The last play/pause change, shown as a short pulse in the middle of the picture; the
   /// counter gives each pulse its own animation id, so a new change restarts it.
   pause_pulse: Option<(u32, bool)>,
+  /// The last seek by key, shown beside the picture's edge.
+  seek_pulse: Option<SeekPulse>,
+  /// Turns of the seek pill's icon, one more each way per seek: eased toward, so quick seeks
+  /// keep it spinning instead of starting over.
+  seek_spin: f32,
+  /// The last volume change by key or wheel, shown as a ring with the percentage: when the ring
+  /// came, and the last change.
+  volume_pulse: Option<(Instant, Instant)>,
   /// Space or the left button held on the picture, and the task switching to [`HOLD_SPEED`]
   /// once it lasts [`HOLD_DELAY`].
   hold: Option<Hold>,
@@ -590,6 +612,9 @@ impl PlayerView {
       paused_since: None,
       started: false,
       pause_pulse: None,
+      seek_pulse: None,
+      seek_spin: 0.,
+      volume_pulse: None,
       hold: None,
       hold_task: None,
       fast: false,
@@ -2124,6 +2149,28 @@ impl PlayerView {
     self.seek_to(self.position + delta, cx);
   }
 
+  /// A seek by key: shown beside the edge it goes toward, adding up with the last one.
+  fn seek_by_key(&mut self, delta: f64, cx: &mut Context<Self>) {
+    self.seek_by(delta, cx);
+    self.seek_pulse = Some(SeekPulse::after(self.seek_pulse, delta, Instant::now()));
+    self.seek_spin += if delta > 0. { 1. } else { -1. };
+    cx.notify();
+  }
+
+  /// A volume change by key or wheel: the ring shows it instead of the OSD's text.
+  fn change_volume(&mut self, volume: f64, cx: &mut Context<Self>) {
+    self.set_volume(volume, cx);
+    self.osd = None;
+    self.osd_task = None;
+    let now = Instant::now();
+    let came = match self.volume_pulse {
+      Some((came, last)) if now.duration_since(last) < VOLUME_PULSE => came,
+      _ => now,
+    };
+    self.volume_pulse = Some((came, now));
+    cx.notify();
+  }
+
   /// The volume slider's end: 100, or [`player::VOLUME_MAX`] with the boost.
   fn volume_max(&self) -> f64 {
     if self.boosted {
@@ -2333,8 +2380,8 @@ impl PlayerView {
         }
       }
       "k" => self.toggle_pause(cx),
-      "left" | "j" => self.seek_by(-self.seek_step(shift), cx),
-      "right" | "l" => self.seek_by(self.seek_step(shift), cx),
+      "left" | "j" => self.seek_by_key(-self.seek_step(shift), cx),
+      "right" | "l" => self.seek_by_key(self.seek_step(shift), cx),
       "pageup" => self.add_chapter(-1, cx),
       "pagedown" => self.add_chapter(1, cx),
       "home" => self.seek_to(self.seek_range().0, cx),
@@ -2342,8 +2389,8 @@ impl PlayerView {
         let tenth = key.parse::<f64>().unwrap_or(0.0);
         self.seek_to(self.seek_time(tenth / 10.0), cx);
       }
-      "up" => self.set_volume(self.volume + VOLUME_STEP, cx),
-      "down" => self.set_volume(self.volume - VOLUME_STEP, cx),
+      "up" => self.change_volume(self.volume + VOLUME_STEP, cx),
+      "down" => self.change_volume(self.volume - VOLUME_STEP, cx),
       "m" => self.toggle_mute(cx),
       "a" => self.cycle_audio(cx),
       "c" if self.on_demand_subtitles() => self.toggle_captions(cx),
@@ -2440,7 +2487,7 @@ impl PlayerView {
     let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
     if dy.abs() > 0.5 {
       let step = if dy > 0.0 { VOLUME_STEP } else { -VOLUME_STEP };
-      self.set_volume(self.volume + step, cx);
+      self.change_volume(self.volume + step, cx);
       self.show_controls(cx);
       cx.stop_propagation();
     }
@@ -3630,6 +3677,61 @@ fn group_thousands(n: u64) -> String {
   out
 }
 
+/// A seek by key as it shows: its way, the seconds added up, and when the last one came.
+#[derive(Clone, Copy, Debug)]
+struct SeekPulse {
+  forward: bool,
+  seconds: f64,
+  /// When the pill came (the first seek of the count).
+  came: Instant,
+  /// The last seek.
+  at: Instant,
+}
+
+impl SeekPulse {
+  /// The pulse after a seek of `delta` seconds: added to `last` if it went the same way within
+  /// [`SEEK_PULSE_GROUP`], else on its own.
+  fn after(last: Option<Self>, delta: f64, now: Instant) -> Self {
+    let forward = delta > 0.;
+    let (seconds, came) = match last {
+      Some(last) if last.forward == forward && now.duration_since(last.at) < SEEK_PULSE_GROUP => {
+        (last.seconds + delta.abs(), last.came)
+      }
+      _ => (delta.abs(), now),
+    };
+    Self {
+      forward,
+      seconds,
+      came,
+      at: now,
+    }
+  }
+}
+
+/// Where in a pulse its fade out starts.
+const FADE_FROM: f32 = 0.7;
+
+/// How far `age` is into `duration`, 0 to 1, eased out (cubic).
+fn entered(age: Duration, duration: Duration) -> f32 {
+  let t = (age.as_secs_f32() / duration.as_secs_f32()).min(1.);
+  1. - (1. - t).powi(3)
+}
+
+/// A pulse's opacity and progress `age` into `duration`: full for most of it, then fading out
+/// (full until the end with reduced motion); `None` once over.
+fn pulse(age: Duration, duration: Duration, reduced: bool) -> Option<(f32, f32)> {
+  let t = age.as_secs_f32() / duration.as_secs_f32();
+  if t >= 1. {
+    return None;
+  }
+  let opacity = if reduced || t < FADE_FROM {
+    1.
+  } else {
+    1. - (t - FADE_FROM) / (1. - FADE_FROM)
+  };
+  Some((opacity, t))
+}
+
 /// `1:02:03` or `12:34`.
 pub fn format_time(seconds: f64) -> String {
   let total = seconds.max(0.0) as u64;
@@ -3642,6 +3744,152 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 impl PlayerView {
+  /// The last seek by key beside the edge it went toward: the way's icon and `+10 s`, sliding
+  /// a little outward, then fading.
+  fn render_seek_pulse(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    // On every render, shown or not, so the next seek turns on from where the last one stopped.
+    let spin = motion::tween(
+      "seek-spin",
+      self.seek_spin,
+      self.seek_spin,
+      SEEK_SPIN,
+      window,
+      cx,
+    );
+    let seek = self.seek_pulse?;
+    let reduced = cx.reduce_motion();
+    let (opacity, _) = pulse(seek.at.elapsed(), SEEK_PULSE, reduced)?;
+    window.request_animation_frame();
+    // In fast, then still, its icon turning a whole turn the seek's way at each seek.
+    let enter = if reduced {
+      1.
+    } else {
+      entered(seek.came.elapsed(), PULSE_ENTER)
+    };
+    let inset = 48. + SEEK_ENTER_SLIDE * (1. - enter);
+    let seconds = format!("{:.0}", seek.seconds);
+    let label = if seek.forward {
+      tf!("+{} s", "+{} s", seconds)
+    } else {
+      tf!("−{} s", "−{} s", seconds)
+    };
+    let icon = if seek.forward {
+      Icon::Forward10
+    } else {
+      Icon::Back10
+    };
+    Some(
+      div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .map(|el| {
+          if seek.forward {
+            el.right(px(inset))
+          } else {
+            el.left(px(inset))
+          }
+        })
+        .flex()
+        .items_center()
+        .child(
+          h_flex()
+            .gap_2()
+            .px_4()
+            .py_2()
+            .rounded_full()
+            .bg(gpui::black().opacity(0.6))
+            .text_color(gpui::white())
+            .font_weight(FontWeight::SEMIBOLD)
+            .opacity(opacity * enter)
+            .child(
+              gpui_component::Icon::new(icon)
+                .size(px(20.))
+                // The space's accent, as the player's lit controls.
+                .text_color(cx.theme().primary)
+                .rotate(gpui::radians(spin * std::f32::consts::TAU)),
+            )
+            .child(label),
+        )
+        .into_any_element(),
+    )
+  }
+
+  /// The last volume change by key or wheel: a ring filled to the volume (of the slider's
+  /// range), the percentage inside, where the OSD shows, then fading.
+  fn render_volume_pulse(
+    &self,
+    show_ui: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    // Eased toward the volume on every render, shown or not, so the ring's arc runs from the
+    // last volume to the new one even when it comes back after a while.
+    let target = if self.muted {
+      0.
+    } else {
+      (self.volume / self.volume_max()) as f32
+    };
+    let fraction = motion::tween("volume-ring", target, target, theme::FAST, window, cx);
+    let digits = crate::widgets::odometer(
+      "volume-digits",
+      self.volume.round().max(0.) as u32,
+      9.,
+      18.,
+      window,
+      cx,
+    );
+    let (came, last) = self.volume_pulse?;
+    let reduced = cx.reduce_motion();
+    let (opacity, _) = pulse(last.elapsed(), VOLUME_PULSE, reduced)?;
+    let enter = if reduced {
+      1.
+    } else {
+      entered(came.elapsed(), PULSE_ENTER)
+    };
+    let opacity = opacity * enter;
+    window.request_animation_frame();
+    let title_bar = show_ui && !self.failed && self.has_title_bar();
+    Some(
+      div()
+        .absolute()
+        .top(px(if title_bar { 84. } else { 24. }))
+        .left_0()
+        .right_0()
+        .flex()
+        .justify_center()
+        .child(
+          div()
+            .relative()
+            .size(px(VOLUME_RING + 16.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .bg(gpui::black().opacity(0.6))
+            .opacity(opacity)
+            .child(crate::widgets::gauge(
+              VOLUME_RING,
+              fraction,
+              cx.theme().primary,
+            ))
+            .child(
+              div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_sm()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(gpui::white())
+                .child(digits),
+            ),
+        )
+        .into_any_element(),
+    )
+  }
+
   /// The poster over the black picture until the video's first frame, fading out then
   /// ([`theme::FAST`]); nothing once gone, in picture-in-picture, or without one.
   fn render_poster(
@@ -3896,6 +4144,9 @@ impl Render for PlayerView {
           ),
       );
     }
+    root = root
+      .children(self.render_seek_pulse(window, cx))
+      .children(self.render_volume_pulse(show_ui, window, cx));
     // No key up comes once the focus or the window is gone: the 2× speed ends there.
     if self.hold == Some(Hold::Space)
       && !(self.focus.is_focused(window) && window.is_window_active())
@@ -3980,7 +4231,9 @@ impl Render for PlayerView {
 
 #[cfg(test)]
 mod tests {
-  use super::{group_thousands, speed_label};
+  use std::time::{Duration, Instant};
+
+  use super::{SeekPulse, group_thousands, pulse, speed_label};
 
   #[test]
   fn thousands() {
@@ -3996,5 +4249,40 @@ mod tests {
     assert_eq!(speed_label(1.0), "Normal");
     assert_eq!(speed_label(0.75), "0.75×");
     assert_eq!(speed_label(2.0), "2×");
+  }
+
+  #[test]
+  fn seeks_add_up_the_same_way_within_a_second() {
+    let t0 = Instant::now();
+    let first = SeekPulse::after(None, 10., t0);
+    let second = SeekPulse::after(Some(first), 10., t0 + Duration::from_millis(400));
+    assert_eq!(second.seconds, 20.);
+    assert!(second.forward);
+    // Back the other way: a new count.
+    let back = SeekPulse::after(Some(second), -5., t0 + Duration::from_millis(600));
+    assert_eq!(back.seconds, 5.);
+    assert!(!back.forward);
+    // Too late: a new count.
+    let late = SeekPulse::after(Some(back), -5., t0 + Duration::from_millis(1700));
+    assert_eq!(late.seconds, 5.);
+    // A count keeps when its pill came; a new one comes again.
+    assert_eq!(second.came, t0);
+    assert_eq!(late.came, t0 + Duration::from_millis(1700));
+  }
+
+  #[test]
+  fn pulses_hold_then_fade() {
+    let d = Duration::from_millis(1000);
+    assert_eq!(
+      pulse(Duration::from_millis(100), d, false).map(|p| p.0),
+      Some(1.)
+    );
+    let fading = pulse(Duration::from_millis(850), d, false).map(|p| p.0);
+    assert!(fading.is_some_and(|o| o > 0.4 && o < 0.6));
+    assert_eq!(
+      pulse(Duration::from_millis(800), d, true).map(|p| p.0),
+      Some(1.)
+    );
+    assert!(pulse(d, d, false).is_none());
   }
 }
