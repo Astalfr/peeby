@@ -273,7 +273,7 @@ pub fn audio_output(cx: &App) -> Option<String> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layout {
   /// In a page with other content (YouTube's watch page): theater mode, the wheel scrolls the
-  /// page unless in fullscreen.
+  /// page unless in fullscreen or while the player has the focus.
   Embedded,
   /// A page of its own in the content panel (Jellyfin): a top bar with back, title and subtitle
   /// over the picture; Escape and Backspace close it; the wheel sets the volume.
@@ -447,6 +447,9 @@ pub struct PlayerView {
   /// ([`Self::announce`]), and where its card is.
   announced: Option<(UpNextItem, Announce)>,
   announce_task: Option<Task<()>>,
+  /// Embedded, the wheel over the player sets the volume: it was clicked since it last lost
+  /// the focus (`on_wheel`).
+  wheel_volume: bool,
   /// The shortcut help is open.
   help: bool,
   /// The right-click menu is open, at this point of the player.
@@ -649,6 +652,7 @@ impl PlayerView {
       countdown_task: None,
       announced: None,
       announce_task: None,
+      wheel_volume: false,
       help: false,
       context_menu: None,
       stats: false,
@@ -2491,6 +2495,13 @@ impl PlayerView {
       "i" if self.pip_offered() => self.toggle_picture_in_picture(window, cx),
       "f" => window.toggle_fullscreen(),
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
+      // Embedded, Escape leaves the player: the wheel over it scrolls the page again.
+      "escape" if self.layout == Layout::Embedded => {
+        self.wheel_volume = false;
+        window.blur(cx);
+        cx.stop_propagation();
+        return;
+      }
       "escape" | "backspace" if page_layout => self.close(cx),
       _ => return,
     }
@@ -2558,22 +2569,28 @@ impl PlayerView {
     }
   }
 
-  /// Mouse wheel: volume, in fullscreen or when the player is the page (embedded, the wheel
-  /// scrolls the page).
+  /// Mouse wheel: volume, in fullscreen, when the player is the page, or embedded once clicked
+  /// while it keeps the focus (not from its page opening); else embedded, the wheel scrolls the
+  /// page.
   fn on_wheel(&mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
     if !window.is_fullscreen() && self.layout == Layout::Embedded {
-      return;
-    }
-    let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
-    if dy.abs() > 0.5 {
-      // A step per notch, the wheel's slices carrying none (`wheel::notches`).
-      let steps = crate::wheel::notches(event) as f64;
-      if steps > 0. {
-        let step = if dy > 0.0 { VOLUME_STEP } else { -VOLUME_STEP };
-        self.change_volume(self.volume + step * steps, cx);
-        self.show_controls(cx);
+      if !self.focus.contains_focused(window, cx) {
+        // Left since the click: the next focus without one does not count.
+        self.wheel_volume = false;
       }
-      cx.stop_propagation();
+      if !self.wheel_volume {
+        return;
+      }
+    }
+    // Every slice of a notch stops here, its last tiny ones included: none scrolls the page.
+    cx.stop_propagation();
+    let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
+    // A step per notch, the wheel's slices carrying none (`wheel::notches`).
+    let steps = crate::wheel::notches(event) as f64;
+    if dy.abs() > 0.5 && steps > 0. {
+      let step = if dy > 0.0 { VOLUME_STEP } else { -VOLUME_STEP };
+      self.change_volume(self.volume + step * steps, cx);
+      self.show_controls(cx);
     }
   }
 
@@ -4185,20 +4202,43 @@ impl Render for PlayerView {
       .rounded_bl(radii.bottom_left)
       .bg(gpui::black())
       .track_focus(&self.focus)
+      // Any press on the player (picture, controls) focuses it, before a control stops the
+      // press (else its keys, Escape out of fullscreen included, reach nobody once a click on
+      // the page has left it); the wheel over it is then the volume's.
+      .capture_any_mouse_down(cx.listener(|this, _, window, cx| {
+        this.wheel_volume = true;
+        if !this.focus.contains_focused(window, cx) {
+          window.focus(&this.focus, cx);
+        }
+      }))
       .on_key_down(cx.listener(Self::on_key))
       .on_key_up(cx.listener(Self::on_key_up))
       .child({
         let (bounds, visible) = (self.bounds.clone(), self.visible.clone());
         let (mouse_hold, view) = (self.hold == Some(Hold::Mouse), cx.weak_entity());
+        let blur_outside = (self.layout == Layout::Embedded).then(|| self.focus.clone());
         canvas(
           move |b, window, _| {
             bounds.set(b);
             visible.set(b.intersect(&window.content_mask().bounds));
           },
-          move |_, _, window, _| {
+          move |b, _, window, _| {
             // The release of a left button held on the picture, wherever it happens.
             if mouse_hold {
               listen_to_drag(&view, window, |_, _, _| {}, PlayerView::end_mouse_hold);
+            }
+            // Embedded, a press elsewhere on the page that nothing focusable takes leaves the
+            // player: the wheel over it scrolls the page again (`on_wheel`).
+            if let Some(focus) = blur_outside.clone() {
+              window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble
+                  && !b.contains(&event.position)
+                  && !window.default_prevented()
+                  && focus.is_focused(window)
+                {
+                  window.blur(cx);
+                }
+              });
             }
           },
         )
