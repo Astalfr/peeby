@@ -32,6 +32,7 @@ use crate::{Nav, Route};
 use ui::assets::Icon;
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
+use ui::lazy::Lazy;
 use ui::picture::image_fill;
 use ui::player::PlayerView;
 use ui::selectable::{self, SelectableText};
@@ -87,6 +88,8 @@ pub struct CommentSection {
   player: Entity<PlayerView>,
   /// The scroll of the panel holding the section: the next page loads near its end.
   scroll: ScrollHandle,
+  /// The threads far out of that panel's view are not built.
+  lazy: Lazy,
   /// A timestamp's seek scrolls the panel back to the top, where the player is (the watch
   /// page; not the Shorts page, whose player is beside the panel).
   top_on_seek: bool,
@@ -145,6 +148,7 @@ impl CommentSection {
       video_id,
       nav,
       player,
+      lazy: Lazy::new(scroll.clone()),
       scroll,
       top_on_seek,
       first: None,
@@ -814,7 +818,11 @@ impl CommentSection {
     let items: Vec<_> = comments
       .items
       .iter()
-      .map(|c| self.comment_thread(c, window, cx))
+      .map(|c| {
+        self.lazy.item(format!("comment-{}", c.id), || {
+          self.comment_thread(c, window, cx).into_any_element()
+        })
+      })
       .collect();
     // Pages load as the page scrolls; the button only shows to retry after a failure.
     let more = (comments.failed && comments.continuation.is_some()).then(|| {

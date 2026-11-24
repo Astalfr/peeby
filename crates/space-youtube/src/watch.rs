@@ -50,6 +50,7 @@ use ui::card::skeleton_compact;
 use ui::chat::{ChatPanel, ChatPanelEvent, watch_layout};
 use ui::i18n::{Lang, lang, t};
 use ui::images::Images;
+use ui::lazy::Lazy;
 use ui::picture::image_fill;
 use ui::player::segments::{Segment, SegmentKind};
 use ui::player::{PlayerEvent, PlayerView, Prefs, UpNextItem};
@@ -107,6 +108,8 @@ pub struct WatchView {
   rating: Rating,
   comments: Entity<CommentSection>,
   scroll: ScrollHandle,
+  /// The related videos far out of view are not built.
+  lazy: Lazy,
   /// The playlist being played, if any.
   queue: Option<Entity<Queue>>,
   queue_scroll: ScrollHandle,
@@ -257,6 +260,7 @@ impl WatchView {
       votes,
       rating: Rating::default(),
       comments,
+      lazy: Lazy::new(scroll.clone()),
       scroll,
       description_open: false,
       hovered_link: None,
@@ -1868,8 +1872,12 @@ impl Render for WatchView {
         .related
         .iter()
         .map(|related| match related {
-          Related::Video(v) => compact_card(v, &self.nav, window, cx),
-          Related::Playlist(p) => playlist_compact_card(p, &self.nav, window, cx),
+          Related::Video(v) => self.lazy.item(format!("video-{}", v.id), || {
+            compact_card(v, &self.nav, window, cx)
+          }),
+          Related::Playlist(p) => self.lazy.item(format!("playlist-{}", p.id), || {
+            playlist_compact_card(p, &self.nav, window, cx)
+          }),
         })
         .collect(),
       None => (0..8)

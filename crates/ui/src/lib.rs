@@ -9,6 +9,7 @@ pub mod chat;
 pub mod form;
 pub mod i18n;
 pub mod images;
+pub mod lazy;
 pub mod motion;
 pub mod picture;
 pub mod player;
