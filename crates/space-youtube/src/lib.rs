@@ -581,7 +581,7 @@ impl YouTubeSpace {
     let client = self.client.clone();
     let view = cx.new(|cx| WatchView::new(client, id, Some(queue), nav, window, cx));
     // From one video of the queue to the next: the player says which one starts.
-    if replace {
+    if replace && Settings::get(cx).player.now_playing {
       view.update(cx, |view, cx| view.announce_now_playing(cx));
     }
     if let Some(t) = self.tabs.get_mut(tab) {

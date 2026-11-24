@@ -323,6 +323,9 @@ pub struct Player {
   pub autoplay_next: bool,
   /// Countdown length, seconds.
   pub autoplay_countdown: u32,
+  /// A playlist's video that follows another says "now playing" at the player's top left as
+  /// it starts (on by default).
+  pub now_playing: bool,
   /// Keep the volume and mute state between videos and runs.
   pub remember_volume: bool,
   /// ← / → step, seconds.
@@ -346,6 +349,7 @@ impl Default for Player {
     Self {
       autoplay_next: true,
       autoplay_countdown: 10,
+      now_playing: true,
       remember_volume: true,
       seek_step: 10,
       seek_step_large: 60,

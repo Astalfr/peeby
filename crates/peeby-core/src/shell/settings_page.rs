@@ -349,6 +349,17 @@ fn player_section(p: &Player) -> AnyElement {
       )
       .into_any_element(),
       row(
+        t("Now playing", "Lecture en cours"),
+        t(
+          "In a playlist, the video that starts shows at the player's top left for a few seconds.",
+          "Dans une playlist, la vidéo qui commence s'affiche en haut à gauche du lecteur pendant quelques secondes.",
+        ),
+        toggle("now-playing", p.now_playing, |v, cx| {
+          set_player(cx, |p| p.now_playing = v)
+        }),
+      )
+      .into_any_element(),
+      row(
         t("Sleep timer", "Minuterie de mise en veille"),
         t(
           "A button of the player's control bar that pauses it after a while (15 to 90 min) or at the end of the video. Applies to the next video.",
