@@ -140,7 +140,8 @@ const VIDEO_STOPPED_AFTER: Duration = Duration::from_secs(2);
 const DROPS_WINDOW: Duration = Duration::from_secs(1);
 /// Fewer frames dropped in a [`DROPS_WINDOW`] do not show.
 const DROPS_SHOWN: u64 = 3;
-const VOLUME_FADE: Duration = Duration::from_millis(150);
+/// How long the volume slider takes to unfold beside the mute button, and to fold back.
+const VOLUME_FADE: Duration = Duration::from_millis(250);
 const VOLUME_STEP: f64 = 5.0;
 /// The wheel's step over the volume slider, finer than the picture's.
 const VOLUME_SLIDER_STEP: f64 = 2.0;
