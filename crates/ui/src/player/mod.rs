@@ -438,6 +438,9 @@ pub struct PlayerView {
   stats_task: Option<Task<()>>,
   /// Where the player is in the window, for the right-click menu.
   bounds: Rc<Cell<Bounds<Pixels>>>,
+  /// The part of it not clipped by the page (a page sliding in hangs out of the content
+  /// panel): where a flying poster lands ([`Self::fly_poster_from`]).
+  visible: Rc<Cell<Bounds<Pixels>>>,
   title: SharedString,
   /// The channel shown with the title over the picture.
   author: Option<Author>,
@@ -631,6 +634,7 @@ impl PlayerView {
       stats_rows: Vec::new(),
       stats_task: None,
       bounds: Rc::default(),
+      visible: Rc::default(),
       title: SharedString::default(),
       author: None,
       player: None,
@@ -3970,7 +3974,8 @@ impl PlayerView {
     // Asked at a card's size: the thumbnail its card loaded is likely in the image cache.
     let width = f32::from(target.size.width).clamp(1., POSTER_WIDTH);
     if let Some(flight) = &self.flight
-      && let Some((bounds, radius, e)) = self.flight_at(framed, target, radii.top_left, window, cx)
+      && let Some((bounds, radius, e)) =
+        self.flight_at(framed, self.visible.get(), radii.top_left, window, cx)
     {
       window.request_animation_frame();
       // The larger poster loads meanwhile.
@@ -4156,10 +4161,13 @@ impl Render for PlayerView {
       .on_key_down(cx.listener(Self::on_key))
       .on_key_up(cx.listener(Self::on_key_up))
       .child({
-        let bounds = self.bounds.clone();
+        let (bounds, visible) = (self.bounds.clone(), self.visible.clone());
         let (mouse_hold, view) = (self.hold == Some(Hold::Mouse), cx.weak_entity());
         canvas(
-          move |b, _, _| bounds.set(b),
+          move |b, window, _| {
+            bounds.set(b);
+            visible.set(b.intersect(&window.content_mask().bounds));
+          },
           move |_, _, window, _| {
             // The release of a left button held on the picture, wherever it happens.
             if mouse_hold {
