@@ -302,6 +302,27 @@ impl WatchView {
     });
   }
 
+  /// The player shows the queue's video as "now playing" as it starts (one that follows
+  /// another in the queue).
+  pub fn announce_now_playing(&self, cx: &mut Context<Self>) {
+    let Some(video) = self
+      .queue
+      .as_ref()
+      .and_then(|queue| queue.read(cx).current_video().cloned())
+    else {
+      return;
+    };
+    let item = UpNextItem {
+      title: video.title.clone().into(),
+      author: video.channel.clone().map(Into::into),
+      picture: Some(convert::picture(&video.thumbnails)),
+      until_end: false,
+    };
+    self
+      .player
+      .update(cx, |player, cx| player.announce(item, cx));
+  }
+
   /// The playlist next to the player: title, place, shuffle and repeat, and its videos in
   /// play order, the current one highlighted. A click plays that video.
   fn queue_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {

@@ -355,6 +355,20 @@ pub struct UpNextItem {
 /// How long before a video's end a playlist's next one shows ([`UpNextItem::until_end`]).
 const UP_NEXT_BEFORE_END: f64 = 10.0;
 
+/// How long the "now playing" card stays once the video starts ([`PlayerView::announce`]).
+const NOW_PLAYING_FOR: Duration = Duration::from_secs(5);
+
+/// Where the "now playing" card is in its showing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Announce {
+  /// Waiting for the video to start.
+  Pending,
+  /// Shown since the video started.
+  Shown,
+  /// Fading out.
+  Leaving,
+}
+
 /// The sleep timer's lengths offered, minutes.
 const SLEEP_MINUTES: [u64; 5] = [15, 30, 45, 60, 90];
 /// The on-screen message says the pause is coming this long before it.
@@ -429,6 +443,10 @@ pub struct PlayerView {
   up_next_item: Option<UpNextItem>,
   up_next: UpNext,
   countdown_task: Option<Task<()>>,
+  /// The video announced at the top left as it starts, a playlist's next one
+  /// ([`Self::announce`]), and where its card is.
+  announced: Option<(UpNextItem, Announce)>,
+  announce_task: Option<Task<()>>,
   /// The shortcut help is open.
   help: bool,
   /// The right-click menu is open, at this point of the player.
@@ -629,6 +647,8 @@ impl PlayerView {
       up_next_item: None,
       up_next: UpNext::Hidden,
       countdown_task: None,
+      announced: None,
+      announce_task: None,
       help: false,
       context_menu: None,
       stats: false,
@@ -1858,6 +1878,7 @@ impl PlayerView {
             self.take_over(cx);
           }
           cx.emit(PlayerEvent::Started);
+          self.show_announced(cx);
         }
       }
       // While dragging, mpv still reports the positions of the seeks it has not caught up
@@ -4335,7 +4356,10 @@ impl Render for PlayerView {
     } else {
       None
     };
-    root = root.children(skip).children(up_next);
+    root = root
+      .children(skip)
+      .children(up_next)
+      .children(self.render_now_playing(show_ui, window, cx));
     // Drawn while shown and while their fade-out runs. The wrapper has no handlers, so it
     // takes no mouse events from the picture; its opacity applies to every bar.
     if self.player.is_some() && (self.controls_visible || self.controls_fade_task.is_some()) {

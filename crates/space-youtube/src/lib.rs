@@ -580,6 +580,10 @@ impl YouTubeSpace {
     let nav = Nav::new(cx.weak_entity(), tab);
     let client = self.client.clone();
     let view = cx.new(|cx| WatchView::new(client, id, Some(queue), nav, window, cx));
+    // From one video of the queue to the next: the player says which one starts.
+    if replace {
+      view.update(cx, |view, cx| view.announce_now_playing(cx));
+    }
     if let Some(t) = self.tabs.get_mut(tab) {
       t.set_view(view.into());
     }

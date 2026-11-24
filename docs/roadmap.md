@@ -193,6 +193,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
 ## YouTube playlist's next video
 
 - Done (2026-11-11, the user's request, branch `dev`): in a playlist, the player's "up next" card shows the queue's next video 10 s before the end (`UpNextItem`: thumbnail, title, channel, "Vidéo suivante dans X s" on the time left), the whole card playing it at once; the end still plays it (`Queue::next_video`). Then (the user's requests): smaller, a chevron, the "×" in its corner, sliding in, low over the picture and moving up with the control bar's own fade. Checked by the user in the app (2026-11-11).
+- Done (2026-11-24, the user's request, branch `dev`): in a playlist, a video that follows another shows a "now playing" card at the top left of the player for 5 s as it starts (`PlayerView::announce`, docs/player/playback-ux.md).
 - Done (2026-11-11, the user's request, branch `dev`): an autoplay switch on the shared player's control bar wherever something comes next (YouTube's playlists, Jellyfin's episodes), kept as the player setting "Lire la suite automatiquement" (`PlayerEvent::Autoplay`); YouTube's watch page no longer takes the player's `Ended` for the queue's next video when the player announced one (autoplay off or its card hidden). Checked by the user in the app (2026-11-11).
 
 ## YouTube chapters

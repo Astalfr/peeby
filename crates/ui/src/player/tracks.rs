@@ -427,6 +427,47 @@ impl PlayerView {
     self.up_next_item.is_some()
   }
 
+  /// Announces `item` at the top left once the video starts (at once when it has), as "now
+  /// playing" for [`super::NOW_PLAYING_FOR`]: a playlist's video that follows another.
+  pub fn announce(&mut self, item: super::UpNextItem, cx: &mut Context<Self>) {
+    self.announced = Some((item, super::Announce::Pending));
+    if self.started {
+      self.show_announced(cx);
+    }
+  }
+
+  /// The announced card shows, then leaves after [`super::NOW_PLAYING_FOR`].
+  pub(super) fn show_announced(&mut self, cx: &mut Context<Self>) {
+    let Some((_, state)) = &mut self.announced else {
+      return;
+    };
+    if *state != super::Announce::Pending {
+      return;
+    }
+    *state = super::Announce::Shown;
+    self.announce_task = Some(cx.spawn(async move |this, cx| {
+      cx.background_executor().timer(super::NOW_PLAYING_FOR).await;
+      let leaving = this.update(cx, |this, cx| {
+        if let Some((_, state)) = &mut this.announced {
+          *state = super::Announce::Leaving;
+        }
+        cx.notify();
+      });
+      if leaving.is_err() {
+        return;
+      }
+      cx.background_executor().timer(crate::theme::SLOW).await;
+      this
+        .update(cx, |this, cx| {
+          this.announced = None;
+          this.announce_task = None;
+          cx.notify();
+        })
+        .ok();
+    }));
+    cx.notify();
+  }
+
   /// [`Self::set_up_next`] with the item's author and picture, and when it shows
   /// ([`super::UpNextItem::until_end`]). The card stays as it is when only the item's details
   /// change.

@@ -105,6 +105,67 @@ const UP_NEXT_BOTTOM: (f32, f32) = (24., 110.);
 const UP_NEXT_RIGHT: f32 = 24.;
 /// How far from the right the card slides in.
 const UP_NEXT_SLIDE: f32 = 24.;
+/// The "now playing" card's distance from the player's top edge: with the controls hidden,
+/// then shown (under the title bar or the top bar).
+const NOW_PLAYING_TOP: (f32, f32) = (12., 68.);
+/// The "now playing" card's distance from the player's left edge.
+const NOW_PLAYING_LEFT: f32 = 12.;
+const NOW_PLAYING_WIDTH: f32 = 320.;
+/// How far left the "now playing" card comes from and goes back to: wholly out of the player.
+const NOW_PLAYING_AWAY: f32 = NOW_PLAYING_LEFT + NOW_PLAYING_WIDTH;
+
+/// A video card's thumbnail (when it has one) and its text: `status` (after `icon`), the
+/// title, the channel.
+fn video_lines(
+  item: &super::UpNextItem,
+  icon: Option<Icon>,
+  status: SharedString,
+  window: &mut Window,
+  cx: &mut Context<PlayerView>,
+) -> (Option<gpui::Div>, gpui::Div) {
+  let muted = cx.theme().muted_foreground;
+  let thumbnail = item.picture.as_ref().map(|picture| {
+    div()
+      .w(px(UP_NEXT_THUMB.0))
+      .h(px(UP_NEXT_THUMB.1))
+      .flex_none()
+      .child(crate::picture::image_fill(
+        picture,
+        UP_NEXT_THUMB.0,
+        UP_NEXT_THUMB.0 / UP_NEXT_THUMB.1,
+        px(4.),
+        window,
+        cx,
+      ))
+  });
+  let lines = v_flex()
+    .flex_1()
+    .min_w_0()
+    .child(
+      h_flex()
+        .gap_1()
+        .items_center()
+        .text_xs()
+        .text_color(muted)
+        .children(icon.map(|icon| gpui_component::Icon::new(icon).size(px(10.))))
+        .child(status),
+    )
+    .child(
+      div()
+        .text_sm()
+        .line_height(px(18.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .line_clamp(2)
+        .child(item.title.clone()),
+    )
+    .children(
+      item
+        .author
+        .clone()
+        .map(|author| div().text_xs().text_color(muted).truncate().child(author)),
+    );
+  (thumbnail, lines)
+}
 
 impl PlayerView {
   /// The open menu above the control bar.
@@ -577,20 +638,7 @@ impl PlayerView {
     } else {
       t("Up next", "À suivre").to_owned()
     };
-    let thumbnail = item.picture.as_ref().map(|picture| {
-      div()
-        .w(px(UP_NEXT_THUMB.0))
-        .h(px(UP_NEXT_THUMB.1))
-        .flex_none()
-        .child(crate::picture::image_fill(
-          picture,
-          UP_NEXT_THUMB.0,
-          UP_NEXT_THUMB.0 / UP_NEXT_THUMB.1,
-          px(4.),
-          window,
-          cx,
-        ))
-    });
+    let (thumbnail, lines) = video_lines(&item, None, status.into(), window, cx);
     let card = h_flex()
       .id("up-next")
       .occlude()
@@ -608,26 +656,7 @@ impl PlayerView {
       .hover(|s| s.border_color(gpui::white().opacity(0.4)))
       .on_click(cx.listener(|this, _, _, cx| this.play_next(cx)))
       .children(thumbnail)
-      .child(
-        v_flex()
-          .flex_1()
-          .min_w_0()
-          .child(div().text_xs().text_color(muted).child(status))
-          .child(
-            div()
-              .text_sm()
-              .line_height(px(18.))
-              .font_weight(FontWeight::SEMIBOLD)
-              .line_clamp(2)
-              .child(item.title.clone()),
-          )
-          .children(
-            item
-              .author
-              .clone()
-              .map(|author| div().text_xs().text_color(muted).truncate().child(author)),
-          ),
-      )
+      .child(lines)
       .child(
         div()
           .flex_none()
@@ -683,6 +712,95 @@ impl PlayerView {
       .bottom(px(low + (high - low) * shown))
       .child(card)
       .into_any_element()
+  }
+
+  /// The video [`Self::announce`]d, at the top left as it starts: its thumbnail, "Now playing",
+  /// its title and channel, as the "up next" card. It slides in from beyond the player's left
+  /// edge and back there after [`super::NOW_PLAYING_FOR`] (at once with reduced motion); low
+  /// over the
+  /// picture, it moves down under the title bar while the controls show. It takes no mouse
+  /// events: a click plays or pauses the picture under it.
+  pub(super) fn render_now_playing(
+    &self,
+    show_ui: bool,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<AnyElement> {
+    let (item, state) = self.announced.clone()?;
+    if state == super::Announce::Pending || self.failed {
+      return None;
+    }
+    let theme = cx.theme();
+    let (popover, border) = (theme.popover, theme.border);
+    let status: SharedString = t("Now playing", "Lecture en cours").into();
+    let (thumbnail, lines) = video_lines(&item, Some(Icon::Play), status, window, cx);
+    let card = h_flex()
+      .w(px(NOW_PLAYING_WIDTH))
+      .p_2()
+      .gap_2p5()
+      .items_center()
+      .rounded_lg()
+      .bg(popover)
+      .border_1()
+      .border_color(border)
+      .children(thumbnail)
+      .child(lines);
+    let reduced = cx.reduce_motion();
+    let leaving = state == super::Announce::Leaving;
+    let card = if reduced {
+      card.when(leaving, |el| el.invisible()).into_any_element()
+    } else {
+      card
+        .with_animation(
+          SharedString::from(format!("now-playing-{leaving}")),
+          gpui::Animation::new(crate::theme::SLOW).with_easing(move |t| {
+            // Leaving speeds up as it goes (ease in), coming slows down (ease out).
+            if leaving {
+              t * t * t
+            } else {
+              gpui::ease_out_quint()(t)
+            }
+          }),
+          // From beyond the player's left edge, and back there.
+          move |el, t| {
+            let out = if leaving { t } else { 1. - t };
+            el.left(px(-NOW_PLAYING_AWAY * out))
+          },
+        )
+        .into_any_element()
+    };
+    // Under what the controls draw at the top while they show (the embedded player's title
+    // bar, the page's top bar), moved with their fade as the "up next" card is.
+    let covered = self.layout.is_page() || self.has_title_bar();
+    let progress = self.controls_changed.map_or(1., |at| {
+      (at.elapsed().as_secs_f32() / super::CONTROLS_FADE.as_secs_f32()).min(1.)
+    });
+    let progress = if reduced { 1. } else { progress };
+    if progress < 1. {
+      window.request_animation_frame();
+    }
+    let shown = if covered && (show_ui || self.controls_fade_task.is_some()) {
+      gpui::ease_out_quint()(if self.controls_visible {
+        progress
+      } else {
+        1. - progress
+      })
+    } else {
+      0.
+    };
+    let (low, high) = NOW_PLAYING_TOP;
+    Some(
+      // Clipped at the player's left edge: the page beside it never shows the card.
+      div()
+        .absolute()
+        .left_0()
+        .top(px(low + (high - low) * shown))
+        .w(px(NOW_PLAYING_LEFT + NOW_PLAYING_WIDTH))
+        .overflow_hidden()
+        .pl(px(NOW_PLAYING_LEFT))
+        .child(card)
+        .into_any_element(),
+    )
   }
 
   /// The keyboard shortcuts (?).
