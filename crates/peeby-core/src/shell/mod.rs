@@ -56,6 +56,8 @@ const AUDIO_MENU_WIDTH: f32 = 320.;
 /// A tab's widest; tabs narrow down to [`TAB_MIN_WIDTH`] when the bar is full.
 const TAB_MAX_WIDTH: f32 = 220.;
 const TAB_MIN_WIDTH: f32 = 140.;
+/// How long a tab just opened takes to grow to its width.
+const TAB_OPEN: Duration = theme::NORMAL;
 /// A cell of the new tab frame: "+" and each space's logo.
 const NEW_TAB_ITEM: f32 = 26.;
 /// Width of the menu of new tabs (`NewTabStyle::Menu`).
@@ -130,6 +132,8 @@ pub struct Shell {
   tab_layout: Rc<TabLayout>,
   /// The tabs sliding to a new place (passed by the dragged one, or released).
   tab_slides: HashMap<TabId, Slide>,
+  /// The tabs just opened, when: they grow into the bar for [`TAB_OPEN`].
+  tab_openings: HashMap<TabId, Instant>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -322,6 +326,7 @@ impl Shell {
       tab_drag: None,
       tab_layout: Rc::default(),
       tab_slides: HashMap::new(),
+      tab_openings: HashMap::new(),
       _subscriptions: subscriptions,
     };
     if let Some(&first) = shell.tabs.first() {
@@ -522,6 +527,7 @@ impl Shell {
       None => self.tabs.len(),
     };
     self.tabs.insert(at, TabRef { space, id });
+    self.grow_tab(id, cx);
     self.opened_from = after.map(|from| (from, id));
     if focus {
       self.activate(id, window, cx);
@@ -536,7 +542,27 @@ impl Shell {
     };
     let id = handle.new_tab(cx);
     self.tabs.push(TabRef { space, id });
+    self.grow_tab(id, cx);
     self.activate(id, window, cx);
+  }
+
+  /// Tab `id`, just opened, grows into the bar rather than showing at once.
+  fn grow_tab(&mut self, id: TabId, cx: &App) {
+    if cx.reduce_motion() {
+      return;
+    }
+    let now = Instant::now();
+    self
+      .tab_openings
+      .retain(|_, at| now.duration_since(*at) < TAB_OPEN);
+    self.tab_openings.insert(id, now);
+  }
+
+  /// How far tab `id` has grown, 0 to 1 (eased), while it opens; `None` once open.
+  fn tab_growth(&self, id: TabId) -> Option<f32> {
+    let at = self.tab_openings.get(&id)?;
+    let t = at.elapsed().as_secs_f32() / TAB_OPEN.as_secs_f32();
+    (t < 1.).then(|| gpui::ease_out_quint()(t))
   }
 
   /// Shows the tab `step` places after the shown one (before, negative), around the bar.
@@ -1065,7 +1091,8 @@ impl Shell {
         let tooltip = self.spaces[tab.space].title(id, cx);
         let layout = self.tab_layout.clone();
         let slide = self.tab_slide(id);
-        if slide.is_some() {
+        let growth = self.tab_growth(id);
+        if slide.is_some() || growth.is_some() {
           window.request_animation_frame();
         }
         let held = dragged.filter(|d| d.tab == id);
@@ -1074,6 +1101,13 @@ impl Shell {
           .id(group.clone())
           .group(group)
           .when_some(slide, |el, offset| el.left(offset))
+          // Opening: from nothing to its width, its content clipped and fading in.
+          .when_some(growth, |el, g| {
+            el.min_w(px(TAB_MIN_WIDTH * g))
+              .max_w(px(TAB_MAX_WIDTH * g))
+              .overflow_hidden()
+              .opacity(g)
+          })
           .when(held.is_some(), |el| el.invisible())
           // Pulled off the bar: its slot closes.
           .when(held.is_some_and(|d| d.detached), |el| el.hidden())
