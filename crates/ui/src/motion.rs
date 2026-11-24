@@ -2,7 +2,9 @@
 //!
 //! GPUI animates elements that appear (`with_animation`) but has no transitions between
 //! states. [`tween`] keeps a value per element id and eases it toward its target, asking for
-//! frames until it gets there.
+//! frames until it gets there; a new target starts a new ease from rest. [`spring`] does the
+//! same with a damped spring ([`Spring`], ADR 0041), which keeps its speed when its target
+//! changes: for values redirected while they move (a hover left halfway, a fold reversed).
 
 use std::time::{Duration, Instant};
 
@@ -75,6 +77,169 @@ pub fn tween(
     tween.value(now)
   });
   if !done {
+    window.request_animation_frame();
+  }
+  value
+}
+
+/// A spring's damping ratio without bounce: the fastest return that does not overshoot from
+/// rest.
+pub const CRITICAL: f32 = 1.;
+/// A spring is at rest once both its distance to its target and the distance its speed would
+/// cover in a radian of its swing are under this, in the value's units; it then snaps to its
+/// target.
+const REST: f32 = 1e-3;
+
+/// A value pulled toward its target by a damped spring (ADR 0041), as SwiftUI's and Apple's
+/// "fluid interfaces" springs: `response` is the period the spring would swing at without
+/// damping (about the time it takes to get there, critically damped), `damping` its damping
+/// ratio (1 for [`CRITICAL`], under 1 bounces, over 1 creeps in). Its motion is solved in
+/// closed form from its last change, so it is the same at any frame rate, and a change of
+/// target (or a shift of its value) keeps both where it is and how fast it moves.
+#[derive(Clone, Copy, Debug)]
+pub struct Spring {
+  /// Value and speed (units per second) at `since`.
+  value: f32,
+  velocity: f32,
+  target: f32,
+  since: Instant,
+  /// Undamped angular frequency, from the response (rad/s).
+  omega: f32,
+  damping: f32,
+}
+
+impl Spring {
+  /// At rest at `value`.
+  pub fn new(value: f32, response: Duration, damping: f32, now: Instant) -> Self {
+    let secs = response.as_secs_f32().max(1e-3);
+    Self {
+      value,
+      velocity: 0.,
+      target: value,
+      since: now,
+      omega: std::f32::consts::TAU / secs,
+      damping: damping.max(0.),
+    }
+  }
+
+  /// Where it heads.
+  pub fn target(&self) -> f32 {
+    self.target
+  }
+
+  /// Its value and speed at `now`: the target, still, once at rest.
+  pub fn at(&self, now: Instant) -> (f32, f32) {
+    let t = now.saturating_duration_since(self.since).as_secs_f32();
+    let (y, v) = self.offset(self.value - self.target, self.velocity, t);
+    if self.rests(y, v) {
+      (self.target, 0.)
+    } else {
+      (self.target + y, v)
+    }
+  }
+
+  /// Its value at `now`.
+  pub fn value(&self, now: Instant) -> f32 {
+    self.at(now).0
+  }
+
+  /// At rest on its target at `now`.
+  pub fn settled(&self, now: Instant) -> bool {
+    let t = now.saturating_duration_since(self.since).as_secs_f32();
+    let (y, v) = self.offset(self.value - self.target, self.velocity, t);
+    self.rests(y, v)
+  }
+
+  /// Heads for `target` from `now`, from where it is and as fast as it moves.
+  pub fn retarget(&mut self, target: f32, now: Instant) {
+    if target == self.target {
+      return;
+    }
+    self.rebase(now);
+    self.target = target;
+  }
+
+  /// Its value moved `by` at `now` (the target stays), its speed kept: a slide added to one
+  /// under way.
+  pub fn shift(&mut self, by: f32, now: Instant) {
+    self.rebase(now);
+    self.value += by;
+  }
+
+  /// At rest on `target` at once (reduced motion).
+  pub fn snap(&mut self, target: f32, now: Instant) {
+    self.value = target;
+    self.velocity = 0.;
+    self.target = target;
+    self.since = now;
+  }
+
+  fn rebase(&mut self, now: Instant) {
+    (self.value, self.velocity) = self.at(now);
+    self.since = now;
+  }
+
+  fn rests(&self, y: f32, v: f32) -> bool {
+    y.abs() < REST && (v / self.omega).abs() < REST
+  }
+
+  /// The distance to the target and the speed `t` seconds after being `y0` away at `v0`: the
+  /// damped oscillator `y'' + 2ζω y' + ω² y = 0`, in its three cases.
+  fn offset(&self, y0: f32, v0: f32, t: f32) -> (f32, f32) {
+    let (w, z) = (self.omega, self.damping);
+    if (z - 1.).abs() < 1e-3 {
+      // Critically damped: y = e^(-ωt) (y0 + (v0 + ω y0) t).
+      let b = v0 + w * y0;
+      let e = (-w * t).exp();
+      (e * (y0 + b * t), e * (v0 - w * b * t))
+    } else if z < 1. {
+      // Underdamped: it swings at ωd, its swings shrinking at ζω.
+      let a = z * w;
+      let wd = w * (1. - z * z).sqrt();
+      let b = (v0 + a * y0) / wd;
+      let e = (-a * t).exp();
+      let (sin, cos) = (wd * t).sin_cos();
+      (
+        e * (y0 * cos + b * sin),
+        e * (v0 * cos - (a * b + y0 * wd) * sin),
+      )
+    } else {
+      // Overdamped: two decays, at r1 and r2.
+      let root = (z * z - 1.).sqrt();
+      let (r1, r2) = (-w * (z - root), -w * (z + root));
+      let c2 = (v0 - r1 * y0) / (r2 - r1);
+      let c1 = y0 - c2;
+      let (e1, e2) = ((r1 * t).exp(), (r2 * t).exp());
+      (c1 * e1 + c2 * e2, c1 * r1 * e1 + c2 * r2 * e2)
+    }
+  }
+}
+
+/// The current value of a spring toward `target` ([`Spring`]), at rest on it the first time
+/// the id is seen; `response` and `damping` are read then. Asks for frames until it rests.
+/// With reduced motion, the value is the target at once.
+pub fn spring(
+  id: impl Into<ElementId>,
+  target: f32,
+  response: Duration,
+  damping: f32,
+  window: &mut Window,
+  cx: &mut App,
+) -> f32 {
+  let reduced = cx.reduce_motion();
+  let now = Instant::now();
+  let state = window.use_keyed_state(id.into(), cx, |_, _| {
+    Spring::new(target, response, damping, now)
+  });
+  let (value, settled) = state.update(cx, |spring, _| {
+    if reduced {
+      spring.snap(target, now);
+    } else {
+      spring.retarget(target, now);
+    }
+    (spring.value(now), spring.settled(now))
+  });
+  if !settled {
     window.request_animation_frame();
   }
   value
@@ -221,4 +386,109 @@ pub fn cascade(
     window.request_animation_frame();
   }
   cards
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  const RESPONSE: Duration = Duration::from_millis(150);
+
+  fn ms(n: u64) -> Duration {
+    Duration::from_millis(n)
+  }
+
+  #[test]
+  fn a_critical_spring_gets_there_without_overshooting() {
+    let start = Instant::now();
+    let mut spring = Spring::new(0., RESPONSE, CRITICAL, start);
+    spring.retarget(1., start);
+    let mut last = 0.;
+    for n in 1..=100 {
+      let value = spring.value(start + ms(5 * n));
+      assert!(value >= last && value <= 1., "{value} after {last}");
+      last = value;
+    }
+    assert!(spring.value(start + RESPONSE) > 0.95);
+    assert!(spring.settled(start + ms(500)));
+    assert_eq!(spring.value(start + ms(500)), 1.);
+  }
+
+  #[test]
+  fn a_new_target_keeps_position_and_velocity() {
+    for damping in [0.6, CRITICAL, 1.5] {
+      let start = Instant::now();
+      let mut spring = Spring::new(0., RESPONSE, damping, start);
+      spring.retarget(1., start);
+      let turn = start + ms(40);
+      let (before, speed) = spring.at(turn);
+      assert!(speed > 0., "{damping}: moving toward 1");
+      spring.retarget(0., turn);
+      let (after, kept) = spring.at(turn);
+      assert!(
+        (after - before).abs() < 1e-6,
+        "{damping}: {before} → {after}"
+      );
+      assert!((kept - speed).abs() < 1e-3, "{damping}: {speed} → {kept}");
+      // Just after, it still goes on toward 1 before it turns back: it does not stop dead.
+      assert!(spring.value(turn + ms(2)) > before, "{damping}");
+      assert!(spring.value(turn + ms(800)).abs() < 0.01, "{damping}");
+    }
+  }
+
+  #[test]
+  fn the_velocity_is_the_derivative_of_the_value() {
+    for damping in [0.5, CRITICAL, 2.] {
+      let start = Instant::now();
+      let mut spring = Spring::new(3., RESPONSE, damping, start);
+      spring.retarget(-2., start);
+      spring.shift(1., start + ms(30));
+      for n in [40, 70, 120] {
+        let at = start + ms(n);
+        let (a, b) = (spring.value(at), spring.value(at + ms(1)));
+        let (_, v) = spring.at(at);
+        let slope = (b - a) / 1e-3;
+        assert!(
+          (slope - v).abs() < 0.05 * v.abs().max(1.),
+          "{damping} at {n}: {slope} vs {v}"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn a_shift_moves_the_value_and_keeps_the_speed() {
+    let start = Instant::now();
+    let mut spring = Spring::new(40., RESPONSE, CRITICAL, start);
+    spring.retarget(0., start);
+    let at = start + ms(50);
+    let (value, speed) = spring.at(at);
+    spring.shift(-25., at);
+    let (shifted, kept) = spring.at(at);
+    assert!((shifted - (value - 25.)).abs() < 1e-4);
+    assert!((kept - speed).abs() < 1e-3);
+    assert_eq!(spring.target(), 0.);
+  }
+
+  #[test]
+  fn an_underdamped_spring_bounces_then_rests() {
+    let start = Instant::now();
+    let mut spring = Spring::new(0., RESPONSE, 0.4, start);
+    spring.retarget(1., start);
+    let peak = (1..200)
+      .map(|n| spring.value(start + ms(n)))
+      .fold(0., f32::max);
+    assert!(peak > 1.05, "{peak}");
+    assert!(spring.settled(start + Duration::from_secs(2)));
+  }
+
+  #[test]
+  fn snapping_rests_on_the_target() {
+    let start = Instant::now();
+    let mut spring = Spring::new(0., RESPONSE, CRITICAL, start);
+    spring.retarget(1., start);
+    spring.snap(1., start + ms(10));
+    assert!(spring.settled(start + ms(10)));
+    assert_eq!(spring.value(start + ms(10)), 1.);
+  }
 }

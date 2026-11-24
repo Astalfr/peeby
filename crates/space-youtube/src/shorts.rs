@@ -19,9 +19,8 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-  Animation, AnimationExt, AnyElement, App, Context, Entity, EventEmitter, FontWeight,
-  KeyDownEvent, Pixels, ScrollEvent, ScrollHandle, SharedString, Subscription, Window, div,
-  ease_out_quint, px,
+  AnyElement, App, Context, Entity, EventEmitter, FontWeight, KeyDownEvent, Pixels, ScrollEvent,
+  ScrollHandle, SharedString, Subscription, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
@@ -43,7 +42,7 @@ use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::image_fill;
 use ui::player::{PlayerEvent, PlayerView, Prefs};
-use ui::{runtime, theme};
+use ui::{motion, runtime, theme};
 
 /// Height under the Short for its title and channel.
 const INFO_HEIGHT: f32 = 64.;
@@ -62,8 +61,10 @@ const ARROWS_WIDTH: f32 = 40.;
 /// A new wheel gesture starts after this long without wheel events: one gesture (a trackpad
 /// swipe and its inertia, a burst of notches) moves by one Short.
 const WHEEL_GAP: Duration = Duration::from_millis(250);
-/// Length of the slide from one Short to the next.
+/// The slide from one Short to the next: its spring's response (about its length).
 const SLIDE: Duration = theme::SLOW;
+/// A slide's Short leaving is dropped after this long at the latest.
+const SLIDE_KEPT: Duration = Duration::from_secs(1);
 /// The next page of Shorts loads when this few are left after the current one.
 const LOAD_AHEAD: usize = 3;
 
@@ -592,6 +593,10 @@ struct Slide {
   from: Entity<ShortView>,
   /// Toward the next Short (the Shorts move up), else the previous one (down).
   forward: bool,
+  /// How far the new Short is from its place, in pages (down for positive), pulled to 0 by a
+  /// spring (ADR 0041): a move started during a slide goes on from where the Shorts are and as
+  /// fast as they move.
+  offset: motion::Spring,
   /// Its number in [`ShortsView::slides`].
   id: usize,
 }
@@ -764,12 +769,14 @@ impl ShortsView {
     self.index = index;
     let from = self.current.take();
     self.show(window, cx);
-    if let Some(from) = from.filter(|_| !window.is_fullscreen()) {
+    if let Some(from) = from.filter(|_| !window.is_fullscreen() && !cx.reduce_motion()) {
       self.start_slide(from, by > 0, cx);
     }
   }
 
-  /// Slides `from` off the page and the new Short in; `from` goes when the slide ends.
+  /// Slides `from` off the page and the new Short in; `from` goes when the slide ends. During
+  /// another slide, `from` (the Short that was coming in) leaves from where it is, the one it
+  /// replaced goes at once.
   fn start_slide(&mut self, from: Entity<ShortView>, forward: bool, cx: &mut Context<Self>) {
     from.update(cx, |short, cx| {
       short
@@ -778,9 +785,24 @@ impl ShortsView {
     });
     self.slides += 1;
     let id = self.slides;
-    self.slide = Some(Slide { from, forward, id });
+    let now = Instant::now();
+    let mut offset = self
+      .slide
+      .as_ref()
+      .map(|slide| slide.offset)
+      .unwrap_or_else(|| motion::Spring::new(0., SLIDE, motion::CRITICAL, now));
+    // The new Short a page below `from` (above it going back), wherever `from` is drawn.
+    offset.shift(if forward { 1. } else { -1. }, now);
+    self.slide = Some(Slide {
+      from,
+      forward,
+      offset,
+      id,
+    });
     cx.spawn(async move |this, cx| {
-      cx.background_executor().timer(SLIDE).await;
+      // Long past the spring's rest: the slide ends in `render` once there, and here for a
+      // page that stopped being drawn (another tab on top).
+      cx.background_executor().timer(SLIDE_KEPT).await;
       this
         .update(cx, |this, cx| {
           if this.slide.as_ref().is_some_and(|slide| slide.id == id) {
@@ -903,8 +925,17 @@ impl Render for ShortsView {
     // The Short coming in, and the one leaving above or below it while the slide runs. Both
     // move by the page's height, so that they leave and enter from off the page.
     let distance = f32::from(window.viewport_size().height - theme::TITLE_BAR_HEIGHT);
+    let now = Instant::now();
+    if self
+      .slide
+      .as_ref()
+      .is_some_and(|slide| slide.offset.settled(now))
+    {
+      self.slide = None;
+    }
     let shorts = match &self.slide {
       Some(slide) => {
+        window.request_animation_frame();
         let sign = if slide.forward { 1. } else { -1. };
         // A page away from the new one: where it was when the slide starts, off the page when
         // it ends.
@@ -915,13 +946,9 @@ impl Render for ShortsView {
           .child(slide.from.clone());
         div()
           .relative()
+          .top(px(slide.offset.value(now) * distance))
           .child(short)
           .child(leaving)
-          .with_animation(
-            SharedString::from(format!("short-slide-{}", slide.id)),
-            Animation::new(SLIDE).with_easing(ease_out_quint()),
-            move |el, t| el.top(px(sign * distance * (1. - t))),
-          )
           .into_any_element()
       }
       None => short.into_any_element(),

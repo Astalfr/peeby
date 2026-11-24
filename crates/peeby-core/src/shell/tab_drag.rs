@@ -36,6 +36,7 @@ use gpui::{
 use super::space::TabId;
 use super::{Shell, windows};
 use crate::desktop;
+use ui::motion;
 
 /// How far the pointer moves, held, before the tab follows it: less is still a click.
 const THRESHOLD: f32 = 4.;
@@ -52,18 +53,15 @@ const GAP: f32 = 4.;
 /// A tab sliding to its new place.
 const SLIDE: Duration = Duration::from_millis(150);
 
-/// A tab drawn away from its place by `from`, easing back to it from `started`.
+/// A tab drawn away from its place, pulled back to it by a spring (ADR 0041): a slide added
+/// to one under way (the copy passing several tabs, or back and forth) keeps its speed.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Slide {
-  from: Pixels,
-  started: Instant,
-}
+pub(super) struct Slide(motion::Spring);
 
 impl Slide {
   /// Where the tab is drawn from its place at `now`; `None` once there.
   fn offset(&self, now: Instant) -> Option<Pixels> {
-    let t = now.duration_since(self.started).as_secs_f32() / SLIDE.as_secs_f32();
-    (t < 1.).then(|| self.from * (1. - t).powi(3))
+    (!self.0.settled(now)).then(|| px(self.0.value(now)))
   }
 }
 
@@ -523,15 +521,13 @@ impl Shell {
       return;
     }
     let now = Instant::now();
-    let current = self.tab_slide_at(id, now).unwrap_or_default();
     self.tab_slides.retain(|_, s| s.offset(now).is_some());
-    self.tab_slides.insert(
-      id,
-      Slide {
-        from: current + by,
-        started: now,
-      },
-    );
+    self
+      .tab_slides
+      .entry(id)
+      .or_insert_with(|| Slide(motion::Spring::new(0., SLIDE, motion::CRITICAL, now)))
+      .0
+      .shift(f32::from(by), now);
   }
 
   fn tab_slide_at(&self, id: TabId, now: Instant) -> Option<Pixels> {

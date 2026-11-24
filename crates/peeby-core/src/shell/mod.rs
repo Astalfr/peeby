@@ -1615,7 +1615,16 @@ impl Shell {
     } else {
       0.
     };
-    let fold = motion::tween("sidebar-fold", target, target, theme::FAST, window, cx);
+    // A spring (ADR 0041): the menu button clicked again mid-fold turns it back smoothly.
+    let fold = motion::spring(
+      "sidebar-fold",
+      target,
+      theme::FAST,
+      motion::CRITICAL,
+      window,
+      cx,
+    )
+    .clamp(0., 1.);
     let collapsed = fold >= 1.;
     let folding = fold > 0. && fold < 1.;
     let labels = (1. - 2. * fold).clamp(0., 1.);

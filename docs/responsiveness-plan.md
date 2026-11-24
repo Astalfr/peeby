@@ -202,6 +202,11 @@ answer); otherwise the thumbnail stays still. Depends on item 5.
 
 ### 14. Springs in `ui::motion`
 
+Done (2026-11-24), not yet checked in the app ([ADR 0041](decisions/0041-springs-for-redirected-motion.md)):
+`motion::Spring` (closed form, critically, under- and overdamped) and `motion::spring`, with the
+old durations as responses, on the card hover, the sidebar's and the theater chat's folding, the
+tab slides and the Shorts' slide. The Shorts no longer slide with reduced motion.
+
 `motion::tween` eases every value with `ease_out_cubic` and restarts from rest when its target
 changes: a hover reversed halfway stops, then starts back. Add `motion::spring(id, target,
 response, damping)` that keeps position and velocity across target changes (critically damped

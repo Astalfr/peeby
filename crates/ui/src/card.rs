@@ -125,14 +125,17 @@ impl Hover {
     let rested = (*since.read(cx)).is_some_and(|at| at.elapsed() >= SCRUB_DELAY);
     let scrub = (*scrub_at.read(cx)).filter(|_| hovered && rested);
     let is_down = *down.read(cx) && hovered;
-    let t = motion::tween(
+    // A spring: the mouse passing over a card and leaving it halfway turns the rise back
+    // without stopping it dead (ADR 0041). Kept within 0 and 1 (opacities follow it).
+    let t = motion::spring(
       SharedString::from(format!("{id}-lift")),
-      0.,
       if hovered { 1. } else { 0. },
       theme::FAST,
+      motion::CRITICAL,
       window,
       cx,
-    );
+    )
+    .clamp(0., 1.);
     let pressed = motion::press(
       SharedString::from(format!("{id}-press")),
       is_down,

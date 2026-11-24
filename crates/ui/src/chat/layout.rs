@@ -59,7 +59,16 @@ pub fn watch_layout(
   let chat_width = px(CHAT_WIDTH);
   if theater {
     let target = if chat_hidden { 1. } else { 0. };
-    let fold = motion::tween("chat-fold", target, target, theme::FAST, window, cx);
+    // A spring, as the sidebar's (ADR 0041).
+    let fold = motion::spring(
+      "chat-fold",
+      target,
+      theme::FAST,
+      motion::CRITICAL,
+      window,
+      cx,
+    )
+    .clamp(0., 1.);
     let chat = chat.filter(|_| fold < 1.);
     return h_flex()
       .size_full()
