@@ -801,46 +801,48 @@ impl PlayerView {
           }),
       )
     };
-    v_flex()
-      .id("context-menu")
-      .occlude()
-      .absolute()
-      .left(px(left))
-      .top(px(top))
-      .w(px(WIDTH))
-      .p_1()
-      .gap_0p5()
-      .rounded_lg()
-      .bg(popover)
-      .border_1()
-      .border_color(border)
-      .shadow_lg()
-      .child(
-        entry(
-          "context-help",
-          Icon::Keyboard,
-          t("Keyboard shortcuts", "Raccourcis clavier"),
-          self.help,
+    crate::widgets::popup_enter(
+      v_flex()
+        .id("context-menu")
+        .occlude()
+        .absolute()
+        .left(px(left))
+        .top(px(top))
+        .w(px(WIDTH))
+        .p_1()
+        .gap_0p5()
+        .rounded_lg()
+        .bg(popover)
+        .border_1()
+        .border_color(border)
+        .shadow_lg()
+        .child(
+          entry(
+            "context-help",
+            Icon::Keyboard,
+            t("Keyboard shortcuts", "Raccourcis clavier"),
+            self.help,
+          )
+          .on_click(cx.listener(|this, _, _, cx| {
+            this.context_menu = None;
+            this.help = !this.help;
+            this.show_controls(cx);
+          })),
         )
-        .on_click(cx.listener(|this, _, _, cx| {
-          this.context_menu = None;
-          this.help = !this.help;
-          this.show_controls(cx);
-        })),
-      )
-      .child(
-        entry(
-          "context-stats",
-          Icon::Info,
-          t("Statistics", "Statistiques"),
-          self.stats,
-        )
-        .on_click(cx.listener(|this, _, _, cx| {
-          this.context_menu = None;
-          this.toggle_stats(cx);
-        })),
-      )
-      .into_any_element()
+        .child(
+          entry(
+            "context-stats",
+            Icon::Info,
+            t("Statistics", "Statistiques"),
+            self.stats,
+          )
+          .on_click(cx.listener(|this, _, _, cx| {
+            this.context_menu = None;
+            this.toggle_stats(cx);
+          })),
+        ),
+    )
+    .into_any_element()
   }
 
   /// Why the video cannot play, with a way back when the player is the page.

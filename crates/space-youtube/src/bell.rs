@@ -110,46 +110,52 @@ pub fn bell_button(
       Popover::new(ElementId::Name(key.into()))
         .anchor(Anchor::TopRight)
         .trigger(button)
+        .appearance(false)
         .content(move |_, _, cx| {
-          let current = level(&channel_id, &bell, cx);
-          v_flex()
-            .w(px(220.))
-            .gap_0p5()
-            .child(
-              div()
-                .px_2()
-                .pb_1()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(t("Notifications", "Notifications")),
-            )
-            .children(bell.options.iter().map(|(level, params)| {
-              let (level, params) = (*level, params.clone());
-              let channel_id = channel_id.clone();
-              h_flex()
-                .id(item_id(level))
-                .w_full()
-                .px_2()
-                .py_1p5()
-                .gap_3()
-                .items_center()
-                .rounded(theme::RADIUS)
-                .cursor_pointer()
-                .text_sm()
-                .hover(|s| s.bg(theme::surface_hover()))
-                .active(|s| s.bg(theme::surface_pressed()))
-                .when(level == current, |el| el.text_color(theme::accent()))
-                .on_click(cx.listener(move |state, _, window, cx| {
-                  state.dismiss(window, cx);
-                  if level != current {
-                    set_level(&channel_id, current, level, &params, window, cx);
-                  }
+          ui::widgets::popup_surface(
+            {
+              let current = level(&channel_id, &bell, cx);
+              v_flex()
+                .w(px(220.))
+                .gap_0p5()
+                .child(
+                  div()
+                    .px_2()
+                    .pb_1()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(t("Notifications", "Notifications")),
+                )
+                .children(bell.options.iter().map(|(level, params)| {
+                  let (level, params) = (*level, params.clone());
+                  let channel_id = channel_id.clone();
+                  h_flex()
+                    .id(item_id(level))
+                    .w_full()
+                    .px_2()
+                    .py_1p5()
+                    .gap_3()
+                    .items_center()
+                    .rounded(theme::RADIUS)
+                    .cursor_pointer()
+                    .text_sm()
+                    .hover(|s| s.bg(theme::surface_hover()))
+                    .active(|s| s.bg(theme::surface_pressed()))
+                    .when(level == current, |el| el.text_color(theme::accent()))
+                    .on_click(cx.listener(move |state, _, window, cx| {
+                      state.dismiss(window, cx);
+                      if level != current {
+                        set_level(&channel_id, current, level, &params, window, cx);
+                      }
+                    }))
+                    .child(gpui_component::Icon::new(icon(level)).size(px(16.)))
+                    .child(div().flex_1().child(label(level)))
+                    .when(level == current, |el| {
+                      el.child(gpui_component::Icon::new(Icon::Check).size(px(14.)))
+                    })
                 }))
-                .child(gpui_component::Icon::new(icon(level)).size(px(16.)))
-                .child(div().flex_1().child(label(level)))
-                .when(level == current, |el| {
-                  el.child(gpui_component::Icon::new(Icon::Check).size(px(14.)))
-                })
-            }))
+            },
+            cx,
+          )
         }),
     )
 }

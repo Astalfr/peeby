@@ -1300,10 +1300,16 @@ impl PointsView {
             "Points de chaîne · récompenses",
           )),
       )
+      .appearance(false)
       .content(move |_, _, cx| {
-        this
-          .update(cx, |this, cx| this.rewards_panel(cx).into_any_element())
-          .unwrap_or_else(|_| div().into_any_element())
+        ui::widgets::popup_surface(
+          {
+            this
+              .update(cx, |this, cx| this.rewards_panel(cx).into_any_element())
+              .unwrap_or_else(|_| div().into_any_element())
+          },
+          cx,
+        )
       })
   }
 

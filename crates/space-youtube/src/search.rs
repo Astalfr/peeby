@@ -342,7 +342,7 @@ impl SearchView {
           )
       })
       .collect();
-    Some(deferred(
+    Some(deferred(ui::widgets::popup_enter(
       v_flex()
         .id("search-suggestions")
         .occlude()
@@ -350,7 +350,7 @@ impl SearchView {
         .top_full()
         .left_0()
         .right_0()
-        .mt_1()
+        .mt(px(4.))
         .p_1()
         .rounded(theme::RADIUS_LG)
         .border_1()
@@ -359,7 +359,7 @@ impl SearchView {
         .shadow_lg()
         .text_sm()
         .children(rows),
-    ))
+    )))
   }
 
   /// Runs the typed query (Enter).

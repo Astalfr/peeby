@@ -568,29 +568,35 @@ fn chapters_button(
             .bg(gpui::black().opacity(0.8))
             .text_color(gpui::white()),
         )
+        .appearance(false)
         .content(move |_, window, cx| {
-          let (video_id, nav) = (video_id.clone(), nav.clone());
-          let starts: Vec<u32> = items.iter().map(|item| item.start as u32).collect();
-          div()
-            .id(ElementId::Name(format!("{key}-list").into()))
-            .max_h(px(380.))
-            .overflow_y_scroll()
-            .child(chapter_list(
-              &key,
-              &items,
-              None,
-              move |i, _, cx| {
-                nav.open(
-                  Route::Vod {
-                    id: video_id.clone(),
-                    start: Some(starts[i]),
+          ui::widgets::popup_surface(
+            {
+              let (video_id, nav) = (video_id.clone(), nav.clone());
+              let starts: Vec<u32> = items.iter().map(|item| item.start as u32).collect();
+              div()
+                .id(ElementId::Name(format!("{key}-list").into()))
+                .max_h(px(380.))
+                .overflow_y_scroll()
+                .child(chapter_list(
+                  &key,
+                  &items,
+                  None,
+                  move |i, _, cx| {
+                    nav.open(
+                      Route::Vod {
+                        id: video_id.clone(),
+                        start: Some(starts[i]),
+                      },
+                      cx,
+                    );
                   },
+                  window,
                   cx,
-                );
-              },
-              window,
-              cx,
-            ))
+                ))
+            },
+            cx,
+          )
         }),
     )
 }

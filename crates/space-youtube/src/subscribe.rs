@@ -102,36 +102,42 @@ pub fn subscribe_button(
     Popover::new(ElementId::Name(key.into()))
       .anchor(Anchor::TopLeft)
       .trigger(button)
+      .appearance(false)
       .content(move |_, _, cx| {
-        let (channel_id, subscription) = (channel_id.clone(), subscription.clone());
-        v_flex().w(px(260.)).gap_1().child(
-          h_flex()
-            .id("unsubscribe")
-            .w_full()
-            .px_2()
-            .py_1p5()
-            .gap_3()
-            .items_center()
-            .rounded(theme::RADIUS)
-            .cursor_pointer()
-            .text_sm()
-            .hover(|s| s.bg(theme::surface_hover()))
-            .active(|s| s.bg(theme::surface_pressed()))
-            .on_click(cx.listener(move |state, _, window, cx| {
-              state.dismiss(window, cx);
-              set_subscribed(&channel_id, false, &subscription, window, cx);
-            }))
-            .child(
-              gpui_component::Icon::new(Icon::BellOff)
-                .size(px(16.))
-                .flex_none(),
+        ui::widgets::popup_surface(
+          {
+            let (channel_id, subscription) = (channel_id.clone(), subscription.clone());
+            v_flex().w(px(260.)).gap_1().child(
+              h_flex()
+                .id("unsubscribe")
+                .w_full()
+                .px_2()
+                .py_1p5()
+                .gap_3()
+                .items_center()
+                .rounded(theme::RADIUS)
+                .cursor_pointer()
+                .text_sm()
+                .hover(|s| s.bg(theme::surface_hover()))
+                .active(|s| s.bg(theme::surface_pressed()))
+                .on_click(cx.listener(move |state, _, window, cx| {
+                  state.dismiss(window, cx);
+                  set_subscribed(&channel_id, false, &subscription, window, cx);
+                }))
+                .child(
+                  gpui_component::Icon::new(Icon::BellOff)
+                    .size(px(16.))
+                    .flex_none(),
+                )
+                // A long channel name wraps inside the menu, two lines at most.
+                .child(div().flex_1().min_w_0().line_clamp(2).child(tf!(
+                  "Unsubscribe from {}",
+                  "Se désabonner de {}",
+                  channel
+                ))),
             )
-            // A long channel name wraps inside the menu, two lines at most.
-            .child(div().flex_1().min_w_0().line_clamp(2).child(tf!(
-              "Unsubscribe from {}",
-              "Se désabonner de {}",
-              channel
-            ))),
+          },
+          cx,
         )
       }),
   )

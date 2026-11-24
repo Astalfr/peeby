@@ -486,9 +486,15 @@ pub fn menu_button(
             .icon(Icon::More)
             .tooltip(ui::i18n::t("More actions", "Plus d'actions")),
         )
+        .appearance(false)
         .content(move |_, window, cx| {
-          let menu = Menu::Card(not_interested.clone());
-          picker_content(&key, &video_id, menu, window, cx)
+          ui::widgets::popup_surface(
+            {
+              let menu = Menu::Card(not_interested.clone());
+              picker_content(&key, &video_id, menu, window, cx)
+            },
+            cx,
+          )
         }),
     )
 }
@@ -506,7 +512,10 @@ pub fn watch_menu_button(video_id: &str) -> impl IntoElement {
         .icon(Icon::More)
         .tooltip(t("More actions", "Plus d'actions")),
     )
-    .content(move |_, window, cx| picker_content(&key, &video_id, Menu::Watch, window, cx))
+    .appearance(false)
+    .content(move |_, window, cx| {
+      ui::widgets::popup_surface(picker_content(&key, &video_id, Menu::Watch, window, cx), cx)
+    })
 }
 
 /// Which "⋮" menu a popover shows.

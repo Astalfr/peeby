@@ -303,6 +303,51 @@ pub fn gauge(size: f32, fraction: f32, color: gpui::Hsla) -> impl IntoElement {
   )
 }
 
+/// How long a popup takes to come in ([`popup_surface`], [`popup_enter`]).
+const POPUP_ENTER: Duration = Duration::from_millis(180);
+/// How far a popup slides in from, above its place.
+const POPUP_SLIDE: f32 = 12.;
+
+/// `el` coming in as a popup does: fading in and sliding 12 px down into place, easing out
+/// (docs/design.md, "Popup opening"). The animation's key is constant: a popup's element
+/// state goes when it closes, so it plays again at each opening. Its shadow is held back until
+/// the fade is nearly done (mid-fade it would show through the surface as a dark slab). None
+/// with reduced motion (GPUI's animations then show their end).
+pub fn popup_enter<E: Styled + IntoElement + 'static>(mut el: E) -> gpui::AnimationElement<E> {
+  let shadow = el.style().box_shadow.clone();
+  // Slides from its own top margin, when it has one in pixels.
+  let margin = match el.style().margin.top {
+    Some(gpui::Length::Definite(gpui::DefiniteLength::Absolute(gpui::AbsoluteLength::Pixels(
+      margin,
+    )))) => f32::from(margin),
+    _ => 0.,
+  };
+  el.with_animation(
+    "popup-enter",
+    Animation::new(POPUP_ENTER).with_easing(|t: f32| 1. - (1. - t).powi(3)),
+    move |el, t| {
+      // A margin, not `top`: a popup placed with `top` (a context menu) keeps its place.
+      let el = el.opacity(t).mt(px(margin - POPUP_SLIDE * (1. - t)));
+      match &shadow {
+        Some(shadow) if t >= 0.85 => el.shadow(shadow.clone()),
+        Some(_) => el.shadow(Vec::new()),
+        None => el,
+      }
+    },
+  )
+}
+
+/// A popover's content on gpui-component's popover surface (its background, text color,
+/// radius, shadow and padding), coming in with [`popup_enter`]. For popovers built with
+/// `.appearance(false)`, which then look as they did, animated.
+pub fn popup_surface(
+  content: impl IntoElement,
+  cx: &gpui::App,
+) -> gpui::AnimationElement<gpui::Div> {
+  use gpui_component::ThemeStyled as _;
+  popup_enter(div().relative().popover_style(cx).p_3().child(content))
+}
+
 /// Whether a scroll area is within about a screen of its end, to load the next page early.
 pub fn near_scroll_end(handle: &gpui::ScrollHandle) -> bool {
   let max = f32::from(handle.max_offset().y);

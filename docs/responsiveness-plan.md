@@ -163,6 +163,12 @@ on folding and in the second half on unfolding; the content panel follows its wi
 
 ### 11. Menus and popovers opening
 
+Done (2026-11-24), not yet checked in the app: `ui::widgets::popup_enter` and `popup_surface`
+on every `Popover`, the player's context menu, the search suggestions and the chat's
+completion. No exit motion: a closed popover stops being rendered at once (gpui-component
+says the same of its own dropdowns), which would need each popup to stay mounted past its
+close. The shell's context menu (`context_menu`, a gpui-component `PopupMenu`) is left as is.
+
 The "⋮" menus, the bell's panel, the audio output menu and the search suggestions open in a
 single frame. Fade them in moving 4 px from their anchor (120 ms), and out without movement (83 ms),
 as the sidebar's hover cards already do. Check first what gpui-component's `Popover` and

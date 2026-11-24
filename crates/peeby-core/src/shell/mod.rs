@@ -1376,54 +1376,60 @@ impl Shell {
       Popover::new("new-tab")
         .anchor(Anchor::TopLeft)
         .trigger(trigger)
+        .appearance(false)
         .content(move |_, window, cx| {
-          let rows: Vec<_> = spaces
-            .iter()
-            .enumerate()
-            .map(|(index, info)| {
-              let shell = shell.clone();
-              h_flex()
-                .id(SharedString::from(format!("new-tab-{index}")))
-                .w_full()
-                .px_2()
-                .py_1p5()
-                .gap_3()
-                .items_center()
-                .rounded(theme::RADIUS)
-                .cursor_pointer()
-                .text_sm()
-                .hover(|s| s.bg(theme::surface_hover()))
-                .active(|s| s.bg(theme::surface_pressed()))
-                .child(assets::color_svg(info.icon, 18., window, cx))
-                .child(info.name.clone())
-                .on_click(cx.listener(move |state, _, window, cx| {
-                  state.dismiss(window, cx);
+          ui::widgets::popup_surface(
+            {
+              let rows: Vec<_> = spaces
+                .iter()
+                .enumerate()
+                .map(|(index, info)| {
                   let shell = shell.clone();
-                  let handle = window.window_handle();
-                  // The popover is drawn in the window: open the tab once it is done.
-                  cx.defer(move |cx| {
-                    handle
-                      .update(cx, |_, window, cx| {
-                        shell
-                          .update(cx, |shell, cx| shell.new_tab(index, window, cx))
+                  h_flex()
+                    .id(SharedString::from(format!("new-tab-{index}")))
+                    .w_full()
+                    .px_2()
+                    .py_1p5()
+                    .gap_3()
+                    .items_center()
+                    .rounded(theme::RADIUS)
+                    .cursor_pointer()
+                    .text_sm()
+                    .hover(|s| s.bg(theme::surface_hover()))
+                    .active(|s| s.bg(theme::surface_pressed()))
+                    .child(assets::color_svg(info.icon, 18., window, cx))
+                    .child(info.name.clone())
+                    .on_click(cx.listener(move |state, _, window, cx| {
+                      state.dismiss(window, cx);
+                      let shell = shell.clone();
+                      let handle = window.window_handle();
+                      // The popover is drawn in the window: open the tab once it is done.
+                      cx.defer(move |cx| {
+                        handle
+                          .update(cx, |_, window, cx| {
+                            shell
+                              .update(cx, |shell, cx| shell.new_tab(index, window, cx))
+                              .ok();
+                          })
                           .ok();
-                      })
-                      .ok();
-                  });
-                }))
-            })
-            .collect();
-          v_flex()
-            .w(px(NEW_TAB_MENU_WIDTH))
-            .gap_1()
-            .child(
-              div()
-                .px_2()
-                .pb_1()
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(t("New tab", "Nouvel onglet")),
-            )
-            .children(rows)
+                      });
+                    }))
+                })
+                .collect();
+              v_flex()
+                .w(px(NEW_TAB_MENU_WIDTH))
+                .gap_1()
+                .child(
+                  div()
+                    .px_2()
+                    .pb_1()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(t("New tab", "Nouvel onglet")),
+                )
+                .children(rows)
+            },
+            cx,
+          )
         }),
     )
   }
@@ -1465,9 +1471,15 @@ impl Shell {
         Popover::new("notifications")
           .anchor(Anchor::TopRight)
           .trigger(trigger)
+          .appearance(false)
           .content(move |_, window, cx| {
-            let popover = cx.entity().downgrade();
-            bell::panel(spaces.clone(), popover, NOTIFICATIONS_WIDTH, window, cx)
+            ui::widgets::popup_surface(
+              {
+                let popover = cx.entity().downgrade();
+                bell::panel(spaces.clone(), popover, NOTIFICATIONS_WIDTH, window, cx)
+              },
+              cx,
+            )
           }),
       )
       .children(badge)
@@ -1497,90 +1509,96 @@ impl Shell {
           }
         }
       })
+      .appearance(false)
       .content(move |_, _, cx| {
-        let devices = shell
-          .upgrade()
-          .and_then(|shell| shell.read(cx).audio_devices.clone());
-        let current = Settings::get(cx).player.audio_device.clone();
-        let volume = output_volume::slider_row(&shell, cx);
-        let row = |id: SharedString,
-                   device: Option<String>,
-                   label: SharedString,
-                   cx: &mut Context<PopoverState>| {
-          let selected = device == current;
-          h_flex()
-            .id(id)
-            .w_full()
-            .px_2()
-            .py_1p5()
-            .gap_3()
-            .items_center()
-            .rounded(theme::RADIUS)
-            .cursor_pointer()
-            .text_sm()
-            .hover(|s| s.bg(theme::surface_hover()))
-            .active(|s| s.bg(theme::surface_pressed()))
-            .when(selected, |el| el.text_color(theme::accent()))
-            .on_click(cx.listener(move |state, _, window, cx| {
-              state.dismiss(window, cx);
-              if !selected {
-                choose_audio_device(device.clone(), cx);
-              }
-            }))
-            .child(div().flex_1().min_w_0().truncate().child(label))
-            .when(selected, |el| {
-              el.child(
-                gpui_component::Icon::new(Icon::Check)
-                  .size(px(14.))
-                  .flex_none(),
-              )
-            })
-        };
-        let default = row(
-          "audio-device-default".into(),
-          None,
-          t("Windows default", "Par défaut de Windows").into(),
-          cx,
-        );
-        let rows: Vec<_> = devices
-          .iter()
-          .flatten()
-          .enumerate()
-          .map(|(index, device)| {
-            row(
-              SharedString::from(format!("audio-device-{index}")),
-              Some(device.name.clone()),
-              device.description.clone().into(),
-              cx,
-            )
-          })
-          .collect();
-        v_flex()
-          .w(px(AUDIO_MENU_WIDTH))
-          .gap_1()
-          .child(
-            div()
-              .px_2()
-              .pb_1()
-              .font_weight(FontWeight::SEMIBOLD)
-              .child(t("Audio output", "Sortie audio")),
-          )
-          .when_some(volume, |el, volume| {
-            el.child(volume)
-              .child(div().my_1().mx_2().h(px(1.)).bg(theme::border()))
-          })
-          .child(default)
-          .children(rows)
-          .when(devices.is_none(), |el| {
-            el.child(
-              div()
+        ui::widgets::popup_surface(
+          {
+            let devices = shell
+              .upgrade()
+              .and_then(|shell| shell.read(cx).audio_devices.clone());
+            let current = Settings::get(cx).player.audio_device.clone();
+            let volume = output_volume::slider_row(&shell, cx);
+            let row = |id: SharedString,
+                       device: Option<String>,
+                       label: SharedString,
+                       cx: &mut Context<PopoverState>| {
+              let selected = device == current;
+              h_flex()
+                .id(id)
+                .w_full()
                 .px_2()
                 .py_1p5()
+                .gap_3()
+                .items_center()
+                .rounded(theme::RADIUS)
+                .cursor_pointer()
                 .text_sm()
-                .text_color(theme::muted())
-                .child(t("Looking for outputs…", "Recherche des sorties…")),
-            )
-          })
+                .hover(|s| s.bg(theme::surface_hover()))
+                .active(|s| s.bg(theme::surface_pressed()))
+                .when(selected, |el| el.text_color(theme::accent()))
+                .on_click(cx.listener(move |state, _, window, cx| {
+                  state.dismiss(window, cx);
+                  if !selected {
+                    choose_audio_device(device.clone(), cx);
+                  }
+                }))
+                .child(div().flex_1().min_w_0().truncate().child(label))
+                .when(selected, |el| {
+                  el.child(
+                    gpui_component::Icon::new(Icon::Check)
+                      .size(px(14.))
+                      .flex_none(),
+                  )
+                })
+            };
+            let default = row(
+              "audio-device-default".into(),
+              None,
+              t("Windows default", "Par défaut de Windows").into(),
+              cx,
+            );
+            let rows: Vec<_> = devices
+              .iter()
+              .flatten()
+              .enumerate()
+              .map(|(index, device)| {
+                row(
+                  SharedString::from(format!("audio-device-{index}")),
+                  Some(device.name.clone()),
+                  device.description.clone().into(),
+                  cx,
+                )
+              })
+              .collect();
+            v_flex()
+              .w(px(AUDIO_MENU_WIDTH))
+              .gap_1()
+              .child(
+                div()
+                  .px_2()
+                  .pb_1()
+                  .font_weight(FontWeight::SEMIBOLD)
+                  .child(t("Audio output", "Sortie audio")),
+              )
+              .when_some(volume, |el, volume| {
+                el.child(volume)
+                  .child(div().my_1().mx_2().h(px(1.)).bg(theme::border()))
+              })
+              .child(default)
+              .children(rows)
+              .when(devices.is_none(), |el| {
+                el.child(
+                  div()
+                    .px_2()
+                    .py_1p5()
+                    .text_sm()
+                    .text_color(theme::muted())
+                    .child(t("Looking for outputs…", "Recherche des sorties…")),
+                )
+              })
+          },
+          cx,
+        )
       })
   }
 

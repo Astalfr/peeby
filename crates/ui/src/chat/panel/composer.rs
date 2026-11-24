@@ -605,7 +605,7 @@ impl ChatPanel {
       })
       .collect();
     Some(
-      deferred(
+      deferred(crate::widgets::popup_enter(
         v_flex()
           .id("chat-completion")
           .occlude()
@@ -621,7 +621,7 @@ impl ChatPanel {
           .bg(theme::background())
           .shadow_lg()
           .children(rows),
-      )
+      ))
       .into_any_element(),
     )
   }
@@ -826,10 +826,16 @@ impl ChatPanel {
           .disabled(off)
           .tooltip(t("Emotes and emoji", "Emotes et emoji")),
       )
+      .appearance(false)
       .content(move |_, _, cx| {
-        this
-          .update(cx, |this, cx| this.render_picker(cx))
-          .unwrap_or_else(|_| div().into_any_element())
+        crate::widgets::popup_surface(
+          {
+            this
+              .update(cx, |this, cx| this.render_picker(cx))
+              .unwrap_or_else(|_| div().into_any_element())
+          },
+          cx,
+        )
       });
     // The options' gear. Its menu is built again at every opening, so a label or a greyed entry
     // set meanwhile shows. The button is not disabled with the field: its options are about the

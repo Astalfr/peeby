@@ -881,52 +881,58 @@ impl WatchView {
         Popover::new(SharedString::from(key.clone()))
           .anchor(gpui::Anchor::TopLeft)
           .trigger(trigger)
+          .appearance(false)
           .content(move |_, window, cx| {
-            v_flex()
-              .w(px(340.))
-              .p_1()
-              .gap_1()
-              .children(
-                channels
-                  .iter()
-                  .map(|(id, name, subscription, bell, avatar)| {
-                    let row = format!("{key}-{id}");
-                    let subscribed = subscribe::is_subscribed(id, subscription, cx);
-                    h_flex()
-                      .px_2()
-                      .py_1p5()
-                      .gap_3()
-                      .items_center()
-                      .child(ui::picture::avatar(
-                        &convert::picture(avatar),
-                        32.,
-                        window,
-                        cx,
-                      ))
-                      .child(
-                        div()
-                          .flex_1()
-                          .min_w_0()
-                          .truncate()
-                          .font_weight(FontWeight::SEMIBOLD)
-                          .child(name.clone()),
-                      )
-                      .child(subscribe::subscribe_button(
-                        &row,
-                        id,
-                        name,
-                        subscription,
-                        true,
-                        cx,
-                      ))
-                      .children(
-                        bell
-                          .as_ref()
-                          .filter(|_| subscribed)
-                          .map(|bell| bell::bell_button(&row, id, bell, true, cx)),
-                      )
-                  }),
-              )
+            ui::widgets::popup_surface(
+              {
+                v_flex()
+                  .w(px(340.))
+                  .p_1()
+                  .gap_1()
+                  .children(
+                    channels
+                      .iter()
+                      .map(|(id, name, subscription, bell, avatar)| {
+                        let row = format!("{key}-{id}");
+                        let subscribed = subscribe::is_subscribed(id, subscription, cx);
+                        h_flex()
+                          .px_2()
+                          .py_1p5()
+                          .gap_3()
+                          .items_center()
+                          .child(ui::picture::avatar(
+                            &convert::picture(avatar),
+                            32.,
+                            window,
+                            cx,
+                          ))
+                          .child(
+                            div()
+                              .flex_1()
+                              .min_w_0()
+                              .truncate()
+                              .font_weight(FontWeight::SEMIBOLD)
+                              .child(name.clone()),
+                          )
+                          .child(subscribe::subscribe_button(
+                            &row,
+                            id,
+                            name,
+                            subscription,
+                            true,
+                            cx,
+                          ))
+                          .children(
+                            bell
+                              .as_ref()
+                              .filter(|_| subscribed)
+                              .map(|bell| bell::bell_button(&row, id, bell, true, cx)),
+                          )
+                      }),
+                  )
+              },
+              cx,
+            )
           }),
       ),
     )
