@@ -233,6 +233,12 @@ first frame.
 
 ### 16. Smooth wheel scrolling
 
+Done (2026-11-24), not yet checked in the app, without a helper per list: `ui::wheel::listen`
+on the shell's and the lives panel's roots takes each notch in the capture phase and dispatches
+it again (`Window::dispatch_event`) as fractional `Lines` slices over the next frames, so the 44
+scrolling divs, the feeds' and the chat's `ListState` and gpui-component's scroll areas all ease.
+The volume wheels and the Shorts count notches (`wheel::notches`), not slices.
+
 GPUI scrolls by whole steps with a mouse wheel, where WinUI's ScrollViewer animates each notch
 (about 150 ms). Animate line-based wheel deltas (`ScrollDelta::Lines`) toward a target offset,
 added up while the wheel turns; pixel deltas (touchpads, precise wheels) stay as they are.

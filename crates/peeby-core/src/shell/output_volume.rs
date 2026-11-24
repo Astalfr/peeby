@@ -289,7 +289,8 @@ pub(super) fn slider_row(shell: &WeakEntity<Shell>, cx: &App) -> Option<impl Int
         // The menu has nothing to scroll, nor the page under it to get.
         cx.stop_propagation();
         let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
-        if dy.abs() > 0.5 {
+        // A step per notch: the wheel's slices carry none (`ui::wheel::notches`).
+        if dy.abs() > 0.5 && ui::wheel::notches(event) > 0 {
           wheel_shell
             .update(cx, |shell, cx| shell.step_output_volume(dy > 0.0, cx))
             .ok();

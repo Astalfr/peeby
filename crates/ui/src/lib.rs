@@ -19,6 +19,7 @@ pub mod spin;
 pub mod splash;
 pub mod text;
 pub mod theme;
+pub mod wheel;
 pub mod widgets;
 
 /// Moves and resizes a window without activating it (patched GPUI), for the mini-player.

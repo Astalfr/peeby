@@ -238,6 +238,17 @@ fn general_section(settings: &Settings, spaces: &[SpaceInfo]) -> AnyElement {
       )
       .into_any_element(),
       row(
+        t("Smooth scrolling", "Défilement fluide"),
+        t(
+          "Each notch of the mouse wheel scrolls in a short glide rather than in one step. Touchpads are not affected.",
+          "Chaque cran de la molette défile en un court glissement plutôt que d'un coup. Les pavés tactiles ne sont pas concernés.",
+        ),
+        toggle("smooth-scrolling", settings.smooth_scrolling, |v, cx| {
+          Settings::update(cx, |s| s.smooth_scrolling = v)
+        }),
+      )
+      .into_any_element(),
+      row(
         t("Keep running in the background", "Rester en arrière-plan"),
         t(
           "Closing the window keeps Peeby in the notification area, for the notifications; its icon's menu quits. Off, closing the window quits.",

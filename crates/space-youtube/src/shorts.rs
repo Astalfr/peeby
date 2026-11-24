@@ -830,7 +830,8 @@ impl ShortsView {
 
   fn on_wheel(&mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
     let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
-    if dy.abs() < 0.5 {
+    if dy.abs() < 0.5 || ui::wheel::notches(event) == 0 {
+      // The rest of an eased notch (`ui::wheel`): the notch itself counted.
       return;
     }
     let now = Instant::now();

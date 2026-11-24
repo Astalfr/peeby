@@ -519,6 +519,7 @@ impl Render for LivesView {
     let tabs = self.tabs(window, cx);
     let list = self.list(window, cx);
     let rise = if self.from_below { RISE } else { -RISE };
+    let smooth = crate::settings::Settings::get(cx).smooth_scrolling;
     let panel = v_flex()
       .id("lives")
       .track_focus(&self.focus)
@@ -536,6 +537,15 @@ impl Render for LivesView {
       .border_color(theme::border())
       .font_family(font)
       .text_color(theme::foreground())
+      // The wheel's notches eased, as in the main windows (`ui::wheel`).
+      .child(
+        gpui::canvas(
+          |_, _, _| {},
+          move |_, _, window, _| ui::wheel::listen(window, smooth),
+        )
+        .absolute()
+        .inset_0(),
+      )
       .child(
         h_flex()
           .pt_1()

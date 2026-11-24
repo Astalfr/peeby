@@ -136,6 +136,8 @@ pub struct Settings {
   pub chat_hidden: bool,
   /// Sidebar reduced to its icons.
   pub sidebar_collapsed: bool,
+  /// The mouse wheel's notches eased rather than in steps (`ui::wheel`).
+  pub smooth_scrolling: bool,
   /// The Jellyfin space.
   pub jellyfin: Jellyfin,
   /// The Twitch space.
@@ -537,6 +539,7 @@ impl Default for Settings {
       theater: false,
       chat_hidden: false,
       sidebar_collapsed: false,
+      smooth_scrolling: true,
       player: Player::default(),
       jellyfin: Jellyfin::default(),
       twitch: Twitch::default(),

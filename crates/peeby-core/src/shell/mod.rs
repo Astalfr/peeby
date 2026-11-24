@@ -2050,6 +2050,7 @@ impl Render for Shell {
         )
         .child(frame)
     });
+    let smooth = Settings::get(cx).smooth_scrolling;
     // The mouse's side buttons go back and forward, as in a browser; not in fullscreen, which
     // belongs to the player (there would be no bar to come back from another page).
     let root = v_flex()
@@ -2075,7 +2076,16 @@ impl Render for Shell {
       // A link dragged from a browser, or an Internet shortcut, opens its video or live.
       .on_drop(|paths: &gpui::ExternalPaths, window, cx| drop::open(paths, window, cx))
       .bg(theme::chrome(cx))
-      .text_color(theme::foreground());
+      .text_color(theme::foreground())
+      // The wheel's notches eased (`ui::wheel`): first, so it sees them before the content.
+      .child(
+        gpui::canvas(
+          |_, _, _| {},
+          move |_, _, window, _| ui::wheel::listen(window, smooth),
+        )
+        .absolute()
+        .inset_0(),
+      );
     // The settings page is made each time it shows (its cache size measured again).
     let page = if self.in_settings(cx) {
       self.settings_view(cx)

@@ -2544,9 +2544,13 @@ impl PlayerView {
     }
     let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
     if dy.abs() > 0.5 {
-      let step = if dy > 0.0 { VOLUME_STEP } else { -VOLUME_STEP };
-      self.change_volume(self.volume + step, cx);
-      self.show_controls(cx);
+      // A step per notch, the wheel's slices carrying none (`wheel::notches`).
+      let steps = crate::wheel::notches(event) as f64;
+      if steps > 0. {
+        let step = if dy > 0.0 { VOLUME_STEP } else { -VOLUME_STEP };
+        self.change_volume(self.volume + step * steps, cx);
+        self.show_controls(cx);
+      }
       cx.stop_propagation();
     }
   }
@@ -3017,13 +3021,14 @@ impl PlayerView {
       .on_scroll(cx.listener(|this, event: &ScrollEvent, window, cx| {
         cx.stop_propagation();
         let dy = f32::from(event.delta.pixel_delta(window.line_height()).y);
-        if dy.abs() > 0.5 {
+        let steps = crate::wheel::notches(event) as f64;
+        if dy.abs() > 0.5 && steps > 0. {
           let step = if dy > 0.0 {
             VOLUME_SLIDER_STEP
           } else {
             -VOLUME_SLIDER_STEP
           };
-          this.set_volume(this.volume + step, cx);
+          this.set_volume(this.volume + step * steps, cx);
           this.show_controls(cx);
         }
       }))
