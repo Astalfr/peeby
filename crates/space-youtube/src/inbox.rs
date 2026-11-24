@@ -12,7 +12,9 @@
 //!
 //! The list is loaded each time the panel opens, without the kinds left out of the bell, its
 //! next page when the end of the list comes near; each page is merged in by date (a
-//! notification's id). Opening the panel marks the unread notifications it loads read on
+//! notification's id). The pages loaded are kept ([`Inbox::cache`], until the session
+//! changes): the panel opens on them while its first page reloads, never on a skeleton that
+//! would make it jump. Opening the panel marks the unread notifications it loads read on
 //! YouTube (one request each, as clicks on youtube.com); their dot still shows until it closes,
 //! telling what was new.
 
@@ -65,6 +67,44 @@ pub struct Inbox {
   /// The ids of the session's notifications already counted or shown in the panel: never
   /// announced (again).
   seen: HashSet<String>,
+  /// What the panel loaded last (every kind), shown at once when it opens again while it
+  /// reloads: a panel that started from its skeleton would jump to the list's height.
+  cache: Option<Cache>,
+}
+
+/// The notifications loaded so far, newest first, those marked read on YouTube read.
+#[derive(Clone)]
+struct Cache {
+  items: Vec<Notification>,
+  continuation: Option<String>,
+}
+
+/// Merges `page` into the inbox's cache; `next` when it is a next page, whose continuation
+/// goes further (a first page's only when nothing was loaded yet).
+fn cache_page(page: &NotificationPage, next: bool, cx: &mut App) {
+  let inbox = inbox(cx);
+  inbox.update(cx, |inbox, _| {
+    let cache = inbox.cache.get_or_insert_with(|| Cache {
+      items: Vec::new(),
+      continuation: page.continuation.clone(),
+    });
+    if next {
+      cache.continuation = page.continuation.clone();
+    }
+    merge(&mut cache.items, page.clone(), |_| true);
+  });
+}
+
+/// The cached copies of the notifications of `ids` are read.
+fn cache_read(ids: &HashSet<String>, cx: &mut App) {
+  let inbox = inbox(cx);
+  inbox.update(cx, |inbox, _| {
+    for n in inbox.cache.iter_mut().flat_map(|c| &mut c.items) {
+      if ids.contains(&n.id) {
+        n.read = true;
+      }
+    }
+  });
 }
 
 /// Where notifications of `kind` show; `None` for the kinds Peeby has no setting for (they
@@ -125,15 +165,19 @@ fn sent_micros(n: &Notification) -> u64 {
 }
 
 /// Merges the sections of `page` into `items`, one list newest first: the notifications that
-/// `keep` keeps and `items` does not have yet.
+/// `keep` keeps, a notification `items` already has replaced by its newer copy.
 fn merge(
   items: &mut Vec<Notification>,
   page: NotificationPage,
   keep: impl Fn(&Notification) -> bool,
 ) {
   for n in page.sections.into_iter().flat_map(|s| s.items) {
-    if keep(&n) && !items.iter().any(|m| m.id == n.id) {
-      items.push(n);
+    if !keep(&n) {
+      continue;
+    }
+    match items.iter_mut().find(|m| m.id == n.id) {
+      Some(m) => *m = n,
+      None => items.push(n),
     }
   }
   // Stable: the notifications without a time keep YouTube's order, at the end.
@@ -335,6 +379,7 @@ pub fn reset(nav: WeakEntity<YouTubeSpace>, cx: &mut App) {
     inbox.unseen = 0;
     inbox.generation += 1;
     inbox.seen.clear();
+    inbox.cache = None;
     cx.notify();
     inbox.generation
   });
@@ -380,6 +425,7 @@ pub fn reset(nav: WeakEntity<YouTubeSpace>, cx: &mut App) {
               poll.count = Some(0);
               cx.update(|cx| {
                 if current(cx) {
+                  cache_page(&page, false, cx);
                   let fresh = seen(cx, |seen| poll.fresh(&page, seen));
                   let shown = fresh.iter().filter(|n| in_bell(n.kind, cx)).count();
                   add_unseen(u32::try_from(shown).unwrap_or(u32::MAX), cx);
@@ -481,12 +527,12 @@ impl InboxPanel {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
     // Opening the inbox sees its notifications, as on youtube.com.
-    if let Some(InboxHandle(inbox)) = cx.try_global::<InboxHandle>().cloned() {
-      inbox.update(cx, |inbox, cx| {
-        inbox.unseen = 0;
-        cx.notify();
-      });
-    }
+    let inbox = inbox(cx);
+    let cache = inbox.update(cx, |inbox, cx| {
+      inbox.unseen = 0;
+      cx.notify();
+      inbox.cache.clone()
+    });
     let mut panel = Self {
       nav,
       popover,
@@ -497,6 +543,16 @@ impl InboxPanel {
       failed_more: false,
       scroll: ScrollHandle::new(),
     };
+    // The last list shows while the first page reloads, merged in when it comes.
+    if let Some(cache) = cache {
+      panel.state = State::Loaded;
+      panel.continuation = cache.continuation;
+      panel.items = cache
+        .items
+        .into_iter()
+        .filter(|n| in_bell(n.kind, cx))
+        .collect();
+    }
     panel.load(None, cx);
     panel
   }
@@ -530,23 +586,26 @@ impl InboxPanel {
                 .flat_map(|s| &s.items)
                 .map(|n| n.id.clone());
               seen(cx, |seen| seen.extend(ids));
-              // Opening the inbox reads what it shows: marked read on YouTube, while their dot
-              // still tells here what was new.
-              let tokens = page
+              // Opening the inbox reads what it shows: marked read on YouTube (and in the
+              // cache), while their dot still tells here what was new.
+              let unread: Vec<&Notification> = page
                 .sections
                 .iter()
                 .flat_map(|s| &s.items)
                 .filter(|n| !n.read && in_bell(n.kind, cx))
-                .filter_map(|n| n.read_token.clone())
                 .collect();
+              let tokens = unread.iter().filter_map(|n| n.read_token.clone()).collect();
+              let read: HashSet<String> = unread.iter().map(|n| n.id.clone()).collect();
               mark_read(tokens, cx);
-              this.append(page, |n| in_bell(n.kind, cx))
+              cache_page(&page, more, cx);
+              cache_read(&read, cx);
+              this.append(page, more, |n| in_bell(n.kind, cx))
             }
             Some(Err(e)) => {
               tracing::warn!("notifications: {e}");
               if more {
                 this.failed_more = true;
-              } else {
+              } else if !matches!(this.state, State::Loaded) {
                 this.state = State::Failed(inbox_error(&e).into());
               }
             }
@@ -560,10 +619,13 @@ impl InboxPanel {
   }
 
   /// Adds the notifications of a page that `keep` keeps (the kinds the settings leave out of
-  /// the bell are not).
-  fn append(&mut self, page: NotificationPage, keep: impl Fn(&Notification) -> bool) {
+  /// the bell are not). The continuation of a first page, reloaded over the cached list, would
+  /// go back: the list's own stays (`next` is a next page).
+  fn append(&mut self, page: NotificationPage, next: bool, keep: impl Fn(&Notification) -> bool) {
+    if next || !matches!(self.state, State::Loaded) {
+      self.continuation = page.continuation.clone();
+    }
     self.state = State::Loaded;
-    self.continuation = page.continuation.clone();
     merge(&mut self.items, page, keep);
   }
 
