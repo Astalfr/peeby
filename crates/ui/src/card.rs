@@ -233,13 +233,16 @@ fn surface_pressed(base: Hsla, hover: f32, press: f32) -> Hsla {
 const LAUNCH_FRESH: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Where a clicked card's picture was (docs/responsiveness-plan.md, item 15): the page it opens
-/// grows its poster from there (`PlayerView::fly_poster_from`).
-#[derive(Clone, Copy, Debug)]
+/// grows its poster from there (`PlayerView::fly_poster_from`), the card's picture, which it
+/// shows until the first frame unless the page has a poster of its own.
+#[derive(Clone)]
 pub struct Launch {
   /// The picture's bounds in its window, when clicked.
   pub bounds: gpui::Bounds<Pixels>,
   /// Its corner radius.
   pub radius: Pixels,
+  /// The picture itself.
+  pub picture: Picture,
   window: gpui::WindowId,
   at: std::time::Instant,
 }
@@ -248,13 +251,14 @@ thread_local! {
   static LAUNCH: Cell<Option<Launch>> = const { Cell::new(None) };
 }
 
-fn launch(bounds: gpui::Bounds<Pixels>, radius: Pixels, window: &Window) {
-  if bounds.size.width <= px(0.) {
+fn launch(bounds: gpui::Bounds<Pixels>, radius: Pixels, picture: &Picture, window: &Window) {
+  if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) || picture.is_empty() {
     return;
   }
   LAUNCH.set(Some(Launch {
     bounds,
     radius,
+    picture: picture.clone(),
     window: window.window_handle().window_id(),
     at: std::time::Instant::now(),
   }));
@@ -540,14 +544,15 @@ impl MediaCard {
     let on_click = self.on_click.take();
     let on_middle_click = self.on_middle_click.take();
     let frame = div().id(ElementId::Name(self.id.clone())).cursor_pointer();
-    let (picture, radius) = (self.hover.picture.clone(), self.picture_radius.clone());
+    let (bounds, radius) = (self.hover.picture.clone(), self.picture_radius.clone());
+    let picture = self.picture.clone();
     self
       .hover
       .track(frame, on_hover)
       .when_some(on_click, |el, on_click| {
         el.on_click(move |_, window, cx| {
           // Where the picture was, for the page it opens to grow it from ([`take_launch`]).
-          launch(picture.get(), radius.get(), window);
+          launch(bounds.get(), radius.get(), &picture, window);
           on_click(window, cx)
         })
       })

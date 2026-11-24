@@ -216,12 +216,14 @@ velocity on a target change. Needs an ADR (the motion model changes) and the des
 
 ### 15. Connected animation from card to player
 
-Done (2026-11-24) for YouTube's watch page, the way there only, not yet checked in the app:
-`ui::card::take_launch` (the picture's bounds at a left click, 500 ms fresh, same window) and
-`PlayerView::fly_poster_from`. No overlay in the shell: the player draws the flying poster
-itself through GPUI's `deferred` + `anchored` (window coordinates, no clipping), toward its own
-bounds at the last frame, so it follows the page's entrance slide. Left: the way back, Twitch,
-Jellyfin, the Shorts (9:16).
+Done (2026-11-24) for the three spaces' player pages, the way there only, not yet checked in
+the app: `ui::card::take_launch` (the picture's bounds, radius and picture at a left click,
+500 ms fresh, same window) and `PlayerView::fly_poster_from`, which makes a wide card's picture
+the poster when the page has none (Twitch, Jellyfin) and fades out a card of another shape.
+No overlay in the shell: the player draws the flying poster itself through GPUI's `deferred`
++ `anchored` (window coordinates, no clipping), toward its own bounds at the last frame, so it
+follows the page's entrance slide. Left: the way back, the Shorts (9:16), Jellyfin's episode
+rows (not `MediaCard`s).
 
 Builds on item 1: on a click, the card's thumbnail grows from its place in the grid to the
 player's place (250 ms, decelerate), the page's other parts fading in around it; the video

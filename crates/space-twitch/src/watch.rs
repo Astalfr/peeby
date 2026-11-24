@@ -187,6 +187,14 @@ impl WatchView {
     Self::make(kind, client, catalog, nav, None, cx)
   }
 
+  /// Opened by a click on a card: its picture grows from it into the player, and stays as
+  /// its poster until the first frame (`PlayerView::fly_poster_from`).
+  pub fn fly_from(&mut self, launch: ui::card::Launch, cx: &mut Context<Self>) {
+    self
+      .player
+      .update(cx, |player, cx| player.fly_poster_from(launch, cx));
+  }
+
   /// A multistream's tile playing `login`'s live, its `main` one or a secondary one.
   pub fn tile(
     login: String,

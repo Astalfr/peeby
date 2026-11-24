@@ -92,9 +92,15 @@ impl PlayView {
     let settings = Settings::get(cx);
     let prefs = settings.jellyfin.playback.clone();
     let player_prefs = Player::prefs(settings);
+    // Opened by a click on its card: the card's picture grows into the player (a wide one
+    // stays as the poster until the first frame).
+    let launch = ui::card::take_launch(window);
     let player = cx.new(|cx| {
       let mut player = PlayerView::new(player_prefs, false, cx);
       player.set_layout(Layout::Page, cx);
+      if let Some(launch) = launch {
+        player.fly_poster_from(launch, cx);
+      }
       player
     });
     let focus = player.read(cx).focus_handle().clone();

@@ -726,8 +726,16 @@ impl TwitchSpace {
           Route::Watch(login) => Kind::Live(login.clone()),
           _ => return None,
         };
-        cx.new(|cx| WatchView::new(kind, client, catalog, nav, cx))
-          .into()
+        // Opened by a click on its card: the card's picture grows into the player.
+        let launch = ui::card::take_launch(window);
+        cx.new(|cx| {
+          let mut view = WatchView::new(kind, client, catalog, nav, cx);
+          if let Some(launch) = launch {
+            view.fly_from(launch, cx);
+          }
+          view
+        })
+        .into()
       }
       #[cfg(debug_assertions)]
       Route::FakeChat => return None,

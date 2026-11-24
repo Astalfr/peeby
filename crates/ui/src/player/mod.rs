@@ -56,11 +56,31 @@ const FLIGHT: Duration = Duration::from_millis(250);
 
 /// The poster's flight from a card ([`PlayerView::fly_poster_from`]).
 struct Flight {
-  /// The card's picture, in the window, and its corner radius.
+  /// The card's picture, its place in the window and its corner radius.
+  picture: Picture,
   from: Bounds<Pixels>,
   radius: Pixels,
+  /// About the player's shape (16:9): it rests in the player once landed, else fades out.
+  wide: bool,
   /// When it left: the first frame the player knew its own place.
   started: Cell<Option<Instant>>,
+}
+
+impl Flight {
+  /// The card's picture as its card drew it (its width and shape: already loaded), filling
+  /// whatever box it is in.
+  fn image(&self, radius: Pixels, window: &mut Window, cx: &mut App) -> AnyElement {
+    let size = self.from.size;
+    let aspect = f32::from(size.width) / f32::from(size.height).max(1.);
+    picture::image_fill(
+      &self.picture,
+      f32::from(size.width).max(1.),
+      aspect,
+      radius,
+      window,
+      cx,
+    )
+  }
 }
 const OSD_DURATION: Duration = Duration::from_millis(1500);
 const PAUSE_PULSE: Duration = Duration::from_millis(600);
@@ -1527,10 +1547,18 @@ impl PlayerView {
   /// The poster grows from the card clicked ([`crate::card::take_launch`]) to the player's
   /// place before it rests there (docs/design.md, "Watch page opening"). Never in fullscreen,
   /// with reduced motion or once the first frame is there: it never holds back the video.
+  /// Without a poster of its own, a wide card's picture becomes the poster.
   pub fn fly_poster_from(&mut self, launch: crate::card::Launch, cx: &mut Context<Self>) {
+    let size = launch.bounds.size;
+    let wide = f32::from(size.width) / f32::from(size.height).max(1.) > 1.5;
+    if wide && self.poster.is_none() {
+      self.poster = Some(launch.picture.clone());
+    }
     self.flight = Some(Flight {
+      picture: launch.picture,
       from: launch.bounds,
       radius: launch.radius,
+      wide,
       started: Cell::new(None),
     });
     cx.notify();
@@ -3917,14 +3945,18 @@ impl PlayerView {
   }
 
   /// The poster over the black picture until the video's first frame, fading out then
-  /// ([`theme::FAST`]); nothing once gone, in picture-in-picture, or without one.
+  /// ([`theme::FAST`]); nothing once gone, in picture-in-picture, or without one. While it
+  /// flies from its card ([`Self::fly_poster_from`]), the card's picture instead, over
+  /// everything.
   fn render_poster(
     &self,
     radii: gpui::Corners<Pixels>,
     window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<AnyElement> {
-    let poster = self.poster.as_ref().filter(|_| !self.in_pip)?;
+    if self.in_pip {
+      return None;
+    }
     let framed = self.video.as_ref().is_some_and(|v| v.read(cx).has_frame());
     let shown = motion::tween(
       "poster",
@@ -3934,46 +3966,54 @@ impl PlayerView {
       window,
       cx,
     );
+    let target = self.bounds.get();
+    // Asked at a card's size: the thumbnail its card loaded is likely in the image cache.
+    let width = f32::from(target.size.width).clamp(1., POSTER_WIDTH);
+    if let Some(flight) = &self.flight
+      && let Some((bounds, radius, e)) = self.flight_at(framed, target, radii.top_left, window, cx)
+    {
+      window.request_animation_frame();
+      // The larger poster loads meanwhile.
+      if let Some(poster) = &self.poster {
+        picture::is_loaded(poster, width, 16. / 9., window, cx);
+      }
+      // A picture of another shape (a 2:3 poster) does not rest in the player: it fades out
+      // as it lands.
+      let opacity = if flight.wide {
+        1.
+      } else {
+        (2. - 2. * e).min(1.)
+      };
+      return Some(
+        gpui::deferred(
+          gpui::anchored()
+            .position_mode(gpui::AnchoredPositionMode::Window)
+            .position(bounds.origin)
+            .child(
+              div()
+                .w(bounds.size.width)
+                .h(bounds.size.height)
+                .rounded(radius)
+                .opacity(opacity)
+                .shadow_lg()
+                .child(flight.image(radius, window, cx)),
+            ),
+        )
+        .into_any_element(),
+      );
+    }
+    let poster = self.poster.as_ref()?;
     if shown <= 0. {
       return None;
     }
-    let target = self.bounds.get();
-    // Asked at a card's size: the thumbnail its card loaded is likely in the image cache.
-    let mut width = f32::from(target.size.width).clamp(1., POSTER_WIDTH);
-    if let Some(flight) = &self.flight {
-      // The card's own image (loaded at its width) flies, and stays until the larger one is
-      // there: never a flat surface in between.
-      let card_width = f32::from(flight.from.size.width).max(1.);
-      if !picture::is_loaded(poster, width, 16. / 9., window, cx) {
-        width = card_width;
+    // Landed: the card's own image stays until the larger one is there (never a flat surface
+    // in between).
+    let image = match &self.flight {
+      Some(flight) if !picture::is_loaded(poster, width, 16. / 9., window, cx) => {
+        flight.image(radii.top_left, window, cx)
       }
-      if let Some((bounds, radius)) = self.flight_at(framed, target, radii.top_left, window, cx) {
-        window.request_animation_frame();
-        return Some(
-          gpui::deferred(
-            gpui::anchored()
-              .position_mode(gpui::AnchoredPositionMode::Window)
-              .position(bounds.origin)
-              .child(
-                div()
-                  .w(bounds.size.width)
-                  .h(bounds.size.height)
-                  .rounded(radius)
-                  .shadow_lg()
-                  .child(picture::image_fill(
-                    poster,
-                    card_width,
-                    16. / 9.,
-                    radius,
-                    window,
-                    cx,
-                  )),
-              ),
-          )
-          .into_any_element(),
-        );
-      }
-    }
+      _ => picture::image_fill(poster, width, 16. / 9., radii.top_left, window, cx),
+    };
     Some(
       div()
         .absolute()
@@ -3984,21 +4024,14 @@ impl PlayerView {
         .rounded_br(radii.bottom_right)
         .rounded_bl(radii.bottom_left)
         .opacity(shown)
-        .child(picture::image_fill(
-          poster,
-          width,
-          16. / 9.,
-          radii.top_left,
-          window,
-          cx,
-        ))
+        .child(image)
         .into_any_element(),
     )
   }
 
   /// Where the flying poster is ([`Self::fly_poster_from`]), toward `target` (the player's place
-  /// at the last frame, whose corners are `to_radius`), and its corner radius; `None` once
-  /// landed, or when it does not fly.
+  /// at the last frame, whose corners are `to_radius`), and its corner radius and how far it
+  /// is along (0 to 1, eased); `None` once landed, or when it does not fly.
   fn flight_at(
     &self,
     framed: bool,
@@ -4006,7 +4039,7 @@ impl PlayerView {
     to_radius: Pixels,
     window: &Window,
     cx: &App,
-  ) -> Option<(Bounds<Pixels>, Pixels)> {
+  ) -> Option<(Bounds<Pixels>, Pixels, f32)> {
     let flight = self.flight.as_ref()?;
     if framed || window.is_fullscreen() || cx.reduce_motion() {
       return None;
@@ -4017,7 +4050,7 @@ impl PlayerView {
         .started
         .get()
         .is_none()
-        .then_some((flight.from, flight.radius));
+        .then_some((flight.from, flight.radius, 0.));
     }
     let started = flight.started.get().unwrap_or_else(Instant::now);
     flight.started.set(Some(started));
@@ -4025,11 +4058,8 @@ impl PlayerView {
     if t >= 1. {
       return None;
     }
-    Some(in_flight(
-      (flight.from, flight.radius),
-      (target, to_radius),
-      t,
-    ))
+    let (bounds, radius) = in_flight((flight.from, flight.radius), (target, to_radius), t);
+    Some((bounds, radius, 1. - (1. - t).powi(3)))
   }
 
   /// A secondary player ([`Self::set_secondary`]): its picture, with its page's notice, a
