@@ -38,7 +38,25 @@ struct Glide {
   event: Option<ScrollEvent>,
   /// Smooth scrolling is off: each notch goes at once.
   instant: bool,
+  /// The next slice is the first since the glide started from idle: it goes right after the
+  /// notch's event, not a frame after the previous slice.
+  first: bool,
+  /// Frame timings of the glide under way, logged at debug level when it ends.
+  timings: Timings,
 }
+
+/// How evenly a glide's slices came: one per frame unless frames were late.
+#[derive(Default)]
+struct Timings {
+  slices: u32,
+  /// Slices more than [`LATE`] after the previous one: a frame dropped there.
+  late: u32,
+  longest: Duration,
+  total: Duration,
+}
+
+/// A slice this long after the previous one is a dropped frame (a 60 Hz frame and a half).
+const LATE: Duration = Duration::from_millis(25);
 
 impl Glide {
   /// A notch of `lines`: added to what is left, or in place of it when it turns back.
@@ -116,6 +134,7 @@ pub fn listen(window: &mut Window, smooth: bool) {
       let idle = glide.last.is_none();
       if idle {
         glide.last = Some(Instant::now());
+        glide.first = true;
       }
       idle
     });
@@ -134,19 +153,43 @@ fn step(window: &mut Window, cx: &mut App) {
   let slice = GLIDES.with_borrow_mut(|glides| {
     let glide = glides.get_mut(&id)?;
     let last = glide.last?;
-    // The first slice of a notch after a pause is a frame's worth; all of it at once with
-    // reduced motion or smooth scrolling off.
+    // The first slice of a notch after a pause is a 60 Hz frame's worth, the next ones the time
+    // since the previous slice (a frame of the display's rate); all of it at once with reduced
+    // motion or smooth scrolling off.
+    let first = std::mem::take(&mut glide.first);
     let dt = if cx.reduce_motion() || glide.instant {
       Duration::from_secs(1)
+    } else if first {
+      Duration::from_millis(16)
     } else {
-      now.duration_since(last).max(Duration::from_millis(16))
+      now.duration_since(last)
     };
+    if glide.notches == 0 {
+      let since = now.duration_since(last);
+      let timings = &mut glide.timings;
+      timings.slices += 1;
+      timings.total += since;
+      timings.longest = timings.longest.max(since);
+      if since > LATE {
+        timings.late += 1;
+      }
+    }
     glide.last = Some(now);
     let lines = glide.slice(dt);
     let notches = std::mem::take(&mut glide.notches);
     let event = glide.event.clone()?;
     if glide.done() {
       glide.last = None;
+      let timings = std::mem::take(&mut glide.timings);
+      if timings.slices > 0 {
+        tracing::debug!(
+          slices = timings.slices,
+          late = timings.late,
+          longest_ms = timings.longest.as_millis() as u64,
+          mean_ms = (timings.total / timings.slices).as_millis() as u64,
+          "wheel glide"
+        );
+      }
     }
     Some((lines, notches, event, glide.last.is_some()))
   });
