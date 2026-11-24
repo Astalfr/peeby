@@ -58,6 +58,21 @@ const TAB_MAX_WIDTH: f32 = 220.;
 const TAB_MIN_WIDTH: f32 = 140.;
 /// How long a tab just opened takes to grow to its width.
 const TAB_OPEN: Duration = theme::NORMAL;
+/// How long a tab closed takes to shrink away.
+const TAB_CLOSE: Duration = theme::NORMAL;
+
+/// A tab closed, drawn where it was while it shrinks away: its face as it was, without its
+/// "×"; the tab itself is gone already.
+struct ClosingTab {
+  /// The tab it followed, to stay after it; first when `None`.
+  after: Option<TabId>,
+  icon: &'static [u8],
+  settings: bool,
+  title: SharedString,
+  /// Its width as last drawn.
+  width: gpui::Pixels,
+  started: Instant,
+}
 /// A cell of the new tab frame: "+" and each space's logo.
 const NEW_TAB_ITEM: f32 = 26.;
 /// Width of the menu of new tabs (`NewTabStyle::Menu`).
@@ -134,6 +149,8 @@ pub struct Shell {
   tab_slides: HashMap<TabId, Slide>,
   /// The tabs just opened, when: they grow into the bar for [`TAB_OPEN`].
   tab_openings: HashMap<TabId, Instant>,
+  /// The tabs just closed, shrinking away for [`TAB_CLOSE`].
+  tab_closings: Vec<ClosingTab>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -327,6 +344,7 @@ impl Shell {
       tab_layout: Rc::default(),
       tab_slides: HashMap::new(),
       tab_openings: HashMap::new(),
+      tab_closings: Vec::new(),
       _subscriptions: subscriptions,
     };
     if let Some(&first) = shell.tabs.first() {
@@ -558,6 +576,97 @@ impl Shell {
     self.tab_openings.insert(id, now);
   }
 
+  /// The tab at `index`, closing, leaves its face where it was, shrinking away.
+  fn shrink_tab(&mut self, index: usize, cx: &App) {
+    if cx.reduce_motion() {
+      return;
+    }
+    let Some(&tab) = self.tabs.get(index) else {
+      return;
+    };
+    let now = Instant::now();
+    self
+      .tab_closings
+      .retain(|c| now.duration_since(c.started) < TAB_CLOSE);
+    let width = self
+      .tab_layout
+      .tabs
+      .borrow()
+      .iter()
+      .find(|(id, _)| *id == tab.id)
+      .map(|(_, b)| b.size.width);
+    // Never drawn (the bar too narrow, a window hidden): nothing to shrink.
+    let Some(width) = width else {
+      return;
+    };
+    let space = &self.spaces[tab.space];
+    // A tab closed just before, right after it, stays after it.
+    for closing in &mut self.tab_closings {
+      if closing.after == Some(tab.id) {
+        closing.after = index.checked_sub(1).map(|i| self.tabs[i].id);
+      }
+    }
+    self.tab_closings.push(ClosingTab {
+      after: index.checked_sub(1).map(|i| self.tabs[i].id),
+      icon: space.info(cx).icon,
+      settings: space.settings_shown(tab.id, cx),
+      title: space.title(tab.id, cx),
+      width,
+      started: now,
+    });
+  }
+
+  /// A closed tab's face, shrinking from its width to nothing and fading; `None` once gone.
+  fn closing_face(
+    &self,
+    closing: &ClosingTab,
+    window: &mut Window,
+    cx: &mut App,
+  ) -> Option<gpui::Div> {
+    let t = closing.started.elapsed().as_secs_f32() / TAB_CLOSE.as_secs_f32();
+    if t >= 1. {
+      return None;
+    }
+    window.request_animation_frame();
+    let left = 1. - gpui::ease_out_quint()(t);
+    let icon = if closing.settings {
+      gpui_component::Icon::new(Icon::Settings)
+        .size(px(16.))
+        .into_any_element()
+    } else {
+      assets::color_svg(closing.icon, 18., window, cx).into_any_element()
+    };
+    Some(
+      h_flex()
+        .h_full()
+        .flex_none()
+        .w(closing.width * left)
+        .overflow_hidden()
+        .opacity(left)
+        .pl_3()
+        .gap_2()
+        .items_center()
+        .text_sm()
+        .text_color(theme::muted())
+        .child(
+          div()
+            .flex_none()
+            .size(px(18.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(icon),
+        )
+        .child(
+          div()
+            .flex_1()
+            .min_w_0()
+            .whitespace_nowrap()
+            .child(closing.title.clone()),
+        ),
+    )
+  }
+
   /// How far tab `id` has grown, 0 to 1 (eased), while it opens; `None` once open.
   fn tab_growth(&self, id: TabId) -> Option<f32> {
     let at = self.tab_openings.get(&id)?;
@@ -602,6 +711,7 @@ impl Shell {
     let Some(index) = self.tabs.iter().position(|t| t.id == id) else {
       return;
     };
+    self.shrink_tab(index, cx);
     let tab = self.tabs.remove(index);
     if self.mini.as_ref().is_some_and(|m| m.tab == tab) {
       self.close_mini(cx);
@@ -1082,78 +1192,36 @@ impl Shell {
     self.tab_layout.tabs.borrow_mut().clear();
     // A window keeps a tab.
     let movable = self.tabs.len() > 1;
+    // The tabs closing, each after the tab it followed (first when that one is gone too).
+    let mut closing_after: Vec<(Option<TabId>, gpui::Div)> = Vec::new();
+    for closing in &self.tab_closings {
+      if let Some(face) = self.closing_face(closing, window, cx) {
+        let after = closing.after.filter(|id| self.holds(*id));
+        closing_after.push((after, face));
+      }
+    }
+    let mut ghosts_after = |after: Option<TabId>| -> Vec<gpui::AnyElement> {
+      let mut taken = Vec::new();
+      closing_after.retain_mut(|(a, face)| {
+        if *a == after {
+          taken.push(std::mem::replace(face, div()).into_any_element());
+          false
+        } else {
+          true
+        }
+      });
+      taken
+    };
+    let first_ghosts = ghosts_after(None);
     let tabs: Vec<_> = self
       .tabs
       .iter()
-      .map(|&tab| {
-        let id = tab.id;
-        let group = SharedString::from(format!("tab-{id}"));
-        let tooltip = self.spaces[tab.space].title(id, cx);
-        let layout = self.tab_layout.clone();
-        let slide = self.tab_slide(id);
-        let growth = self.tab_growth(id);
-        if slide.is_some() || growth.is_some() {
-          window.request_animation_frame();
-        }
-        let held = dragged.filter(|d| d.tab == id);
-        self
-          .tab_face(tab, window, cx)
-          .id(group.clone())
-          .group(group)
-          .when_some(slide, |el, offset| el.left(offset))
-          // Opening: from nothing to its width, its content clipped and fading in.
-          .when_some(growth, |el, g| {
-            el.min_w(px(TAB_MIN_WIDTH * g))
-              .max_w(px(TAB_MAX_WIDTH * g))
-              .overflow_hidden()
-              .opacity(g)
-          })
-          .when(held.is_some(), |el| el.invisible())
-          // Pulled off the bar: its slot closes.
-          .when(held.is_some_and(|d| d.detached), |el| el.hidden())
-          .child(
-            canvas(
-              move |bounds, _, _| layout.tabs.borrow_mut().push((id, bounds)),
-              |_, _, _, _| {},
-            )
-            .absolute()
-            .inset_0(),
-          )
-          .tooltip(move |window, cx| {
-            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
-          })
-          .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-              this.press_tab(id, event.position, cx)
-            }),
-          )
-          .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
-          .on_aux_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-            if event.is_middle_click() {
-              this.middle_click_tab(id, cx);
-            }
-          }))
-          .context_menu({
-            let shell = cx.weak_entity();
-            move |menu, _, _| {
-              let shell = shell.clone();
-              menu.item(
-                PopupMenuItem::new(t(
-                  "Move to a new window",
-                  "Déplacer dans une nouvelle fenêtre",
-                ))
-                .disabled(!movable)
-                .on_click(move |_, window, cx| {
-                  shell
-                    .update(cx, |shell, cx| shell.move_to_new_window(id, window, cx))
-                    .ok();
-                }),
-              )
-            }
-          })
+      .flat_map(|&tab| {
+        let ghosts = ghosts_after(Some(tab.id));
+        std::iter::once(self.tab_element(tab, movable, dragged, window, cx)).chain(ghosts)
       })
       .collect();
+    let tabs: Vec<_> = first_ghosts.into_iter().chain(tabs).collect();
     // The dragged tab over the others, opaque, occluding the slots under it (drawn over the
     // whole window instead once detached).
     let copy = dragged
@@ -1208,6 +1276,84 @@ impl Shell {
       .children(tabs)
       .child(self.new_tab_menu(window, cx))
       .children(copy)
+  }
+
+  /// A tab in the bar: its face, where it slides or grows, and its listeners.
+  fn tab_element(
+    &self,
+    tab: TabRef,
+    movable: bool,
+    dragged: Option<TabDrag>,
+    window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> gpui::AnyElement {
+    let id = tab.id;
+    let group = SharedString::from(format!("tab-{id}"));
+    let tooltip = self.spaces[tab.space].title(id, cx);
+    let layout = self.tab_layout.clone();
+    let slide = self.tab_slide(id);
+    let growth = self.tab_growth(id);
+    if slide.is_some() || growth.is_some() {
+      window.request_animation_frame();
+    }
+    let held = dragged.filter(|d| d.tab == id);
+    self
+      .tab_face(tab, window, cx)
+      .id(group.clone())
+      .group(group)
+      .when_some(slide, |el, offset| el.left(offset))
+      // Opening: from nothing to its width, its content clipped and fading in.
+      .when_some(growth, |el, g| {
+        el.min_w(px(TAB_MIN_WIDTH * g))
+          .max_w(px(TAB_MAX_WIDTH * g))
+          .overflow_hidden()
+          .opacity(g)
+      })
+      .when(held.is_some(), |el| el.invisible())
+      // Pulled off the bar: its slot closes.
+      .when(held.is_some_and(|d| d.detached), |el| el.hidden())
+      .child(
+        canvas(
+          move |bounds, _, _| layout.tabs.borrow_mut().push((id, bounds)),
+          |_, _, _, _| {},
+        )
+        .absolute()
+        .inset_0(),
+      )
+      .tooltip(move |window, cx| {
+        gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+      })
+      .on_mouse_down(
+        MouseButton::Left,
+        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+          this.press_tab(id, event.position, cx)
+        }),
+      )
+      .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
+      .on_aux_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+        if event.is_middle_click() {
+          this.middle_click_tab(id, cx);
+        }
+      }))
+      .context_menu({
+        let shell = cx.weak_entity();
+        move |menu, _, _| {
+          let shell = shell.clone();
+          menu.item(
+            PopupMenuItem::new(t(
+              "Move to a new window",
+              "Déplacer dans une nouvelle fenêtre",
+            ))
+            .disabled(!movable)
+            .on_click(move |_, window, cx| {
+              shell
+                .update(cx, |shell, cx| shell.move_to_new_window(id, window, cx))
+                .ok();
+            }),
+          )
+        }
+      })
+      .into_any_element()
   }
 
   /// What a tab shows (its logo or the gear, its title, its "×"), without the slot's listeners:
