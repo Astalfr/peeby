@@ -3,6 +3,7 @@
 //! elements that draw it.
 
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use gpui::prelude::*;
 use gpui::{AnyElement, App, ImageSource, ObjectFit, Pixels, SharedString, Window, div, img};
@@ -64,6 +65,34 @@ impl Picture {
   }
 }
 
+/// The scale factor of the window that drew a picture last (f32 bits), for [`preload`] where no
+/// window is at hand. 1 until a picture is drawn.
+static LAST_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
+
+/// The device pixels of `picture` drawn `width` logical pixels wide at `aspect`, and its URL.
+fn sized_url(picture: &Picture, width: f32, aspect: f32, scale: f32) -> Option<(String, u32, u32)> {
+  let pixels = (width * scale).round() as u32;
+  let height = (width / aspect.max(0.01) * scale).round() as u32;
+  Some((picture.url(pixels, height)?, pixels, height))
+}
+
+/// Starts loading `picture` (download, disk cache, decoding) as [`image_fill`] will draw it
+/// `width` logical pixels wide at `aspect`, so it shows at once when it does: thumbnails about
+/// to scroll into view, a hovered card's page. `scale` is the window's, else the last one a
+/// picture was drawn at.
+pub fn preload(picture: &Picture, width: f32, aspect: f32, scale: Option<f32>, cx: &mut App) {
+  let scale = scale.unwrap_or_else(|| f32::from_bits(LAST_SCALE.load(Ordering::Relaxed)));
+  let (Some((url, pixels, height)), Some(images)) = (
+    sized_url(picture, width, aspect, scale),
+    cx.try_global::<Images>().cloned(),
+  ) else {
+    return;
+  };
+  images.0.update(cx, |store, cx| {
+    store.get_fit(&url, Effects::default(), Fit::Cover, pixels, height, cx);
+  });
+}
+
 /// `picture` filling its parent, drawn `width` logical pixels wide with the `aspect` ratio
 /// (width / height); its BlurHash, or a flat surface, until it is loaded, then the image fades
 /// in.
@@ -85,10 +114,9 @@ pub fn image_fill(
     .bg(theme::surface())
     .overflow_hidden();
   let scale = window.scale_factor();
-  let pixels = (width * scale).round() as u32;
-  let height = (width / aspect.max(0.01) * scale).round() as u32;
-  let (Some(url), Some(images)) = (
-    picture.url(pixels, height),
+  LAST_SCALE.store(scale.to_bits(), Ordering::Relaxed);
+  let (Some((url, pixels, height)), Some(images)) = (
+    sized_url(picture, width, aspect, scale),
     cx.try_global::<Images>().cloned(),
   ) else {
     return base.into_any_element();

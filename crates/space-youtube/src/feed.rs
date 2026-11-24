@@ -32,10 +32,10 @@ use crate::save::CardAction;
 use crate::{Nav, Route, bell, subscribe};
 use peeby_core::settings::{FeedLayout, Settings};
 use ui::assets::Icon;
-use ui::card::{skeleton_card, skeleton_row};
+use ui::card::{ROW_WIDTH, WIDE, skeleton_card, skeleton_row};
 use ui::i18n::t;
 use ui::images::Images;
-use ui::picture::image_fill;
+use ui::picture::{self, image_fill};
 use ui::widgets::{loading_more, notice, page_title, sort_choices};
 use ui::{motion, runtime, tf, theme};
 
@@ -58,6 +58,12 @@ const CHANNEL_AVATAR: f32 = 120.;
 const DISMISSED_ROW_HEIGHT: f32 = 96.;
 /// Height built beyond the visible part of the list, above and below.
 const OVERDRAW: Pixels = px(800.);
+/// A row this close to the last one asks for the next page when it is built (within the
+/// overdraw of the view): the page comes before the scroll reaches the end's spinner.
+const LOAD_AHEAD_ROWS: usize = 2;
+/// A row built loads the thumbnails of the row this far below it (downloaded and decoded), so
+/// rows scrolling in past the overdraw show their pictures at once.
+const PRELOAD_AHEAD_ROWS: usize = 3;
 
 /// What the grid shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -808,6 +814,12 @@ impl FeedView {
         .children(self.end_of_list(cx))
         .into_any_element();
     }
+    if start + LOAD_AHEAD_ROWS * shape.per_item() >= total {
+      self.load_more(cx);
+    }
+    if !shape.shorts {
+      self.preload_row(row + PRELOAD_AHEAD_ROWS, shape, window, cx);
+    }
     if shape.shorts {
       let shorts = &self.shorts[start..(start + shape.per_item()).min(total)];
       let width = self.card_width;
@@ -870,6 +882,29 @@ impl FeedView {
       .opacity(self.fade)
       .child(row)
       .into_any_element()
+  }
+
+  /// Loads the thumbnails of row `row`, at the size its cards (or list rows) draw them.
+  fn preload_row(&self, row: usize, shape: Shape, window: &Window, cx: &mut gpui::App) {
+    let per = shape.per_item();
+    let start = row.saturating_mul(per);
+    let end = start.saturating_add(per).min(self.cards.len());
+    if start >= end {
+      return;
+    }
+    let width = if shape.list {
+      ROW_WIDTH
+    } else {
+      self.card_width
+    };
+    let scale = window.scale_factor();
+    for card in &self.cards[start..end] {
+      let thumbnails = match card {
+        Related::Video(video) => &video.thumbnails,
+        Related::Playlist(playlist) => &playlist.thumbnails,
+      };
+      picture::preload(&convert::picture(thumbnails), width, WIDE, Some(scale), cx);
+    }
   }
 
   /// Shorts shelf `n`, list item `ix`: its title with the Shorts icon, then a row of 9:16

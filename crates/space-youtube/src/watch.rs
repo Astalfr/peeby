@@ -37,6 +37,7 @@ use crate::cards::{compact_card, playlist_compact_card, playlist_row};
 use crate::comments::{CommentSection, HoveredLink, Links, linked_text};
 use crate::convert::{self, error_text};
 use crate::history::{self, Reporter};
+use crate::prefetch::PageClaim;
 use crate::queue::{Queue, QueueEvent};
 use crate::rating::{self, DISLIKE_RED, LIKE_BLUE, Rating};
 use crate::seed::{self, Seed};
@@ -514,42 +515,70 @@ impl WatchView {
     self.chat = Some((panel, task));
   }
 
+  /// The page's `next` answer: the one the hovered card prefetched, else asked now.
   fn load_page(&self, cx: &mut Context<Self>) {
+    let this = cx.weak_entity();
+    let claim = prefetch::claim_page(
+      &self.video_id,
+      move |page, cx| {
+        this
+          .update(cx, |this, cx| match page {
+            Some(page) => this.show_page(page, cx),
+            // The prefetch failed: ask again, and say why if it fails here too.
+            None => this.fetch_page(cx),
+          })
+          .ok();
+      },
+      cx,
+    );
+    match claim {
+      // Shown once the page is built: showing it updates the tab, whose space builds the page.
+      PageClaim::Ready(page) => cx
+        .spawn(async move |this, cx| {
+          this.update(cx, |this, cx| this.show_page(*page, cx)).ok();
+        })
+        .detach(),
+      PageClaim::Waiting => tracing::debug!("watch page: waiting for its prefetch"),
+      PageClaim::Missing => self.fetch_page(cx),
+    }
+  }
+
+  fn fetch_page(&self, cx: &mut Context<Self>) {
     let (client, id) = (self.client.clone(), self.video_id.clone());
     let fetch = runtime::spawn(cx, async move { client.watch(&id).await });
     cx.spawn(async move |this, cx| {
       let result = fetch.await;
       this
-        .update(cx, |this, cx| {
-          match result {
-            Some(Ok(page)) => {
-              let title = SharedString::from(page.title.clone());
-              this.nav.set_title(cx.entity_id(), title.clone(), cx);
-              let chapters = convert::chapters(&page.chapters);
-              let author = convert::author(&page);
-              this.player.update(cx, |player, cx| {
-                player.set_title(title, cx);
-                player.set_author(author, cx);
-                if !chapters.is_empty() {
-                  player.set_chapters(chapters, cx);
-                }
-              });
-              this.rating = Rating::of(&page);
-              if let Some(continuation) = page.live_chat.clone() {
-                this.start_chat(continuation, page.channel_handle.clone(), cx);
-              }
-              let token = page.comments_continuation.clone();
-              this.comments.update(cx, |c, cx| c.start(token, cx));
-              this.page = Some(page);
-            }
-            Some(Err(e)) => tracing::warn!("watch page: {e}"),
-            None => {}
-          }
-          cx.notify();
+        .update(cx, |this, cx| match result {
+          Some(Ok(page)) => this.show_page(page, cx),
+          Some(Err(e)) => tracing::warn!("watch page: {e}"),
+          None => {}
         })
         .ok();
     })
     .detach();
+  }
+
+  fn show_page(&mut self, page: WatchPage, cx: &mut Context<Self>) {
+    let title = SharedString::from(page.title.clone());
+    self.nav.set_title(cx.entity_id(), title.clone(), cx);
+    let chapters = convert::chapters(&page.chapters);
+    let author = convert::author(&page);
+    self.player.update(cx, |player, cx| {
+      player.set_title(title, cx);
+      player.set_author(author, cx);
+      if !chapters.is_empty() {
+        player.set_chapters(chapters, cx);
+      }
+    });
+    self.rating = Rating::of(&page);
+    if let Some(continuation) = page.live_chat.clone() {
+      self.start_chat(continuation, page.channel_handle.clone(), cx);
+    }
+    let token = page.comments_continuation.clone();
+    self.comments.update(cx, |c, cx| c.start(token, cx));
+    self.page = Some(page);
+    cx.notify();
   }
 
   fn load_votes(&self, cx: &mut Context<Self>) {

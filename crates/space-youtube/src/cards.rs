@@ -44,6 +44,10 @@ fn open_video_in_new_tab(video: &VideoItem, nav: &Nav) -> impl Fn(&mut Window, &
 /// views · date, and the stream prefetch on hover. Without `nav`, the channel is plain text.
 fn card(id: &str, hover: Hover, video: &VideoItem, nav: Option<&Nav>) -> MediaCard {
   let video_id = video.id.clone();
+  let pictures = std::rc::Rc::new(crate::prefetch::CardPictures {
+    thumbnails: video.thumbnails.clone(),
+    avatar: video.avatar.clone(),
+  });
   let channel = nav.zip(
     video
       .channel
@@ -70,7 +74,7 @@ fn card(id: &str, hover: Hover, video: &VideoItem, nav: Option<&Nav>) -> MediaCa
   .badge_left_icon(video.members_only.then_some(ui::assets::Icon::Star))
   .live(video.live)
   .progress(video.progress.map(|p| f32::from(p.percent) / 100.0))
-  .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, hovered, cx));
+  .on_hover(move |hovered, cx| crate::prefetch::hover(&video_id, &pictures, hovered, cx));
   match channel {
     Some((nav, route)) => {
       let open = {

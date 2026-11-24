@@ -18,8 +18,9 @@ when web_embedded falls back to yt-dlp.
 - A setting, "Player" / "Lecteur" in YouTube's part of the settings (`youtube_player`,
   `YouTubePlayer`): `embedded` (default, "Signed-in" / "Connecté") or `visionos`.
 - `embedded`, signed in: web_embedded first, then VISIONOS (lives, videos it cannot embed, an
-  expired session), then yt-dlp. The hover prefetch sends nothing (`prefetch::fetch`): its
-  VISIONOS stream would not be used.
+  expired session), then yt-dlp. The hover prefetch resolves no stream (`prefetch::fetch`): its
+  VISIONOS stream would not be used. It still asks for the signed-in `next` answer and loads
+  the poster, as with any player (2026-11-24, docs/responsiveness-plan.md, item 5).
 - `visionos`, or signed out: as before, VISIONOS (or the hover prefetch's stream), web_embedded
   when the bot check refuses it (signed in), then yt-dlp.
 - Toasts, in the player's own window (`PlayerView::toast`, pushed at its next render, deferred):

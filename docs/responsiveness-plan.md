@@ -89,6 +89,11 @@ with the setting off.
 
 ### 5. Hover prefetch with web_embedded first
 
+Done (2026-11-24), not yet checked in the app: `prefetch::fetch_page` / `claim_page` (with the
+session's client, whatever the player; 5 min, 30 s for a live; 16 pages) and
+`ui::picture::preload` for the poster (640 px) and the avatar. The web_embedded `player`
+prefetch is not done.
+
 With web_embedded first (the default signed in, ADR 0040), [prefetch.rs](../crates/space-youtube/src/prefetch.rs)
 is idle, so most signed-in users get no head start. On a 300 ms hover, prefetch what costs no
 `player` request: the `next` answer (title, details, related videos, cached for a few minutes)
@@ -106,6 +111,11 @@ items already shown stay in place, new ones come in at the top with a "N new vid
 day, and the cache is cleared at sign-out. Needs a short ADR (what is stored, where, for how long).
 
 ### 7. Thumbnails ahead of the scroll
+
+Done (2026-11-24) for the YouTube feeds, not measured: the next page is asked for when a row
+two rows before the last one is built (`LOAD_AHEAD_ROWS`), and each row built loads the
+thumbnails of the row three below it (`PRELOAD_AHEAD_ROWS`, `ui::picture::preload`). The
+overdraw stays 800 px. Search, playlists, Twitch and Jellyfin lists are left as they are.
 
 The feed lists already build 800 px beyond the view (`OVERDRAW` in
 [feed.rs](../crates/space-youtube/src/feed.rs)), so the next page starts about a screen early.

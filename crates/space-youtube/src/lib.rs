@@ -285,6 +285,7 @@ impl YouTubeSpace {
       cx.observe(&images.0, |_, _, cx| cx.notify()).detach();
     }
     cx.set_global(save::Session(client.clone()));
+    prefetch::forget_pages(cx);
     save::load_watch_later(cx);
     chat::reset_account_handle(cx);
     bell::reset(cx);
@@ -349,6 +350,7 @@ impl YouTubeSpace {
       }
     }));
     cx.set_global(save::Session(client.clone()));
+    prefetch::forget_pages(cx);
     save::load_watch_later(cx);
     chat::reset_account_handle(cx);
     bell::reset(cx);
