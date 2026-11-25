@@ -21,7 +21,7 @@ These are starting points, to be tuned. The reason for each option is recorded h
 | `demuxer-readahead-secs` | `20` | To tune |
 | `cache-secs` | `60` for YouTube and Twitch (`StartOptions::readahead_secs`), else mpv's default (1 h) | Without it, mpv downloads a YouTube video as fast as it can: after about 160 segments in two seconds, YouTube answers HTTP 401 to the rest, and the video or audio stops where its download stopped. A Twitch VOD would otherwise be fetched whole through the proxy |
 | `network-timeout` | `30` | Slow servers |
-| `http-header-fields` | `Authorization: MediaBrowser …`, added with `change-list http-header-fields append` | Auth without a token in the URL. As a plain option it would be split on its commas; the `-append` option variants do not exist in the client API |
+| `http-header-fields` | `Authorization: MediaBrowser …`, set before `mpv_initialize` as a node list (`mpv_set_option`, `MPV_FORMAT_NODE`) | Auth without a token in the URL. As a plain string option it would be split on its commas. Not with `change-list … append` nor as a property after init: mpv's log file records the command's arguments and the property's value, so the token would be in the log; an option set as a node before init is not logged |
 | `embeddedfonts` | `yes` | MKV font attachments (default) |
 | `sub-ass-override` | `no` | Never restyle ASS |
 | `sub-files` | added with `change-list sub-files append <url>` | External subtitles (Jellyfin `DeliveryUrl`), after the embedded tracks |
@@ -42,6 +42,8 @@ The menu's slider sets the selected output's own volume in Windows (for every ap
 ## Security
 
 mpv's log holds stream URLs, which carry the user's IP, so it is opt-in. `PEEBY_MPV_LOG` names a file. The setting **mpv logs** (`[player] mpv_log`, off by default) writes one file per video to `%LOCALAPPDATA%\peeby\logs\mpv-<ms>.log`. Files older than 7 days are deleted at startup, with Peeby's own logs from the same folder. A restarted player (another quality, a reload after an early end) writes next to the taken name (`-2`, `-3`…), so a restart never overwrites the log that shows why it happened.
+
+The HTTP headers (Jellyfin's token) never reach that file: they are set before init as a node list (see the table above).
 
 mpv error messages built by `player::sys` never include option values or command arguments. Those can hold the Authorization header or private URLs, and they would end up in logs. Only the option or command name is reported.
 

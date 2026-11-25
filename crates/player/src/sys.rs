@@ -68,8 +68,27 @@ pub enum RenderBackend {
 }
 
 pub const FORMAT_NONE: c_int = 0;
+pub const FORMAT_STRING: c_int = 1;
 pub const FORMAT_FLAG: c_int = 3;
 pub const FORMAT_DOUBLE: c_int = 5;
+pub const FORMAT_NODE: c_int = 6;
+pub const FORMAT_NODE_ARRAY: c_int = 7;
+
+/// `mpv_node`, only built here for a list of strings (`u` is a `char*` or an `mpv_node_list*`;
+/// the union's other members are no wider than a pointer on x64).
+#[repr(C)]
+struct Node {
+  u: *mut c_void,
+  format: c_int,
+}
+
+/// `mpv_node_list`.
+#[repr(C)]
+struct NodeList {
+  num: c_int,
+  values: *mut Node,
+  keys: *mut *mut c_char,
+}
 
 pub const EVENT_NONE: c_int = 0;
 pub const EVENT_SHUTDOWN: c_int = 1;
@@ -126,6 +145,7 @@ pub struct Api {
   pub terminate_destroy: unsafe extern "C" fn(*mut Handle),
   pub client_api_version: unsafe extern "C" fn() -> std::ffi::c_ulong,
   pub set_option_string: unsafe extern "C" fn(*mut Handle, *const c_char, *const c_char) -> c_int,
+  pub set_option: unsafe extern "C" fn(*mut Handle, *const c_char, c_int, *mut c_void) -> c_int,
   pub set_property_string: unsafe extern "C" fn(*mut Handle, *const c_char, *const c_char) -> c_int,
   pub observe_property: unsafe extern "C" fn(*mut Handle, u64, *const c_char, c_int) -> c_int,
   pub get_property_string: unsafe extern "C" fn(*mut Handle, *const c_char) -> *mut c_char,
@@ -162,6 +182,7 @@ impl Api {
       terminate_destroy: sym!(lib, "mpv_terminate_destroy"),
       client_api_version: sym!(lib, "mpv_client_api_version"),
       set_option_string: sym!(lib, "mpv_set_option_string"),
+      set_option: sym!(lib, "mpv_set_option"),
       set_property_string: sym!(lib, "mpv_set_property_string"),
       observe_property: sym!(lib, "mpv_observe_property"),
       get_property_string: sym!(lib, "mpv_get_property_string"),
@@ -219,8 +240,18 @@ unsafe impl Send for Mpv {}
 unsafe impl Sync for Mpv {}
 
 impl Mpv {
-  /// Creates mpv with `options` (set before init) and a render context for `backend`.
-  pub fn new(api: Api, options: &[(&str, &str)], backend: RenderBackend) -> Result<Self, String> {
+  /// Creates mpv with `options` and the list options `lists` (both set before init) and a render
+  /// context for `backend`.
+  ///
+  /// A list given in `lists` keeps each item verbatim (no splitting on commas) and, set before
+  /// init as a node, its value never reaches mpv's log file, unlike `change-list` (its arguments
+  /// are logged) or a property set after init (its value is logged): use it for credentials.
+  pub fn new(
+    api: Api,
+    options: &[(&str, &str)],
+    lists: &[(&str, &[String])],
+    backend: RenderBackend,
+  ) -> Result<Self, String> {
     // SAFETY: plain constructor, returns null on failure.
     let handle = unsafe { (api.create)() };
     if handle.is_null() {
@@ -237,6 +268,11 @@ impl Mpv {
       let code = unsafe { (mpv.api.set_option_string)(mpv.handle, n.as_ptr(), v.as_ptr()) };
       // Values are never echoed: they can hold credentials (HTTP headers).
       mpv.api.check(code, &format!("option {name}"))?;
+    }
+    for (name, items) in lists {
+      if !items.is_empty() {
+        mpv.set_option_list(name, items)?;
+      }
     }
     // SAFETY: valid, not yet initialized handle.
     mpv.api.check(
@@ -275,6 +311,40 @@ impl Mpv {
     mpv.api.check(code, "mpv_render_context_create")?;
     mpv.render = render;
     Ok(mpv)
+  }
+
+  /// Sets the list option `name` to `items` as a node array (see [`Mpv::new`]).
+  fn set_option_list(&self, name: &str, items: &[String]) -> Result<(), String> {
+    let owned: Vec<CString> = items.iter().map(|s| cstr(s)).collect();
+    let mut values: Vec<Node> = owned
+      .iter()
+      .map(|s| Node {
+        u: s.as_ptr() as *mut c_void,
+        format: FORMAT_STRING,
+      })
+      .collect();
+    let mut list = NodeList {
+      num: c_int::try_from(values.len()).map_err(|_| format!("option {name}: too many items"))?,
+      values: values.as_mut_ptr(),
+      keys: ptr::null_mut(),
+    };
+    let mut node = Node {
+      u: (&mut list as *mut NodeList).cast(),
+      format: FORMAT_NODE_ARRAY,
+    };
+    let n = cstr(name);
+    // SAFETY: valid handle; the node tree (strings, values, list) outlives the call, and mpv
+    // copies what it keeps.
+    let code = unsafe {
+      (self.api.set_option)(
+        self.handle,
+        n.as_ptr(),
+        FORMAT_NODE,
+        (&mut node as *mut Node).cast(),
+      )
+    };
+    // Values are never echoed: they can hold credentials.
+    self.api.check(code, &format!("option {name}"))
   }
 
   /// Runs an mpv command such as `["loadfile", url]`.

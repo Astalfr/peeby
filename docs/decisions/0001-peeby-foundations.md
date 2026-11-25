@@ -34,6 +34,7 @@ PeebTube additions to `player`:
 - `StartOptions::audio_device`, `Player::set_audio_device` and `audio_devices` (an mpv without render context, `sys::RenderBackend::None`), for the top bar's audio output menu;
 - `StartOptions::http_proxy` (`http-proxy`), for a Jellyfin server behind a WireGuard tunnel (ADR 0037);
 - `play_wav` (`sys::play_wav`: Windows' `PlaySoundW` from winmm.dll, loaded at runtime like libmpv), for the opening animation's sound;
+- `sys::Mpv::new` takes list options set before init as nodes (`mpv_set_option`): `http-header-fields` goes there instead of `change-list`, whose arguments mpv's log file records (Jellyfin's token was in it);
 - the GPU ring is recreated at once after a quiet spell, else once a resize settles (60 ms), and the replaced ring lives until the next one (no black video while the mini-player is resized, ADR 0008).
 
 PeebTube additions to `gpui-video`:

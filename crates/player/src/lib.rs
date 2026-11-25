@@ -118,7 +118,7 @@ pub fn audio_devices(libmpv_path: Option<PathBuf>) -> Result<Vec<AudioDevice>, S
     ("idle", "yes"),
     ("video", "no"),
   ];
-  let mpv = Mpv::new(api, &options, RenderBackend::None)?;
+  let mpv = Mpv::new(api, &options, &[], RenderBackend::None)?;
   // A node list: read item by item through its sub-properties.
   let count = mpv
     .property("audio-device-list/count")
@@ -367,6 +367,7 @@ impl Player {
         let mpv = create_mpv(
           api,
           &mpv_options(&options, Backend::Software),
+          &options.http_headers,
           RenderBackend::Software,
         )?;
         (mpv, None, Backend::Software)
@@ -393,10 +394,8 @@ impl Player {
       mpv.observe(name, format)?;
     }
     // List options are filled with `change-list … append`, which adds one item verbatim
-    // (setting them as plain options would split the Authorization header on its commas).
-    for header in &options.http_headers {
-      mpv.command(&["change-list", "http-header-fields", "append", header])?;
-    }
+    // (setting them as plain options would split a value on its commas). Not the HTTP headers:
+    // `change-list` logs its arguments, so they are set before init (`create_mpv`).
     for sub in &options.external_subtitles {
       mpv.command(&["change-list", "sub-files", "append", sub])?;
     }
@@ -591,6 +590,7 @@ fn start_gpu(dll: &std::path::Path, options: &StartOptions) -> Result<(Mpv, Vide
   let mpv = create_mpv(
     api,
     &mpv_options(options, Backend::Gpu),
+    &options.http_headers,
     RenderBackend::D3d11 {
       device: device.as_raw(),
     },
@@ -688,14 +688,21 @@ fn free_log_path(path: &std::path::Path) -> PathBuf {
     .unwrap_or_else(|| path.to_owned())
 }
 
-/// Creates mpv with owned option pairs.
+/// Creates mpv with owned option pairs and the HTTP headers, set before init so that they never
+/// reach mpv's log file (they hold credentials: Jellyfin's token).
 fn create_mpv(
   api: sys::Api,
   options: &[(&'static str, String)],
+  http_headers: &[String],
   backend: RenderBackend,
 ) -> Result<Mpv, String> {
   let borrowed: Vec<(&str, &str)> = options.iter().map(|(k, v)| (*k, v.as_str())).collect();
-  Mpv::new(api, &borrowed, backend)
+  Mpv::new(
+    api,
+    &borrowed,
+    &[("http-header-fields", http_headers)],
+    backend,
+  )
 }
 
 fn render_gpu(
