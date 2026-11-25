@@ -455,9 +455,6 @@ pub struct PlayerView {
   /// ([`Self::announce`]), and where its card is.
   announced: Option<(UpNextItem, Announce)>,
   announce_task: Option<Task<()>>,
-  /// Embedded, the wheel over the player sets the volume: it was clicked since it last lost
-  /// the focus (`on_wheel`).
-  wheel_volume: bool,
   /// The shortcut help is open.
   help: bool,
   /// The right-click menu is open, at this point of the player.
@@ -663,7 +660,6 @@ impl PlayerView {
       countdown_task: None,
       announced: None,
       announce_task: None,
-      wheel_volume: false,
       help: false,
       context_menu: None,
       stats: false,
@@ -2508,7 +2504,6 @@ impl PlayerView {
       "escape" if window.is_fullscreen() => window.toggle_fullscreen(),
       // Embedded, Escape leaves the player: the wheel over it scrolls the page again.
       "escape" if self.layout == Layout::Embedded => {
-        self.wheel_volume = false;
         window.blur(cx);
         cx.stop_propagation();
         return;
@@ -2580,18 +2575,14 @@ impl PlayerView {
     }
   }
 
-  /// Mouse wheel: volume, in fullscreen, when the player is the page, or embedded once clicked
-  /// while it keeps the focus (not from its page opening); else embedded, the wheel scrolls the
-  /// page.
+  /// Mouse wheel: volume, in fullscreen, when the player is the page, or embedded while it has
+  /// the focus (its page gives it on opening); else embedded, the wheel scrolls the page.
   fn on_wheel(&mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
-    if !window.is_fullscreen() && self.layout == Layout::Embedded {
-      if !self.focus.contains_focused(window, cx) {
-        // Left since the click: the next focus without one does not count.
-        self.wheel_volume = false;
-      }
-      if !self.wheel_volume {
-        return;
-      }
+    if !window.is_fullscreen()
+      && self.layout == Layout::Embedded
+      && !self.focus.contains_focused(window, cx)
+    {
+      return;
     }
     // Every slice of a notch stops here, its last tiny ones included: none scrolls the page.
     cx.stop_propagation();
@@ -4217,7 +4208,6 @@ impl Render for PlayerView {
       // press (else its keys, Escape out of fullscreen included, reach nobody once a click on
       // the page has left it); the wheel over it is then the volume's.
       .capture_any_mouse_down(cx.listener(|this, _, window, cx| {
-        this.wheel_volume = true;
         if !this.focus.contains_focused(window, cx) {
           window.focus(&this.focus, cx);
         }
