@@ -11,7 +11,7 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::skeleton::Skeleton;
-use gpui_component::{Sizable, h_flex, v_flex};
+use gpui_component::{IconName, Sizable, h_flex, v_flex};
 use jellyfin_api::models::{BaseItem, CollectionType, ItemKind};
 use jellyfin_api::{Client, Error, NextUpOptions};
 use ui::assets::Icon;
@@ -21,12 +21,14 @@ use ui::images::Images;
 use ui::picture::{Picture, image_fill, logo};
 use ui::rows::scroll_row;
 use ui::text::one_paragraph;
+use ui::widgets::notice;
 use ui::{motion, runtime, tf, theme};
 
 use super::items::{
   Shape, TICKS_PER_SECOND, backdrop_ref, card, episode_number, is_spoiler, logo_ref, resumable,
   route_for, section_title,
 };
+use super::login::describe;
 use super::{Nav, Route, report};
 use peeby_core::settings::Settings;
 
@@ -51,6 +53,9 @@ pub struct HomeView {
   nav: Nav,
   rows: Vec<Row>,
   loading: bool,
+  /// Why the last load failed, until the next one succeeds: shown in place of the rows when
+  /// there are none (else the page would read as an empty server).
+  error: Option<SharedString>,
   hero: Vec<BaseItem>,
   hero_index: usize,
   /// The slide being faded out, under the current one.
@@ -69,6 +74,7 @@ impl HomeView {
       nav,
       rows: Vec::new(),
       loading: true,
+      error: None,
       hero: Vec::new(),
       hero_index: 0,
       hero_previous: None,
@@ -188,6 +194,7 @@ impl HomeView {
       this
         .update(cx, |this, cx| {
           this.loading = false;
+          this.error = None;
           // A reload keeps the slide shown when it is still there.
           let shown = this.hero.get(this.hero_index).map(|i| i.id.clone());
           this.hero_index = shown
@@ -206,7 +213,16 @@ impl HomeView {
 
   fn failed(&mut self, error: &Error, cx: &mut Context<Self>) {
     self.loading = false;
+    self.error = Some(describe(error));
     report(&self.nav, error, cx);
+    cx.notify();
+  }
+
+  /// "Retry" on the failed page: the skeleton again, then a fresh load.
+  fn retry(&mut self, cx: &mut Context<Self>) {
+    self.loading = true;
+    self.error = None;
+    self.load(cx);
     cx.notify();
   }
 
@@ -523,11 +539,26 @@ impl Render for HomeView {
       );
     }
     if !self.loading && self.hero.is_empty() && self.rows.iter().all(|r| r.items.is_empty()) {
-      rows = rows.child(
-        div()
+      rows = rows.child(match &self.error {
+        Some(error) => notice(
+          IconName::TriangleAlert,
+          t("Cannot load the page", "Impossible de charger la page"),
+          error.clone(),
+        )
+        .child(
+          h_flex().pt_2().child(
+            Button::new("retry")
+              .primary()
+              .label(t("Retry", "Réessayer"))
+              .on_click(cx.listener(|this, _, _, cx| this.retry(cx))),
+          ),
+        )
+        .into_any_element(),
+        None => div()
           .text_color(theme::muted())
-          .child(t("Nothing to show yet.", "Rien à afficher pour l'instant.")),
-      );
+          .child(t("Nothing to show yet.", "Rien à afficher pour l'instant."))
+          .into_any_element(),
+      });
     }
     let skeleton = v_flex()
       .p_8()
