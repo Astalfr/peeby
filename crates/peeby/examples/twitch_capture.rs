@@ -28,6 +28,13 @@
 //! `-- notifications [<file>]` reads the account's notification center (twitch.tv's bell) with
 //! the saved `auth-token` and prints counts and kinds; it reads, never writes. The file gets the
 //! whole answer, which names the followed channels: trim and rename it before a fixture.
+//! `-- clip <login>` creates a clip of a live (`POST helix/clips`: a PUBLIC write from the account,
+//! to delete afterwards from the creator dashboard), waits for it and saves both answers redacted
+//! (`helix_clip_create.json`, `helix_clip_created.json`). `-- clip-vod <vod-id> <offset>` asks
+//! for a clip of a VOD ending at `offset` seconds (`POST helix/videos/clips`, the account as
+//! editor) and saves the answer, success or refusal. Both use the debug profile's session
+//! (`--profile peeby` for the release one) and, when it lacks a scope of `SCOPES`, ask for a device
+//! code approval first, printing the page and the code.
 //! `-- catalog` saves the GQL catalog's answers (`gql_catalog_*.json`, [`twitch::catalog`]),
 //! anonymous: no secret is read, the lists are trimmed to a few items.
 //!
@@ -39,9 +46,10 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use twitch::auth::{Auth, Session, Store};
+use twitch::auth::{Auth, Poll, Session, Store, Validation};
 use twitch::helix::Helix;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../twitch/tests/fixtures");
@@ -105,6 +113,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   }
   if args.iter().any(|a| a == "catalog") {
     return twitch::block_on(capture_catalog())?;
+  }
+  let profile = args
+    .iter()
+    .position(|a| a == "--profile")
+    .and_then(|i| args.get(i + 1).cloned())
+    .unwrap_or_else(|| "peeby-dev".to_owned());
+  if let Some(i) = args.iter().position(|a| a == "clip") {
+    let login = args.get(i + 1).ok_or("clip <login>")?.clone();
+    return twitch::block_on(capture_clip(login, profile))?;
+  }
+  if let Some(i) = args.iter().position(|a| a == "clip-vod") {
+    let usage = "clip-vod <vod-id> <offset>";
+    let vod = args.get(i + 1).ok_or(usage)?.clone();
+    let offset: u32 = args.get(i + 2).ok_or(usage)?.parse()?;
+    return twitch::block_on(capture_vod_clip(vod, offset, profile))?;
   }
   let entry = keyring::Entry::new("peeby", "twitch|refresh")?;
   let refresh = entry.get_password()?;
@@ -201,6 +224,253 @@ async fn capture(helix: &Helix) -> Result<(), Box<dyn std::error::Error>> {
     .get("clips", &[("broadcaster_id", &channel_id), ("first", "3")])
     .await?;
   save("helix_clips.json", &clips)?;
+  Ok(())
+}
+
+/// The slug every saved clip answer gets instead of the real clip's.
+const FAKE_SLUG: &str = "PeebyTestClipSlug";
+
+/// Saves refresh tokens in `profile`'s Credential Manager entry, as the app does.
+fn clip_store(profile: &str) -> Store {
+  let profile = profile.to_owned();
+  Arc::new(move |token: &str| {
+    keyring::Entry::new(&profile, "twitch|refresh")
+      .and_then(|e| e.set_password(token))
+      .map_err(|e| e.to_string())
+  })
+}
+
+/// `POST helix/{path}` with `query`: the status and the JSON body. No refresh and no retry: the
+/// answer is what is saved.
+async fn helix_post(
+  helix: &Helix,
+  path: &str,
+  query: &[(&str, &str)],
+) -> Result<(u16, Value), Box<dyn std::error::Error>> {
+  let url = reqwest::Url::parse_with_params(&format!("https://api.twitch.tv/helix/{path}"), query)?;
+  let response = reqwest::Client::new()
+    .post(url)
+    .header("Client-Id", helix.session().auth().client_id())
+    .header(
+      "Authorization",
+      format!("Bearer {}", helix.session().access_token()),
+    )
+    .send()
+    .await?;
+  let status = response.status().as_u16();
+  let text = response.text().await?;
+  Ok((status, serde_json::from_str(&text).unwrap_or(Value::Null)))
+}
+
+/// A device code approval (what the app's sign-in card does): the user opens the page and types
+/// the code; the new refresh token is stored in `store`.
+async fn approve(auth: Auth, store: Store) -> Result<Session, Box<dyn std::error::Error>> {
+  let device = auth.start_device().await?;
+  println!(
+    "Approve the sign-in: open {} and enter {} (within {} s).",
+    device.verification_uri, device.user_code, device.expires_in
+  );
+  let deadline = Instant::now() + Duration::from_secs(device.expires_in);
+  let mut interval = Duration::from_secs(device.interval);
+  loop {
+    if Instant::now() >= deadline {
+      return Err("the code expired".into());
+    }
+    // A command-line tool alone on its runtime: blocking it a while harms nothing.
+    std::thread::sleep(interval);
+    match auth.poll(&device).await? {
+      Poll::Pending => {}
+      Poll::SlowDown => interval += Duration::from_secs(5),
+      Poll::Done(tokens) => return Ok(Session::begin(auth, tokens, store).await),
+    }
+  }
+}
+
+/// A Helix session of `profile` (the debug one by default) that holds every scope of
+/// [`twitch::auth::SCOPES`]: the saved one when it does, else after a device code approval. With
+/// `probe_scope`, a session without `clips:edit` first sends one clip request, to save Twitch's
+/// refusal (`helix_clip_missing_scope.json`): a made-up channel, so it can create nothing.
+async fn clip_session(
+  profile: &str,
+  probe_scope: bool,
+) -> Result<(Helix, Validation), Box<dyn std::error::Error>> {
+  let auth = Auth::new(None)?;
+  let store = clip_store(profile);
+  let saved = keyring::Entry::new(profile, "twitch|refresh")
+    .ok()
+    .and_then(|e| e.get_password().ok());
+  let mut session = None;
+  if let Some(refresh) = saved {
+    match Session::restore(auth.clone(), &refresh, store.clone()).await {
+      Ok(s) => session = Some(s),
+      Err(e) => println!("The saved session is unusable ({e}): it needs an approval."),
+    }
+  }
+  let mut validation = match &session {
+    Some(s) => Some(s.validate().await?),
+    None => None,
+  };
+  if let Some(v) = &validation {
+    println!("Granted: {:?}; missing: {:?}", v.scopes, v.missing_scopes());
+  }
+  if validation
+    .as_ref()
+    .is_none_or(|v| !v.missing_scopes().is_empty())
+  {
+    if let (Some(s), Some(v)) = (&session, &validation)
+      && probe_scope
+      && !v.can_clip()
+    {
+      let helix = Helix::new(s.clone())?;
+      let (status, body) = helix_post(&helix, "clips", &[("broadcaster_id", "1")]).await?;
+      println!(
+        "Without clips:edit, Twitch answers HTTP {status}: {}",
+        body["message"].as_str().unwrap_or_default()
+      );
+      if status == 401 {
+        save("helix_clip_missing_scope.json", &body)?;
+      }
+    }
+    let s = approve(auth, store).await?;
+    validation = Some(s.validate().await?);
+    session = Some(s);
+  }
+  match (session, validation) {
+    (Some(s), Some(v)) if v.missing_scopes().is_empty() => Ok((Helix::new(s)?, v)),
+    (_, Some(v)) => Err(format!("Twitch did not grant {:?}", v.missing_scopes()).into()),
+    _ => Err("no session".into()),
+  }
+}
+
+/// A clip answer with the real clip, its channel and its creator replaced (same shape): the slug
+/// everywhere, then the fields that name the channel, the account or the video.
+fn redact_clip(answer: &Value, slug: &str) -> Result<Value, Box<dyn std::error::Error>> {
+  let text = serde_json::to_string(answer)?.replace(slug, FAKE_SLUG);
+  let mut answer: Value = serde_json::from_str(&text)?;
+  let fixed = |clip: &mut Value, key: &str, value: Value| {
+    if clip.get(key).is_some_and(|v| !v.is_null()) {
+      clip[key] = value;
+    }
+  };
+  if let Some(list) = answer["data"].as_array_mut() {
+    for clip in list {
+      fixed(clip, "broadcaster_id", json!("200000001"));
+      fixed(clip, "broadcaster_name", json!("Streamer1"));
+      fixed(clip, "creator_id", json!("100000001"));
+      fixed(clip, "creator_name", json!("peeby_test"));
+      fixed(clip, "title", json!("Clip title"));
+      // Both name the channel: `https://www.twitch.tv/<login>/clip/<slug>`.
+      for key in ["url", "edit_url"] {
+        fixed(
+          clip,
+          key,
+          json!(format!("https://www.twitch.tv/streamer1/clip/{FAKE_SLUG}")),
+        );
+      }
+      if clip["video_id"].as_str().is_some_and(|v| !v.is_empty()) {
+        clip["video_id"] = json!("400000001");
+      }
+      fixed(
+        clip,
+        "thumbnail_url",
+        json!(format!(
+          "https://static-cdn.jtvnw.net/twitch-clips-thumbnails-prod/{FAKE_SLUG}/preview.jpg"
+        )),
+      );
+    }
+  }
+  Ok(answer)
+}
+
+/// Creates a clip of a live (a public write from the account: ask first, and delete it afterwards
+/// from the creator dashboard), then asks for it until Twitch has made it. Saves
+/// `helix_clip_create.json` (the 202) and `helix_clip_created.json` (`GET clips?id=`), redacted;
+/// a refusal is saved as `helix_clip_create_refused.json`.
+async fn capture_clip(login: String, profile: String) -> Result<(), Box<dyn std::error::Error>> {
+  let (helix, _) = clip_session(&profile, true).await?;
+  let streams = helix.get("streams", &[("user_login", &login)]).await?;
+  let broadcaster = streams["data"][0]["user_id"]
+    .as_str()
+    .ok_or("that channel is not live")?
+    .to_owned();
+  let (status, created) = helix_post(&helix, "clips", &[("broadcaster_id", &broadcaster)]).await?;
+  if status != 202 {
+    println!(
+      "Refused: HTTP {status}: {}",
+      created["message"].as_str().unwrap_or_default()
+    );
+    save("helix_clip_create_refused.json", &created)?;
+    return Err("clip refused".into());
+  }
+  let slug = created["data"][0]["id"]
+    .as_str()
+    .ok_or("no clip id")?
+    .to_owned();
+  save("helix_clip_create.json", &redact_clip(&created, &slug)?)?;
+  println!("Clip created: https://clips.twitch.tv/{slug} (delete it from the dashboard).");
+  let started = Instant::now();
+  for attempt in 1..=30 {
+    // Alone on its runtime, as above.
+    std::thread::sleep(Duration::from_secs(1));
+    let answer = helix.get("clips", &[("id", &slug)]).await?;
+    if answer["data"].as_array().is_some_and(|d| !d.is_empty()) {
+      println!(
+        "Ready after {} s ({attempt} asks).",
+        started.elapsed().as_secs()
+      );
+      save("helix_clip_created.json", &redact_clip(&answer, &slug)?)?;
+      return Ok(());
+    }
+  }
+  Err("the clip was not ready after 30 s".into())
+}
+
+/// Asks Helix for a clip of a VOD ending at `offset` seconds, as the account (editor_id): saves
+/// the success (`helix_vod_clip_create.json`) or the refusal (`helix_vod_clip_refused.json`), so
+/// the refusal of a channel the account is no editor of is known. Public write if it succeeds:
+/// ask first.
+async fn capture_vod_clip(
+  vod: String,
+  offset: u32,
+  profile: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+  // The clip ends at the offset and lasts 30 s by default: a smaller offset is a 400.
+  if offset < 30 {
+    return Err("the offset must be at least 30 (the default duration)".into());
+  }
+  let (helix, validation) = clip_session(&profile, false).await?;
+  let video = helix.get("videos", &[("id", &vod)]).await?;
+  let broadcaster = video["data"][0]["user_id"]
+    .as_str()
+    .ok_or("VOD not found")?
+    .to_owned();
+  let offset = offset.to_string();
+  let (status, body) = helix_post(
+    &helix,
+    "videos/clips",
+    &[
+      ("editor_id", &validation.user_id),
+      ("broadcaster_id", &broadcaster),
+      ("vod_id", &vod),
+      ("vod_offset", &offset),
+      ("title", "Peeby capture"),
+    ],
+  )
+  .await?;
+  println!(
+    "HTTP {status}: {}",
+    body["message"].as_str().unwrap_or("(no message)")
+  );
+  if status == 202 {
+    let slug = body["data"][0]["id"]
+      .as_str()
+      .ok_or("no clip id")?
+      .to_owned();
+    println!("Clip created: https://clips.twitch.tv/{slug} (delete it from the dashboard).");
+    save("helix_vod_clip_create.json", &redact_clip(&body, &slug)?)?;
+  } else {
+    save("helix_vod_clip_refused.json", &body)?;
+  }
   Ok(())
 }
 

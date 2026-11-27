@@ -21,8 +21,10 @@ use crate::error::{Error, Result};
 /// Client-ID is not a secret.
 pub const CLIENT_ID: &str = "zsxaog2l339o1lbld85h17ksscnjwr";
 
-/// Scopes asked for: the followed channels.
-pub const SCOPES: &str = "user:read:follows";
+/// Scopes asked for, space separated: the followed channels, creating a clip of a live
+/// (`clips:edit`) and of a video (`editor:manage:clips`, which Helix's "Create Clip From VOD"
+/// takes with `channel:manage:clips`; granted by the device flow, checked on 2026-11-27).
+pub const SCOPES: &str = "user:read:follows clips:edit editor:manage:clips";
 
 /// A device code waiting for the user.
 #[derive(Clone)]
@@ -85,6 +87,22 @@ pub struct Validation {
   pub expires_in: u64,
   /// Granted scopes.
   pub scopes: Vec<String>,
+}
+
+impl Validation {
+  /// The scopes of [`SCOPES`] this token was not granted (a session approved before they were
+  /// asked for lacks them: it needs a new device code approval).
+  pub fn missing_scopes(&self) -> Vec<&'static str> {
+    SCOPES
+      .split_whitespace()
+      .filter(|wanted| !self.scopes.iter().any(|s| s == wanted))
+      .collect()
+  }
+
+  /// Whether the token can create clips (of a live, which is what the button needs first).
+  pub fn can_clip(&self) -> bool {
+    self.scopes.iter().any(|s| s == "clips:edit")
+  }
 }
 
 /// Reads a `/oauth2/device` answer.

@@ -7,3 +7,4 @@ CLAUDE.local.md
 *.local.toml
 cookies*.txt
 /third_party/vcruntime/
+.koyun/

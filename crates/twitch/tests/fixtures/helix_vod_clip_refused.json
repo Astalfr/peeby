@@ -1,0 +1,5 @@
+{
+  "error": "Forbidden",
+  "status": 403,
+  "message": "User does not have editor permissions for this channel"
+}

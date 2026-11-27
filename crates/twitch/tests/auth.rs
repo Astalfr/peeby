@@ -93,6 +93,38 @@ fn validation() {
 }
 
 #[test]
+fn scopes_include_clips() {
+  let wanted: Vec<&str> = auth::SCOPES.split_whitespace().collect();
+  assert_eq!(
+    wanted,
+    ["user:read:follows", "clips:edit", "editor:manage:clips"]
+  );
+}
+
+#[test]
+fn missing_scopes_of_an_old_session() {
+  let old = json!({
+    "client_id": auth::CLIENT_ID, "login": "peeby_test", "scopes": ["user:read:follows"],
+    "user_id": "123", "expires_in": 13000
+  });
+  let v = auth::parse_validation(200, &old).unwrap();
+  assert_eq!(v.missing_scopes(), ["clips:edit", "editor:manage:clips"]);
+  assert!(!v.can_clip());
+}
+
+#[test]
+fn no_missing_scopes_when_complete() {
+  let full = json!({
+    "client_id": auth::CLIENT_ID, "login": "peeby_test",
+    "scopes": ["editor:manage:clips", "user:read:follows", "clips:edit", "chat:read"],
+    "user_id": "123", "expires_in": 13000
+  });
+  let v = auth::parse_validation(200, &full).unwrap();
+  assert!(v.missing_scopes().is_empty());
+  assert!(v.can_clip());
+}
+
+#[test]
 fn auth_token_check() {
   assert!(matches!(
     gql::parse_account(&json("gql_current_user_anonymous.json")),

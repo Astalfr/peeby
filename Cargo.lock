@@ -5342,6 +5342,7 @@ dependencies = [
  "innertube",
  "keyring",
  "peeby-core",
+ "reqwest",
  "serde_json",
  "space-jellyfin",
  "space-twitch",

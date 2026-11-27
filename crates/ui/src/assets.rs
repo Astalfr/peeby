@@ -111,6 +111,7 @@ icons! {
   Close => "close",
   Hide => "eye-off",
   Timer => "timer",
+  Clip => "scissors",
 }
 
 macro_rules! files {

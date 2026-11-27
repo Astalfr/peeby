@@ -227,9 +227,10 @@ impl Render for LoginView {
         .gap_3()
         .child(div().text_sm().text_color(theme::muted()).child(t(
           "Peeby shows a code to enter on twitch.tv: no password goes through the app. It \
-           reads your followed channels, nothing else.",
+           reads your followed channels and creates clips when you ask, nothing else.",
           "Peeby affiche un code à saisir sur twitch.tv : aucun mot de passe ne passe par \
-           l'application. Il lit vos chaînes suivies, rien d'autre.",
+           l'application. Il lit vos chaînes suivies et crée des clips à votre demande, rien \
+           d'autre.",
         )))
         .child(
           Button::new("twitch-login")

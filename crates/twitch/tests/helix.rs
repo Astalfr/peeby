@@ -146,6 +146,71 @@ fn clips() {
 }
 
 #[test]
+fn created_clip() {
+  let clip = helix::parse_created_clip(&json("helix_clip_create.json")).unwrap();
+  assert_eq!(clip.id, "PeebyTestClipSlug");
+  assert_eq!(
+    clip.edit_url,
+    "https://www.twitch.tv/streamer1/clip/PeebyTestClipSlug"
+  );
+  assert!(helix::parse_created_clip(&json!({"data": []})).is_err());
+}
+
+#[test]
+fn finished_clip() {
+  let page = helix::parse_clips(&json("helix_clip_created.json"));
+  assert_eq!(page.items.len(), 1);
+  assert_eq!(page.items[0].id, "PeebyTestClipSlug");
+  assert_eq!(page.items[0].duration, 30.0);
+}
+
+#[test]
+fn refusals_are_classified() {
+  use twitch::Error;
+  let scope = json("helix_clip_missing_scope.json");
+  assert!(matches!(
+    helix::parse_error(401, &scope),
+    Error::MissingScope
+  ));
+  let refused = helix::parse_error(403, &json("helix_vod_clip_refused.json"));
+  assert!(helix::is_editor_refusal(&refused));
+  assert!(
+    matches!(&refused, Error::Helix { status: 403, message } if message.contains("editor permissions"))
+  );
+  // Another 403 (clips disabled) is not the editor refusal.
+  let other = helix::parse_error(403, &json!({"message": "Clips are disabled"}));
+  assert!(!helix::is_editor_refusal(&other));
+  // A stale token's 401 is not a scope problem.
+  let stale = helix::parse_error(401, &json!({"message": "Invalid OAuth token"}));
+  assert!(matches!(stale, Error::Helix { status: 401, .. }));
+}
+
+#[test]
+fn urls() {
+  assert_eq!(helix::clip_url("AbC"), "https://clips.twitch.tv/AbC");
+  assert_eq!(
+    helix::vod_url("42", 0),
+    "https://www.twitch.tv/videos/42?t=0s"
+  );
+  assert_eq!(
+    helix::vod_url("42", 59),
+    "https://www.twitch.tv/videos/42?t=59s"
+  );
+  assert_eq!(
+    helix::vod_url("42", 125),
+    "https://www.twitch.tv/videos/42?t=2m5s"
+  );
+  assert_eq!(
+    helix::vod_url("42", 3723),
+    "https://www.twitch.tv/videos/42?t=1h2m3s"
+  );
+  assert_eq!(
+    helix::vod_url("42", 3600),
+    "https://www.twitch.tv/videos/42?t=1h0m0s"
+  );
+}
+
+#[test]
 fn durations() {
   assert_eq!(helix::parse_duration("3h8m33s"), 3 * 3600 + 8 * 60 + 33);
   assert_eq!(helix::parse_duration("45m2s"), 45 * 60 + 2);

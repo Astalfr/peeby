@@ -373,6 +373,78 @@ pub fn parse_clips(answer: &Value) -> Page<Clip> {
   })
 }
 
+/// Tries of [`Helix::wait_clip`]: a clip exists about 10 s after its creation.
+pub const CLIP_TRIES: u32 = 15;
+/// Delay between two tries of [`Helix::wait_clip`].
+pub const CLIP_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// A clip just created, not yet finished.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CreatedClip {
+  /// Id, also its slug.
+  pub id: String,
+  /// Where to trim and title it on twitch.tv (`https://www.twitch.tv/<login>/clip/<slug>`).
+  pub edit_url: String,
+}
+
+/// The answer of `POST /clips` and `POST /videos/clips`.
+pub fn parse_created_clip(answer: &Value) -> Result<CreatedClip> {
+  let first = &answer["data"][0];
+  match first["id"].as_str().filter(|id| !id.is_empty()) {
+    Some(id) => Ok(CreatedClip {
+      id: id.to_owned(),
+      edit_url: text(&first["edit_url"]),
+    }),
+    None => Err(Error::Parse {
+      endpoint: "helix/clips",
+      detail: "no clip id".into(),
+    }),
+  }
+}
+
+/// Helix's `message` of an error answer, empty when it has none.
+fn message(answer: &Value) -> String {
+  text(&answer["message"])
+}
+
+/// A 401 about a scope (`Missing scope: clips:edit`), not about a stale token.
+fn is_missing_scope(message: &str) -> bool {
+  message.to_ascii_lowercase().contains("scope")
+}
+
+/// The error of a refused write: its status and Helix's message.
+pub fn parse_error(status: u16, answer: &Value) -> Error {
+  if status == 401 && is_missing_scope(&message(answer)) {
+    return Error::MissingScope;
+  }
+  Error::Helix {
+    status,
+    message: message(answer),
+  }
+}
+
+/// Whether `error` is Helix refusing a VOD clip to someone who is not the channel's editor
+/// (403): the caller falls back to twitch.tv.
+pub fn is_editor_refusal(error: &Error) -> bool {
+  matches!(error, Error::Helix { status: 403, message } if message.to_ascii_lowercase().contains("editor"))
+}
+
+/// A clip's public page.
+pub fn clip_url(slug: &str) -> String {
+  format!("https://clips.twitch.tv/{slug}")
+}
+
+/// A VOD's page at `seconds`, as twitch.tv's `?t=1h2m3s`.
+pub fn vod_url(id: &str, seconds: u64) -> String {
+  let (h, m, s) = (seconds / 3600, seconds % 3600 / 60, seconds % 60);
+  let t = match (h, m) {
+    (0, 0) => format!("{s}s"),
+    (0, _) => format!("{m}m{s}s"),
+    _ => format!("{h}h{m}m{s}s"),
+  };
+  format!("https://www.twitch.tv/videos/{id}?t={t}")
+}
+
 /// `/search/channels`.
 pub fn parse_search_channels(answer: &Value) -> Page<ChannelResult> {
   page(answer, |c| {
@@ -412,6 +484,36 @@ impl Helix {
 
   /// `GET helix/{path}` with `query`, as JSON; a refused token is refreshed once.
   pub async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value> {
+    match self.send(reqwest::Method::GET, path, query).await? {
+      (200, answer) => Ok(answer),
+      (status, _) => Err(Error::Status {
+        status,
+        endpoint: "helix",
+        code: None,
+      }),
+    }
+  }
+
+  /// `POST helix/{path}` with `query` and no body, the answer as JSON (200 or 202). A 401 for a
+  /// missing scope is [`Error::MissingScope`], without a refresh (the token is fine); any other
+  /// 401 refreshes the token once. A 404 on `clips` is [`Error::Offline`]; other refusals are
+  /// [`Error::Helix`] with Helix's message.
+  pub async fn post(&self, path: &str, query: &[(&str, &str)]) -> Result<Value> {
+    match self.send(reqwest::Method::POST, path, query).await? {
+      (200 | 202, answer) => Ok(answer),
+      (404, _) if path == "clips" => Err(Error::Offline),
+      (status, answer) => Err(parse_error(status, &answer)),
+    }
+  }
+
+  /// One call with the token, refreshed once on a 401 that is not about a scope. Returns the
+  /// status and the body (`Null` when it is not JSON); a 2xx answer that is not JSON is an error.
+  async fn send(
+    &self,
+    method: reqwest::Method,
+    path: &str,
+    query: &[(&str, &str)],
+  ) -> Result<(u16, Value)> {
     let url = reqwest::Url::parse_with_params(&format!("{BASE}{path}"), query).map_err(|e| {
       Error::Parse {
         endpoint: "helix",
@@ -422,30 +524,33 @@ impl Helix {
     for attempt in 0..2 {
       let response = self
         .http
-        .get(url.clone())
+        .request(method.clone(), url.clone())
         .header("Client-Id", self.session.auth().client_id())
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await?;
       let status = response.status().as_u16();
+      let text = response.text().await?;
+      let answer = serde_json::from_str::<Value>(&text);
       match status {
-        200 => {
-          let text = response.text().await?;
-          return serde_json::from_str(&text).map_err(|e| Error::Parse {
+        401 => {
+          if answer.as_ref().is_ok_and(|a| is_missing_scope(&message(a))) {
+            return Err(Error::MissingScope);
+          }
+          if attempt == 0 {
+            token = self.session.refresh_after(&token).await?;
+          } else {
+            return Err(Error::SessionExpired);
+          }
+        }
+        429 => return Err(Error::RateLimited),
+        200..=299 => {
+          return answer.map(|a| (status, a)).map_err(|e| Error::Parse {
             endpoint: "helix",
             detail: e.to_string(),
           });
         }
-        401 if attempt == 0 => token = self.session.refresh_after(&token).await?,
-        401 => return Err(Error::SessionExpired),
-        429 => return Err(Error::RateLimited),
-        _ => {
-          return Err(Error::Status {
-            status,
-            endpoint: "helix",
-            code: None,
-          });
-        }
+        _ => return Ok((status, answer.unwrap_or(Value::Null))),
       }
     }
     Err(Error::SessionExpired)
@@ -515,6 +620,66 @@ impl Helix {
       .into_iter()
       .next()
       .ok_or(Error::NotFound)
+  }
+
+  /// Creates a clip of a live (`POST /clips`, 30 s by default; needs `clips:edit`). The clip
+  /// exists a few seconds later: [`Helix::wait_clip`].
+  pub async fn create_clip(&self, broadcaster_id: &str) -> Result<CreatedClip> {
+    parse_created_clip(
+      &self
+        .post("clips", &[("broadcaster_id", broadcaster_id)])
+        .await?,
+    )
+  }
+
+  /// Creates a clip of a VOD (`POST /videos/clips`; needs `editor:manage:clips`). Helix reserves
+  /// it to the channel and its editors: `editor_id` is the user's id, and anyone else gets a 403
+  /// ([`is_editor_refusal`]). `vod_offset` is the END of the clip, in seconds from the VOD's
+  /// start (at least `duration`); `duration` is 5 to 60 s; `title` is required.
+  pub async fn create_vod_clip(
+    &self,
+    editor_id: &str,
+    broadcaster_id: &str,
+    vod_id: &str,
+    vod_offset: u64,
+    duration: u32,
+    title: &str,
+  ) -> Result<CreatedClip> {
+    let offset = vod_offset.to_string();
+    let duration = duration.to_string();
+    parse_created_clip(
+      &self
+        .post(
+          "videos/clips",
+          &[
+            ("editor_id", editor_id),
+            ("broadcaster_id", broadcaster_id),
+            ("vod_id", vod_id),
+            ("vod_offset", &offset),
+            ("duration", &duration),
+            ("title", title),
+          ],
+        )
+        .await?,
+    )
+  }
+
+  /// Waits for a created clip to exist: [`CLIP_TRIES`] tries, [`CLIP_EVERY`] apart, then
+  /// [`Error::ClipNotReady`].
+  pub async fn wait_clip(&self, id: &str) -> Result<Clip> {
+    for attempt in 0..CLIP_TRIES {
+      if attempt > 0 {
+        tokio::time::sleep(CLIP_EVERY).await;
+      }
+      if let Some(clip) = parse_clips(&self.get("clips", &[("id", id)]).await?)
+        .items
+        .into_iter()
+        .next()
+      {
+        return Ok(clip);
+      }
+    }
+    Err(Error::ClipNotReady)
   }
 
   /// The chat badges every channel shares (moderator, VIP, partner…).
