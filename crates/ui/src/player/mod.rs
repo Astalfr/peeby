@@ -172,6 +172,55 @@ pub struct CornerAction {
 /// What a [`CornerAction`]'s click runs.
 pub type CornerClick = dyn Fn(&mut Window, &mut App);
 
+/// A keyboard shortcut of a [`ControlAction`].
+#[derive(Clone)]
+pub struct Shortcut {
+  /// The key, as GPUI names it (`"x"`).
+  pub key: &'static str,
+  /// Whether Alt is held with it.
+  pub alt: bool,
+  /// How the tooltip and the help `?` write it (`"Alt+X"`).
+  pub label: SharedString,
+}
+
+/// A button the page adds to the control bar's right side (a service's "Clip"), with an optional
+/// shortcut listed in the help `?`. The page gives the whole list through
+/// [`PlayerView::set_actions`]; an action it leaves out has neither button nor shortcut.
+#[derive(Clone)]
+pub struct ControlAction {
+  /// Identifies the button.
+  pub id: &'static str,
+  /// Its icon.
+  pub icon: Icon,
+  /// Its tooltip, in the viewer's language, without the shortcut (added by the player).
+  pub tooltip: SharedString,
+  /// Its keyboard shortcut.
+  pub shortcut: Option<Shortcut>,
+  /// The action is under way: the button is disabled and the shortcut does nothing.
+  pub busy: bool,
+  /// What the button and the shortcut run. It runs outside any update of the player (the
+  /// shortcut defers it), so it may update or read the [`PlayerView`] freely.
+  pub on_click: Rc<CornerClick>,
+}
+
+/// The action whose shortcut `keystroke` is: Alt held (or not) as the shortcut says, and no
+/// Ctrl, Shift or Windows key.
+pub fn matching_action<'a>(
+  actions: &'a [ControlAction],
+  keystroke: &gpui::Keystroke,
+) -> Option<&'a ControlAction> {
+  let m = &keystroke.modifiers;
+  if m.control || m.shift || m.platform {
+    return None;
+  }
+  actions.iter().find(|action| {
+    action
+      .shortcut
+      .as_ref()
+      .is_some_and(|s| s.key == keystroke.key && s.alt == m.alt)
+  })
+}
+
 /// What the player tells its page.
 pub enum PlayerEvent {
   /// The video played to its end.
@@ -402,6 +451,8 @@ pub struct PlayerView {
   theater_offered: bool,
   /// The page's button at the top right ([`PlayerView::set_corner_action`]).
   corner_action: Option<CornerAction>,
+  /// The page's buttons in the control bar ([`PlayerView::set_actions`]).
+  actions: Vec<ControlAction>,
   /// The page offers picture-in-picture (button and I); not a page of short looping videos.
   pip_page_offered: bool,
   /// The bar shows the seek buttons (back and forward a step); the keys seek either way.
@@ -633,6 +684,7 @@ impl PlayerView {
       theater,
       theater_offered: true,
       corner_action: None,
+      actions: Vec::new(),
       speed_offered: true,
       pip_page_offered: true,
       seek_buttons: true,
@@ -1195,6 +1247,13 @@ impl PlayerView {
   /// removes it.
   pub fn set_corner_action(&mut self, action: Option<CornerAction>, cx: &mut Context<Self>) {
     self.corner_action = action;
+    cx.notify();
+  }
+
+  /// Sets the page's buttons in the control bar, with their shortcuts and their lines in the
+  /// help; an empty list removes them all.
+  pub fn set_actions(&mut self, actions: Vec<ControlAction>, cx: &mut Context<Self>) {
+    self.actions = actions;
     cx.notify();
   }
 
@@ -2453,8 +2512,21 @@ impl PlayerView {
       cx.stop_propagation();
       return self.show_controls(cx);
     }
+    if let Some(action) = matching_action(&self.actions, keystroke) {
+      if !action.busy {
+        let on_click = action.on_click.clone();
+        // Deferred: the player is being updated here, and the page's callback updates it again.
+        window.defer(cx, move |window, cx| on_click(window, cx));
+      }
+      cx.stop_propagation();
+      return self.show_controls(cx);
+    }
     let page_layout = self.layout.is_page();
     let key = keystroke.key.as_str();
+    // Alt+letter belongs to the pages' actions: it never moves the subtitles.
+    if keystroke.modifiers.alt && matches!(key, "x" | "z") {
+      return;
+    }
     // A live without its past has nowhere to seek to: those keys go on to the page.
     let seek_key = matches!(
       key,
@@ -3429,6 +3501,19 @@ impl PlayerView {
             ),
         )
       })
+      .children(self.actions.iter().map(|action| {
+        let on_click = action.on_click.clone();
+        let tooltip = match &action.shortcut {
+          Some(s) => SharedString::from(format!("{} ({})", action.tooltip, s.label)),
+          None => action.tooltip.clone(),
+        };
+        self
+          .control_button(action.id, cx)
+          .icon(action.icon)
+          .tooltip(tooltip)
+          .disabled(action.busy)
+          .on_click(move |_, window, cx| on_click(window, cx))
+      }))
       .when(!self.chapters.is_empty(), |row| {
         row.child(
           self
@@ -4466,7 +4551,40 @@ mod tests {
 
   use gpui::{Bounds, point, px, size};
 
-  use super::{SeekPulse, group_thousands, in_flight, pulse, speed_label};
+  use super::{
+    ControlAction, SeekPulse, Shortcut, group_thousands, in_flight, matching_action, pulse,
+    speed_label,
+  };
+  use crate::assets::Icon;
+
+  fn clip_action() -> ControlAction {
+    ControlAction {
+      id: "clip",
+      icon: Icon::Clip,
+      tooltip: "Clip".into(),
+      shortcut: Some(Shortcut {
+        key: "x",
+        alt: true,
+        label: "Alt+X".into(),
+      }),
+      busy: false,
+      on_click: std::rc::Rc::new(|_, _| {}),
+    }
+  }
+
+  #[test]
+  fn a_shortcut_needs_its_modifiers() {
+    let actions = [clip_action()];
+    let key = |s: &'static str| gpui::Keystroke::parse(s).expect("valid keystroke");
+    assert!(matching_action(&actions, &key("alt-x")).is_some());
+    // Plain X is the subtitle delay's; Ctrl, Shift and Windows variants are not the action's.
+    assert!(matching_action(&actions, &key("x")).is_none());
+    assert!(matching_action(&actions, &key("ctrl-alt-x")).is_none());
+    assert!(matching_action(&actions, &key("alt-shift-x")).is_none());
+    assert!(matching_action(&actions, &key("alt-z")).is_none());
+    // No action registered: Alt+X does nothing.
+    assert!(matching_action(&[], &key("alt-x")).is_none());
+  }
 
   #[test]
   fn a_poster_flies_from_its_card_to_the_player() {

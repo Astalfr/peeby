@@ -97,6 +97,10 @@ impl SettingsView {
       .upgrade()
       .map(|nav| (nav.read(cx).login(), nav.read(cx).account_signed_in()))
       .unwrap_or_default();
+    let needs_approval = self
+      .nav
+      .upgrade()
+      .is_some_and(|nav| matches!(nav.read(cx).clip_access(), crate::ClipAccess::MissingScope));
     let body = match login {
       _ if !signed_in => h_flex().child(div().text_sm().text_color(theme::muted()).child(t(
         "Sign in to your Twitch account first (above): the Following page then offers to \
@@ -108,11 +112,39 @@ impl SettingsView {
         .gap_4()
         .items_center()
         .child(
-          div()
+          v_flex()
             .flex_1()
-            .text_sm()
-            .child(tf!("Connected as {login}", "Connecté en tant que {login}")),
+            .gap_1()
+            .child(
+              div()
+                .text_sm()
+                .child(tf!("Connected as {login}", "Connecté en tant que {login}")),
+            )
+            .when(needs_approval, |el| {
+              el.child(div().text_sm().text_color(theme::muted()).child(t(
+                "Creating clips needs a new approval.",
+                "Créer des clips demande une nouvelle approbation.",
+              )))
+            }),
         )
+        .when(needs_approval, |el| {
+          el.child(
+            Button::new("twitch-reconnect")
+              .small()
+              .label(t("Reconnect", "Reconnecter"))
+              .on_click(cx.listener(|this, _, _, cx| {
+                // The tab the settings are in: "Suivies" opens after them.
+                this
+                  .nav
+                  .update(cx, |space, cx| {
+                    if let Some(tab) = space.shown_tab() {
+                      space.reconnect_helix(tab, cx);
+                    }
+                  })
+                  .ok();
+              })),
+          )
+        })
         .child(
           Button::new("twitch-sign-out")
             .small()
@@ -125,10 +157,10 @@ impl SettingsView {
             })),
         ),
       None => h_flex().child(div().text_sm().text_color(theme::muted()).child(t(
-        "The Following page, the sidebar's lives and the bell also need Twitch's sign-in by \
-         code: connect from the Following page.",
-        "La page Suivies, les lives de la barre latérale et la cloche demandent aussi la \
-         connexion Twitch par code : connectez-vous depuis la page Suivies.",
+        "The Following page, the sidebar's lives, the bell and the Clip button also need \
+         Twitch's sign-in by code: connect from the Following page.",
+        "La page Suivies, les lives de la barre latérale, la cloche et le bouton Clip demandent \
+         aussi la connexion Twitch par code : connectez-vous depuis la page Suivies.",
       ))),
     };
     section(

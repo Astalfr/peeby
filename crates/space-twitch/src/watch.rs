@@ -29,14 +29,19 @@ use twitch::catalog::Catalog;
 use twitch::gql::Channel;
 use twitch::usher::Codec;
 use twitch::{Proxy, Target};
+use ui::assets::Icon;
 use ui::chat::{ChatPanel, ChatPanelEvent, watch_layout};
 use ui::i18n::t;
 use ui::images::Images;
 use ui::picture::{self, Picture};
-use ui::player::{Author, LiveInfo, PlayerEvent, PlayerView, Rewind, Source};
+use ui::player::{
+  Author, ControlAction, LiveInfo, PlayerEvent, PlayerView, Rewind, Shortcut, Source,
+};
 use ui::selectable::SelectableText;
 use ui::{runtime, tf, theme};
 
+use super::ClipAccess;
+use super::clip::{self, ClipTarget};
 use super::points::{Backend, PointsEvent, PointsFooter, PointsView};
 use super::{Nav, Route, cards, chat, follow, play, progress, replay};
 use peeby_core::settings::{Player, Settings};
@@ -75,6 +80,18 @@ pub enum Kind {
   Vod { id: String, start: Option<u32> },
   /// A clip, by slug.
   Clip(String),
+}
+
+/// How a clip request ended, when it did not fail.
+enum ClipOutcome {
+  /// Made and ready.
+  Created {
+    created: twitch::helix::CreatedClip,
+    /// Its title, as Twitch has it.
+    title: String,
+  },
+  /// A VOD only its channel's editors clip: its twitch.tv URL at the playhead.
+  EditorsOnly(String),
 }
 
 /// The header under the player.
@@ -166,6 +183,13 @@ pub struct WatchView {
   /// Saves the position in the recording, as for any VOD (ADR 0013): while it plays, and while
   /// the live does (its playhead is on the recording's timeline).
   archive_saver: Option<progress::Saver>,
+  /// The channel's id (Helix's `broadcaster_id`), once its header or its VOD is read.
+  broadcaster_id: Option<String>,
+  /// A clip is being made: the button waits.
+  clipping: bool,
+  /// Whether the player has the Clip action, and whether it is busy: `set_actions` is called
+  /// only when this changes.
+  actions_state: (bool, bool),
   focused: bool,
   /// A multistream's tile: its multistream lays it out and follows its raids.
   tile: bool,
@@ -286,6 +310,9 @@ impl WatchView {
       rewind_asked: false,
       archive_proxy: None,
       archive_saver: None,
+      broadcaster_id: None,
+      clipping: false,
+      actions_state: (false, false),
       focused: false,
       tile: tile.is_some(),
       height_cap: (tile == Some(false)).then_some(SECONDARY_HEIGHT),
@@ -296,6 +323,16 @@ impl WatchView {
         .player
         .update(cx, |player, cx| player.set_secondary(true, cx));
     }
+    // The Clip button follows Helix's connection. The page is built while the space is being
+    // updated: it is not read before that ends.
+    if let Some(space) = view.nav.upgrade() {
+      cx.observe(&space, |this, _, cx| this.refresh_actions(cx))
+        .detach();
+    }
+    let page = cx.weak_entity();
+    cx.defer(move |cx| {
+      page.update(cx, |this, cx| this.refresh_actions(cx)).ok();
+    });
     match view.kind.clone() {
       Kind::Live(login) => {
         let panel = cx.new(|cx| ChatPanel::new(cx).with_composer(twitch::chat::MAX_CHARS));
@@ -432,6 +469,170 @@ impl WatchView {
     if let Some(points) = &self.points {
       points.update(cx, |points, cx| points.set_earning(main, cx));
     }
+    self.refresh_actions(cx);
+  }
+
+  /// Puts the Clip button (and Alt+X) on the player, or takes it off: only a live or a VOD that
+  /// is not a secondary tile, and only while Helix is connected (a session from before clips
+  /// has it too: a click offers the new approval).
+  fn refresh_actions(&mut self, cx: &mut Context<Self>) {
+    let eligible = matches!(self.kind, Kind::Live(_) | Kind::Vod { .. })
+      && (!self.tile || self.height_cap.is_none());
+    let connected = self
+      .nav
+      .upgrade()
+      .is_some_and(|space| !matches!(space.read(cx).clip_access(), ClipAccess::NoHelix));
+    let shown = eligible && connected;
+    let state = (shown, shown && self.clipping);
+    if state == self.actions_state {
+      return;
+    }
+    self.actions_state = state;
+    let actions = if shown {
+      let page = cx.weak_entity();
+      vec![ControlAction {
+        id: "clip",
+        icon: Icon::Clip,
+        tooltip: if self.clipping {
+          t("Creating the clip…", "Création du clip…").into()
+        } else {
+          t("Clip", "Clip").into()
+        },
+        shortcut: Some(Shortcut {
+          key: "x",
+          alt: true,
+          label: "Alt+X".into(),
+        }),
+        busy: self.clipping,
+        on_click: std::rc::Rc::new(move |_, cx| {
+          page.update(cx, |this, cx| this.clip(cx)).ok();
+        }),
+      }]
+    } else {
+      Vec::new()
+    };
+    self
+      .player
+      .update(cx, |player, cx| player.set_actions(actions, cx));
+  }
+
+  fn toast(&self, note: gpui_component::notification::Notification, cx: &mut Context<Self>) {
+    self.player.update(cx, |player, cx| player.toast(note, cx));
+  }
+
+  /// The Clip button or Alt+X (ADR 0043): a clip of the live's last seconds, or of the VOD
+  /// ending at the playhead, through Helix. Once Twitch has made it: its link is copied, its
+  /// edit page opens on twitch.tv and a toast offers to open or edit it. A VOD of a channel the
+  /// viewer does not edit is opened on twitch.tv at the playhead instead.
+  fn clip(&mut self, cx: &mut Context<Self>) {
+    if self.clipping {
+      return;
+    }
+    let Some(space) = self.nav.upgrade() else {
+      return;
+    };
+    let (helix, user_id) = match space.read(cx).clip_access() {
+      ClipAccess::NoHelix => {
+        // Helix was disconnected under the button: it goes.
+        self.refresh_actions(cx);
+        return;
+      }
+      ClipAccess::MissingScope => {
+        self.toast(clip::reconnect_toast(self.nav.clone()), cx);
+        return;
+      }
+      ClipAccess::Ready { helix, user_id } => (helix, user_id),
+    };
+    let Some(broadcaster) = self.broadcaster_id.clone() else {
+      self.toast(
+        clip::error_toast(t(
+          "The channel is still loading: try again in a moment.",
+          "La chaîne se charge encore : réessayez dans un instant.",
+        )),
+        cx,
+      );
+      return;
+    };
+    let player = self.player.read(cx);
+    let Some(target) = clip::target(
+      &self.kind,
+      player.rewound(),
+      player.position(),
+      self.archive.as_ref().map(|a| a.id.as_str()),
+    ) else {
+      return;
+    };
+    let title = self
+      .header
+      .as_ref()
+      .map(|h| h.title.clone())
+      .filter(|t| !t.is_empty())
+      .unwrap_or_else(|| "Clip".to_owned());
+    self.clipping = true;
+    self.refresh_actions(cx);
+    let task = runtime::spawn(cx, async move {
+      let created = match target {
+        ClipTarget::Live => helix.create_clip(&broadcaster).await?,
+        ClipTarget::Vod { id, position } => {
+          match helix
+            .create_vod_clip(
+              &user_id,
+              &broadcaster,
+              &id,
+              clip::vod_offset(position),
+              clip::CLIP_SECONDS,
+              &title,
+            )
+            .await
+          {
+            Ok(created) => created,
+            Err(e) if twitch::helix::is_editor_refusal(&e) => {
+              return Ok(ClipOutcome::EditorsOnly(twitch::helix::vod_url(
+                &id, position,
+              )));
+            }
+            Err(e) => return Err(e),
+          }
+        }
+      };
+      let ready = helix.wait_clip(&created.id).await?;
+      Ok::<_, twitch::Error>(ClipOutcome::Created {
+        created,
+        title: ready.title,
+      })
+    });
+    self._tasks.push(cx.spawn(async move |this, cx| {
+      let result = task.await;
+      this
+        .update(cx, |this, cx| {
+          this.clipping = false;
+          this.refresh_actions(cx);
+          match result {
+            Some(Ok(ClipOutcome::Created { created, title })) => {
+              clip::copy_link(&created.id, cx);
+              cx.open_url(&created.edit_url);
+              let note = clip::created_toast(this.nav.clone(), created.id, title, created.edit_url);
+              this.toast(note, cx);
+            }
+            Some(Ok(ClipOutcome::EditorsOnly(url))) => {
+              cx.open_url(&url);
+              this.toast(clip::editor_only_toast(), cx);
+            }
+            Some(Err(twitch::Error::MissingScope)) => {
+              tracing::warn!("Twitch clip: the session lacks a scope");
+              this.toast(clip::reconnect_toast(this.nav.clone()), cx);
+            }
+            Some(Err(e)) => {
+              tracing::warn!("Twitch clip: {e}");
+              // An expired session disconnects Helix: the Clip button goes away by itself.
+              crate::report(&this.nav, &e, cx);
+              this.toast(clip::error_toast(clip::error_text(&e)), cx);
+            }
+            None => {}
+          }
+        })
+        .ok();
+    }));
   }
 
   /// Plays the quality the tile's role allows: the settings' for the main live, at most
@@ -774,6 +975,7 @@ impl WatchView {
                 cx.notify();
               });
             }
+            this.broadcaster_id = Some(video.user_id.clone());
             this.header = Some(Header {
               title: video.title.clone(),
               name: video.user_name.clone(),
@@ -965,6 +1167,7 @@ impl WatchView {
   }
 
   fn show_channel(&mut self, channel: Channel, cx: &mut Context<Self>) {
+    self.broadcaster_id = Some(channel.id.clone());
     // Its raids and Hype Trains, once its id is known (a live only: VODs and clips have no
     // points view).
     if let Some(points) = self.points.clone() {

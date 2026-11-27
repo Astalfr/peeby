@@ -42,6 +42,21 @@ pub enum Error {
   /// already spent). The user signs in again.
   #[error("the Twitch session expired")]
   SessionExpired,
+  /// Helix refused the call for a scope the session lacks (a 401 saying `Missing scope`): the
+  /// token is fine, the user must approve again with the new scopes.
+  #[error("the Twitch session lacks a scope")]
+  MissingScope,
+  /// Helix refused a write, with its status and `message` (which holds no token nor IP).
+  #[error("Helix refused ({status}): {message}")]
+  Helix {
+    /// HTTP status code.
+    status: u16,
+    /// Helix's `message`.
+    message: String,
+  },
+  /// A clip was created but Twitch had not finished it after the wait.
+  #[error("the clip is not ready yet")]
+  ClipNotReady,
   /// Helix's rate limit is spent for now (HTTP 429).
   #[error("too many Twitch requests, try again in a moment")]
   RateLimited,

@@ -17,6 +17,7 @@ mod browse;
 mod cards;
 mod channel;
 mod chat;
+mod clip;
 #[cfg(debug_assertions)]
 mod fake_chat;
 mod follow;
@@ -241,6 +242,8 @@ struct Signed {
   helix: Helix,
   login: String,
   user_id: String,
+  /// The scopes Twitch granted to the session (read by `/oauth2/validate`).
+  scopes: Vec<String>,
   /// The followed channels on air (the sidebar shows the first ones, the notification area's
   /// list every one), with their avatars (and the user's); `None` before the first reading.
   live: Option<Vec<Stream>>,
@@ -249,6 +252,31 @@ struct Signed {
   bell: bell::Bell,
   _validate: Task<()>,
   _sidebar: Task<()>,
+}
+
+impl Signed {
+  /// Whether every scope `twitch::auth::SCOPES` asks for was granted.
+  fn scopes_allow_clips(&self) -> bool {
+    twitch::auth::SCOPES
+      .split_whitespace()
+      .all(|wanted| self.scopes.iter().any(|s| s == wanted))
+  }
+}
+
+/// What creating a clip needs from the Helix session.
+#[derive(Clone)]
+pub enum ClipAccess {
+  /// No Helix session (signed out, no account, or still being restored): no clip button.
+  NoHelix,
+  /// Connected before clips existed: the code approval must be redone (`reconnect_helix`).
+  MissingScope,
+  /// Connected with every scope.
+  Ready {
+    /// The connected Helix client.
+    helix: Helix,
+    /// The signed-in user's id.
+    user_id: String,
+  },
 }
 
 /// Helix's connection.
@@ -526,7 +554,21 @@ impl TwitchSpace {
             check
           };
           match check.await {
-            Some(Ok(_)) => {}
+            Some(Ok(validation)) => {
+              // The granted scopes can change (revoked on twitch.tv): the pages that show the
+              // clip button observe the space.
+              let alive = this.update(cx, |this, cx| {
+                if let State::SignedIn(signed) = &mut this.state
+                  && signed.scopes != validation.scopes
+                {
+                  signed.scopes = validation.scopes;
+                  cx.notify();
+                }
+              });
+              if alive.is_err() {
+                return;
+              }
+            }
             Some(Err(Error::SessionExpired)) => {
               this
                 .update(cx, |this, cx| this.sign_out(Some(expired()), cx))
@@ -599,6 +641,7 @@ impl TwitchSpace {
       helix,
       login: validation.login,
       user_id: validation.user_id,
+      scopes: validation.scopes,
       live: None,
       avatars: Avatars::new(),
       bell: bell::Bell::default(),
@@ -627,6 +670,10 @@ impl TwitchSpace {
   /// Disconnects the followed channels: revokes the Helix token at Twitch, then signs out here
   /// even if it fails.
   pub fn disconnect_helix(&mut self, cx: &mut Context<Self>) {
+    self.revoke_helix(None, cx);
+  }
+
+  fn revoke_helix(&mut self, message: Option<SharedString>, cx: &mut Context<Self>) {
     if let State::SignedIn(signed) = &self.state {
       let session = signed.session.clone();
       drop(runtime::spawn(cx, async move {
@@ -635,7 +682,36 @@ impl TwitchSpace {
         }
       }));
     }
-    self.sign_out(None, cx);
+    self.sign_out(message, cx);
+  }
+
+  /// What creating a clip needs, from the Helix session. Changes go through `cx.notify()` on the
+  /// space (connection, disconnection, expiry, restoration, granted scopes): observe it.
+  pub fn clip_access(&self) -> ClipAccess {
+    match &self.state {
+      State::SignedIn(signed) if signed.scopes_allow_clips() => ClipAccess::Ready {
+        helix: signed.helix.clone(),
+        user_id: signed.user_id.clone(),
+      },
+      State::SignedIn(_) => ClipAccess::MissingScope,
+      State::Restoring | State::SignedOut => ClipAccess::NoHelix,
+    }
+  }
+
+  /// Asks for the approval again, for the scopes clips need: revokes the Helix session (with a
+  /// message saying why), then opens "Suivies" in `tab`, which offers the code sign-in.
+  pub fn reconnect_helix(&mut self, tab: TabId, cx: &mut Context<Self>) {
+    self.revoke_helix(
+      Some(
+        t(
+          "Reconnect to allow clips.",
+          "Reconnectez-vous pour autoriser les clips.",
+        )
+        .into(),
+      ),
+      cx,
+    );
+    self.open(tab, Route::Following, cx);
   }
 
   /// "Se déconnecter": forgets the auth-token and disconnects Helix (which needs it).
@@ -950,6 +1026,11 @@ impl TwitchSpace {
       }
     });
     inbox::test_toast(&sample, cx);
+  }
+
+  /// The tab last shown in any window (where the settings page is, when it asks to reconnect).
+  pub fn shown_tab(&self) -> Option<TabId> {
+    self.tabs.shown()
   }
 
   /// The login Helix is connected with.

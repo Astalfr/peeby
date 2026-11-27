@@ -403,6 +403,32 @@ Probed on 2026-11-03, raw queries with the web Client-ID, anonymous and with the
   - `GET /helix/clips`: `duration` in seconds (float), `vod_offset`, a direct `thumbnail_url`; no playable
     URL (playback goes through GQL) **[src]**;
   - `GET /helix/users`: `profile_image_url`, `offline_image_url` **[mem]**.
+  - Creating clips (ADR 0043), captured on 2026-11-27 (fixtures `helix_clip_*.json`,
+    `helix_vod_clip_refused.json`):
+    - `POST /helix/clips?broadcaster_id=` (`clips:edit`): answers 202 `{id, edit_url}`, 30 s by default.
+      The clip exists about 10 s later: `GET /helix/clips?id=` answers an empty list until then, so
+      `Helix::wait_clip` asks every second, 15 times at most (`Error::ClipNotReady`). `edit_url` is
+      `https://www.twitch.tv/<login>/clip/<slug>`; the link to share is `https://clips.twitch.tv/<slug>`.
+      An offline channel answers 404 (`Error::Offline`).
+    - `POST /helix/videos/clips` (`editor:manage:clips`): `editor_id` (the user), `broadcaster_id`,
+      `vod_id`, `vod_offset`, `duration` (5 to 60 s) and a mandatory `title`. `vod_offset` is the clip's
+      **end** in the VOD, at least `duration`. Only the channel and its editors may: anyone else gets 403
+      `User does not have editor permissions for this channel` (`helix::is_editor_refusal`). The success
+      was **never captured** (no tested channel gave the user editor rights).
+    - Both are public writes from the account, and the API cannot delete a clip: the creator
+      dashboard does.
+  - Scopes: `auth::SCOPES` is `user:read:follows clips:edit editor:manage:clips`. A session approved
+    before has not the new ones: `/oauth2/validate` lists the granted scopes (`Validation::missing_scopes`),
+    kept in the space (`Signed::scopes`, `ClipAccess`) and compared **before** the call.
+    Only a new Device Code approval adds scopes: "Reconnect" revokes the session and opens the approval card.
+  - **A missing scope is a 401**, as a stale token: `{"error", "status": 401, "message": "Missing scope: clips:edit"}`
+    (`helix_clip_missing_scope.json`). `Helix::send` reads the message: one that speaks of a *scope*
+    is `Error::MissingScope`, without refreshing the token (a refresh would end in `SessionExpired`
+    and disconnect Helix); any other 401 refreshes once, as before.
+  - The Clip button and Alt+X exist only with Helix connected. On a live at its edge Peeby clips through
+    Helix, opens `edit_url` and copies the link; on a VOD (or a live gone back into its recording) it tries
+    `videos/clips`, and on the editor refusal opens `twitch.tv/videos/<id>?t=…` at the playhead, whose
+    own clip button works for anyone.
 - Images:
   - Live previews are cached by Twitch's CDN: add a cache-buster.
   - `/404_processing_…` means a VOD not processed yet.

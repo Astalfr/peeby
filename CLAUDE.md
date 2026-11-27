@@ -66,7 +66,11 @@ the former Jellyfin-only peeby (`D:\DEV\peeby`, abandoned, ADR 0007); import not
   the user: prefer their own channel); `-- notifications [<file>]` reads the account's twitch.tv notification center with the
   auth-token (read only, counts and kinds; the file holds the whole answer, the followed channels
   included: trim and rename before a fixture); `-- predictions-ended <login>` probes, anonymous,
-  the GQL fields of ended predictions and saves the app's predictions answer)
+  the GQL fields of ended predictions and saves the app's predictions answer; `-- clip <login>` creates a
+  PUBLIC clip of a live from the account (ask first, delete it from the creator dashboard), waits for it and
+  saves both answers redacted; `-- clip-vod <vod-id> <offset>` asks for a clip of a VOD ending at that second
+  and saves the answer or its refusal; both use the debug profile's session (`--profile peeby`: the release
+  one), after a device code approval when it lacks a scope: never while Peeby runs)
 - 7TV's EventAPI (anonymous): `cargo run -p twitch --example seventv_events -- <minutes> (<login>… | top) [--save <file>] [--cosmetics]`
   subscribes to channels' 7TV sets and users and prints what comes (ADR 0030; trim the `actor` before a fixture);
   `--cosmetics` instead their paints, badges and who wears them (ADR 0031; rename the users before a fixture)

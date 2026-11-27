@@ -890,7 +890,28 @@ impl PlayerView {
                   )
                   .child(div().text_sm().text_color(muted).child(action))
               }),
-          ),
+          )
+          // The pages' actions that have a shortcut.
+          .children(self.actions.iter().filter_map(|action| {
+            let shortcut = action.shortcut.as_ref()?;
+            Some(
+              h_flex()
+                .gap_4()
+                .child(
+                  div()
+                    .w(px(190.))
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(shortcut.label.clone()),
+                )
+                .child(
+                  div()
+                    .text_sm()
+                    .text_color(muted)
+                    .child(action.tooltip.clone()),
+                ),
+            )
+          })),
       )
   }
 

@@ -25,6 +25,8 @@ ui = { workspace = true }
 # The Twitch fixtures' capture (examples/twitch_capture.rs).
 [dev-dependencies]
 keyring = "4"
+# The clip capture's POSTs (same version and features as the `twitch` crate's).
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "http2", "charset"] }
 serde_json = "1"
 
 [build-dependencies]

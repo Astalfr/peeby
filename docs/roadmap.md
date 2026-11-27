@@ -471,6 +471,23 @@ Status legend: ✅ done · 🚧 in progress · ⏳ not started
   `tracking` answer carries the end screen (it would spare the watch page); a playlist element
   (none in the samples).
 
+## Twitch clips
+
+- Done (2026-11-27, [ADR 0043](decisions/0043-twitch-clips-helix.md)): a Clip button (scissors) on the Twitch
+  player's control bar and Alt+X, only with Helix connected, on a live and on a VOD. A live: Helix creates
+  the clip, Peeby waits for it, copies `clips.twitch.tv/<slug>`, opens its edit page and a toast offers
+  "Open" / "Edit". A VOD or a live back in its recording: `videos/clips` ending at the playhead, and
+  twitch.tv at that moment when Twitch refuses a non-editor. A session approved before asks for a new
+  approval ("Reconnect", also in the settings). Shared player: `ControlAction` (page actions with a
+  shortcut, listed in the `?` help). Helix: `SCOPES` extended, `Error::MissingScope` (a 401 about a
+  scope no longer ends the session), `create_clip`, `create_vod_clip`, `wait_clip`. New tests on 4
+  fixtures (`helix_clip_*`, `helix_vod_clip_refused`), captured with `twitch_capture -- clip` / `clip-vod`
+  (one public clip created, with the user's permission).
+  **Not verified:** the whole flow in the running app (button, toasts, clipboard, edit page, "Open");
+  Alt+X reaching GPUI on Windows; a VOD clip succeeding as an editor (never captured); the playhead of
+  a live back in its recording being on the recording's timeline; the button appearing and vanishing as
+  Helix connects and disconnects; `cargo test --workspace` as a whole.
+
 ## Members-only videos
 
 - Done (2026-11-06): cards of members-only videos show a star and "Réservé aux membres" at the thumbnail's
